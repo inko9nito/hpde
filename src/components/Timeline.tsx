@@ -34,7 +34,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
   const now = nowMinutes()
 
   const visible = events.flatMap<ScheduleEvent>(event => {
-    // General/lunch/special always show
+    // Breaks and general events always show
     if (event.type !== 'session') return [event]
     // Sessions: filter by selected groups
     if (selectedGroups.length === 0) return [event]
@@ -45,12 +45,17 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return [{ ...event, onTrack, inClass }]
   })
 
-  const filtered = hidePast && isToday
-    ? visible.filter(e => parseMinutes(e.time) >= now)
+  // Breaks have no time; keep them unless they'd be orphaned at the top of the list
+  const withoutPast = hidePast && isToday
+    ? visible.filter(e => e.type === 'break' || parseMinutes(e.time) >= now)
     : visible
+  const filtered = withoutPast.filter((e, idx) => {
+    if (e.type !== 'break') return true
+    return withoutPast.slice(0, idx).some(prev => prev.type !== 'break')
+  })
 
   const indicatorIndex = isToday
-    ? filtered.findIndex(e => parseMinutes(e.time) > now)
+    ? filtered.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
     : -1
   const indicatorAtEnd = isToday && indicatorIndex === -1 && filtered.length > 0
 
@@ -59,7 +64,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
   return (
     <div className="flex flex-col gap-2 pb-10">
       {filtered.map((event, idx) => {
-        const past = isToday && parseMinutes(event.time) < now
+        const past = isToday && event.type !== 'break' && parseMinutes(event.time) < now
 
         let sessionHeader: React.ReactNode = null
         if (event.type === 'session' && event.sessionNumber !== undefined && event.sessionNumber !== lastSessionNumber) {
@@ -75,15 +80,12 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
           <div key={idx}>
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
-            {event.type === 'session'
-              ? <SessionCard event={event} runGroups={runGroups} past={past} />
-              : <EventCard event={event} past={past} />
+            {event.type === 'break'
+              ? <div className="px-1 py-0.5 text-xs text-gray-400 italic">{event.label}</div>
+              : event.type === 'session'
+                ? <SessionCard event={event} runGroups={runGroups} past={past} />
+                : <EventCard event={event} past={past} />
             }
-            {event.type === 'session' && event.note && (
-              <div className="px-1 pt-1.5 pb-0.5 text-xs text-gray-400 italic">
-                {event.note}
-              </div>
-            )}
           </div>
         )
       })}

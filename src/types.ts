@@ -18,10 +18,14 @@ export interface SessionEvent {
   sessionNumber?: number
   onTrack: string[]
   inClass?: string[]
-  note?: string // e.g. 'Instructor break', 'Corner worker break' — happens concurrent with this slot
 }
 
-export type ScheduleEvent = GeneralEvent | SessionEvent
+export interface BreakEvent {
+  type: 'break'
+  label: string
+}
+
+export type ScheduleEvent = GeneralEvent | SessionEvent | BreakEvent
 
 export interface DaySchedule {
   id: string

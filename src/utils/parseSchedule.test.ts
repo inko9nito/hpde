@@ -14,7 +14,8 @@ pink | Pink | bg-pink-500 | text-white
 08:00 general | Drivers meeting
 08:30 general | Track goes hot
 08:30 session | on: orange | in: pink
-09:00 session 1 | on: orange | note: Instructor break
+09:00 session 1 | on: orange
+break | Instructor break
 10:00 session 2 | on: pink | in: orange
 12:00 lunch | Lunch break | Bring your own food
 17:00 general | Track goes cold
@@ -71,10 +72,10 @@ describe('parseScheduleMD', () => {
     expect(s2).toMatchObject({ sessionNumber: 2 })
   })
 
-  it('parses session note', () => {
+  it('parses break event', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const withNote = days[0].events.find(e => e.type === 'session' && (e as { note?: string }).note)
-    expect(withNote).toMatchObject({ note: 'Instructor break' })
+    const brk = days[0].events.find(e => e.type === 'break')
+    expect(brk).toMatchObject({ type: 'break', label: 'Instructor break' })
   })
 
   it('parses multiple groups in a single field', () => {

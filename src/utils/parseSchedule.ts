@@ -55,9 +55,14 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
       continue
     }
 
-    if (currentDay && /^\d{2}:\d{2}/.test(line)) {
-      const event = parseEventLine(line)
-      if (event) currentDay.events.push(event)
+    if (currentDay) {
+      if (/^\d{2}:\d{2}/.test(line)) {
+        const event = parseEventLine(line)
+        if (event) currentDay.events.push(event)
+      } else if (/^break\s*\|/.test(line)) {
+        const label = line.slice(line.indexOf('|') + 1).trim()
+        currentDay.events.push({ type: 'break', label })
+      }
     }
   }
 
@@ -88,15 +93,12 @@ function parseEventLine(line: string): ScheduleEvent | null {
 
     let onTrack: string[] = []
     let inClass: string[] = []
-    let note: string | undefined
 
     for (const token of rest) {
       if (token.startsWith('on:')) {
         onTrack = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
       } else if (token.startsWith('in:')) {
         inClass = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
-      } else if (token.startsWith('note:')) {
-        note = token.slice(5).trim()
       }
     }
 
@@ -106,7 +108,6 @@ function parseEventLine(line: string): ScheduleEvent | null {
       ...(sessionNumber !== undefined ? { sessionNumber } : {}),
       onTrack,
       ...(inClass.length ? { inClass } : {}),
-      ...(note ? { note } : {}),
     }
   }
 

@@ -85,20 +85,25 @@ describe('run group filter', () => {
   })
 })
 
-describe('session notes', () => {
-  it('renders the note inside the session card when present', () => {
-    const withNote: ScheduleEvent[] = [
-      { time: '09:15', type: 'session', onTrack: ['purple'], note: 'Instructor break' },
+describe('break events', () => {
+  it('renders a break label between sessions', () => {
+    const withBreak: ScheduleEvent[] = [
+      { time: '09:15', type: 'session', onTrack: ['purple'] },
+      { type: 'break', label: 'Instructor break' },
+      { time: '09:50', type: 'session', onTrack: ['orange'] },
     ]
-    render(<Timeline events={withNote} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline events={withBreak} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getByText('Instructor break')).toBeInTheDocument()
   })
 
-  it('does not render a note row when note is absent', () => {
-    const noNote: ScheduleEvent[] = [
-      { time: '09:15', type: 'session', onTrack: ['purple'] },
+  it('hides an orphaned break when hidePast removes all preceding events', () => {
+    const withBreak: ScheduleEvent[] = [
+      { time: '08:00', type: 'session', onTrack: ['purple'] },
+      { type: 'break', label: 'Instructor break' },
+      { time: '10:30', type: 'session', onTrack: ['orange'] },
     ]
-    render(<Timeline events={noNote} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline events={withBreak} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    // 08:00 is past (now=10:00), so the break is orphaned and should be hidden
     expect(screen.queryByText('Instructor break')).not.toBeInTheDocument()
   })
 })
