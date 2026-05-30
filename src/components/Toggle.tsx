@@ -19,7 +19,7 @@ export function Toggle({ checked, onChange, label }: Props) {
           width: '44px',
           height: '24px',
           borderRadius: '12px',
-          backgroundColor: checked ? '#3b82f6' : '#d1d5db',
+          backgroundColor: checked ? '#000000' : '#d1d5db',
           border: 'none',
           cursor: 'pointer',
           padding: 0,

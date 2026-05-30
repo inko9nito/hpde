@@ -117,7 +117,7 @@ export default function App() {
               <Toggle
                 checked={hidePast}
                 onChange={() => setHidePast(h => !h)}
-                label="Hide past"
+                label="Hide past events"
               />
             </div>
 
