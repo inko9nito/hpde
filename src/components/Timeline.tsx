@@ -81,7 +81,13 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
             {event.type === 'break'
-              ? <div className="px-1 py-0.5 text-xs text-gray-400 italic">{event.label}</div>
+              ? (
+                <div className="flex items-center gap-2 py-1">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs text-gray-400 italic">{event.label}</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+              )
               : event.type === 'session'
                 ? <SessionCard event={event} runGroups={runGroups} past={past} />
                 : <EventCard event={event} past={past} />
