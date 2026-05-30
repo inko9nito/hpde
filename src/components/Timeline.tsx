@@ -79,6 +79,11 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
               ? <SessionCard event={event} runGroups={runGroups} past={past} />
               : <EventCard event={event} past={past} />
             }
+            {event.type === 'session' && event.note && (
+              <div className="px-1 pt-1.5 pb-0.5 text-xs text-gray-400 italic">
+                {event.note}
+              </div>
+            )}
           </div>
         )
       })}

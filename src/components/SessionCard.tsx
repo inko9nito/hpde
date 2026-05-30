@@ -45,12 +45,6 @@ export function SessionCard({ event, runGroups, past }: Props) {
               </div>
             </>
           )}
-          {event.note && (
-            <>
-              <div className="border-t border-gray-100" />
-              <span className="text-xs text-gray-400">{event.note}</span>
-            </>
-          )}
         </div>
       </div>
     </div>
