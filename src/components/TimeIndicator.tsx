@@ -15,7 +15,7 @@ export const TimeIndicator = forwardRef<HTMLDivElement, Props>(({ events }, ref)
   }, [])
 
   const now = nowMinutes()
-  const nextEvent = events.find(e => parseMinutes(e.time) > now)
+  const nextEvent = events.find(e => e.type !== 'break' && parseMinutes(e.time) > now)
   const minsUntilNext = nextEvent ? parseMinutes(nextEvent.time) - now : null
 
   const urgencyClass = minsUntilNext !== null
