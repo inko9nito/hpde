@@ -4,6 +4,7 @@ import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
 import { Toggle } from './components/Toggle'
+import { PullToRefresh } from './components/PullToRefresh'
 import { EVENTS } from './data'
 import type { EventConfig, DaySchedule, View } from './types'
 
@@ -49,6 +50,7 @@ export default function App() {
   }
 
   return (
+    <PullToRefresh>
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
@@ -142,5 +144,6 @@ export default function App() {
 
       </div>
     </div>
+    </PullToRefresh>
   )
 }
