@@ -15,7 +15,7 @@ export function EventPicker({ events, active, onChange }: Props) {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 group"
+        className="flex items-center gap-1.5 text-left group"
       >
         <div>
           <h1 className="text-2xl font-bold text-gray-900 leading-tight">{active.name}</h1>
