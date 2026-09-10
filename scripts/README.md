@@ -74,17 +74,22 @@ gives each row more vertical room.
 What it shows:
 
 - Header line with event name, day, and the current time.
-- One horizontal row per run group, each labeled with a colored pill matching
-  the web app's `GroupBadge`.
-- Colored blocks in each row mark the intervals when that group is on the
-  track (derived from consecutive `on: <group>` session entries). Blocks
-  entirely in the past render dimmed; blocks straddling now split at the
-  NOW line so the past half is dimmed and the future half is full color.
-- Hour tick marks along the top with vertical grid lines through the plot.
+- One horizontal row per run group, each labeled with a colored pill on the
+  left.
+- Solid colored blocks labeled **On track** mark when that group is on the
+  track. Paler tinted blocks labeled **In class** mark classroom time.
+  Both are derived from `on:` / `in:` session entries.
+- Past portions of any block render dimmed; a block straddling now splits
+  at the NOW line so the past half is dimmed and the future half is full.
+- Hour tick marks along the top with faint vertical grid lines.
 - Lunch (🍔) and special (⭐) anchors appear as thin vertical bars.
 - A bright vertical NOW line labeled `NOW`, sitting roughly one hour from
   the left edge and sliding right as the day goes on.
 
-**Optional Parameter:** an integer between 2 and 8, the total window length
-in hours (default 4 — one hour before now, three hours after). Set it to `6`
-for a wider look ahead, or `2` for tighter zoom.
+The window starts one hour before now and extends **to the last event of
+the day**, so an empty afternoon doesn't leave dead space on the right.
+
+**Optional Parameter:** an integer between 2 and 8, the maximum window
+length in hours (default 5). The actual window shrinks to the last event
+when that's sooner — this is a ceiling, not a fixed span. Use `3` to
+zoom in on the immediate future, `8` to keep more of the day in view.

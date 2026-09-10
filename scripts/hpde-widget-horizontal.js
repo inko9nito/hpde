@@ -2,23 +2,27 @@
 // Source: https://github.com/inko9nito/hpde/blob/main/scripts/hpde-widget-horizontal.js
 // Data:   https://inko9nito.github.io/hpde/api/events.json
 //
-// A Gantt-style timeline: one row per run group, colored blocks marking when
-// that group is on track. The visible window starts one hour before now and
-// extends a few hours to the right; a vertical NOW line sits about a quarter
-// of the way in and slides right as the day progresses.
+// A Gantt-style timeline: one row per run group, blocks marking when the
+// group is on track (solid color, labeled "On track") or in class (outlined
+// with the group color, labeled "In class"). The visible window starts one
+// hour before now and extends to the last event of the day (capped at a
+// max window). A vertical NOW line sits about an hour into the window and
+// slides right as the day progresses.
 //
 // Setup: install Scriptable → paste this script → long-press Home Screen →
 //   Add Widget → Scriptable → Medium (or Large) → Edit Widget → Script = this.
-// Optional Parameter: window length in hours (integer, 2–8). Default 4.
-//   e.g. "6" widens the view to six hours after "one hour ago".
+// Optional Parameter: max window length in hours (integer, 2–8). Default 5.
+//   The actual window shrinks to the last event of the day when that's
+//   sooner, so this is only a ceiling.
 
 const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
-// Default visible window: one hour before now, plus this many hours after.
-const DEFAULT_WINDOW_HOURS = 4
+const DEFAULT_MAX_WINDOW_HOURS = 5
+const MIN_WINDOW_MIN = 90
 const LOOKBACK_MIN = 60
+const TRAILING_PAD_MIN = 10
 
 // ---------- data fetching (with offline cache) ----------
 
@@ -84,10 +88,10 @@ function formatHourLabel(min) {
   return `${hour}${ampm}`
 }
 
-function parseWindowHours() {
+function parseMaxWindowHours() {
   const raw = typeof args !== "undefined" && args.widgetParameter
   const n = raw ? parseInt(String(raw).trim(), 10) : NaN
-  if (!Number.isFinite(n)) return DEFAULT_WINDOW_HOURS
+  if (!Number.isFinite(n)) return DEFAULT_MAX_WINDOW_HOURS
   return Math.max(2, Math.min(8, n))
 }
 
@@ -117,12 +121,12 @@ function pickNextFuture(manifest) {
 
 // ---------- Gantt block computation ----------
 
-// A group's on-track block runs from its session entry's start time to
-// min(next timed event start, its own start + typical slot length). The
-// slot-length cap keeps the last group before a break/lunch from visually
-// occupying the downtime — schedules don't carry explicit end times, so we
-// infer slot length as the median gap between consecutive session entries.
-// Consecutive on-track slots for the same group merge into one block.
+// For each group, walk the day and record on-track and in-class intervals.
+// A block runs from its session-entry start to min(next timed event start,
+// own start + typical slot length). Slot length is the median gap between
+// consecutive session entries — this keeps the last group before a break
+// or lunch from visually occupying the downtime. Consecutive same-kind
+// slots for the same group merge into one block.
 function computeGroupBlocks(dayEvents, groupIds) {
   const timed = dayEvents.filter(e => e.type !== "break" && typeof e.time === "string")
   const starts = timed.map(e => parseMinutes(e.time))
@@ -139,30 +143,51 @@ function computeGroupBlocks(dayEvents, groupIds) {
   gaps.sort((a, b) => a - b)
   const slotLen = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 20
 
-  const blocks = Object.fromEntries(groupIds.map(id => [id, []]))
+  const blocks = {}
+  for (const id of groupIds) blocks[id] = { onTrack: [], inClass: [] }
+
+  const pushBlock = (kind, gid, start, end) => {
+    const arr = blocks[gid][kind]
+    const last = arr[arr.length - 1]
+    if (last && last.end === start) last.end = end
+    else arr.push({ start, end })
+  }
 
   for (let i = 0; i < timed.length; i++) {
     const ev = timed[i]
     if (ev.type !== "session") continue
-    const onTrack = ev.onTrack || []
-    if (!onTrack.length) continue
     const start = starts[i]
     const nextStart = i + 1 < timed.length ? starts[i + 1] : start + slotLen
     const end = Math.min(start + slotLen, nextStart)
-    for (const gid of onTrack) {
-      if (!blocks[gid]) continue
-      const arr = blocks[gid]
-      const last = arr[arr.length - 1]
-      if (last && last.end === start) last.end = end
-      else arr.push({ start, end })
+    for (const gid of ev.onTrack || []) {
+      if (blocks[gid]) pushBlock("onTrack", gid, start, end)
+    }
+    for (const gid of ev.inClass || []) {
+      if (blocks[gid]) pushBlock("inClass", gid, start, end)
     }
   }
 
   return blocks
 }
 
-// Anchor events (lunch, special) that fall inside the visible window are
-// rendered as vertical bars so the timeline stays legible during downtime.
+// The window's rightmost point should hug the end of the day so the axis
+// isn't padded with dead space. Falls back to a minimum width when the day
+// is essentially over, so the NOW line still has room to sit inside a plot.
+function computeWindow(dayEvents, now, maxHours) {
+  const winStart = Math.max(0, now - LOOKBACK_MIN)
+  const timed = dayEvents.filter(e => e.type !== "break" && typeof e.time === "string")
+  const starts = timed.map(e => parseMinutes(e.time))
+  const lastStart = starts.length ? starts[starts.length - 1] : winStart
+  const naturalEnd = lastStart + TRAILING_PAD_MIN
+  const cappedEnd = winStart + maxHours * 60
+  let winEnd = Math.min(cappedEnd, naturalEnd)
+  if (winEnd - winStart < MIN_WINDOW_MIN) winEnd = winStart + MIN_WINDOW_MIN
+  winEnd = Math.min(24 * 60, winEnd)
+  return { winStart, winEnd }
+}
+
+// Anchor events (lunch, special) inside the window render as thin vertical
+// bars with a small icon at the top of the axis.
 function anchorMarkers(dayEvents, winStart, winEnd) {
   const out = []
   for (const e of dayEvents) {
@@ -196,7 +221,7 @@ function makeWidget({ manifest, stale }) {
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
   w.backgroundColor = p.bg
-  w.setPadding(10, 12, 10, 12)
+  w.setPadding(10, 12, 8, 12)
   w.url = SITE_URL
 
   const picked = pickToday(manifest)
@@ -207,10 +232,8 @@ function makeWidget({ manifest, stale }) {
   }
 
   const { event, day } = picked
-  const winHours = parseWindowHours()
   const now = nowMinutes()
-  const winStart = Math.max(0, now - LOOKBACK_MIN)
-  const winEnd = Math.min(24 * 60, winStart + winHours * 60)
+  const { winStart, winEnd } = computeWindow(day.events, now, parseMaxWindowHours())
 
   renderHeader(w, event, day, p, stale)
 
@@ -218,10 +241,11 @@ function makeWidget({ manifest, stale }) {
   const isLarge = family === "large" || family === "extraLarge"
 
   const image = drawTimelineImage({
-    event, day, p, dark, isLarge, winStart, winEnd, now,
+    event, day, p, isLarge, winStart, winEnd, now,
   })
   const img = w.addImage(image)
-  img.resizable = true
+  img.resizable = false
+  img.centerAlignImage()
 
   w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
   return w
@@ -237,44 +261,44 @@ function renderHeader(w, event, day, p, stale) {
   title.lineLimit = 1
 
   const dot = row.addText("  ·  ")
-  dot.font = Font.systemFont(11)
+  dot.font = Font.systemFont(12)
   dot.textColor = p.muted
 
   const sub = row.addText(day.label)
-  sub.font = Font.systemFont(11)
+  sub.font = Font.systemFont(12)
   sub.textColor = p.muted
   sub.lineLimit = 1
 
   row.addSpacer()
 
   const nowLabel = row.addText(nowHM())
-  nowLabel.font = Font.mediumSystemFont(11)
+  nowLabel.font = Font.mediumSystemFont(12)
   nowLabel.textColor = p.accent
 
   if (stale) {
-    const gap = row.addText("  ")
-    gap.font = Font.systemFont(9)
-    const s = row.addText("offline")
+    const s = row.addText("  offline")
     s.font = Font.systemFont(9)
     s.textColor = p.muted
   }
   w.addSpacer(6)
 }
 
-// The timeline is drawn as one image so we get precise horizontal blocks
-// and a crisp NOW line. Canvas coordinates are internal — the widget
-// scales the image to fit its available width.
-function drawTimelineImage({ event, day, p, dark, isLarge, winStart, winEnd, now }) {
+// Draw the timeline at real point dimensions and let `respectScreenScale`
+// handle retina. iOS renders the image 1:1 so text stays crisp and
+// legible; nothing gets shrunk to fit.
+function drawTimelineImage({ event, day, p, isLarge, winStart, winEnd, now }) {
   const groups = event.runGroups
   const groupIds = groups.map(g => g.id)
   const blocks = computeGroupBlocks(day.events, groupIds)
   const markers = anchorMarkers(day.events, winStart, winEnd)
 
-  const W = 640
-  const rowH = isLarge ? 48 : 30
-  const labelColW = 78
-  const axisH = 22
-  const bottomPad = 6
+  // Approximate content area of a medium widget (after the widget's own
+  // padding and the header stack above).
+  const W = isLarge ? 305 : 305
+  const rowH = isLarge ? 40 : 22
+  const labelColW = 44
+  const axisH = 14
+  const bottomPad = 2
   const H = axisH + groups.length * rowH + bottomPad
 
   const dc = new DrawContext()
@@ -283,111 +307,128 @@ function drawTimelineImage({ event, day, p, dark, isLarge, winStart, winEnd, now
   dc.respectScreenScale = true
 
   const plotX0 = labelColW
-  const plotX1 = W - 4
+  const plotX1 = W - 2
   const plotW = plotX1 - plotX0
-  const winMin = winEnd - winStart
+  const winMin = Math.max(1, winEnd - winStart)
   const timeToX = t => plotX0 + ((t - winStart) / winMin) * plotW
 
-  // Axis: hour ticks + labels. Draw a subtle vertical grid line down through
-  // every row so the eye can line blocks up with the axis.
+  // Hour tick marks with faint vertical grid lines through the rows.
   const firstHour = Math.ceil(winStart / 60) * 60
-  dc.setTextAlignedCenter()
   for (let t = firstHour; t <= winEnd; t += 60) {
     const x = timeToX(t)
     dc.setFillColor(p.grid)
-    dc.fillRect(new Rect(x - 0.5, axisH - 4, 1, H - axisH - bottomPad + 4))
-    dc.setFont(Font.mediumSystemFont(10))
+    dc.fillRect(new Rect(x - 0.5, axisH - 2, 1, H - axisH - bottomPad + 2))
+    dc.setFont(Font.mediumSystemFont(8))
     dc.setTextColor(p.muted)
-    dc.drawTextInRect(formatHourLabel(t), new Rect(x - 24, 2, 48, 14))
+    dc.setTextAlignedCenter()
+    dc.drawTextInRect(formatHourLabel(t), new Rect(x - 20, 1, 40, 10))
   }
 
-  // Row bands + group labels + on-track blocks.
+  // Rows: pill label on the left, band background, then any on-track /
+  // in-class blocks inside the band.
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i]
     const y = axisH + i * rowH
-    const bandY = y + 4
-    const bandH = rowH - 8
+    const bandY = y + 2
+    const bandH = rowH - 4
 
     dc.setFillColor(p.row)
     dc.fillRect(new Rect(plotX0, bandY, plotW, bandH))
 
-    // Group pill (rounded rect) on the left, matching the web app's
-    // GroupBadge — colored background with the group label in white.
-    const pillH = Math.min(bandH, 20)
+    // Left pill: solid group color with the group name in white.
+    const pillH = Math.min(bandH, isLarge ? 22 : 16)
     const pillY = y + (rowH - pillH) / 2
     dc.setFillColor(new Color(g.color))
-    drawRoundedRect(dc, new Rect(4, pillY, labelColW - 10, pillH), pillH / 2)
-    dc.setFont(Font.boldSystemFont(11))
+    dc.fillRect(new Rect(2, pillY, labelColW - 6, pillH))
+    dc.setFont(Font.boldSystemFont(isLarge ? 11 : 9))
     dc.setTextColor(new Color("#ffffff"))
     dc.setTextAlignedCenter()
-    dc.drawTextInRect(g.label, new Rect(4, pillY + (pillH - 14) / 2, labelColW - 10, 14))
+    dc.drawTextInRect(g.label, new Rect(2, pillY + (pillH - (isLarge ? 14 : 11)) / 2,
+      labelColW - 6, isLarge ? 14 : 11))
 
-    // On-track blocks (clipped to the visible window). Blocks whose whole
-    // span is in the past are dimmed; blocks straddling now are drawn full
-    // opacity from now onward, dimmed before.
-    for (const b of blocks[g.id] || []) {
-      if (b.end <= winStart || b.start >= winEnd) continue
-      const s = Math.max(b.start, winStart)
-      const e = Math.min(b.end, winEnd)
-      const x = timeToX(s)
-      const bw = Math.max(2, timeToX(e) - x)
-      const rect = new Rect(x, bandY, bw, bandH)
-      if (e <= now) {
-        dc.setFillColor(new Color(g.color, p.pastOpacity))
-        drawRoundedRect(dc, rect, Math.min(4, bandH / 2))
-      } else if (s >= now) {
-        dc.setFillColor(new Color(g.color))
-        drawRoundedRect(dc, rect, Math.min(4, bandH / 2))
-      } else {
-        const splitX = timeToX(now)
-        dc.setFillColor(new Color(g.color, p.pastOpacity))
-        drawRoundedRect(dc, new Rect(x, bandY, splitX - x, bandH), Math.min(4, bandH / 2))
-        dc.setFillColor(new Color(g.color))
-        drawRoundedRect(dc, new Rect(splitX, bandY, bw - (splitX - x), bandH), Math.min(4, bandH / 2))
-      }
-    }
+    drawBlocks({
+      dc, blocks: blocks[g.id].onTrack, kind: "onTrack",
+      color: g.color, bandY, bandH, timeToX, winStart, winEnd, now, p,
+      labelFontSize: isLarge ? 10 : 8,
+    })
+    drawBlocks({
+      dc, blocks: blocks[g.id].inClass, kind: "inClass",
+      color: g.color, bandY, bandH, timeToX, winStart, winEnd, now, p,
+      labelFontSize: isLarge ? 10 : 8,
+    })
   }
 
-  // Anchor markers (lunch / special) as thin vertical bars behind the NOW
-  // line, with a small icon at the top so the downtime is recognizable.
+  // Lunch / special markers as vertical bars behind the NOW line.
   for (const m of markers) {
     const x = timeToX(m.time)
     dc.setFillColor(p.marker)
-    dc.fillRect(new Rect(x - 1, axisH, 2, H - axisH - bottomPad))
-    dc.setFont(Font.systemFont(11))
+    dc.fillRect(new Rect(x - 0.75, axisH, 1.5, H - axisH - bottomPad))
+    dc.setFont(Font.systemFont(9))
     dc.setTextAlignedCenter()
     dc.drawTextInRect(m.type === "lunch" ? "🍔" : "⭐",
-      new Rect(x - 10, 3, 20, 14))
+      new Rect(x - 9, 1, 18, 12))
   }
 
-  // NOW line, drawn last so it sits on top of everything.
+  // NOW line sits on top of everything.
   if (now >= winStart && now <= winEnd) {
     const x = timeToX(now)
     dc.setFillColor(p.accent)
-    dc.fillRect(new Rect(x - 1.25, axisH - 6, 2.5, H - axisH - bottomPad + 6))
-    dc.setFont(Font.boldSystemFont(9))
+    dc.fillRect(new Rect(x - 1, axisH - 3, 2, H - axisH - bottomPad + 3))
+    dc.setFont(Font.boldSystemFont(8))
     dc.setTextColor(p.accent)
     dc.setTextAlignedCenter()
-    dc.drawTextInRect("NOW", new Rect(x - 20, 2, 40, 12))
+    dc.drawTextInRect("NOW", new Rect(x - 16, 2, 32, 10))
   }
 
   return dc.getImage()
 }
 
-// DrawContext has no rounded-rect primitive; approximate with a center
-// rect + two square caps + four corner circles. Falls back to a plain
-// fillRect when the radius is 0.
-function drawRoundedRect(dc, rect, radius) {
-  const r = Math.max(0, Math.min(radius, rect.width / 2, rect.height / 2))
-  if (r === 0) { dc.fillRect(rect); return }
-  const { x, y, width: w, height: h } = rect
-  dc.fillRect(new Rect(x + r, y, w - 2 * r, h))
-  dc.fillRect(new Rect(x, y + r, r, h - 2 * r))
-  dc.fillRect(new Rect(x + w - r, y + r, r, h - 2 * r))
-  dc.fillEllipse(new Rect(x, y, 2 * r, 2 * r))
-  dc.fillEllipse(new Rect(x + w - 2 * r, y, 2 * r, 2 * r))
-  dc.fillEllipse(new Rect(x, y + h - 2 * r, 2 * r, 2 * r))
-  dc.fillEllipse(new Rect(x + w - 2 * r, y + h - 2 * r, 2 * r, 2 * r))
+// Blocks whose entire span is past are dimmed; blocks straddling now are
+// dimmed before the NOW line, full opacity after. In-class blocks use a
+// tinted background instead of a full-color fill so they read as different
+// from on-track without competing visually.
+function drawBlocks({ dc, blocks, kind, color, bandY, bandH, timeToX,
+  winStart, winEnd, now, p, labelFontSize }) {
+  for (const b of blocks) {
+    if (b.end <= winStart || b.start >= winEnd) continue
+    const s = Math.max(b.start, winStart)
+    const e = Math.min(b.end, winEnd)
+    const x = timeToX(s)
+    const bw = Math.max(2, timeToX(e) - x)
+
+    // Draw the block in one or two pieces (dim before now, full after).
+    const pieces = []
+    if (e <= now) pieces.push({ x, w: bw, past: true })
+    else if (s >= now) pieces.push({ x, w: bw, past: false })
+    else {
+      const split = timeToX(now)
+      pieces.push({ x, w: split - x, past: true })
+      pieces.push({ x: split, w: bw - (split - x), past: false })
+    }
+
+    for (const pc of pieces) {
+      if (kind === "onTrack") {
+        dc.setFillColor(new Color(color, pc.past ? p.pastOpacity : 1))
+      } else {
+        // In-class: pale fill so it doesn't look like the group is racing.
+        dc.setFillColor(new Color(color, pc.past ? 0.15 : 0.3))
+      }
+      dc.fillRect(new Rect(pc.x, bandY, pc.w, bandH))
+    }
+
+    // Label inside the block if there's room. On-track uses white on the
+    // solid color; in-class uses the color itself on the pale fill.
+    if (bw >= 26) {
+      const label = kind === "onTrack" ? "On track" : "In class"
+      dc.setFont(Font.mediumSystemFont(labelFontSize))
+      if (kind === "onTrack") dc.setTextColor(new Color("#ffffff"))
+      else dc.setTextColor(new Color(color))
+      dc.setTextAlignedCenter()
+      const textH = labelFontSize + 2
+      dc.drawTextInRect(label,
+        new Rect(x, bandY + (bandH - textH) / 2, bw, textH))
+    }
+  }
 }
 
 function renderNoEvents(w, p, stale, next) {
