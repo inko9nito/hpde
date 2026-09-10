@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import { SessionCard } from './SessionCard'
 import { EventCard } from './EventCard'
 import { TimeIndicator } from './TimeIndicator'
-import { parseMinutes, nowMinutes } from '../utils/time'
+import { parseMinutes, nowMinutes, findCurrentEvent } from '../utils/time'
 import type { ScheduleEvent, RunGroupConfig } from '../types'
 
 interface Props {
@@ -34,9 +34,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
   const now = nowMinutes()
 
   const visible = events.flatMap<ScheduleEvent>(event => {
-    // Breaks and general events always show
     if (event.type !== 'session') return [event]
-    // Sessions: filter by selected groups
     if (selectedGroups.length === 0) return [event]
 
     const onTrack = event.onTrack.filter(id => selectedGroups.includes(id))
@@ -45,7 +43,6 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return [{ ...event, onTrack, inClass }]
   })
 
-  // Breaks have no time; keep them unless they'd be orphaned at the top of the list
   const withoutPast = hidePast && isToday
     ? visible.filter(e => e.type === 'break' || parseMinutes(e.time) >= now)
     : visible
@@ -54,17 +51,35 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return withoutPast.slice(0, idx).some(prev => prev.type !== 'break')
   })
 
-  const indicatorIndex = isToday
+  // Timed (non-break) events, needed for the current-event lookup.
+  const timedIndices: number[] = []
+  const timedTimes: string[] = []
+  filtered.forEach((e, i) => {
+    if (e.type !== 'break') {
+      timedIndices.push(i)
+      timedTimes.push((e as { time: string }).time)
+    }
+  })
+  const { index: currentTimedIdx, progress: currentProgress } = isToday
+    ? findCurrentEvent(timedTimes, now)
+    : { index: -1, progress: 0 }
+  const currentIdx = currentTimedIdx === -1 ? -1 : timedIndices[currentTimedIdx]
+
+  const indicatorIndex = currentIdx === -1 && isToday
     ? filtered.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
     : -1
-  const indicatorAtEnd = isToday && indicatorIndex === -1 && filtered.length > 0
+  const indicatorAtEnd = isToday && currentIdx === -1 && indicatorIndex === -1 && filtered.length > 0
 
   let lastSessionNumber: number | undefined = undefined
 
   return (
     <div className="flex flex-col gap-2 pb-10">
       {filtered.map((event, idx) => {
-        const past = isToday && event.type !== 'break' && parseMinutes(event.time) < now
+        const isCurrentEvent = idx === currentIdx
+        const past = isToday
+          && event.type !== 'break'
+          && !isCurrentEvent
+          && parseMinutes(event.time) < now
 
         let sessionHeader: React.ReactNode = null
         if (event.type === 'session' && event.sessionNumber !== undefined && event.sessionNumber !== lastSessionNumber) {
@@ -76,22 +91,34 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
           )
         }
 
+        const card = event.type === 'break'
+          ? (
+            <div className="flex items-center gap-2 py-1">
+              <div className="h-px flex-1 bg-gray-200" />
+              <span className="text-xs text-gray-400 italic">{event.label}</span>
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+          )
+          : event.type === 'session'
+            ? <SessionCard event={event} runGroups={runGroups} past={past} />
+            : <EventCard event={event} past={past} />
+
         return (
           <div key={idx}>
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
-            {event.type === 'break'
-              ? (
-                <div className="flex items-center gap-2 py-1">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-xs text-gray-400 italic">{event.label}</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
-              )
-              : event.type === 'session'
-                ? <SessionCard event={event} runGroups={runGroups} past={past} />
-                : <EventCard event={event} past={past} />
-            }
+            {isCurrentEvent ? (
+              <div ref={indicatorRef} className="relative">
+                {card}
+                <TimeIndicator
+                  events={filtered}
+                  overlay
+                  overlayTopPct={currentProgress * 100}
+                />
+              </div>
+            ) : (
+              card
+            )}
           </div>
         )
       })}

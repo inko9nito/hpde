@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown, isCurrent, CURRENT_WINDOW_MIN } from './time'
+import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN } from './time'
 
 describe('parseMinutes', () => {
   it('converts "00:00" to 0', () => expect(parseMinutes('00:00')).toBe(0))
@@ -17,23 +17,38 @@ describe('formatTime', () => {
   it('formats "09:05" as "9:05"', () => expect(formatTime('09:05')).toBe('9:05'))
 })
 
-describe('isCurrent', () => {
-  const start = parseMinutes('13:10')
-  it('false when the event has not started', () => {
-    expect(isCurrent(start, parseMinutes('13:00'))).toBe(false)
+describe('findCurrentEvent', () => {
+  const times = ['08:30', '09:00', '10:30', '11:00']
+
+  it('returns -1 before the first event', () => {
+    expect(findCurrentEvent(times, parseMinutes('08:00'))).toEqual({ index: -1, progress: 0 })
   })
-  it('true exactly at the start', () => {
-    expect(isCurrent(start, start)).toBe(true)
+  it('returns index 0 at the very start of the first event', () => {
+    expect(findCurrentEvent(times, parseMinutes('08:30'))).toEqual({ index: 0, progress: 0 })
   })
-  it('true while inside the 15-minute window', () => {
-    expect(isCurrent(start, parseMinutes('13:15'))).toBe(true)
-    expect(isCurrent(start, parseMinutes('13:25'))).toBe(true)
+  it('returns index 0 with progress at midpoint between 08:30 and 09:00', () => {
+    const r = findCurrentEvent(times, parseMinutes('08:45'))
+    expect(r.index).toBe(0)
+    expect(r.progress).toBeCloseTo(0.5, 5)
   })
-  it('false at 16 minutes past', () => {
-    expect(isCurrent(start, parseMinutes('13:26'))).toBe(false)
+  it('flips to the next event as soon as it starts', () => {
+    expect(findCurrentEvent(times, parseMinutes('09:00'))).toEqual({ index: 1, progress: 0 })
   })
-  it('CURRENT_WINDOW_MIN is 15 (kept in sync with the widget)', () => {
-    expect(CURRENT_WINDOW_MIN).toBe(15)
+  it('progress on 09:00 → 10:30 event goes 0.20 at 09:18', () => {
+    const r = findCurrentEvent(times, parseMinutes('09:18'))
+    expect(r.index).toBe(1)
+    expect(r.progress).toBeCloseTo(18 / 90, 5)
+  })
+  it('uses the 30 min fallback for the last event of the day', () => {
+    const r = findCurrentEvent(times, parseMinutes('11:15'))
+    expect(r.index).toBe(3)
+    expect(r.progress).toBeCloseTo(0.5, 5)
+  })
+  it('returns -1 once the fallback duration has elapsed on the last event', () => {
+    expect(findCurrentEvent(times, parseMinutes('11:30'))).toEqual({ index: -1, progress: 0 })
+  })
+  it('LAST_EVENT_FALLBACK_MIN is 30 (kept in sync with the widget)', () => {
+    expect(LAST_EVENT_FALLBACK_MIN).toBe(30)
   })
 })
 

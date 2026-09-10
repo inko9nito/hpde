@@ -5,15 +5,33 @@ export function parseMinutes(time: string): number {
 }
 
 /**
- * How long an event stays "current" after it starts. The now-marker
- * overlays on a current event's card and the card stays at full opacity.
- * After this window the event is treated as past.
+ * Fallback duration (in minutes) assumed for the last event of the day —
+ * it has no following event to infer an end time from. Kept in sync with
+ * LAST_EVENT_FALLBACK_MIN in scripts/hpde-widget.js.
  */
-export const CURRENT_WINDOW_MIN = 15
+export const LAST_EVENT_FALLBACK_MIN = 30
 
-/** True while an event's start is within `windowMin` minutes of `now`. */
-export function isCurrent(startMinutes: number, now: number, windowMin: number = CURRENT_WINDOW_MIN): boolean {
-  return startMinutes <= now && now - startMinutes <= windowMin
+/**
+ * Compute the current event and progress fraction (0-1) through it.
+ * `visibleTimes` are the timed events in chronological order (breaks
+ * stripped). Returns `{ index: -1 }` when no event contains `now`.
+ */
+export function findCurrentEvent(
+  visibleTimes: string[],
+  now: number,
+): { index: number; progress: number } {
+  let lastPast = -1
+  for (let i = 0; i < visibleTimes.length; i++) {
+    if (parseMinutes(visibleTimes[i]) <= now) lastPast = i
+    else break
+  }
+  if (lastPast === -1) return { index: -1, progress: 0 }
+  const start = parseMinutes(visibleTimes[lastPast])
+  const nextStart = visibleTimes[lastPast + 1] ? parseMinutes(visibleTimes[lastPast + 1]) : null
+  const end = nextStart !== null ? nextStart : start + LAST_EVENT_FALLBACK_MIN
+  if (now >= end) return { index: -1, progress: 0 }
+  const progress = end === start ? 0 : (now - start) / (end - start)
+  return { index: lastPast, progress: Math.max(0, Math.min(1, progress)) }
 }
 
 /** Convert "HH:MM" (24h) to "H:MM" 12h display (no AM/PM) */

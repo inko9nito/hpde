@@ -11,8 +11,10 @@ const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
-// Kept in sync with CURRENT_WINDOW_MIN in src/utils/time.ts.
-const CURRENT_WINDOW_MIN = 15
+// Fallback duration (minutes) applied to the last event of the day, which
+// has no following event to infer an end time from. Kept in sync with
+// LAST_EVENT_FALLBACK_MIN in src/utils/time.ts.
+const LAST_EVENT_FALLBACK_MIN = 30
 
 // ---------- data fetching (with offline cache) ----------
 
@@ -171,15 +173,26 @@ function makeWidget({ manifest, stale }) {
 
   const now = nowMinutes()
 
-  // Find the "current" event: the most recent event to have started, if
-  // it was within CURRENT_WINDOW_MIN. When it exists, the now-marker
-  // overlays that card instead of sitting between two cards.
+  // "Current" event: the last event that has started, iff `now` still
+  // falls inside its inferred duration. Duration is `next.start - start`,
+  // or LAST_EVENT_FALLBACK_MIN when there is no next event on today's
+  // schedule. When an event is current we draw the now-line THROUGH its
+  // card (via a DrawContext background image) at Y proportional to how
+  // far we are into the event.
   let currentIdx = -1
-  for (let i = visible.length - 1; i >= 0; i--) {
-    const t = parseMinutes(visible[i].time)
-    if (t <= now) {
-      if (now - t <= CURRENT_WINDOW_MIN) currentIdx = i
-      break
+  let currentProgress = 0
+  let lastPastIdx = -1
+  for (let i = 0; i < visible.length; i++) {
+    if (parseMinutes(visible[i].time) <= now) lastPastIdx = i
+    else break
+  }
+  if (lastPastIdx !== -1) {
+    const start = parseMinutes(visible[lastPastIdx].time)
+    const nextEv = visible[lastPastIdx + 1]
+    const end = nextEv ? parseMinutes(nextEv.time) : start + LAST_EVENT_FALLBACK_MIN
+    if (now < end) {
+      currentIdx = lastPastIdx
+      currentProgress = end === start ? 0 : (now - start) / (end - start)
     }
   }
 
@@ -218,7 +231,7 @@ function makeWidget({ manifest, stale }) {
     const isCurrentEvent = i === currentLocalIdx
     const past = !isCurrentEvent && parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past,
-      isCurrentEvent ? { now, nextEvent } : null)
+      isCurrentEvent ? { progress: currentProgress } : null)
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
@@ -254,15 +267,30 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
-function drawEventRow(w, ev, groupById, selected, p, past, current) {
-  // Current events overlay the now-marker on top of the card: draw the
-  // rule row directly above with 0 bottom spacer so they read as one unit.
-  if (current) drawNowLine(w, p, current.now, current.nextEvent, 0)
+// Fixed size of the current-event card, so we can precompute a background
+// image with the now-line drawn at Y = progress * height. Height in points
+// (Scriptable Sizes are in points; the DrawContext scales to screen ppi).
+const CURRENT_CARD_HEIGHT = 44
+const CURRENT_CARD_IMAGE_WIDTH = 640  // wide canvas — image stretches to fit
+const CURRENT_CARD_IMAGE_HEIGHT = 88   // 2x of card height so the line stays crisp
 
-  // Card-style row (block) with subtle background and rounded corners.
+function drawEventRow(w, ev, groupById, selected, p, past, current) {
   const card = w.addStack()
-  card.backgroundColor = current ? p.currentCardBg : p.cardBg
-  card.cornerRadius = 6
+  if (current) {
+    // The card's background is a DrawContext image: rounded card fill
+    // plus a horizontal blue rule at Y = progress * height. Card content
+    // renders on top of it.
+    card.backgroundImage = makeHighlightBackground(
+      CURRENT_CARD_IMAGE_WIDTH,
+      CURRENT_CARD_IMAGE_HEIGHT,
+      Math.max(0, Math.min(1, current.progress)),
+      p.currentCardBg, p.accent
+    )
+    card.size = new Size(0, CURRENT_CARD_HEIGHT)
+  } else {
+    card.backgroundColor = p.cardBg
+    card.cornerRadius = 6
+  }
   card.setPadding(7, 10, 7, 10)
   card.spacing = 8
   card.centerAlignContent()
@@ -310,6 +338,47 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 
   card.addSpacer()
   w.addSpacer(6)
+}
+
+// Draw the current-event card background: a filled rounded rectangle
+// with a horizontal blue rule at Y = progress * height, plus a small
+// filled circle at its left edge. The image is used as the card's
+// backgroundImage so the card's flow-laid-out text renders on top of it.
+function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
+  const ctx = new DrawContext()
+  ctx.size = new Size(width, height)
+  ctx.opaque = false
+  ctx.respectScreenScale = true
+
+  const cornerR = 12
+  const rect = new Rect(0, 0, width, height)
+
+  const bgPath = new Path()
+  bgPath.addRoundedRect(rect, cornerR, cornerR)
+  ctx.addPath(bgPath)
+  ctx.setFillColor(bgColor)
+  ctx.fillPath()
+
+  // Horizontal rule at the progress Y, clamped so it stays inside the
+  // card even at 0 % or 100 %.
+  const yRaw = height * progress
+  const thickness = 3
+  const y = Math.min(Math.max(yRaw, thickness), height - thickness)
+  const linePath = new Path()
+  linePath.addRect(new Rect(0, y - thickness / 2, width, thickness))
+  ctx.addPath(linePath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  // Left-edge dot for the "you are here" marker.
+  const dotDiameter = 14
+  const dotPath = new Path()
+  dotPath.addEllipse(new Rect(4, y - dotDiameter / 2, dotDiameter, dotDiameter))
+  ctx.addPath(dotPath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  return ctx.getImage()
 }
 
 function drawSessionHeader(w, p, n) {

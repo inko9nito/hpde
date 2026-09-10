@@ -63,6 +63,37 @@ describe('past event opacity', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(document.querySelectorAll('.opacity-60')).toHaveLength(0)
   })
+
+  it('keeps the current event at full opacity while `now` sits inside its inferred duration', () => {
+    // now = 10:35, session 10:30 → next 11:00 → progress ~1/6
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 35)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const cards = document.querySelectorAll('.rounded-xl')
+    // The 10:30 card is current and must not be faded.
+    const orangeCurrent = Array.from(cards).find(el => el.textContent?.includes('Orange') && !el.classList.contains('opacity-60'))
+    expect(orangeCurrent).toBeDefined()
+  })
+})
+
+describe('current-event overlay', () => {
+  it('positions the overlay indicator inside the current card at progress %', () => {
+    // now = 10:45, session at 10:30 → next 11:00; progress = 15/30 = 50 %
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 45)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const overlay = document.querySelector<HTMLElement>('[data-time-indicator].absolute')
+    expect(overlay).not.toBeNull()
+    expect(overlay!.style.top).toBe('50%')
+  })
+
+  it('falls back to the between-cards indicator before the day starts', () => {
+    // now = 07:00, before the 08:00 first event → no event is current yet
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(7 * 60)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const overlay = document.querySelector('[data-time-indicator].absolute')
+    const between = document.querySelector('[data-time-indicator].relative')
+    expect(overlay).toBeNull()
+    expect(between).not.toBeNull()
+  })
 })
 
 describe('run group filter', () => {
