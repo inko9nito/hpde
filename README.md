@@ -93,3 +93,9 @@ Editing an MD file while `npm run dev` is running will hot-reload the UI instant
 ## Deployment
 
 Pushes to `main` automatically build and deploy to GitHub Pages via GitHub Actions. No manual steps needed.
+
+## iOS Home Screen widget
+
+A [Scriptable](https://scriptable.app/) widget lives in [`scripts/`](./scripts/README.md).
+It reads `dist/api/events.json` (emitted by the Vite build) and renders the
+current day's schedule on the iPhone Home Screen.
