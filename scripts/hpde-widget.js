@@ -272,6 +272,7 @@ function renderHeader(w, event, day, p, stale) {
 // known Y range. The image is at 2× resolution so lines stay crisp.
 const CURRENT_CARD_HEIGHT = 54           // card height in points
 const CURRENT_CARD_PAD_V = 14            // top/bottom padding in points
+const CURRENT_CARD_CORNER_RADIUS = 12    // must match cornerR in makeHighlightBackground
 const CURRENT_CARD_IMAGE_WIDTH = 640
 const CURRENT_CARD_IMAGE_HEIGHT = CURRENT_CARD_HEIGHT * 2
 
@@ -298,6 +299,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
       p.currentCardBg, p.accent
     )
     card.size = new Size(0, CURRENT_CARD_HEIGHT)
+    card.cornerRadius = CURRENT_CARD_CORNER_RADIUS
   } else {
     card.backgroundColor = p.cardBg
     card.cornerRadius = 6
@@ -309,7 +311,10 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 
   const timeCol = card.addStack()
   timeCol.size = new Size(current ? 60 : 44, 0)
-  timeCol.centerAlignContent()
+  // Left-align (not center) so the time digits start at the same x in
+  // every row, even though the current card uses a wider column and a
+  // bigger font than past/future rows.
+  timeCol.leftAlignContent()
 
   const time = timeCol.addText(formatTime12(ev.time))
   time.font = current ? monoBoldFont(17) : monoFont(13)
@@ -365,38 +370,49 @@ function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
   ctx.opaque = false
   ctx.respectScreenScale = true
 
-  const cornerR = 12
+  const cornerR = CURRENT_CARD_CORNER_RADIUS
   const bgPath = new Path()
   bgPath.addRoundedRect(new Rect(0, 0, width, height), cornerR, cornerR)
   ctx.addPath(bgPath)
   ctx.setFillColor(bgColor)
   ctx.fillPath()
 
+  const thickness = 3
+  const dotDiameter = 12
+  const dotRadius = dotDiameter / 2
+  // Keep the dot clear of the rounded left corners (its bounding box
+  // must start at/after the corner radius) so it's never clipped by
+  // the card's own rounded-corner mask.
+  const dotInsetX = cornerR + 6
+
   // Padding zone height in image coords (2× card padding).
   const padZ = CURRENT_CARD_PAD_V * 2
-  const edge = 4  // safety buffer from very top/bottom edge
+  // Keep the marker's full vertical travel inside the canvas — its
+  // bounds must never cross y=0 or y=height, or the dot gets clipped.
+  const topMin = dotRadius + 4
+  const topMax = padZ - 4
+  const bottomMin = height - padZ + 4
+  const bottomMax = height - dotRadius - 4
 
   let y
   if (progress < 0.5) {
     // 0.0 → near top edge, 0.5 → just above the content zone.
     const t = progress * 2
-    y = edge + t * (padZ - edge)
+    y = topMin + t * (topMax - topMin)
   } else {
     // 0.5 → just below the content zone, 1.0 → near bottom edge.
     const t = (progress - 0.5) * 2
-    y = (height - padZ) + t * (padZ - edge)
+    y = bottomMin + t * (bottomMax - bottomMin)
   }
 
-  const thickness = 3
   const linePath = new Path()
   linePath.addRect(new Rect(0, y - thickness / 2, width, thickness))
   ctx.addPath(linePath)
   ctx.setFillColor(lineColor)
   ctx.fillPath()
 
-  const dotDiameter = 14
   const dotPath = new Path()
-  dotPath.addEllipse(new Rect(4, y - dotDiameter / 2, dotDiameter, dotDiameter))
+  dotPath.addEllipse(new Rect(dotInsetX, y - dotRadius, dotDiameter, dotDiameter))
   ctx.addPath(dotPath)
   ctx.setFillColor(lineColor)
   ctx.fillPath()
