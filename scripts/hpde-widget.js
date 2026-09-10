@@ -67,6 +67,13 @@ function monoFont(size) {
   return new Font("Menlo", size)
 }
 
+function monoBoldFont(size) {
+  if (typeof Font.boldMonospacedSystemFont === "function") {
+    return Font.boldMonospacedSystemFont(size)
+  }
+  return new Font("Menlo-Bold", size)
+}
+
 function formatTime12(hhmm) {
   const [h, m] = hhmm.split(":").map(Number)
   const hour = h % 12 || 12
@@ -116,10 +123,12 @@ function parseGroupFilter() {
 function palette(dark) {
   return dark
     ? { bg: new Color("#0b0b0f"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        cardBg: new Color("#141418"), foodStroke: new Color("#f5f5f7"),
+        cardBg: new Color("#141418"), currentCardBg: new Color("#122135"),
+        foodStroke: new Color("#f5f5f7"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        cardBg: new Color("#fafafb"), foodStroke: new Color("#111827"),
+        cardBg: new Color("#fafafb"), currentCardBg: new Color("#eef4ff"),
+        foodStroke: new Color("#111827"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
 
@@ -252,7 +261,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 
   // Card-style row (block) with subtle background and rounded corners.
   const card = w.addStack()
-  card.backgroundColor = p.cardBg
+  card.backgroundColor = current ? p.currentCardBg : p.cardBg
   card.cornerRadius = 6
   card.setPadding(7, 10, 7, 10)
   card.spacing = 8
@@ -265,8 +274,8 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   timeCol.centerAlignContent()
 
   const time = timeCol.addText(formatTime12(ev.time))
-  time.font = monoFont(13)
-  time.textColor = p.fg
+  time.font = current ? monoBoldFont(13) : monoFont(13)
+  time.textColor = current ? p.accent : p.fg
   if (past) time.textOpacity = p.pastOpacity
 
   // Right content

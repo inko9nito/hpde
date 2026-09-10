@@ -28,7 +28,7 @@ export const TimeIndicator = forwardRef<HTMLDivElement, Props>(({ events, overla
     : 'text-gray-400'
 
   const wrapperClass = overlay
-    ? 'absolute inset-x-0 -top-5 pointer-events-none'
+    ? 'absolute inset-x-0 top-0 pointer-events-none z-10'
     : 'relative my-6'
 
   return (
