@@ -12,28 +12,28 @@ export function EventPicker({ events, active, onChange }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="relative flex items-start gap-1">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 text-left group"
-      >
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 leading-tight">{active.name}</h1>
-          <p className="text-sm text-gray-500">{active.subtitle}</p>
-        </div>
-        <ChevronDown size={18} className="text-gray-400 mt-1 group-hover:text-gray-600 transition-colors" />
-      </button>
-      {active.link && (
-        <a
-          href={active.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Event page"
-          className="mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+    <div className="relative min-w-0">
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1 text-left group min-w-0"
         >
-          <ExternalLink size={16} />
-        </a>
-      )}
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
+          <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
+        </button>
+        {active.link && (
+          <a
+            href={active.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Event page"
+            className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:text-gray-700"
+          >
+            <ExternalLink size={14} />
+          </a>
+        )}
+      </div>
+      <p className="text-sm text-gray-500">{active.subtitle}</p>
 
       {open && (
         <>
