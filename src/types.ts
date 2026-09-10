@@ -3,6 +3,7 @@ export interface RunGroupConfig {
   label: string
   bgClass: string
   textClass: string
+  description?: string
 }
 
 export interface GeneralEvent {
