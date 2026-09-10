@@ -18,6 +18,7 @@ export interface SessionEvent {
   sessionNumber?: number
   onTrack: string[]
   inClass?: string[]
+  note?: string
 }
 
 export interface BreakEvent {
@@ -38,6 +39,7 @@ export interface EventConfig {
   id: string
   name: string
   subtitle: string
+  link?: string
   runGroups: RunGroupConfig[]
   days: DaySchedule[]
 }

@@ -1,6 +1,6 @@
 import type { EventConfig } from '../../types'
 import { parseScheduleMD } from '../../utils/parseSchedule'
-import src from '../schedules/2025-11-07_msrc-3-1.md?raw'
+import src from '../schedules/2026-09-13_msr-scca.md?raw'
 
-const event: EventConfig = parseScheduleMD('msrc-3-1', src)
+const event: EventConfig = parseScheduleMD('2026-09-13_msr-scca', src)
 export default event
