@@ -66,20 +66,22 @@ describe('past event opacity', () => {
 })
 
 describe('current event window', () => {
-  it('keeps a card at full opacity while it is within 15 minutes of start', () => {
+  it('keeps a card at full opacity and tints it while within 15 minutes of start', () => {
     // now = 09:10, session at 09:00 → 10 min into it → current
     vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 10)
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
     expect(pinkCard.classList.contains('opacity-60')).toBe(false)
+    expect(pinkCard.classList.contains('bg-blue-50')).toBe(true)
   })
 
-  it('flips the same card to past once 16+ minutes have elapsed', () => {
+  it('flips the same card to past (and removes the highlight) once 16+ minutes have elapsed', () => {
     // now = 09:16, session at 09:00 → past
     vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 16)
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
     expect(pinkCard.classList.contains('opacity-60')).toBe(true)
+    expect(pinkCard.classList.contains('bg-blue-50')).toBe(false)
   })
 })
 

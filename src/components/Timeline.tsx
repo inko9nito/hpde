@@ -95,15 +95,21 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
             </div>
           )
           : event.type === 'session'
-            ? <SessionCard event={event} runGroups={runGroups} past={past} />
-            : <EventCard event={event} past={past} />
+            ? <SessionCard event={event} runGroups={runGroups} past={past} current={isCurrentEvent} />
+            : <EventCard event={event} past={past} current={isCurrentEvent} />
 
         return (
-          <div key={idx} className={isCurrentEvent ? 'relative' : undefined}>
+          <div key={idx}>
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
-            {card}
-            {isCurrentEvent && <TimeIndicator ref={indicatorRef} events={filtered} overlay />}
+            {isCurrentEvent ? (
+              <div ref={indicatorRef} className="relative mt-6">
+                <TimeIndicator events={filtered} overlay />
+                {card}
+              </div>
+            ) : (
+              card
+            )}
           </div>
         )
       })}
