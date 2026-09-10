@@ -12,7 +12,7 @@ export function EventPicker({ events, active, onChange }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="relative min-w-0">
+    <div className="relative min-w-0 pl-1">
       <div className="flex items-center gap-1">
         <button
           onClick={() => setOpen(o => !o)}
