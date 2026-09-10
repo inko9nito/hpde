@@ -15,7 +15,7 @@ export function EventCard({ event, past }: Props) {
       isFood
         ? 'border-2 border-gray-900 bg-white my-2'
         : 'border border-gray-200 bg-white'
-    } ${past ? 'opacity-40' : ''}`}>
+    } ${past ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-4">
         <div className="w-16 shrink-0 font-mono text-lg font-semibold text-gray-900">
           {formatTime(event.time)}
