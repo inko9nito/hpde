@@ -137,12 +137,22 @@ export default function App() {
         )}
 
         {view === 'map' && (
-          <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-400 shadow-sm">
-            <div className="text-center">
-              <Map size={40} className="mx-auto mb-2 opacity-30" />
-              <p className="text-sm">Track map coming soon</p>
+          activeEvent.mapImage ? (
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <img
+                src={activeEvent.mapImage}
+                alt={`${activeEvent.name} track map`}
+                className="block w-full h-auto"
+              />
             </div>
-          </div>
+          ) : (
+            <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-400 shadow-sm">
+              <div className="text-center">
+                <Map size={40} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Track map coming soon</p>
+              </div>
+            </div>
+          )
         )}
 
       </div>
