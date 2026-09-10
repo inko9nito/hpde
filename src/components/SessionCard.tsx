@@ -45,6 +45,9 @@ export function SessionCard({ event, runGroups, past }: Props) {
               </div>
             </>
           )}
+          {event.note && (
+            <p className="text-xs italic text-gray-500">{event.note}</p>
+          )}
         </div>
       </div>
     </div>

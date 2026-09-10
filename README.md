@@ -8,7 +8,17 @@ Track day schedule app for HPDE events. Optimized for mobile (iPhone 13 mini).
 
 ## Editing a schedule
 
-All schedule data lives in `src/data/schedules/`. Each event is one Markdown file named `YYYY-MM-DD_event-id.md`.
+All schedule data lives in `src/data/schedules/`. Each event is one Markdown file named `YYYY-MM-DD_event-id.md`, and the matching wrapper in `src/data/events/` uses the same `YYYY-MM-DD_event-id` filename and id.
+
+### Top-of-file directives
+
+```
+# Event name
+subtitle: Sep 13, 2026 · MSR
+link: https://example.com/event-page
+```
+
+`link:` is optional — when set, a small external-link icon shows next to the event title in the header.
 
 ### Line format
 
@@ -54,12 +64,12 @@ Format: `id | Display name | Tailwind background class | Tailwind text class`
 ## Adding a new event
 
 1. Create `src/data/schedules/YYYY-MM-DD_event-id.md` (copy an existing file as a template)
-2. Create `src/data/events/event-id.ts`:
+2. Create `src/data/events/YYYY-MM-DD_event-id.ts`:
    ```ts
    import type { EventConfig } from '../../types'
    import { parseScheduleMD } from '../../utils/parseSchedule'
    import src from '../schedules/YYYY-MM-DD_event-id.md?raw'
-   const event: EventConfig = parseScheduleMD('event-id', src)
+   const event: EventConfig = parseScheduleMD('YYYY-MM-DD_event-id', src)
    export default event
    ```
 3. Add it to `src/data/index.ts` — the first item in the array is shown by default

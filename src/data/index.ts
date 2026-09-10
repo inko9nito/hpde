@@ -1,6 +1,7 @@
-import msrc17 from './events/msrc-1-7'
-import msrc31 from './events/msrc-3-1'
-import ecr27 from './events/ecr-2-7'
+import msrScca from './events/2026-09-13_msr-scca'
+import msrc17 from './events/2026-06-06_msrc-1-7'
+import msrc31 from './events/2025-11-07_msrc-3-1'
+import ecr27 from './events/2026-05-30_ecr-2-7'
 import type { EventConfig } from '../types'
 
-export const EVENTS: EventConfig[] = [msrc17, ecr27, msrc31]
+export const EVENTS: EventConfig[] = [msrScca, msrc17, ecr27, msrc31]

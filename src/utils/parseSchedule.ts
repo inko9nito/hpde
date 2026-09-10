@@ -5,6 +5,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
   let name = ''
   let subtitle = ''
+  let link: string | undefined
   const runGroups: RunGroupConfig[] = []
   const days: DaySchedule[] = []
   let currentDay: DaySchedule | null = null
@@ -20,6 +21,11 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (line.startsWith('subtitle:')) {
       subtitle = line.slice('subtitle:'.length).trim()
+      continue
+    }
+
+    if (line.startsWith('link:')) {
+      link = line.slice('link:'.length).trim() || undefined
       continue
     }
 
@@ -66,7 +72,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     }
   }
 
-  return { id, name, subtitle, runGroups, days }
+  return { id, name, subtitle, ...(link ? { link } : {}), runGroups, days }
 }
 
 function parseEventLine(line: string): ScheduleEvent | null {
@@ -93,12 +99,15 @@ function parseEventLine(line: string): ScheduleEvent | null {
 
     let onTrack: string[] = []
     let inClass: string[] = []
+    let note: string | undefined
 
     for (const token of rest) {
       if (token.startsWith('on:')) {
         onTrack = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
       } else if (token.startsWith('in:')) {
         inClass = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
+      } else if (token.startsWith('note:')) {
+        note = token.slice(5).trim() || undefined
       }
     }
 
@@ -108,6 +117,7 @@ function parseEventLine(line: string): ScheduleEvent | null {
       ...(sessionNumber !== undefined ? { sessionNumber } : {}),
       onTrack,
       ...(inClass.length ? { inClass } : {}),
+      ...(note ? { note } : {}),
     }
   }
 

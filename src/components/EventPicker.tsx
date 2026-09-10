@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown, Check, ExternalLink } from 'lucide-react'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -12,7 +12,7 @@ export function EventPicker({ events, active, onChange }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="relative">
+    <div className="relative flex items-start gap-1">
       <button
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-1.5 text-left group"
@@ -23,6 +23,17 @@ export function EventPicker({ events, active, onChange }: Props) {
         </div>
         <ChevronDown size={18} className="text-gray-400 mt-1 group-hover:text-gray-600 transition-colors" />
       </button>
+      {active.link && (
+        <a
+          href={active.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Event page"
+          className="mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+        >
+          <ExternalLink size={16} />
+        </a>
+      )}
 
       {open && (
         <>
