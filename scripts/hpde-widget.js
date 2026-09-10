@@ -231,7 +231,7 @@ function makeWidget({ manifest, stale }) {
     const isCurrentEvent = i === currentLocalIdx
     const past = !isCurrentEvent && parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past,
-      isCurrentEvent ? { progress: currentProgress } : null)
+      isCurrentEvent ? { progress: currentProgress, now, nextEvent } : null)
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
@@ -275,11 +275,18 @@ const CURRENT_CARD_IMAGE_WIDTH = 640  // wide canvas — image stretches to fit
 const CURRENT_CARD_IMAGE_HEIGHT = 88   // 2x of card height so the line stays crisp
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
+  if (current) {
+    // Caption above the current-event card: current time on the left,
+    // countdown to the next event on the right (drawNowLine draws the
+    // same header but with a rule below; here the rule lives *inside*
+    // the card image, so we only want the labels).
+    drawCurrentCaption(w, p, current.now, current.nextEvent)
+  }
   const card = w.addStack()
   if (current) {
     // The card's background is a DrawContext image: rounded card fill
-    // plus a horizontal blue rule at Y = progress * height. Card content
-    // renders on top of it.
+    // plus a horizontal blue rule at Y = progress * height, with a dot
+    // at the left edge. Card content renders on top of it.
     card.backgroundImage = makeHighlightBackground(
       CURRENT_CARD_IMAGE_WIDTH,
       CURRENT_CARD_IMAGE_HEIGHT,
@@ -359,8 +366,6 @@ function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
   ctx.setFillColor(bgColor)
   ctx.fillPath()
 
-  // Horizontal rule at the progress Y, clamped so it stays inside the
-  // card even at 0 % or 100 %.
   const yRaw = height * progress
   const thickness = 3
   const y = Math.min(Math.max(yRaw, thickness), height - thickness)
@@ -370,7 +375,6 @@ function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
   ctx.setFillColor(lineColor)
   ctx.fillPath()
 
-  // Left-edge dot for the "you are here" marker.
   const dotDiameter = 14
   const dotPath = new Path()
   dotPath.addEllipse(new Rect(4, y - dotDiameter / 2, dotDiameter, dotDiameter))
@@ -379,6 +383,34 @@ function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
   ctx.fillPath()
 
   return ctx.getImage()
+}
+
+// Small caption drawn above the current-event card: current time on the
+// left, countdown to the next event on the right. Same content as the
+// header row on the between-cards drawNowLine, but without the rule (the
+// rule lives inside the card image).
+function drawCurrentCaption(w, p, now, nextEvent) {
+  const row = w.addStack()
+  row.centerAlignContent()
+
+  const time = row.addText(nowHM().toUpperCase())
+  time.font = Font.mediumSystemFont(10)
+  time.textColor = p.accent
+
+  row.addSpacer()
+
+  if (nextEvent) {
+    const min = parseMinutes(nextEvent.time) - now
+    if (min > 0) {
+      const prefix = row.addText("Next in ")
+      prefix.font = Font.systemFont(10)
+      prefix.textColor = p.muted
+      const label = row.addText(formatCountdown(min))
+      label.font = Font.boldSystemFont(10)
+      label.textColor = urgencyColor(min, p)
+    }
+  }
+  w.addSpacer(3)
 }
 
 function drawSessionHeader(w, p, n) {
