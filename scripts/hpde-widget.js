@@ -161,14 +161,32 @@ function makeWidget({ manifest, stale }) {
   const nextIdx = visible.findIndex(e => parseMinutes(e.time) > now)
   const insertAt = nextIdx === -1 ? visible.length : nextIdx
 
-  // window: 1 past + 3 upcoming (bigger fonts leave less vertical room)
-  const start = Math.max(0, insertAt - 1)
-  const rows = visible.slice(start, start + 4)
+  // Row budget adapts to widget size. Sizes chosen empirically to
+  // avoid clipping the top card. Session-N headers add ~14pt each
+  // so allow room for those on top of the row count.
+  const family = config.widgetFamily || "medium"
+  const isLarge = family === "large" || family === "extraLarge"
+  const maxRows = isLarge ? 10 : 3
+  const maxPast = isLarge ? 2 : 1
+
+  const start = Math.max(0, insertAt - maxPast)
+  const rows = visible.slice(start, start + maxRows)
   const nowLineAt = insertAt - start
 
+  let lastSessionNumber
   for (let i = 0; i < rows.length; i++) {
-    if (i === nowLineAt) drawNowLine(w, p, now, visible[insertAt])
+    if (i === nowLineAt) {
+      drawNowLine(w, p, now, visible[insertAt])
+      lastSessionNumber = undefined
+    }
     const ev = rows[i]
+    if (ev.type === "session" && ev.sessionNumber !== undefined
+        && ev.sessionNumber !== lastSessionNumber) {
+      drawSessionHeader(w, p, ev.sessionNumber)
+      lastSessionNumber = ev.sessionNumber
+    } else if (ev.type !== "session") {
+      lastSessionNumber = undefined
+    }
     const past = parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past)
   }
@@ -216,23 +234,16 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
   card.spacing = 8
   card.centerAlignContent()
 
-  // Fixed-width time column (Outlook-style). For session events we stack
-  // "S<n>" under the time as a small secondary label.
+  // Fixed-width time column (Outlook-style). Session numbers are shown
+  // as SESSION headers between blocks, not inside the time cell.
   const timeCol = card.addStack()
-  timeCol.layoutVertically()
   timeCol.size = new Size(44, 0)
+  timeCol.centerAlignContent()
 
   const time = timeCol.addText(formatTime12(ev.time))
   time.font = monoFont(13)
   time.textColor = p.fg
   if (past) time.textOpacity = p.pastOpacity
-
-  if (ev.type === "session" && ev.sessionNumber !== undefined) {
-    const sn = timeCol.addText(`S${ev.sessionNumber}`)
-    sn.font = Font.systemFont(9)
-    sn.textColor = p.muted
-    if (past) sn.textOpacity = p.pastOpacity
-  }
 
   // Right content
   const isFood = ev.type === "lunch" || ev.type === "special"
@@ -266,6 +277,16 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
 
   card.addSpacer()
   w.addSpacer(4)
+}
+
+function drawSessionHeader(w, p, n) {
+  w.addSpacer(4)
+  const row = w.addStack()
+  const label = row.addText(`SESSION ${n}`)
+  label.font = Font.boldSystemFont(9)
+  label.textColor = p.muted
+  row.addSpacer()
+  w.addSpacer(2)
 }
 
 function addMutedLabel(row, text, p, past) {
@@ -397,6 +418,8 @@ try {
 
 if (config.runsInWidget) {
   Script.setWidget(widget)
+} else if (config.widgetFamily === "large" || config.widgetFamily === "extraLarge") {
+  await widget.presentLarge()
 } else {
   await widget.presentMedium()
 }

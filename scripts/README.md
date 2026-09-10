@@ -12,8 +12,9 @@ widget that mirrors the web app's timeline.
    your iPhone (free).
 2. Open Scriptable → `+` → paste the contents of
    [`hpde-widget.js`](./hpde-widget.js) → title it "HPDE".
-3. Long-press the Home Screen → **Add Widget** → **Scriptable** → **Medium** →
-   Add.
+3. Long-press the Home Screen → **Add Widget** → **Scriptable** → pick
+   **Medium** or **Large** → Add. The same script handles both sizes;
+   Large fits ~10 rows around the "now" line, Medium fits ~3.
 4. Tap the widget → **Edit Widget** → **Script** = "HPDE".
 5. Optional: set **Parameter** to a comma-separated list of run group ids to
    filter session rows — e.g. `orange` or `orange,blue`. Leave blank to show
