@@ -36,7 +36,7 @@ export function SessionCard({ event, runGroups, past }: Props) {
           )}
           {inClass.length > 0 && (
             <>
-              <div className="border-t border-gray-100" />
+              {onTrack.length > 0 && <div className="border-t border-gray-100" />}
               <div className="flex items-center gap-3">
                 <span className="w-16 shrink-0 text-xs text-gray-400">In class</span>
                 <div className="flex flex-wrap gap-1.5">

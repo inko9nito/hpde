@@ -56,9 +56,9 @@ export default function App() {
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
         {/* Header */}
-        <div className="mb-4 flex items-start justify-between rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <EventPicker events={EVENTS} active={activeEvent} onChange={switchEvent} />
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1 ml-3 shrink-0 self-start">
+          <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('schedule')}
               className={`rounded-md p-2 transition-colors ${view === 'schedule' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
