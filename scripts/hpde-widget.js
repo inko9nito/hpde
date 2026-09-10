@@ -267,25 +267,42 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
+// Current-event card is a fixed size so the DrawContext background image
+// (which draws a blue rule at Y proportional to progress) maps onto a
+// known Y range. The image is at 2× resolution so lines stay crisp.
+const CURRENT_CARD_HEIGHT = 54           // card height in points
+const CURRENT_CARD_PAD_V = 14            // top/bottom padding in points
+const CURRENT_CARD_IMAGE_WIDTH = 640
+const CURRENT_CARD_IMAGE_HEIGHT = CURRENT_CARD_HEIGHT * 2
+
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
-  // Where the now-marker (caption + blue rule) sits relative to the card.
-  //  - progress < 0.5: marker ABOVE the card, so it never crosses the event text
-  //  - progress ≥ 0.5: marker BELOW the card
-  const lineAbove = !!current && current.progress < 0.5
+  // Caption (current time + countdown) sits ABOVE the card when we're in
+  // the first half of the event and BELOW when we're past the halfway
+  // point. The blue rule itself lives INSIDE the card (drawn into the
+  // DrawContext background image), in the top or bottom padding zone so
+  // it crosses the card without crossing the event text.
   const lineBelow = !!current && current.progress >= 0.5
+  const lineAbove = !!current && !lineBelow
 
   if (lineAbove) {
     drawNowCaption(w, p, current.now, current.nextEvent)
-    w.addSpacer(2)
-    drawNowRule(w, p)
+    w.addSpacer(3)
   }
 
   const card = w.addStack()
-  card.backgroundColor = current ? p.currentCardBg : p.cardBg
-  card.cornerRadius = current ? 10 : 6
-  // Current card is taller with extra top/bottom padding so the marker
-  // sits well clear of the event text on either side.
-  const padV = current ? 12 : 7
+  if (current) {
+    card.backgroundImage = makeHighlightBackground(
+      CURRENT_CARD_IMAGE_WIDTH,
+      CURRENT_CARD_IMAGE_HEIGHT,
+      Math.max(0, Math.min(1, current.progress)),
+      p.currentCardBg, p.accent
+    )
+    card.size = new Size(0, CURRENT_CARD_HEIGHT)
+  } else {
+    card.backgroundColor = p.cardBg
+    card.cornerRadius = 6
+  }
+  const padV = current ? CURRENT_CARD_PAD_V : 7
   card.setPadding(padV, 12, padV, 12)
   card.spacing = 8
   card.centerAlignContent()
@@ -331,11 +348,60 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   card.addSpacer()
 
   if (lineBelow) {
-    drawNowRule(w, p)
-    w.addSpacer(2)
+    w.addSpacer(3)
     drawNowCaption(w, p, current.now, current.nextEvent)
   }
   w.addSpacer(6)
+}
+
+// Draw the current-event card background: rounded fill + a horizontal
+// blue rule INSIDE the card. The rule's Y is confined to the top
+// padding zone (progress < 0.5) or the bottom padding zone (progress ≥
+// 0.5), interpolating within each half. It never enters the content
+// zone in the middle where the event text sits.
+function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
+  const ctx = new DrawContext()
+  ctx.size = new Size(width, height)
+  ctx.opaque = false
+  ctx.respectScreenScale = true
+
+  const cornerR = 12
+  const bgPath = new Path()
+  bgPath.addRoundedRect(new Rect(0, 0, width, height), cornerR, cornerR)
+  ctx.addPath(bgPath)
+  ctx.setFillColor(bgColor)
+  ctx.fillPath()
+
+  // Padding zone height in image coords (2× card padding).
+  const padZ = CURRENT_CARD_PAD_V * 2
+  const edge = 4  // safety buffer from very top/bottom edge
+
+  let y
+  if (progress < 0.5) {
+    // 0.0 → near top edge, 0.5 → just above the content zone.
+    const t = progress * 2
+    y = edge + t * (padZ - edge)
+  } else {
+    // 0.5 → just below the content zone, 1.0 → near bottom edge.
+    const t = (progress - 0.5) * 2
+    y = (height - padZ) + t * (padZ - edge)
+  }
+
+  const thickness = 3
+  const linePath = new Path()
+  linePath.addRect(new Rect(0, y - thickness / 2, width, thickness))
+  ctx.addPath(linePath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  const dotDiameter = 14
+  const dotPath = new Path()
+  dotPath.addEllipse(new Rect(4, y - dotDiameter / 2, dotDiameter, dotDiameter))
+  ctx.addPath(dotPath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  return ctx.getImage()
 }
 
 function drawSessionHeader(w, p, n) {
