@@ -56,7 +56,14 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     if (inGroups) {
       const parts = line.split('|').map(s => s.trim())
       if (parts.length >= 4) {
-        runGroups.push({ id: parts[0], label: parts[1], bgClass: parts[2], textClass: parts[3] })
+        const description = parts[4] || undefined
+        runGroups.push({
+          id: parts[0],
+          label: parts[1],
+          bgClass: parts[2],
+          textClass: parts[3],
+          ...(description ? { description } : {}),
+        })
       }
       continue
     }

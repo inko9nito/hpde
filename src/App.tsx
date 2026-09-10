@@ -5,6 +5,7 @@ import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
 import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
+import { Legend } from './components/Legend'
 import { EVENTS } from './data'
 import type { EventConfig, DaySchedule, View } from './types'
 
@@ -130,6 +131,8 @@ export default function App() {
               selectedGroups={selectedGroups}
               hidePast={hidePast}
             />
+
+            <Legend groups={activeEvent.runGroups} />
           </>
         )}
 
