@@ -51,7 +51,9 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return withoutPast.slice(0, idx).some(prev => prev.type !== 'break')
   })
 
-  // Timed (non-break) events, needed for the current-event lookup.
+  // findCurrentEvent is used only to keep the "current" card at full opacity
+  // while `now` sits inside its inferred duration. The time marker itself
+  // always sits between the last past and first future card.
   const timedIndices: number[] = []
   const timedTimes: string[] = []
   filtered.forEach((e, i) => {
@@ -60,15 +62,15 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
       timedTimes.push((e as { time: string }).time)
     }
   })
-  const { index: currentTimedIdx, progress: currentProgress } = isToday
+  const { index: currentTimedIdx } = isToday
     ? findCurrentEvent(timedTimes, now)
-    : { index: -1, progress: 0 }
+    : { index: -1 }
   const currentIdx = currentTimedIdx === -1 ? -1 : timedIndices[currentTimedIdx]
 
-  const indicatorIndex = currentIdx === -1 && isToday
+  const indicatorIndex = isToday
     ? filtered.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
     : -1
-  const indicatorAtEnd = isToday && currentIdx === -1 && indicatorIndex === -1 && filtered.length > 0
+  const indicatorAtEnd = isToday && indicatorIndex === -1 && filtered.length > 0
 
   let lastSessionNumber: number | undefined = undefined
 
@@ -107,18 +109,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
           <div key={idx}>
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
-            {isCurrentEvent ? (
-              <div ref={indicatorRef} className="relative">
-                {card}
-                <TimeIndicator
-                  events={filtered}
-                  overlay
-                  overlayTopPct={currentProgress * 100}
-                />
-              </div>
-            ) : (
-              card
-            )}
+            {card}
           </div>
         )
       })}

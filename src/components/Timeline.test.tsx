@@ -75,24 +75,21 @@ describe('past event opacity', () => {
   })
 })
 
-describe('current-event overlay', () => {
-  it('positions the overlay indicator inside the current card at progress %', () => {
-    // now = 10:45, session at 10:30 → next 11:00; progress = 15/30 = 50 %
-    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 45)
+describe('time indicator placement', () => {
+  it('renders the time indicator between the last past card and the first future card', () => {
+    // now = 10:00, next timed event is 10:30 session → indicator sits before it
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
-    const overlay = document.querySelector<HTMLElement>('[data-time-indicator].absolute')
-    expect(overlay).not.toBeNull()
-    expect(overlay!.style.top).toBe('50%')
+    const indicators = document.querySelectorAll('[data-time-indicator]')
+    expect(indicators).toHaveLength(1)
+    expect(indicators[0].classList.contains('relative')).toBe(true)
   })
 
-  it('falls back to the between-cards indicator before the day starts', () => {
-    // now = 07:00, before the 08:00 first event → no event is current yet
-    vi.mocked(timeModule.nowMinutes).mockReturnValue(7 * 60)
+  it('does not overlay the indicator on the current card', () => {
+    // now = 10:45, current event is 10:30 (10:30 → 11:00) — no overlay, just between
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 45)
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const overlay = document.querySelector('[data-time-indicator].absolute')
-    const between = document.querySelector('[data-time-indicator].relative')
     expect(overlay).toBeNull()
-    expect(between).not.toBeNull()
   })
 })
 
