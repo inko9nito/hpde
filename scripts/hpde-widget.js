@@ -55,6 +55,15 @@ function nowMinutes() {
   return d.getHours() * 60 + d.getMinutes()
 }
 
+function monoFont(size) {
+  // Scriptable exposes `regularMonospacedSystemFont`; no `monospacedSystemFont`.
+  // Fall back to a bundled monospace face on older builds.
+  if (typeof Font.regularMonospacedSystemFont === "function") {
+    return Font.regularMonospacedSystemFont(size)
+  }
+  return new Font("Menlo", size)
+}
+
 function formatTime12(hhmm) {
   const [h, m] = hhmm.split(":").map(Number)
   const hour = h % 12 || 12
@@ -205,7 +214,7 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
   row.spacing = 6
 
   const time = row.addText(formatTime12(ev.time))
-  time.font = Font.monospacedSystemFont(11)
+  time.font = monoFont(11)
   time.textColor = p.fg
   if (past) time.textOpacity = p.pastOpacity
 
@@ -264,7 +273,7 @@ function drawNowLine(w, p, now, nextEvent) {
   row.spacing = 6
 
   const time = row.addText(nowHM())
-  time.font = Font.monospacedSystemFont(10)
+  time.font = monoFont(10)
   time.textColor = p.accent
 
   const bar = row.addStack()
