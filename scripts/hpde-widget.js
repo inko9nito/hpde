@@ -80,13 +80,18 @@ function formatCountdown(min) {
 
 // ---------- event picking ----------
 
-function pickDay(manifest) {
+function pickToday(manifest) {
   const iso = todayIso()
   for (const event of manifest.events) {
     for (const day of event.days) {
-      if (day.date === iso) return { event, day, notToday: false }
+      if (day.date === iso) return { event, day }
     }
   }
+  return null
+}
+
+function pickNextFuture(manifest) {
+  const iso = todayIso()
   const future = []
   for (const event of manifest.events) {
     for (const day of event.days) {
@@ -94,7 +99,7 @@ function pickDay(manifest) {
     }
   }
   future.sort((a, b) => a.day.date.localeCompare(b.day.date))
-  return future[0] ? { event: future[0].event, day: future[0].day, notToday: true } : null
+  return future[0] || null
 }
 
 function parseGroupFilter() {
@@ -131,14 +136,14 @@ function makeWidget({ manifest, stale }) {
   w.setPadding(10, 12, 10, 12)
   w.url = SITE_URL
 
-  const picked = pickDay(manifest)
+  const picked = pickToday(manifest)
   if (!picked) {
-    renderNoEvents(w, p, stale)
+    renderNoEvents(w, p, stale, pickNextFuture(manifest))
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
     return w
   }
 
-  const { event, day, notToday } = picked
+  const { event, day } = picked
   const groupById = Object.fromEntries(event.runGroups.map(g => [g.id, g]))
   const selected = parseGroupFilter()
 
@@ -150,37 +155,30 @@ function makeWidget({ manifest, stale }) {
     return on || inC
   }).filter(e => e.type !== "break")
 
-  renderHeader(w, event, day, p, notToday, stale)
+  renderHeader(w, event, day, p, stale)
 
-  const isToday = day.date === todayIso()
   const now = nowMinutes()
-
-  const nextIdx = isToday
-    ? visible.findIndex(e => parseMinutes(e.time) > now)
-    : -1
+  const nextIdx = visible.findIndex(e => parseMinutes(e.time) > now)
   const insertAt = nextIdx === -1 ? visible.length : nextIdx
 
-  // window: 1 past + 4 upcoming when today, first 5 otherwise
-  const start = isToday ? Math.max(0, insertAt - 1) : 0
+  // window: 1 past + 4 upcoming
+  const start = Math.max(0, insertAt - 1)
   const rows = visible.slice(start, start + 5)
-  const nowLineAt = isToday ? insertAt - start : -1
+  const nowLineAt = insertAt - start
 
   for (let i = 0; i < rows.length; i++) {
     if (i === nowLineAt) drawNowLine(w, p, now, visible[insertAt])
     const ev = rows[i]
-    const past = isToday && parseMinutes(ev.time) < now
+    const past = parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past)
   }
-  if (isToday && nowLineAt >= rows.length) drawNowLine(w, p, now, null)
+  if (nowLineAt >= rows.length) drawNowLine(w, p, now, null)
 
-  const nowMs = Date.now()
-  const bumpMin = isToday ? 5 : 60
-  w.refreshAfterDate = new Date(nowMs + bumpMin * 60 * 1000)
-
+  w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
   return w
 }
 
-function renderHeader(w, event, day, p, notToday, stale) {
+function renderHeader(w, event, day, p, stale) {
   const row = w.addStack()
   row.centerAlignContent()
 
@@ -193,7 +191,7 @@ function renderHeader(w, event, day, p, notToday, stale) {
   dot.font = Font.systemFont(11)
   dot.textColor = p.muted
 
-  const sub = row.addText(notToday ? day.label + " " + shortDate(day.date) : day.label)
+  const sub = row.addText(day.label)
   sub.font = Font.systemFont(11)
   sub.textColor = p.muted
   sub.lineLimit = 1
@@ -211,7 +209,7 @@ function renderHeader(w, event, day, p, notToday, stale) {
 function drawEventRow(w, ev, groupById, selected, p, past) {
   const row = w.addStack()
   row.centerAlignContent()
-  row.spacing = 6
+  row.spacing = 5
 
   const time = row.addText(formatTime12(ev.time))
   time.font = monoFont(11)
@@ -221,34 +219,19 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
   const isFood = ev.type === "lunch" || ev.type === "special"
 
   if (ev.type === "session") {
-    const onTrack = (ev.onTrack || [])
-    for (const gid of onTrack) {
-      const g = groupById[gid]
-      if (!g) continue
-      const dimmed = selected.length > 0 && !selected.includes(gid)
-      const dot = row.addText("●")
-      dot.font = Font.systemFont(12)
-      dot.textColor = new Color(g.color)
-      if (dimmed || past) dot.textOpacity = p.pastOpacity
-    }
-    if (ev.sessionNumber !== undefined) {
-      const label = row.addText(` S${ev.sessionNumber}`)
-      label.font = Font.mediumSystemFont(11)
-      label.textColor = p.fg
-      if (past) label.textOpacity = p.pastOpacity
+    const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
+    for (const g of onTrack) {
+      const dimmed = selected.length > 0 && !selected.includes(g.id)
+      addGroupPill(row, g, dimmed || past)
     }
     if (ev.inClass && ev.inClass.length) {
-      const sep = row.addText("  ·  in ")
+      const sep = row.addText(" · in ")
       sep.font = Font.systemFont(10)
       sep.textColor = p.muted
       if (past) sep.textOpacity = p.pastOpacity
-      for (const gid of ev.inClass) {
-        const g = groupById[gid]
-        if (!g) continue
-        const dot = row.addText("●")
-        dot.font = Font.systemFont(10)
-        dot.textColor = new Color(g.color)
-        if (past) dot.textOpacity = p.pastOpacity
+      const inClass = ev.inClass.map(id => groupById[id]).filter(Boolean)
+      for (const g of inClass) {
+        addGroupPill(row, g, past)
       }
     }
   } else {
@@ -265,6 +248,20 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
 
   row.addSpacer()
   w.addSpacer(3)
+}
+
+// Colored pill matching the web app's GroupBadge — colored background
+// with the group's full label in white.
+function addGroupPill(row, g, dim) {
+  const alpha = dim ? 0.35 : 1.0
+  const pill = row.addStack()
+  pill.backgroundColor = new Color(g.color, alpha)
+  pill.cornerRadius = 4
+  pill.setPadding(1, 5, 1, 5)
+  pill.centerAlignContent()
+  const label = pill.addText(g.label)
+  label.font = Font.mediumSystemFont(9)
+  label.textColor = new Color("#ffffff", alpha)
 }
 
 function drawNowLine(w, p, now, nextEvent) {
@@ -303,18 +300,30 @@ function shortDate(iso) {
   return `${months[m - 1]} ${d}`
 }
 
-function renderNoEvents(w, p, stale) {
+function renderNoEvents(w, p, stale, next) {
   const title = w.addText("HPDE")
   title.font = Font.boldSystemFont(14)
   title.textColor = p.fg
-  w.addSpacer(4)
+  w.addSpacer(6)
 
   const msg = w.addText("No event today.")
   msg.font = Font.systemFont(12)
   msg.textColor = p.muted
 
+  if (next) {
+    w.addSpacer(4)
+    const nx = w.addText(`Next: ${next.event.name}`)
+    nx.font = Font.mediumSystemFont(11)
+    nx.textColor = p.fg
+    nx.lineLimit = 1
+    const when = w.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
+    when.font = Font.systemFont(10)
+    when.textColor = p.muted
+  }
+
   if (stale) {
-    const s = w.addText("(showing cached data)")
+    w.addSpacer(4)
+    const s = w.addText("(cached)")
     s.font = Font.systemFont(9)
     s.textColor = p.muted
   }
