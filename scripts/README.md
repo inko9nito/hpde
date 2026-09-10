@@ -1,10 +1,18 @@
 # iOS Home Screen widget
 
-`hpde-widget.js` is a [Scriptable](https://scriptable.app/) script that renders
-the current day's HPDE schedule on the iPhone Home Screen. It fetches
-`https://inko9nito.github.io/hpde/api/events.json` — the manifest emitted at
-build time by `scripts/vite-plugin-events-json.ts` — and draws a medium-size
-widget that mirrors the web app's timeline.
+Two [Scriptable](https://scriptable.app/) variants live here, both fed by the
+same `https://inko9nito.github.io/hpde/api/events.json` manifest emitted at
+build time by `scripts/vite-plugin-events-json.ts`:
+
+- **`hpde-widget.js`** — the vertical list, one row per event. Mirrors the
+  web app's timeline card layout.
+- **`hpde-widget-horizontal.js`** — a Gantt-style horizontal timeline. One
+  row per run group, colored blocks marking when that group is on track,
+  with a NOW line anchored an hour into the visible window.
+
+Both scripts share the same install steps, refresh cadence, and offline
+cache; only the layout differs. The horizontal variant is described at the
+bottom of this file.
 
 ## Install
 
@@ -56,3 +64,27 @@ project's Tailwind palette (see `src/utils/eventsJson.ts` →
 that Tailwind doesn't recognize, `npm run build` fails loudly and blocks
 deploy. So the widget stays in sync with the web app by construction — there
 is no separate list to keep updated.
+
+## Horizontal variant (`hpde-widget-horizontal.js`)
+
+Same install flow as above (paste the script, add a Scriptable widget, point
+it at the "HPDE Horizontal" script). Best on **Medium** — Large works too and
+gives each row more vertical room.
+
+What it shows:
+
+- Header line with event name, day, and the current time.
+- One horizontal row per run group, each labeled with a colored pill matching
+  the web app's `GroupBadge`.
+- Colored blocks in each row mark the intervals when that group is on the
+  track (derived from consecutive `on: <group>` session entries). Blocks
+  entirely in the past render dimmed; blocks straddling now split at the
+  NOW line so the past half is dimmed and the future half is full color.
+- Hour tick marks along the top with vertical grid lines through the plot.
+- Lunch (🍔) and special (⭐) anchors appear as thin vertical bars.
+- A bright vertical NOW line labeled `NOW`, sitting roughly one hour from
+  the left edge and sliding right as the day goes on.
+
+**Optional Parameter:** an integer between 2 and 8, the total window length
+in hours (default 4 — one hour before now, three hours after). Set it to `6`
+for a wider look ahead, or `2` for tighter zoom.
