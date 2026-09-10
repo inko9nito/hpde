@@ -235,7 +235,7 @@ function makeWidget({ manifest, stale }) {
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
-  w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
+  w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
   return w
 }
 
