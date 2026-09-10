@@ -113,11 +113,11 @@ function parseGroupFilter() {
 function palette(dark) {
   return dark
     ? { bg: new Color("#0b0b0f"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        line: new Color("#2a2a30"), accent: new Color("#3b82f6"),
-        food: new Color("#f5f5f7"), pastOpacity: 0.35 }
+        cardBg: new Color("#1a1a1f"), foodStroke: new Color("#f5f5f7"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.35 }
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        line: new Color("#e5e7eb"), accent: new Color("#3b82f6"),
-        food: new Color("#111827"), pastOpacity: 0.35 }
+        cardBg: new Color("#f4f4f6"), foodStroke: new Color("#111827"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.35 }
 }
 
 function urgencyColor(min, p) {
@@ -161,9 +161,9 @@ function makeWidget({ manifest, stale }) {
   const nextIdx = visible.findIndex(e => parseMinutes(e.time) > now)
   const insertAt = nextIdx === -1 ? visible.length : nextIdx
 
-  // window: 1 past + 4 upcoming
+  // window: 1 past + 3 upcoming (bigger fonts leave less vertical room)
   const start = Math.max(0, insertAt - 1)
-  const rows = visible.slice(start, start + 5)
+  const rows = visible.slice(start, start + 4)
   const nowLineAt = insertAt - start
 
   for (let i = 0; i < rows.length; i++) {
@@ -183,16 +183,16 @@ function renderHeader(w, event, day, p, stale) {
   row.centerAlignContent()
 
   const title = row.addText(event.name)
-  title.font = Font.boldSystemFont(13)
+  title.font = Font.boldSystemFont(14)
   title.textColor = p.fg
   title.lineLimit = 1
 
   const dot = row.addText("  ·  ")
-  dot.font = Font.systemFont(11)
+  dot.font = Font.systemFont(12)
   dot.textColor = p.muted
 
   const sub = row.addText(day.label)
-  sub.font = Font.systemFont(11)
+  sub.font = Font.systemFont(12)
   sub.textColor = p.muted
   sub.lineLimit = 1
 
@@ -203,51 +203,83 @@ function renderHeader(w, event, day, p, stale) {
     s.font = Font.systemFont(9)
     s.textColor = p.muted
   }
-  w.addSpacer(4)
+  w.addSpacer(6)
 }
 
 function drawEventRow(w, ev, groupById, selected, p, past) {
-  const row = w.addStack()
-  row.centerAlignContent()
-  row.spacing = 5
+  // Card-style row (block) with light background and rounded corners,
+  // matching the web app's card treatment.
+  const card = w.addStack()
+  card.backgroundColor = p.cardBg
+  card.cornerRadius = 6
+  card.setPadding(4, 8, 4, 8)
+  card.spacing = 8
+  card.centerAlignContent()
 
-  const time = row.addText(formatTime12(ev.time))
-  time.font = monoFont(11)
+  // Fixed-width time column (Outlook-style). For session events we stack
+  // "S<n>" under the time as a small secondary label.
+  const timeCol = card.addStack()
+  timeCol.layoutVertically()
+  timeCol.size = new Size(44, 0)
+
+  const time = timeCol.addText(formatTime12(ev.time))
+  time.font = monoFont(13)
   time.textColor = p.fg
   if (past) time.textOpacity = p.pastOpacity
 
+  if (ev.type === "session" && ev.sessionNumber !== undefined) {
+    const sn = timeCol.addText(`S${ev.sessionNumber}`)
+    sn.font = Font.systemFont(9)
+    sn.textColor = p.muted
+    if (past) sn.textOpacity = p.pastOpacity
+  }
+
+  // Right content
   const isFood = ev.type === "lunch" || ev.type === "special"
 
   if (ev.type === "session") {
     const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
-    for (const g of onTrack) {
-      const dimmed = selected.length > 0 && !selected.includes(g.id)
-      addGroupPill(row, g, dimmed || past)
+    if (onTrack.length) {
+      addMutedLabel(card, "On track", p, past)
+      for (const g of onTrack) {
+        const dim = selected.length > 0 && !selected.includes(g.id)
+        addGroupPill(card, g, dim || past)
+      }
     }
     if (ev.inClass && ev.inClass.length) {
-      const sep = row.addText(" · in ")
-      sep.font = Font.systemFont(10)
-      sep.textColor = p.muted
-      if (past) sep.textOpacity = p.pastOpacity
+      addSeparator(card, p, past)
+      addMutedLabel(card, "In class", p, past)
       const inClass = ev.inClass.map(id => groupById[id]).filter(Boolean)
-      for (const g of inClass) {
-        addGroupPill(row, g, past)
-      }
+      for (const g of inClass) addGroupPill(card, g, past)
     }
   } else {
     if (isFood) {
-      const icon = row.addText(ev.type === "lunch" ? "🍔" : "⭐")
-      icon.font = Font.systemFont(11)
+      const icon = card.addText(ev.type === "lunch" ? "🍔" : "⭐")
+      icon.font = Font.systemFont(13)
     }
-    const label = row.addText(ev.label)
-    label.font = isFood ? Font.boldSystemFont(11) : Font.systemFont(11)
+    const label = card.addText(ev.label)
+    label.font = isFood ? Font.boldSystemFont(12) : Font.systemFont(12)
     label.textColor = p.fg
     label.lineLimit = 1
     if (past) label.textOpacity = p.pastOpacity
   }
 
-  row.addSpacer()
-  w.addSpacer(3)
+  card.addSpacer()
+  w.addSpacer(4)
+}
+
+function addMutedLabel(row, text, p, past) {
+  const l = row.addText(text)
+  l.font = Font.systemFont(10)
+  l.textColor = p.muted
+  if (past) l.textOpacity = p.pastOpacity
+}
+
+function addSeparator(row, p, past) {
+  const s = row.addText(" · ")
+  s.font = Font.systemFont(11)
+  s.textColor = p.muted
+  if (past) s.textOpacity = p.pastOpacity
 }
 
 // Colored pill matching the web app's GroupBadge — colored background
@@ -256,42 +288,51 @@ function addGroupPill(row, g, dim) {
   const alpha = dim ? 0.35 : 1.0
   const pill = row.addStack()
   pill.backgroundColor = new Color(g.color, alpha)
-  pill.cornerRadius = 4
-  pill.setPadding(1, 5, 1, 5)
+  pill.cornerRadius = 5
+  pill.setPadding(2, 7, 2, 7)
   pill.centerAlignContent()
   const label = pill.addText(g.label)
-  label.font = Font.mediumSystemFont(9)
+  label.font = Font.mediumSystemFont(10)
   label.textColor = new Color("#ffffff", alpha)
 }
 
 function drawNowLine(w, p, now, nextEvent) {
-  const row = w.addStack()
-  row.centerAlignContent()
-  row.spacing = 6
+  // Web-app style: current time + countdown above a thin blue rule.
+  const top = w.addStack()
+  top.centerAlignContent()
 
-  const time = row.addText(nowHM())
-  time.font = monoFont(10)
+  const time = top.addText(nowHM().toUpperCase())
+  time.font = Font.mediumSystemFont(10)
   time.textColor = p.accent
 
-  const bar = row.addStack()
+  top.addSpacer()
+
+  if (nextEvent) {
+    const min = parseMinutes(nextEvent.time) - now
+    const prefix = top.addText("Next in ")
+    prefix.font = Font.systemFont(10)
+    prefix.textColor = p.muted
+    const label = top.addText(formatCountdown(min))
+    label.font = Font.boldSystemFont(10)
+    label.textColor = urgencyColor(min, p)
+  }
+
+  w.addSpacer(2)
+
+  const line = w.addStack()
+  const bar = line.addStack()
   bar.backgroundColor = p.accent
   bar.size = new Size(0, 1.5)
   bar.addSpacer()
 
-  if (nextEvent) {
-    const min = parseMinutes(nextEvent.time) - now
-    const label = row.addText("next in " + formatCountdown(min))
-    label.font = Font.systemFont(9)
-    label.textColor = urgencyColor(min, p)
-  }
-  w.addSpacer(3)
+  w.addSpacer(4)
 }
 
 function nowHM() {
   const d = new Date()
   const h = d.getHours() % 12 || 12
-  const ampm = d.getHours() >= 12 ? "p" : "a"
-  return `${h}:${String(d.getMinutes()).padStart(2, "0")}${ampm}`
+  const ampm = d.getHours() >= 12 ? "PM" : "AM"
+  return `${h}:${String(d.getMinutes()).padStart(2, "0")} ${ampm}`
 }
 
 function shortDate(iso) {
