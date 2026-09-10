@@ -4,9 +4,11 @@ import type { ScheduleEvent } from '../types'
 
 interface Props {
   events: ScheduleEvent[]
+  /** When true, style as an overlay across the top of a "current" event card. */
+  overlay?: boolean
 }
 
-export const TimeIndicator = forwardRef<HTMLDivElement, Props>(({ events }, ref) => {
+export const TimeIndicator = forwardRef<HTMLDivElement, Props>(({ events, overlay }, ref) => {
   const [, setTick] = useState(0)
 
   useEffect(() => {
@@ -25,8 +27,12 @@ export const TimeIndicator = forwardRef<HTMLDivElement, Props>(({ events }, ref)
     : 'text-gray-400'
     : 'text-gray-400'
 
+  const wrapperClass = overlay
+    ? 'absolute inset-x-0 -top-5 pointer-events-none'
+    : 'relative my-6'
+
   return (
-    <div ref={ref} data-time-indicator className="relative my-6">
+    <div ref={ref} data-time-indicator className={wrapperClass}>
       <div className="flex items-center -mr-3 sm:-mr-4">
         <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
         <div className="h-0.5 flex-1 bg-blue-500" />

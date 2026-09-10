@@ -20,7 +20,7 @@ export function SessionCard({ event, runGroups, past }: Props) {
   const inClass = resolveGroups(event.inClass ?? [], runGroups)
 
   return (
-    <div className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-opacity ${past ? 'opacity-40' : ''}`}>
+    <div className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-opacity ${past ? 'opacity-60' : ''}`}>
       <div className="flex gap-4">
         <div className="w-16 shrink-0 font-mono text-lg font-semibold text-gray-900">
           {formatTime(event.time)}

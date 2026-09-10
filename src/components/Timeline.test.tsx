@@ -49,19 +49,37 @@ describe('hidePast toggle', () => {
 })
 
 describe('past event opacity', () => {
-  it('applies opacity-40 to cards before current time on today', () => {
+  it('applies opacity-60 to cards before current time on today', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const cards = document.querySelectorAll('.rounded-xl')
-    const pastCards = Array.from(cards).filter(el => el.classList.contains('opacity-40'))
-    const futureCards = Array.from(cards).filter(el => !el.classList.contains('opacity-40'))
-    // 08:30 and 09:00 sessions are past; 10:30 session is future
+    const pastCards = Array.from(cards).filter(el => el.classList.contains('opacity-60'))
+    const futureCards = Array.from(cards).filter(el => !el.classList.contains('opacity-60'))
+    // 08:30 and 09:00 sessions are >15 min past; 10:30 is future
     expect(pastCards.length).toBeGreaterThan(0)
     expect(futureCards.length).toBeGreaterThan(0)
   })
 
-  it('does not apply opacity-40 when isToday is false', () => {
+  it('does not apply the past-opacity class when isToday is false', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
-    expect(document.querySelectorAll('.opacity-40')).toHaveLength(0)
+    expect(document.querySelectorAll('.opacity-60')).toHaveLength(0)
+  })
+})
+
+describe('current event window', () => {
+  it('keeps a card at full opacity while it is within 15 minutes of start', () => {
+    // now = 09:10, session at 09:00 → 10 min into it → current
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 10)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
+    expect(pinkCard.classList.contains('opacity-60')).toBe(false)
+  })
+
+  it('flips the same card to past once 16+ minutes have elapsed', () => {
+    // now = 09:16, session at 09:00 → past
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 16)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
+    expect(pinkCard.classList.contains('opacity-60')).toBe(true)
   })
 })
 

@@ -11,6 +11,9 @@ const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
+// Kept in sync with CURRENT_WINDOW_MIN in src/utils/time.ts.
+const CURRENT_WINDOW_MIN = 15
+
 // ---------- data fetching (with offline cache) ----------
 
 function getFm() {
@@ -113,11 +116,11 @@ function parseGroupFilter() {
 function palette(dark) {
   return dark
     ? { bg: new Color("#0b0b0f"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        cardBg: new Color("#1a1a1f"), foodStroke: new Color("#f5f5f7"),
-        accent: new Color("#3b82f6"), pastOpacity: 0.35 }
+        cardBg: new Color("#141418"), foodStroke: new Color("#f5f5f7"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        cardBg: new Color("#f4f4f6"), foodStroke: new Color("#111827"),
-        accent: new Color("#3b82f6"), pastOpacity: 0.35 }
+        cardBg: new Color("#fafafb"), foodStroke: new Color("#111827"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
 
 function urgencyColor(min, p) {
@@ -158,25 +161,41 @@ function makeWidget({ manifest, stale }) {
   renderHeader(w, event, day, p, stale)
 
   const now = nowMinutes()
+
+  // Find the "current" event: the most recent event to have started, if
+  // it was within CURRENT_WINDOW_MIN. When it exists, the now-marker
+  // overlays that card instead of sitting between two cards.
+  let currentIdx = -1
+  for (let i = visible.length - 1; i >= 0; i--) {
+    const t = parseMinutes(visible[i].time)
+    if (t <= now) {
+      if (now - t <= CURRENT_WINDOW_MIN) currentIdx = i
+      break
+    }
+  }
+
   const nextIdx = visible.findIndex(e => parseMinutes(e.time) > now)
   const insertAt = nextIdx === -1 ? visible.length : nextIdx
+  const nextEvent = insertAt < visible.length ? visible[insertAt] : null
 
-  // Row budget adapts to widget size. Sizes chosen empirically to
-  // avoid clipping the top card. Session-N headers add ~14pt each
-  // so allow room for those on top of the row count.
+  // Row budget adapts to widget size.
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
   const maxRows = isLarge ? 10 : 3
   const maxPast = isLarge ? 2 : 1
 
-  const start = Math.max(0, insertAt - maxPast)
+  const anchorIdx = currentIdx !== -1 ? currentIdx : insertAt
+  const start = Math.max(0, anchorIdx - maxPast)
   const rows = visible.slice(start, start + maxRows)
-  const nowLineAt = insertAt - start
+
+  // The between-cards now-line only renders when there's no "current" event.
+  const nowLineBetweenAt = currentIdx === -1 ? insertAt - start : -1
+  const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
   let lastSessionNumber
   for (let i = 0; i < rows.length; i++) {
-    if (i === nowLineAt) {
-      drawNowLine(w, p, now, visible[insertAt])
+    if (i === nowLineBetweenAt) {
+      drawNowLine(w, p, now, nextEvent, 6)
       lastSessionNumber = undefined
     }
     const ev = rows[i]
@@ -187,10 +206,12 @@ function makeWidget({ manifest, stale }) {
     } else if (ev.type !== "session") {
       lastSessionNumber = undefined
     }
-    const past = parseMinutes(ev.time) < now
-    drawEventRow(w, ev, groupById, selected, p, past)
+    const isCurrentEvent = i === currentLocalIdx
+    const past = !isCurrentEvent && parseMinutes(ev.time) < now
+    drawEventRow(w, ev, groupById, selected, p, past,
+      isCurrentEvent ? { now, nextEvent } : null)
   }
-  if (nowLineAt >= rows.length) drawNowLine(w, p, now, null)
+  if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
   w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)
   return w
@@ -224,13 +245,16 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
-function drawEventRow(w, ev, groupById, selected, p, past) {
-  // Card-style row (block) with light background and rounded corners,
-  // matching the web app's card treatment.
+function drawEventRow(w, ev, groupById, selected, p, past, current) {
+  // Current events overlay the now-marker on top of the card: draw the
+  // rule row directly above with 0 bottom spacer so they read as one unit.
+  if (current) drawNowLine(w, p, current.now, current.nextEvent, 0)
+
+  // Card-style row (block) with subtle background and rounded corners.
   const card = w.addStack()
   card.backgroundColor = p.cardBg
   card.cornerRadius = 6
-  card.setPadding(4, 8, 4, 8)
+  card.setPadding(7, 10, 7, 10)
   card.spacing = 8
   card.centerAlignContent()
 
@@ -276,7 +300,7 @@ function drawEventRow(w, ev, groupById, selected, p, past) {
   }
 
   card.addSpacer()
-  w.addSpacer(4)
+  w.addSpacer(6)
 }
 
 function drawSessionHeader(w, p, n) {
@@ -306,18 +330,19 @@ function addSeparator(row, p, past) {
 // Colored pill matching the web app's GroupBadge — colored background
 // with the group's full label in white.
 function addGroupPill(row, g, dim) {
-  const alpha = dim ? 0.35 : 1.0
+  // Fully-rounded (pill) shape — Scriptable clamps to half the height.
+  const alpha = dim ? 0.55 : 1.0
   const pill = row.addStack()
   pill.backgroundColor = new Color(g.color, alpha)
-  pill.cornerRadius = 5
-  pill.setPadding(2, 7, 2, 7)
+  pill.cornerRadius = 100
+  pill.setPadding(2, 8, 2, 8)
   pill.centerAlignContent()
   const label = pill.addText(g.label)
   label.font = Font.mediumSystemFont(10)
   label.textColor = new Color("#ffffff", alpha)
 }
 
-function drawNowLine(w, p, now, nextEvent) {
+function drawNowLine(w, p, now, nextEvent, belowSpacer) {
   // Web-app style: current time + countdown above a thin blue rule.
   const top = w.addStack()
   top.centerAlignContent()
@@ -346,7 +371,7 @@ function drawNowLine(w, p, now, nextEvent) {
   bar.size = new Size(0, 1.5)
   bar.addSpacer()
 
-  w.addSpacer(4)
+  if (belowSpacer > 0) w.addSpacer(belowSpacer)
 }
 
 function nowHM() {

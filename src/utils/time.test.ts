@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown } from './time'
+import { parseMinutes, formatTime, formatCountdown, isCurrent, CURRENT_WINDOW_MIN } from './time'
 
 describe('parseMinutes', () => {
   it('converts "00:00" to 0', () => expect(parseMinutes('00:00')).toBe(0))
@@ -15,6 +15,26 @@ describe('formatTime', () => {
   it('formats "12:00" as "12:00"', () => expect(formatTime('12:00')).toBe('12:00'))
   it('formats "13:30" as "1:30"', () => expect(formatTime('13:30')).toBe('1:30'))
   it('formats "09:05" as "9:05"', () => expect(formatTime('09:05')).toBe('9:05'))
+})
+
+describe('isCurrent', () => {
+  const start = parseMinutes('13:10')
+  it('false when the event has not started', () => {
+    expect(isCurrent(start, parseMinutes('13:00'))).toBe(false)
+  })
+  it('true exactly at the start', () => {
+    expect(isCurrent(start, start)).toBe(true)
+  })
+  it('true while inside the 15-minute window', () => {
+    expect(isCurrent(start, parseMinutes('13:15'))).toBe(true)
+    expect(isCurrent(start, parseMinutes('13:25'))).toBe(true)
+  })
+  it('false at 16 minutes past', () => {
+    expect(isCurrent(start, parseMinutes('13:26'))).toBe(false)
+  })
+  it('CURRENT_WINDOW_MIN is 15 (kept in sync with the widget)', () => {
+    expect(CURRENT_WINDOW_MIN).toBe(15)
+  })
 })
 
 describe('formatCountdown', () => {
