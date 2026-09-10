@@ -5,18 +5,16 @@ import type { GeneralEvent } from '../types'
 interface Props {
   event: GeneralEvent
   past?: boolean
-  current?: boolean
 }
 
-export function EventCard({ event, past, current }: Props) {
+export function EventCard({ event, past }: Props) {
   const isFood = event.type === 'lunch' || event.type === 'special'
 
-  const generalBg = current ? 'border border-blue-200 bg-blue-50' : 'border border-gray-200 bg-white'
   return (
     <div className={`rounded-xl p-4 shadow-sm transition-opacity ${
       isFood
         ? 'border-2 border-gray-900 bg-white my-2'
-        : generalBg
+        : 'border border-gray-200 bg-white'
     } ${past ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-4">
         <div className="w-16 shrink-0 font-mono text-lg font-semibold text-gray-900">

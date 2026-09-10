@@ -48,3 +48,8 @@ break | 10 minute corner worker break
 
 17:00 general | Track is cold
 17:15 general | Refreshments and trophies
+
+17:35 general | Track re-opens for fun laps
+18:00 session 5 | on: red | in: blue
+18:30 session 5 | on: green
+19:00 general | Post-event dinner

@@ -54,34 +54,45 @@ describe('past event opacity', () => {
     const cards = document.querySelectorAll('.rounded-xl')
     const pastCards = Array.from(cards).filter(el => el.classList.contains('opacity-60'))
     const futureCards = Array.from(cards).filter(el => !el.classList.contains('opacity-60'))
-    // 08:30 and 09:00 sessions are >15 min past; 10:30 is future
+    // 08:30 and 09:00 sessions are past; 10:30 session is future
     expect(pastCards.length).toBeGreaterThan(0)
     expect(futureCards.length).toBeGreaterThan(0)
   })
 
-  it('does not apply the past-opacity class when isToday is false', () => {
+  it('does not apply opacity-60 when isToday is false', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(document.querySelectorAll('.opacity-60')).toHaveLength(0)
   })
+
+  it('keeps the current event at full opacity while `now` sits inside its inferred duration', () => {
+    // now = 10:35, session 10:30 → next 11:00 → progress ~1/6
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 35)
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const cards = document.querySelectorAll('.rounded-xl')
+    // The 10:30 card is current and must not be faded.
+    const orangeCurrent = Array.from(cards).find(el => el.textContent?.includes('Orange') && !el.classList.contains('opacity-60'))
+    expect(orangeCurrent).toBeDefined()
+  })
 })
 
-describe('current event window', () => {
-  it('keeps a card at full opacity and tints it while within 15 minutes of start', () => {
-    // now = 09:10, session at 09:00 → 10 min into it → current
-    vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 10)
+describe('current-event overlay', () => {
+  it('positions the overlay indicator inside the current card at progress %', () => {
+    // now = 10:45, session at 10:30 → next 11:00; progress = 15/30 = 50 %
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 45)
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
-    const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
-    expect(pinkCard.classList.contains('opacity-60')).toBe(false)
-    expect(pinkCard.classList.contains('bg-blue-50')).toBe(true)
+    const overlay = document.querySelector<HTMLElement>('[data-time-indicator].absolute')
+    expect(overlay).not.toBeNull()
+    expect(overlay!.style.top).toBe('50%')
   })
 
-  it('flips the same card to past (and removes the highlight) once 16+ minutes have elapsed', () => {
-    // now = 09:16, session at 09:00 → past
-    vi.mocked(timeModule.nowMinutes).mockReturnValue(9 * 60 + 16)
+  it('falls back to the between-cards indicator before the day starts', () => {
+    // now = 07:00, before the 08:00 first event → no event is current yet
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(7 * 60)
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
-    const pinkCard = screen.getByText('Pink').closest('.rounded-xl')!
-    expect(pinkCard.classList.contains('opacity-60')).toBe(true)
-    expect(pinkCard.classList.contains('bg-blue-50')).toBe(false)
+    const overlay = document.querySelector('[data-time-indicator].absolute')
+    const between = document.querySelector('[data-time-indicator].relative')
+    expect(overlay).toBeNull()
+    expect(between).not.toBeNull()
   })
 })
 

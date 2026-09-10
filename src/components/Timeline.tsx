@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import { SessionCard } from './SessionCard'
 import { EventCard } from './EventCard'
 import { TimeIndicator } from './TimeIndicator'
-import { parseMinutes, nowMinutes, isCurrent } from '../utils/time'
+import { parseMinutes, nowMinutes, findCurrentEvent } from '../utils/time'
 import type { ScheduleEvent, RunGroupConfig } from '../types'
 
 interface Props {
@@ -34,9 +34,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
   const now = nowMinutes()
 
   const visible = events.flatMap<ScheduleEvent>(event => {
-    // Breaks and general events always show
     if (event.type !== 'session') return [event]
-    // Sessions: filter by selected groups
     if (selectedGroups.length === 0) return [event]
 
     const onTrack = event.onTrack.filter(id => selectedGroups.includes(id))
@@ -45,7 +43,6 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return [{ ...event, onTrack, inClass }]
   })
 
-  // Breaks have no time; keep them unless they'd be orphaned at the top of the list
   const withoutPast = hidePast && isToday
     ? visible.filter(e => e.type === 'break' || parseMinutes(e.time) >= now)
     : visible
@@ -54,23 +51,31 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return withoutPast.slice(0, idx).some(prev => prev.type !== 'break')
   })
 
-  // A "current" event is one whose start is within CURRENT_WINDOW_MIN of
-  // now. When present, the now-indicator overlays that card instead of
-  // sitting between cards, and the card stays at full opacity.
-  const currentIndex = isToday
-    ? filtered.findIndex(e => e.type !== 'break' && isCurrent(parseMinutes(e.time), now))
-    : -1
-  const indicatorIndex = currentIndex === -1 && isToday
+  // Timed (non-break) events, needed for the current-event lookup.
+  const timedIndices: number[] = []
+  const timedTimes: string[] = []
+  filtered.forEach((e, i) => {
+    if (e.type !== 'break') {
+      timedIndices.push(i)
+      timedTimes.push((e as { time: string }).time)
+    }
+  })
+  const { index: currentTimedIdx, progress: currentProgress } = isToday
+    ? findCurrentEvent(timedTimes, now)
+    : { index: -1, progress: 0 }
+  const currentIdx = currentTimedIdx === -1 ? -1 : timedIndices[currentTimedIdx]
+
+  const indicatorIndex = currentIdx === -1 && isToday
     ? filtered.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
     : -1
-  const indicatorAtEnd = isToday && currentIndex === -1 && indicatorIndex === -1 && filtered.length > 0
+  const indicatorAtEnd = isToday && currentIdx === -1 && indicatorIndex === -1 && filtered.length > 0
 
   let lastSessionNumber: number | undefined = undefined
 
   return (
     <div className="flex flex-col gap-2 pb-10">
       {filtered.map((event, idx) => {
-        const isCurrentEvent = idx === currentIndex
+        const isCurrentEvent = idx === currentIdx
         const past = isToday
           && event.type !== 'break'
           && !isCurrentEvent
@@ -95,17 +100,21 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
             </div>
           )
           : event.type === 'session'
-            ? <SessionCard event={event} runGroups={runGroups} past={past} current={isCurrentEvent} />
-            : <EventCard event={event} past={past} current={isCurrentEvent} />
+            ? <SessionCard event={event} runGroups={runGroups} past={past} />
+            : <EventCard event={event} past={past} />
 
         return (
           <div key={idx}>
             {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
             {sessionHeader}
             {isCurrentEvent ? (
-              <div ref={indicatorRef} className="relative mt-6">
-                <TimeIndicator events={filtered} overlay />
+              <div ref={indicatorRef} className="relative">
                 {card}
+                <TimeIndicator
+                  events={filtered}
+                  overlay
+                  overlayTopPct={currentProgress * 100}
+                />
               </div>
             ) : (
               card

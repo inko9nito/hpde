@@ -11,8 +11,10 @@ const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
-// Kept in sync with CURRENT_WINDOW_MIN in src/utils/time.ts.
-const CURRENT_WINDOW_MIN = 15
+// Fallback duration (minutes) applied to the last event of the day, which
+// has no following event to infer an end time from. Kept in sync with
+// LAST_EVENT_FALLBACK_MIN in src/utils/time.ts.
+const LAST_EVENT_FALLBACK_MIN = 30
 
 // ---------- data fetching (with offline cache) ----------
 
@@ -171,15 +173,26 @@ function makeWidget({ manifest, stale }) {
 
   const now = nowMinutes()
 
-  // Find the "current" event: the most recent event to have started, if
-  // it was within CURRENT_WINDOW_MIN. When it exists, the now-marker
-  // overlays that card instead of sitting between two cards.
+  // "Current" event: the last event that has started, iff `now` still
+  // falls inside its inferred duration. Duration is `next.start - start`,
+  // or LAST_EVENT_FALLBACK_MIN when there is no next event on today's
+  // schedule. When an event is current we draw the now-line THROUGH its
+  // card (via a DrawContext background image) at Y proportional to how
+  // far we are into the event.
   let currentIdx = -1
-  for (let i = visible.length - 1; i >= 0; i--) {
-    const t = parseMinutes(visible[i].time)
-    if (t <= now) {
-      if (now - t <= CURRENT_WINDOW_MIN) currentIdx = i
-      break
+  let currentProgress = 0
+  let lastPastIdx = -1
+  for (let i = 0; i < visible.length; i++) {
+    if (parseMinutes(visible[i].time) <= now) lastPastIdx = i
+    else break
+  }
+  if (lastPastIdx !== -1) {
+    const start = parseMinutes(visible[lastPastIdx].time)
+    const nextEv = visible[lastPastIdx + 1]
+    const end = nextEv ? parseMinutes(nextEv.time) : start + LAST_EVENT_FALLBACK_MIN
+    if (now < end) {
+      currentIdx = lastPastIdx
+      currentProgress = end === start ? 0 : (now - start) / (end - start)
     }
   }
 
@@ -218,7 +231,7 @@ function makeWidget({ manifest, stale }) {
     const isCurrentEvent = i === currentLocalIdx
     const past = !isCurrentEvent && parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past,
-      isCurrentEvent ? { now, nextEvent } : null)
+      isCurrentEvent ? { progress: currentProgress, now, nextEvent } : null)
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
@@ -254,31 +267,55 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
-function drawEventRow(w, ev, groupById, selected, p, past, current) {
-  // Current events overlay the now-marker on top of the card: draw the
-  // rule row directly above with 0 bottom spacer so they read as one unit.
-  if (current) drawNowLine(w, p, current.now, current.nextEvent, 0)
+// Current-event card is a fixed size so the DrawContext background image
+// (which draws a blue rule at Y proportional to progress) maps onto a
+// known Y range. The image is at 2× resolution so lines stay crisp.
+const CURRENT_CARD_HEIGHT = 54           // card height in points
+const CURRENT_CARD_PAD_V = 14            // top/bottom padding in points
+const CURRENT_CARD_IMAGE_WIDTH = 640
+const CURRENT_CARD_IMAGE_HEIGHT = CURRENT_CARD_HEIGHT * 2
 
-  // Card-style row (block) with subtle background and rounded corners.
+function drawEventRow(w, ev, groupById, selected, p, past, current) {
+  // Caption (current time + countdown) sits ABOVE the card when we're in
+  // the first half of the event and BELOW when we're past the halfway
+  // point. The blue rule itself lives INSIDE the card (drawn into the
+  // DrawContext background image), in the top or bottom padding zone so
+  // it crosses the card without crossing the event text.
+  const lineBelow = !!current && current.progress >= 0.5
+  const lineAbove = !!current && !lineBelow
+
+  if (lineAbove) {
+    drawNowCaption(w, p, current.now, current.nextEvent)
+    w.addSpacer(3)
+  }
+
   const card = w.addStack()
-  card.backgroundColor = current ? p.currentCardBg : p.cardBg
-  card.cornerRadius = 6
-  card.setPadding(7, 10, 7, 10)
+  if (current) {
+    card.backgroundImage = makeHighlightBackground(
+      CURRENT_CARD_IMAGE_WIDTH,
+      CURRENT_CARD_IMAGE_HEIGHT,
+      Math.max(0, Math.min(1, current.progress)),
+      p.currentCardBg, p.accent
+    )
+    card.size = new Size(0, CURRENT_CARD_HEIGHT)
+  } else {
+    card.backgroundColor = p.cardBg
+    card.cornerRadius = 6
+  }
+  const padV = current ? CURRENT_CARD_PAD_V : 7
+  card.setPadding(padV, 12, padV, 12)
   card.spacing = 8
   card.centerAlignContent()
 
-  // Fixed-width time column (Outlook-style). Session numbers are shown
-  // as SESSION headers between blocks, not inside the time cell.
   const timeCol = card.addStack()
-  timeCol.size = new Size(44, 0)
+  timeCol.size = new Size(current ? 60 : 44, 0)
   timeCol.centerAlignContent()
 
   const time = timeCol.addText(formatTime12(ev.time))
-  time.font = current ? monoBoldFont(13) : monoFont(13)
+  time.font = current ? monoBoldFont(17) : monoFont(13)
   time.textColor = current ? p.accent : p.fg
   if (past) time.textOpacity = p.pastOpacity
 
-  // Right content
   const isFood = ev.type === "lunch" || ev.type === "special"
 
   if (ev.type === "session") {
@@ -299,17 +336,72 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   } else {
     if (isFood) {
       const icon = card.addText(ev.type === "lunch" ? "🍔" : "⭐")
-      icon.font = Font.systemFont(13)
+      icon.font = Font.systemFont(current ? 17 : 13)
     }
     const label = card.addText(ev.label)
-    label.font = isFood ? Font.boldSystemFont(12) : Font.systemFont(12)
+    label.font = isFood ? Font.boldSystemFont(current ? 15 : 12) : Font.systemFont(current ? 14 : 12)
     label.textColor = p.fg
     label.lineLimit = 1
     if (past) label.textOpacity = p.pastOpacity
   }
 
   card.addSpacer()
+
+  if (lineBelow) {
+    w.addSpacer(3)
+    drawNowCaption(w, p, current.now, current.nextEvent)
+  }
   w.addSpacer(6)
+}
+
+// Draw the current-event card background: rounded fill + a horizontal
+// blue rule INSIDE the card. The rule's Y is confined to the top
+// padding zone (progress < 0.5) or the bottom padding zone (progress ≥
+// 0.5), interpolating within each half. It never enters the content
+// zone in the middle where the event text sits.
+function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
+  const ctx = new DrawContext()
+  ctx.size = new Size(width, height)
+  ctx.opaque = false
+  ctx.respectScreenScale = true
+
+  const cornerR = 12
+  const bgPath = new Path()
+  bgPath.addRoundedRect(new Rect(0, 0, width, height), cornerR, cornerR)
+  ctx.addPath(bgPath)
+  ctx.setFillColor(bgColor)
+  ctx.fillPath()
+
+  // Padding zone height in image coords (2× card padding).
+  const padZ = CURRENT_CARD_PAD_V * 2
+  const edge = 4  // safety buffer from very top/bottom edge
+
+  let y
+  if (progress < 0.5) {
+    // 0.0 → near top edge, 0.5 → just above the content zone.
+    const t = progress * 2
+    y = edge + t * (padZ - edge)
+  } else {
+    // 0.5 → just below the content zone, 1.0 → near bottom edge.
+    const t = (progress - 0.5) * 2
+    y = (height - padZ) + t * (padZ - edge)
+  }
+
+  const thickness = 3
+  const linePath = new Path()
+  linePath.addRect(new Rect(0, y - thickness / 2, width, thickness))
+  ctx.addPath(linePath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  const dotDiameter = 14
+  const dotPath = new Path()
+  dotPath.addEllipse(new Rect(4, y - dotDiameter / 2, dotDiameter, dotDiameter))
+  ctx.addPath(dotPath)
+  ctx.setFillColor(lineColor)
+  ctx.fillPath()
+
+  return ctx.getImage()
 }
 
 function drawSessionHeader(w, p, n) {
@@ -351,35 +443,46 @@ function addGroupPill(row, g, dim) {
   label.textColor = new Color("#ffffff", alpha)
 }
 
-function drawNowLine(w, p, now, nextEvent, belowSpacer) {
-  // Web-app style: current time + countdown above a thin blue rule.
-  const top = w.addStack()
-  top.centerAlignContent()
+// Web-app style header for the now-marker: current time on the left,
+// countdown to the next event on the right.
+function drawNowCaption(w, p, now, nextEvent) {
+  const row = w.addStack()
+  row.centerAlignContent()
 
-  const time = top.addText(nowHM().toUpperCase())
+  const time = row.addText(nowHM().toUpperCase())
   time.font = Font.mediumSystemFont(10)
   time.textColor = p.accent
 
-  top.addSpacer()
+  row.addSpacer()
 
   if (nextEvent) {
     const min = parseMinutes(nextEvent.time) - now
-    const prefix = top.addText("Next in ")
-    prefix.font = Font.systemFont(10)
-    prefix.textColor = p.muted
-    const label = top.addText(formatCountdown(min))
-    label.font = Font.boldSystemFont(10)
-    label.textColor = urgencyColor(min, p)
+    if (min > 0) {
+      const prefix = row.addText("Next in ")
+      prefix.font = Font.systemFont(10)
+      prefix.textColor = p.muted
+      const label = row.addText(formatCountdown(min))
+      label.font = Font.boldSystemFont(10)
+      label.textColor = urgencyColor(min, p)
+    }
   }
+}
 
-  w.addSpacer(2)
-
+// Thin horizontal accent-color rule spanning the widget width.
+function drawNowRule(w, p) {
   const line = w.addStack()
   const bar = line.addStack()
   bar.backgroundColor = p.accent
   bar.size = new Size(0, 1.5)
   bar.addSpacer()
+}
 
+// Between-cards now-marker: caption on top of a thin rule (used when no
+// event is currently in progress — before the day starts).
+function drawNowLine(w, p, now, nextEvent, belowSpacer) {
+  drawNowCaption(w, p, now, nextEvent)
+  w.addSpacer(2)
+  drawNowRule(w, p)
   if (belowSpacer > 0) w.addSpacer(belowSpacer)
 }
 
