@@ -292,8 +292,12 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   }
 
   const card = w.addStack()
-  card.layoutVertically()
   if (current) {
+    // Current card stacks its three rows (top padding, content, bottom
+    // padding) vertically so the now-line can live in one of the padding
+    // zones. Non-current cards stay horizontal so time + labels lay out
+    // as a single row.
+    card.layoutVertically()
     card.backgroundColor = p.currentCardBg
     card.cornerRadius = CURRENT_CARD_CORNER_RADIUS
 
