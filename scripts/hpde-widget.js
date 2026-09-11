@@ -409,6 +409,17 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
+// ----- now-marker sizing -----
+// Declared before the current-card constants below because
+// MARKER_CONTENT_CLEARANCE reads NOW_LINE_DOT_DIAMETER in its
+// initializer. Top-level `const` declarations are in the temporal
+// dead zone until their own line runs, so referencing a `const`
+// declared later in the file throws at load time (that was the
+// "ReferenceError: Cannot access uninitialized variable" this
+// widget hit before this section moved up here).
+const NOW_LINE_DOT_DIAMETER = 8
+const NOW_LINE_BAR_HEIGHT = 2
+
 // ----- current-card layout constants -----
 
 // Symmetric top/bottom padding on the current card. Big enough to
@@ -470,10 +481,6 @@ function currentContentHeightFor(ev) {
 }
 
 const NONCURRENT_CARD_CORNER_RADIUS = 14
-
-// ----- now-marker sizing -----
-const NOW_LINE_DOT_DIAMETER = 8
-const NOW_LINE_BAR_HEIGHT = 2
 
 // ----- widget-level padding -----
 //
