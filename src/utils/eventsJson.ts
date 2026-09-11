@@ -1,4 +1,5 @@
 import tailwindColors from 'tailwindcss/colors'
+import { runGroupColors } from '../theme/runGroupColors'
 import type { EventConfig, ScheduleEvent } from '../types'
 
 export interface SerializedRunGroup {
@@ -37,6 +38,14 @@ export function resolveTailwindBgColor(bgClass: string): string {
     )
   }
   const [, name, shade] = m
+  if (name in runGroupColors) {
+    if (shade !== '500') {
+      throw new Error(
+        `eventsJson: run-group color "${name}" is only defined at shade 500, got "bg-${name}-${shade}"`
+      )
+    }
+    return runGroupColors[name]
+  }
   const palette = (tailwindColors as unknown as Record<string, unknown>)[name]
   if (!palette || typeof palette !== 'object') {
     throw new Error(

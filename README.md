@@ -55,10 +55,15 @@ Times are 24-hour format. The app converts them to 12-hour for display.
 
 Defined in the `## groups` section at the top of each MD file:
 ```
-orange | Orange | bg-orange-500 | text-white
-blue   | Blue   | bg-blue-500   | text-white | Novice
+orange | Orange | bg-runorange-500 | text-white
+blue   | Blue   | bg-runblue-500   | text-white | Novice
 ```
 Format: `id | Display name | Tailwind background class | Tailwind text class | optional descriptor`
+
+Background classes come from the run-group palette in
+`src/theme/runGroupColors.ts` (`bg-run<color>-500` — red, orange, yellow,
+green, blue, pink, purple, skyblue, indigo, brown, gray, tan). See that
+file's comment for how to add another color.
 
 If any group has a descriptor, a small legend renders at the bottom of the schedule mapping color → descriptor (e.g. Blue · Novice). Keep the display name short — just the color usually — so filter chips and session badges stay clean.
 

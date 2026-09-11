@@ -5,11 +5,11 @@ subtitle: Test event · widget scrubber preview
 // in src/data/index.ts once you're done testing.
 
 ## groups
-red    | Red    | bg-red-500    | text-white | Time Trial
-green  | Green  | bg-green-500  | text-white | Time Trial
-purple | Purple | bg-purple-500 | text-white | Time Trial
-orange | Orange | bg-orange-500 | text-white | Track Day
-blue   | Blue   | bg-blue-500   | text-white | Novice
+red    | Red    | bg-runred-500    | text-white | Time Trial
+green  | Green  | bg-rungreen-500  | text-white | Time Trial
+purple | Purple | bg-runpurple-500 | text-white | Time Trial
+orange | Orange | bg-runorange-500 | text-white | Track Day
+blue   | Blue   | bg-runblue-500   | text-white | Novice
 
 ## Friday | 2026-09-11
 
