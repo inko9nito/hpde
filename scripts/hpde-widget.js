@@ -154,22 +154,25 @@ function parseGroupFilter() {
 
 function palette(dark) {
   return dark
+    // Dark mode keeps its "cards are slightly LIGHTER than the
+    // widget background" relationship — that's the convention that
+    // makes dark cards read as raised over a deeper widget ground.
+    // No borders on either card variety; the tinted background on
+    // the current card and the marker crossing it are enough.
     ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        cardBg: new Color("#18181c"), cardBorder: new Color("#2a2a30"),
+        cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
-        // Subtle border for the current card — just a shade lighter
-        // than the card interior, matching the same contrast ratio
-        // the non-current gray border has against the white card.
-        currentCardBorder: new Color("#1e3050"),
         divider: new Color("#26262c"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
-    : { bg: new Color("#f9fafb"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        cardBg: new Color("#ffffff"), cardBorder: new Color("#e5e7eb"),
+    // Light mode: widget background is now white and non-current
+    // cards use the light gray that USED to be the widget
+    // background (swap of the two, no border). The current card
+    // keeps its blue tint. No borders anywhere — the marker line
+    // would otherwise get interrupted where it crosses a border
+    // strip.
+    : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
+        cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
-        // Tailwind blue-200-ish — a slight blue tint over the
-        // card's blue-50 interior, comparable to the gray-200
-        // border on a white card.
-        currentCardBorder: new Color("#bfdbfe"),
         divider: new Color("#e5e7eb"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
@@ -429,37 +432,31 @@ const NOW_LINE_BAR_HEIGHT = 2
 // doesn't visibly change shape when the marker flips from top to
 // bottom — the empty side still consumes the same pad, and the
 // content stays vertically centered.
-const CURRENT_CARD_PAD_V = 15
-const CURRENT_CARD_CORNER_RADIUS = 8
-
-// Where inside the top (or bottom) pad zone the marker row sits.
-// Chosen so the bar itself lands past the corner radius (8pt) —
-// i.e. in the straight-sides zone of the card, never inside the
-// corner curve. Row is 8pt tall (the dot's diameter); the 2pt-tall
-// bar is centered vertically within it, so at MARKER_ROW_INSET=5
-// the bar sits at y=8-10 from the card top, safely at/past the
-// y=8 corner boundary.
+// Distance from the marker row's outer edge to the nearest card
+// edge (5pt). Chosen so the bar lands past the corner radius (8pt)
+// — the 8pt-tall marker row starts at y=5 with the 2pt bar centered
+// at y=8-10, safely in the straight-sides zone of the card.
 const MARKER_ROW_INSET = 5
-// Space between the marker row and the content block. Kept small so
-// the card stays compact but big enough that content doesn't crowd
-// the bar. Computed from the other constants so any tweak stays
-// consistent with CURRENT_CARD_PAD_V.
-const MARKER_CONTENT_CLEARANCE =
-  CURRENT_CARD_PAD_V - MARKER_ROW_INSET - NOW_LINE_DOT_DIAMETER
+// Distance from the marker row's inner edge to the content. Set
+// equal to MARKER_ROW_INSET so the visible gap above the marker
+// (MARKER_CONTENT_CLEARANCE + 3pt bar-to-row-top) matches the
+// visible gap below (3pt bar-to-row-bottom + MARKER_ROW_INSET).
+// This was the "padding above marker is too much" bug — MCC used
+// to be 2pt while MRI was 5pt, so the visible gaps differed by
+// 3pt AND the fixed-height contentBlock added slack on top of
+// that.
+const MARKER_CONTENT_CLEARANCE = MARKER_ROW_INSET
+// Total vertical pad on each side of the card. Absolute — same
+// whether the marker is on this side or not — so content position
+// is deterministic and the card doesn't shift when the marker
+// flips.
+const CURRENT_CARD_PAD_V =
+  MARKER_ROW_INSET + NOW_LINE_DOT_DIAMETER + MARKER_CONTENT_CLEARANCE
+const CURRENT_CARD_CORNER_RADIUS = 8
 // Space between the current card and its caption ("3:08 AM · Next
 // in 3h 22m") on the outside — matches the pre-#77 spacing so the
 // caption reads as a footer/header for the card.
 const CURRENT_CAPTION_OUTER_PAD = 4
-
-// Session-card content heights — used to size a fixed-height
-// content block inside the current card, so the three-column layout
-// (dot gutter | card | bar gutter) can pre-compute matching
-// spacer heights and keep the dot / bar / bar-continuation all
-// aligned at the same y. Non-current cards don't need this — they
-// grow to fit their content naturally.
-const CURRENT_CONTENT_HEIGHT = 26
-const CURRENT_CONTENT_HEIGHT_STACKED = 58
-const CURRENT_NOTE_ROW_HEIGHT = 17
 
 function eventNote(ev) {
   // Only general-event subtitles surface in the widget. Session
@@ -468,13 +465,6 @@ function eventNote(ev) {
   // adding a note line pushes the whole card taller than it needs
   // to be.
   return ev.subtitle || null
-}
-
-function currentContentHeightFor(ev) {
-  const hasBoth = ev.type === "session"
-    && (ev.onTrack || []).length > 0 && (ev.inClass || []).length > 0
-  const baseH = hasBoth ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
-  return baseH + (eventNote(ev) ? CURRENT_NOTE_ROW_HEIGHT : 0)
 }
 
 const NONCURRENT_CARD_CORNER_RADIUS = 14
@@ -581,14 +571,16 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 // marker crossing it.
 function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     ev, groupById, selected, p, past, position) {
-  const contentH = currentContentHeightFor(ev)
   const markerAtTop = position === "above"
 
   cardContainer.layoutVertically()
   cardContainer.backgroundColor = p.currentCardBg
   cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
 
-  // Top pad zone — marker or plain spacer, both CURRENT_CARD_PAD_V tall.
+  // Top pad zone. Absolute — either the marker + its clearance
+  // (both sum to CURRENT_CARD_PAD_V) or a plain spacer of the same
+  // height. Same either way, so the content below sits at the exact
+  // same y regardless of where the marker is.
   if (markerAtTop) {
     cardContainer.addSpacer(MARKER_ROW_INSET)
     addBarInCard(cardContainer, p.accent)
@@ -597,10 +589,11 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
-  // Fixed-height content block — its known height is what lets the
-  // gutter columns compute matching spacer heights below.
+  // Content grows to its natural height — no fixed-height wrapper.
+  // The fixed wrapper we had before ate the "above marker" gap with
+  // top-aligned slack; now the content is exactly as tall as it
+  // wants, and the pad zones above/below are absolute constants.
   const contentBlock = cardContainer.addStack()
-  contentBlock.size = new Size(0, contentH)
   contentBlock.setPadding(0, CARD_INNER_PAD_H, 0, CARD_INNER_PAD_H)
   buildCardContent(contentBlock, ev, groupById, selected, p, past, true)
 
@@ -613,17 +606,21 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
-  // Gutter columns match the card's y layout so the dot in the left
-  // gutter and the bar continuation in the right gutter land at
-  // exactly the same y as the bar embedded in the card.
-  addGutterMarkerColumn(leftGutter, markerAtTop, contentH, "dot", p.accent)
-  addGutterMarkerColumn(rightGutter, markerAtTop, contentH, "bar", p.accent)
+  // Gutter columns place the dot / bar-continuation at exactly the
+  // same y as the bar embedded in the card. Since content height is
+  // no longer a fixed constant, the gutter columns use a flex
+  // spacer on the empty side to auto-fill to the card's natural
+  // height. Flex is limited to the gutter — it does NOT touch
+  // content position inside the card.
+  addGutterMarkerColumn(leftGutter, markerAtTop, "dot", p.accent)
+  addGutterMarkerColumn(rightGutter, markerAtTop, "bar", p.accent)
 }
 
 function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past) {
+  // No border. Non-current cards are just tinted (light gray on
+  // white) rounded rectangles, matching the current card's
+  // border-less look so the whole widget reads as one system.
   cardContainer.backgroundColor = p.cardBg
-  cardContainer.borderColor = p.cardBorder
-  cardContainer.borderWidth = 1
   cardContainer.cornerRadius = NONCURRENT_CARD_CORNER_RADIUS
   cardContainer.setPadding(
     NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
@@ -646,31 +643,23 @@ function addBarInCard(card, color) {
   bar.addSpacer()
 }
 
-// One of the two negative-space gutter columns. Emits a fixed-height
-// vertical stack that places either the dot (left gutter) or the
-// bar continuation (right gutter) at the exact y where the card's
-// interior bar sits — MARKER_ROW_INSET above the row + 8pt for the
-// marker row itself, mirrored for the "below" case. Since every
-// spacer height is derived from the same constants used for the
-// card interior, alignment can't drift. No border offset because
-// the current card has no border (see drawCurrentCard).
-function addGutterMarkerColumn(col, markerAtTop, contentH, elementType, color) {
-  // Distance from cardContainer top to the marker row's top edge
-  // when the marker is at the card's top pad zone.
-  const topOffset = MARKER_ROW_INSET
-  // Distance from the marker row's bottom edge to cardContainer
-  // bottom — everything below the row when marker is at top.
-  const belowRowIfTop =
-    MARKER_CONTENT_CLEARANCE + contentH + CURRENT_CARD_PAD_V
-
+// One of the two negative-space gutter columns. Places either the
+// dot (left gutter) or the bar continuation (right gutter) at
+// exactly the same y as the bar embedded in the card. Fixed spacer
+// on the marker side (MARKER_ROW_INSET, matching the same absolute
+// constant used inside the card) and a FLEX spacer on the empty
+// side, which auto-fills to whatever height the card's natural
+// content produces. The flex is scoped to the gutter — content
+// inside the card is not touched by it.
+function addGutterMarkerColumn(col, markerAtTop, elementType, color) {
   if (markerAtTop) {
-    col.addSpacer(topOffset)
+    col.addSpacer(MARKER_ROW_INSET)
     addGutterMarkerElement(col, elementType, color)
-    col.addSpacer(belowRowIfTop)
+    col.addSpacer()
   } else {
-    col.addSpacer(belowRowIfTop)
+    col.addSpacer()
     addGutterMarkerElement(col, elementType, color)
-    col.addSpacer(topOffset)
+    col.addSpacer(MARKER_ROW_INSET)
   }
 }
 
@@ -720,31 +709,7 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     && (ev.onTrack || []).length > 0
     && (ev.inClass || []).length > 0
 
-  if (current) {
-    // The current card's contentBlock has a fixed height (needed so
-    // the gutter columns can pre-compute matching spacer heights).
-    // Wrap the actual content in flex spacers so any slop between
-    // the estimated height and the content's natural height shows up
-    // as EQUAL padding above and below — not dumped as extra space
-    // between content and the marker (that was #77's "padding above
-    // marker is too much" complaint: content was top-aligned, so all
-    // the slop piled up right above the bar).
-    container.layoutVertically()
-    container.addSpacer()
-
-    const mainRow = container.addStack()
-    if (stacked) mainRow.topAlignContent()
-    else mainRow.centerAlignContent()
-    mainRow.spacing = TIME_INFO_SPACING
-    buildMainContent(mainRow, ev, groupById, selected, p, past, current)
-
-    if (note) {
-      container.addSpacer(3)
-      addNoteRow(container, note, p, past, current)
-    }
-
-    container.addSpacer()
-  } else if (note) {
+  if (note) {
     container.layoutVertically()
     const mainRow = container.addStack()
     if (stacked) mainRow.topAlignContent()
