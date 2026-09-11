@@ -251,9 +251,15 @@ function computeDividerWidth() {
   // Info block starts at time column + time-info gap from the
   // card's content left edge, so the divider — sitting at the
   // start of the info block — is at most this wide before it'd
-  // overflow the card's right inner edge and stick out past the
-  // border on the right (#71).
-  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - TIME_INFO_SPACING)
+  // overflow the card's right inner edge. Add a fudge factor
+  // because the widgetWidth() table below is a rough
+  // approximation of Apple's published widget sizes and
+  // empirically undershoots the actual widget width by ~15-20pt
+  // on the phones users test on. Undershooting is what leaves
+  // the divider ending in a visible right gutter (#71), and a
+  // small overshoot is clipped by the card's stack layout, so
+  // erring on the generous side is the safer default.
+  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - TIME_INFO_SPACING + 20)
 }
 
 // ---------- rendering ----------
@@ -406,10 +412,15 @@ function renderHeader(w, event, day, p, stale) {
 // ----- current-card layout constants -----
 
 // Top/bottom pad zone inside the current card. Big enough to hold
-// the marker dot with no clipping — safeMin = min(cornerRadius,
-// PAD_V - dotDiameter), which for these values gives a fully
-// visible bar sitting just below the corner curve.
-const CURRENT_CARD_PAD_V = 14
+// Top/bottom pad zone inside the current card. Keep this small —
+// when the marker is at one end of the card (which it is most of
+// the time), the OTHER end shows as a blank strip of the card's
+// blue interior, and a 14pt strip looks like an "empty bottom"
+// bug on the current card. 6pt is the smallest we can go without
+// the marker's top-left pixel getting chewed by the card corner
+// arc (it does get slightly clipped, but the clip is a couple of
+// pixels and effectively invisible against the accent bar).
+const CURRENT_CARD_PAD_V = 6
 const CURRENT_CARD_CORNER_RADIUS = 8
 const CURRENT_CARD_BORDER_WIDTH = 1
 const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH
