@@ -39,7 +39,7 @@ break | 10 minute corner worker break
 
 12:10 lunch | Lunch | 60 minutes
 
-13:10 session 3 | on: red | in: blue
+13:10 session 3 | on: red | in: orange
 13:30 session 3 | on: green
 13:50 session 3 | on: purple
 14:10 session 3 | on: orange
