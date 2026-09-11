@@ -72,7 +72,18 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     : -1
   const indicatorAtEnd = isToday && indicatorIndex === -1 && filtered.length > 0
 
+  const allPastHidden = hidePast && isToday && visible.length > 0 && filtered.length === 0
+
   let lastSessionNumber: number | undefined = undefined
+
+  if (allPastHidden) {
+    return (
+      <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
+        <p className="text-sm font-medium text-gray-500">That's a wrap for today</p>
+        <p className="text-xs text-gray-400">Every event on today's schedule has already happened.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2 pb-10">

@@ -46,6 +46,18 @@ describe('hidePast toggle', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
   })
+
+  it('shows a zero state when hidePast hides every event', () => {
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60) // 11:00 PM, after every event
+    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    expect(screen.queryByText('Lunch')).not.toBeInTheDocument()
+    expect(screen.getByText(/wrap/i)).toBeInTheDocument()
+  })
+
+  it('does not show the zero state when there are no events at all', () => {
+    render(<Timeline events={[]} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    expect(screen.queryByText(/wrap/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('past event opacity', () => {
