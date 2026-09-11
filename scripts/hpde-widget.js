@@ -528,6 +528,12 @@ const TIME_COLUMN_WIDTH = 60
 // ("On track" ~55pt) + 20-ish pt of margin ≈ 100pt.
 const LABEL_COLUMN_WIDTH = 100
 
+// Icon + gap used in front of the "Lunch" / "special" label, sized
+// to match the on-track/in-class section icons so every row's icon
+// reads at the same visual weight.
+const FOOD_ICON_SIZE = 14
+const FOOD_ICON_GAP = 8
+
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
   // current card; the caption ("3:08 AM · Next in 3h 22m") sits
@@ -754,7 +760,14 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     mainRow.spacing = TIME_INFO_SPACING
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
     container.addSpacer(3)
-    addNoteRow(container, note, p, past, current)
+    // Lunch rows carry a leading icon before the label, so the note
+    // needs the extra indent to land under the label text itself —
+    // matching how the web app aligns the subtitle under the title,
+    // not under the icon badge. Special rows have no icon.
+    const hasIcon = ev.type === "lunch"
+    const noteIndent = TIME_COLUMN_WIDTH + TIME_INFO_SPACING
+      + (hasIcon ? FOOD_ICON_SIZE + FOOD_ICON_GAP : 0)
+    addNoteRow(container, note, p, past, current, noteIndent)
   } else {
     if (stacked) container.topAlignContent()
     else container.centerAlignContent()
@@ -803,20 +816,45 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
     }
   } else {
     const isFood = ev.type === "lunch" || ev.type === "special"
-    if (isFood) {
-      const icon = mainRow.addText(ev.type === "lunch" ? "🍔" : "⭐")
-      icon.font = rFont(13)
-      mainRow.addSpacer(6)
+    const hasIcon = ev.type === "lunch"
+    if (hasIcon) {
+      // Icon + label share their own tight-spaced row so mainRow's
+      // wider TIME_INFO_SPACING only applies once, between the time
+      // column and this block — matching how the on-track/in-class
+      // icon columns are laid out.
+      const foodRow = mainRow.addStack()
+      foodRow.centerAlignContent()
+      foodRow.spacing = FOOD_ICON_GAP
+      addFoodIcon(foodRow, p, past)
+      addFoodLabel(foodRow, ev.label, p, past, true)
+    } else {
+      addFoodLabel(mainRow, ev.label, p, past, isFood)
     }
-    const label = mainRow.addText(ev.label)
-    // Same font on current and non-current — the border and
-    // background do the emphasising, not the type.
-    label.font = isFood ? rBoldFont(12) : rMediumFont(12)
-    label.textColor = p.fg
-    label.lineLimit = 1
-    if (past) label.textOpacity = p.pastOpacity
     mainRow.addSpacer()
   }
+}
+
+// SF Symbol for the lunch row — fork.knife mirrors the web app's
+// Utensils icon. Same tint/size/opacity treatment as the on-track/
+// in-class section icons. Special events render with no icon at all.
+function addFoodIcon(row, p, past) {
+  if (typeof SFSymbol === "undefined") return
+  const sym = SFSymbol.named("fork.knife")
+  if (!sym) return
+  const img = row.addImage(sym.image)
+  img.imageSize = new Size(FOOD_ICON_SIZE, FOOD_ICON_SIZE)
+  img.tintColor = p.fg
+  if (past) img.imageOpacity = p.pastOpacity
+}
+
+function addFoodLabel(row, text, p, past, bold) {
+  const label = row.addText(text)
+  // Same font on current and non-current — the border and
+  // background do the emphasising, not the type.
+  label.font = bold ? rBoldFont(12) : rMediumFont(12)
+  label.textColor = p.fg
+  label.lineLimit = 1
+  if (past) label.textOpacity = p.pastOpacity
 }
 
 function addTimeColumn(row, hhmm, p, past, current, topAlign) {
@@ -917,11 +955,12 @@ function addRowDivider(col, p) {
 }
 
 // Small muted note / subtitle line beneath the main content row.
-// Indented past the time column so it aligns with the info block
-// above it — reads as belonging to the event, not the widget.
-function addNoteRow(container, note, p, past, current) {
+// Indented past the time column (and, for food rows, past the icon
+// too) so it aligns with the label above it — reads as belonging to
+// the event, not the widget.
+function addNoteRow(container, note, p, past, current, indent) {
   const row = container.addStack()
-  row.addSpacer(TIME_COLUMN_WIDTH + TIME_INFO_SPACING)
+  row.addSpacer(indent)
   const text = row.addText(note)
   // Same font on current and non-current so subtitles read at
   // one consistent visual weight everywhere.
