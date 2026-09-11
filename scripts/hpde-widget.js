@@ -684,6 +684,17 @@ function addGutterMarkerElement(col, elementType, color) {
     dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
     dot.backgroundColor = color
     dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
+    // Pin the dot to the leading edge of the gutter. Without this
+    // trailing spacer, the row is only 8pt wide (the dot's natural
+    // size) and Scriptable's default cross-axis alignment in a
+    // vertical parent centers narrow children — which would put the
+    // dot in the MIDDLE of the 12pt gutter (2pt on each side)
+    // instead of at its leading edge (4pt of empty gutter to the
+    // right). Adding the spacer makes the row stretch to the full
+    // gutter width, and the dot sits at x=0 with the trailing 4pt
+    // of gutter becoming the guaranteed 4pt gap between dot and
+    // card that issue #67 asked for (and #77 restated).
+    row.addSpacer()
   } else {
     const bar = row.addStack()
     bar.backgroundColor = color

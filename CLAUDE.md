@@ -1,5 +1,16 @@
 # Notes for Claude working in this repo
 
+## Handing the widget script back to the user
+
+The user tests `scripts/hpde-widget.js` by pasting it into
+Scriptable on their iPhone. Every time you change that file:
+push the change, then post the full updated script as a fenced
+```javascript block in a GitHub comment on the issue you're
+working on. Include the direct GitHub raw-file link in the same
+comment (`https://raw.githubusercontent.com/inko9nito/hpde/<branch>/scripts/hpde-widget.js`
+for whichever branch the change lives on) so they can pick
+either. Do this without being asked.
+
 ## Downloading image attachments from GitHub issues
 
 `curl` on a `github.com/user-attachments/assets/<uuid>` URL is blocked by
