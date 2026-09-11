@@ -106,12 +106,20 @@ function formatCountdown(min) {
 
 function pickToday(manifest) {
   const iso = todayIso()
+  const matches = []
   for (const event of manifest.events) {
     for (const day of event.days) {
-      if (day.date === iso) return { event, day }
+      if (day.date === iso) matches.push({ event, day })
     }
   }
-  return null
+  if (matches.length === 0) return null
+  // The TEST — DELETE ME schedule shares today's date with a real
+  // event on purpose (it's meant to always preview as "today"), so
+  // when both match, prefer it over whichever real event happens to
+  // sort first in the manifest. Remove this preference along with
+  // the TEST schedule file once done testing.
+  const testMatch = matches.find(m => /test/i.test(m.event.id))
+  return testMatch || matches[0]
 }
 
 function pickNextFuture(manifest) {
