@@ -271,7 +271,23 @@ function renderHeader(w, event, day, p, stale) {
     const s = row.addText("offline")
     s.font = Font.systemFont(9)
     s.textColor = p.muted
+    row.addSpacer(6)
   }
+
+  // Tap-to-refresh button. iOS throttles widget timelines by a shared
+  // daily budget, so a `refreshAfterDate` hint (see makeWidget) rarely
+  // actually delivers a minute-by-minute cadence over the full day.
+  // Setting a per-stack URL to Scriptable's own URL scheme lets a tap
+  // on this icon open Scriptable, re-run the script, and reload the
+  // widget's timeline immediately — bypassing the budget on demand
+  // without stealing the whole-widget tap (which still opens the site).
+  const refresh = row.addStack()
+  refresh.url = URLScheme.forRunningScript()
+  refresh.setPadding(2, 4, 2, 4)
+  const refreshIcon = refresh.addText("↻")
+  refreshIcon.font = Font.mediumSystemFont(11)
+  refreshIcon.textColor = p.muted
+
   outer.addSpacer(NOW_LINE_DOT_DIAMETER)
   w.addSpacer(6)
 }
