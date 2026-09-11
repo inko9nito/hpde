@@ -202,7 +202,10 @@ function widgetInteriorHeight() {
 // Rough vertical space a rendered event row will consume in the
 // widget's outer stack, including the 6pt gap after it.
 function estimateEventRowHeight(ev, isCurrent) {
-  const hasNote = !!(ev.note || ev.subtitle)
+  // Only general-event subtitles render as a note line. Session
+  // `note` fields are dropped (see `eventNote`), so we don't
+  // budget space for them here either.
+  const hasNote = !!ev.subtitle
   const isSession = ev.type === "session"
   const hasBoth = isSession
     && (ev.onTrack || []).length > 0
@@ -341,6 +344,13 @@ function makeWidget({ manifest, stale }) {
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
+  // Flex spacer at the very end forces the widget's content stack
+  // to top-align. Without it, Scriptable's ListWidget centers
+  // whatever content it has vertically when it's shorter than the
+  // widget's box, which showed up as awkward empty gutters above
+  // the header and below the bottom card.
+  w.addSpacer()
+
   w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
   return w
 }
@@ -399,7 +409,12 @@ const CURRENT_CONTENT_HEIGHT_STACKED = 58
 const NOTE_ROW_HEIGHT = 17
 
 function eventNote(ev) {
-  return ev.note || ev.subtitle || null
+  // Only general-event subtitles surface in the widget. Session
+  // `note` fields are intentionally dropped — a session card is
+  // already carrying a time + on-track pills + in-class pills, and
+  // adding a note line pushes the whole card taller than it needs
+  // to be.
+  return ev.subtitle || null
 }
 
 function currentContentHeightFor(ev) {
@@ -438,7 +453,9 @@ const CARD_INNER_PAD_H = 12
 // up at the same x whether the row is the current card or a plain
 // event row.
 const TIME_COLUMN_WIDTH = 60
-const LABEL_COLUMN_WIDTH = 64
+// Widened to hold the SF Symbol (14pt) + 8pt gap + "On track" or
+// "In class" at the current-card font size, without truncating.
+const LABEL_COLUMN_WIDTH = 88
 
 // Session divider width: computed at runtime from the actual widget
 // width so the divider extends flush to the card's right inner edge
@@ -578,6 +595,13 @@ function addMarkerElementRow(col, elementType, color) {
 // the main row on top and the note line below.
 function buildCardContent(container, ev, groupById, selected, p, past, current) {
   const note = eventNote(ev)
+  // Stacked sessions (both on-track and in-class rows) top-align
+  // the time column with the "On track" row instead of centering
+  // it between the two rows, so the eye doesn't have to hunt for
+  // the time in the vertical middle of a two-row card.
+  const stacked = ev.type === "session"
+    && (ev.onTrack || []).length > 0
+    && (ev.inClass || []).length > 0
 
   if (note) {
     container.layoutVertically()
@@ -585,13 +609,12 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     // inside the current card's fixed-height contentBlock. On a
     // non-current card `container` is the card itself (no fixed
     // height), and a flex spacer there balloons the card to fill
-    // whatever extra vertical space the widget's layout hands it
-    // — which is why an event-with-note previously rendered
-    // enormously tall.
+    // whatever extra vertical space the widget's layout hands it.
     if (current) container.addSpacer()
 
     const mainRow = container.addStack()
-    mainRow.centerAlignContent()
+    if (stacked) mainRow.topAlignContent()
+    else mainRow.centerAlignContent()
     mainRow.spacing = 8
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
 
@@ -599,34 +622,39 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     addNoteRow(container, note, p, past, current)
     if (current) container.addSpacer()
   } else {
-    container.centerAlignContent()
+    if (stacked) container.topAlignContent()
+    else container.centerAlignContent()
     container.spacing = 8
     buildMainContent(container, ev, groupById, selected, p, past, current)
   }
 }
 
 function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
-  addTimeColumn(mainRow, ev.time, p, past, current)
+  const onTrack = ev.type === "session"
+    ? (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
+    : []
+  const inClass = ev.type === "session"
+    ? (ev.inClass || []).map(id => groupById[id]).filter(Boolean)
+    : []
+  const stacked = onTrack.length > 0 && inClass.length > 0
+
+  addTimeColumn(mainRow, ev.time, p, past, current, stacked)
 
   if (ev.type === "session") {
-    const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
-    const inClass = (ev.inClass || []).map(id => groupById[id]).filter(Boolean)
-    const stacked = onTrack.length > 0 && inClass.length > 0
-
     if (stacked) {
       const infoBlock = mainRow.addStack()
       infoBlock.layoutVertically()
 
-      addSectionRow(infoBlock, "On track", onTrack, selected, p, past, current)
+      addSectionRow(infoBlock, "On track", "car", onTrack, selected, p, past, current)
       infoBlock.addSpacer(current ? 6 : 8)
       addRowDivider(infoBlock, p)
       infoBlock.addSpacer(current ? 6 : 8)
-      addSectionRow(infoBlock, "In class", inClass, selected, p, past, current)
+      addSectionRow(infoBlock, "In class", "graduationcap", inClass, selected, p, past, current)
     } else if (onTrack.length) {
-      addSectionRow(mainRow, "On track", onTrack, selected, p, past, current)
+      addSectionRow(mainRow, "On track", "car", onTrack, selected, p, past, current)
       mainRow.addSpacer()
     } else if (inClass.length) {
-      addSectionRow(mainRow, "In class", inClass, selected, p, past, current)
+      addSectionRow(mainRow, "In class", "graduationcap", inClass, selected, p, past, current)
       mainRow.addSpacer()
     }
   } else {
@@ -647,25 +675,33 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
   }
 }
 
-function addTimeColumn(row, hhmm, p, past, current) {
+function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   const timeCol = row.addStack()
   timeCol.size = new Size(TIME_COLUMN_WIDTH, 0)
-  timeCol.centerAlignContent()
+  // For stacked-session cards (both on-track and in-class rows),
+  // pin the time to the top of the card so it visually aligns with
+  // the "On track" text line, rather than floating at the center
+  // between the two rows.
+  if (topAlign) timeCol.topAlignContent()
+  else timeCol.centerAlignContent()
 
   const time = timeCol.addText(formatTime12(hhmm))
-  time.font = current ? rHeavyFont(18) : rMediumFont(14)
+  // Same 14pt on the current card as on the non-current cards — the
+  // accent border and light-blue background do enough to mark the
+  // current row without also inflating the time text.
+  time.font = current ? rBoldFont(14) : rMediumFont(14)
   time.textColor = p.fg
   time.lineLimit = 1
   if (past) time.textOpacity = p.pastOpacity
   timeCol.addSpacer()
 }
 
-function addSectionRow(parent, labelText, groups, selected, p, past, current) {
+function addSectionRow(parent, labelText, iconName, groups, selected, p, past, current) {
   const row = parent.addStack()
   row.centerAlignContent()
   row.spacing = 10
 
-  addSectionLabelColumn(row, labelText, p, past, current)
+  addSectionLabelColumn(row, labelText, iconName, p, past, current)
 
   const pillsStack = row.addStack()
   pillsStack.centerAlignContent()
@@ -678,13 +714,34 @@ function addSectionRow(parent, labelText, groups, selected, p, past, current) {
   row.addSpacer()
 }
 
-function addSectionLabelColumn(row, text, p, past, current) {
+// Label column with a small SF Symbol glyph to the left of the
+// text — a car for "On track" and a graduation cap for "In class".
+// SF Symbols is the iOS-native equivalent of Material Icons and the
+// closest simple line-glyph set actually available inside
+// Scriptable; both are rendered in the same color as the label so
+// the icon reads as part of the section label, not a decoration.
+function addSectionLabelColumn(row, text, iconName, p, past, current) {
   const col = row.addStack()
   col.size = new Size(LABEL_COLUMN_WIDTH, 0)
   col.centerAlignContent()
+  col.spacing = 8   // generous gap between icon and label
+
+  if (iconName && typeof SFSymbol !== "undefined") {
+    const sym = SFSymbol.named(iconName)
+    if (sym) {
+      const img = col.addImage(sym.image)
+      img.imageSize = new Size(14, 14)
+      img.tintColor = p.fg
+      if (past) img.imageOpacity = p.pastOpacity
+    }
+  }
+
   const l = col.addText(text)
   l.font = rFont(current ? 13 : 12)
-  l.textColor = p.muted
+  // Same p.fg as every other text element on the card so the label
+  // doesn't fade into the background — matches the web app's dark
+  // gray section labels, not the earlier gray-400 muted variant.
+  l.textColor = p.fg
   l.lineLimit = 1
   if (past) l.textOpacity = p.pastOpacity
   col.addSpacer()
@@ -723,7 +780,11 @@ function addGroupPill(row, g, dim, current) {
   pill.centerAlignContent()
   const label = pill.addText(g.label)
   label.font = current ? rBoldFont(13) : rMediumFont(10)
-  label.textColor = new Color("#ffffff", alpha)
+  // Pill text stays fully opaque even when the pill is dimmed
+  // (past event / not-in-selected-groups) — the background alpha
+  // already carries the "dimmed" signal, and fading the text on
+  // top makes the label unreadable. Matches the web app.
+  label.textColor = new Color("#ffffff")
 }
 
 function drawNowCaption(w, p, now, nextEvent) {
