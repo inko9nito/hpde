@@ -16,6 +16,13 @@ const CACHE_FILENAME = "hpde-events.json"
 // LAST_EVENT_FALLBACK_MIN in src/utils/time.ts.
 const LAST_EVENT_FALLBACK_MIN = 30
 
+// How many minutes before the next event we stop treating the current
+// event as "in progress" and switch the now-marker to the between-cards
+// style. This keeps the marker from having to sit right at the bottom
+// of the current card's padding zone (which is where the corner-curve
+// starts clipping it) as the event runs down to zero.
+const CURRENT_END_LOOKAHEAD_MIN = 5
+
 // ---------- data fetching (with offline cache) ----------
 
 function getFm() {
@@ -195,7 +202,15 @@ function makeWidget({ manifest, stale }) {
     const start = parseMinutes(visible[lastPastIdx].time)
     const nextEv = visible[lastPastIdx + 1]
     const end = nextEv ? parseMinutes(nextEv.time) : start + LAST_EVENT_FALLBACK_MIN
-    if (now < end) {
+    // Cut off the "current" state CURRENT_END_LOOKAHEAD_MIN minutes
+    // before the next event begins, so the marker moves out of the
+    // card and into the between-cards gap for the final countdown.
+    // Math.max guards against events shorter than the lookahead — in
+    // that case the event never enters "current" state.
+    const currentEndsAt = nextEv
+      ? Math.max(start, end - CURRENT_END_LOOKAHEAD_MIN)
+      : end
+    if (now < currentEndsAt) {
       currentIdx = lastPastIdx
       currentProgress = end === start ? 0 : (now - start) / (end - start)
     }
@@ -297,7 +312,10 @@ function renderHeader(w, event, day, p, stale) {
 // `cornerRadius` has no effect on a stack using `backgroundImage`, so a
 // DrawContext-rendered background can't get rounded corners — real
 // stacks with `backgroundColor` don't have that limitation.
-const CURRENT_CARD_PAD_V = 20            // top/bottom padding in points
+// Top/bottom padding in points, sized to give the now-line room to
+// travel inside the straight-edge zone of the card, i.e. clear of the
+// corner-curve square at each corner.
+const CURRENT_CARD_PAD_V = 24
 const CURRENT_CARD_CORNER_RADIUS = 12
 // Fixed height for the current card's content row. All three columns
 // (leftGutter | card | rightGutter) pin this exact value so their
@@ -308,7 +326,6 @@ const CURRENT_CARD_CORNER_RADIUS = 12
 const CURRENT_CONTENT_HEIGHT = 24
 const NOW_LINE_DOT_DIAMETER = 8
 const NOW_LINE_BAR_HEIGHT = 3
-const NOW_LINE_MARGIN = 2                // min gap from the card edge / content
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
@@ -358,27 +375,27 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
 
     // All three columns get the same three-part vertical structure:
-    // padding zone (20pt) / content-row-sized block (CURRENT_CONTENT_HEIGHT)
-    // / padding zone (20pt). Because the intrinsic heights match, the
-    // dot, the bar inside the card, and the bar continuation in the
-    // right gutter land at the same y without depending on Scriptable
-    // stretching a flexible spacer to line them up.
-    addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent)
+    // padding zone / content-row-sized block (CURRENT_CONTENT_HEIGHT) /
+    // padding zone. Because the intrinsic heights match, the dot, the
+    // bar inside the card, and the bar continuation in the right gutter
+    // land at the same y without depending on Scriptable stretching a
+    // flexible spacer to line them up.
+    addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent, false)
     leftGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
-    addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent)
+    addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent, true)
 
-    addMarkerColumnZone(card, topFraction, "bar", p.accent)
+    addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
     const contentRow = card.addStack()
     contentRow.size = new Size(0, CURRENT_CONTENT_HEIGHT)
     contentRow.setPadding(0, 12, 0, 12)
     contentRow.spacing = 8
     contentRow.centerAlignContent()
     buildEventContent(contentRow, ev, groupById, selected, p, past, true)
-    addMarkerColumnZone(card, botFraction, "bar", p.accent)
+    addMarkerColumnZone(card, botFraction, "bar", p.accent, true)
 
-    addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent)
+    addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent, false)
     rightGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
-    addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent)
+    addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent, true)
   } else {
     card.backgroundColor = p.cardBg
     card.cornerRadius = 6
@@ -398,19 +415,41 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 }
 
 // One of the three-column outer stack's top or bottom padding zone.
-// When `fraction` is a number in [0,1], the marker element (dot or bar)
-// is placed within the CURRENT_CARD_PAD_V-tall zone at
-// (fraction * usable) points from the zone's inner margin. When
-// `fraction` is null, the zone is just blank vertical space of the
-// same height, so all three columns stay aligned.
-function addMarkerColumnZone(col, fraction, elementType, color) {
+// When `fraction` is a number in [0,1] the marker element (dot or bar)
+// is placed within the CURRENT_CARD_PAD_V-tall zone; when it's null,
+// the zone is a blank spacer of the same height so all three columns
+// stay aligned.
+//
+// The marker row is confined to the card's straight-edge zone — the
+// portion of each side that lies clear of the corner-curve square at
+// each corner (CURRENT_CARD_CORNER_RADIUS on a side). Inside that
+// square the card's cornerRadius clips content off from the corner,
+// which would leave a visible gap between the bar inside the card and
+// the bar continuation in the right gutter.
+//
+// Fraction 0 is always the end of the zone nearest the card edge, and
+// fraction 1 is nearest the content row — so the marker moves toward
+// the content as the current event's progress advances.
+function addMarkerColumnZone(col, fraction, elementType, color, isBottomZone) {
   if (fraction === null) {
     col.addSpacer(CURRENT_CARD_PAD_V)
     return
   }
   const rowH = NOW_LINE_DOT_DIAMETER
-  const usable = Math.max(0, CURRENT_CARD_PAD_V - rowH - NOW_LINE_MARGIN * 2)
-  const before = NOW_LINE_MARGIN + fraction * usable
+  const cr = CURRENT_CARD_CORNER_RADIUS
+  // Range of legal row_top offsets within the zone (relative to
+  // zone_top). In the top zone the corner square hugs the zone's top
+  // (row_top >= cr); in the bottom zone it hugs the zone's bottom
+  // (row_top + rowH <= padV - cr).
+  const safeMin = isBottomZone ? 0 : cr
+  const safeMax = isBottomZone
+    ? Math.max(safeMin, CURRENT_CARD_PAD_V - rowH - cr)
+    : Math.max(safeMin, CURRENT_CARD_PAD_V - rowH)
+  // Row_top increases monotonically with fraction in both zones — in
+  // the top zone larger row_top is nearer the content, in the bottom
+  // zone larger row_top is farther from the content — matching how
+  // the caller feeds in progress (small first, growing over time).
+  const before = safeMin + fraction * (safeMax - safeMin)
   const after = Math.max(0, CURRENT_CARD_PAD_V - rowH - before)
   col.addSpacer(before)
   addMarkerElementRow(col, elementType, color)
