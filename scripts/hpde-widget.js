@@ -176,9 +176,9 @@ function makeWidget({ manifest, stale }) {
   // "Current" event: the last event that has started, iff `now` still
   // falls inside its inferred duration. Duration is `next.start - start`,
   // or LAST_EVENT_FALLBACK_MIN when there is no next event on today's
-  // schedule. When an event is current we draw the now-line THROUGH its
-  // card (via a DrawContext background image) at Y proportional to how
-  // far we are into the event.
+  // schedule. When an event is current we draw the now-line inside its
+  // card's top/bottom padding, at a position proportional to how far we
+  // are into the event.
   let currentIdx = -1
   let currentProgress = 0
   let lastPastIdx = -1
@@ -267,21 +267,22 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
-// Current-event card is a fixed size so the DrawContext background image
-// (which draws a blue rule at Y proportional to progress) maps onto a
-// known Y range. The image is at 2× resolution so lines stay crisp.
-const CURRENT_CARD_HEIGHT = 54           // card height in points
-const CURRENT_CARD_PAD_V = 14            // top/bottom padding in points
-const CURRENT_CARD_CORNER_RADIUS = 12    // must match cornerR in makeHighlightBackground
-const CURRENT_CARD_IMAGE_WIDTH = 640
-const CURRENT_CARD_IMAGE_HEIGHT = CURRENT_CARD_HEIGHT * 2
+// The current-event card's now-line is built from plain WidgetStacks
+// (a small circular dot + a thin bar), not a drawn image. Scriptable's
+// `cornerRadius` has no effect on a stack using `backgroundImage`, so a
+// DrawContext-rendered background can't get rounded corners — real
+// stacks with `backgroundColor` don't have that limitation.
+const CURRENT_CARD_PAD_V = 20            // top/bottom padding in points
+const CURRENT_CARD_CORNER_RADIUS = 12
+const NOW_LINE_DOT_DIAMETER = 8
+const NOW_LINE_BAR_HEIGHT = 3
+const NOW_LINE_MARGIN = 2                // min gap from the card edge / content
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
   // the first half of the event and BELOW when we're past the halfway
-  // point. The blue rule itself lives INSIDE the card (drawn into the
-  // DrawContext background image), in the top or bottom padding zone so
-  // it crosses the card without crossing the event text.
+  // point. The now-line itself lives INSIDE the card's top or bottom
+  // padding zone so it crosses the card without crossing the event text.
   const lineBelow = !!current && current.progress >= 0.5
   const lineAbove = !!current && !lineBelow
 
@@ -291,66 +292,28 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   }
 
   const card = w.addStack()
+  card.layoutVertically()
   if (current) {
-    card.backgroundImage = makeHighlightBackground(
-      CURRENT_CARD_IMAGE_WIDTH,
-      CURRENT_CARD_IMAGE_HEIGHT,
-      Math.max(0, Math.min(1, current.progress)),
-      p.currentCardBg, p.accent
-    )
-    card.size = new Size(0, CURRENT_CARD_HEIGHT)
+    card.backgroundColor = p.currentCardBg
     card.cornerRadius = CURRENT_CARD_CORNER_RADIUS
+
+    addPaddingZone(card, current.progress < 0.5 ? current.progress * 2 : null, p.accent)
+
+    const contentRow = card.addStack()
+    contentRow.setPadding(0, 12, 0, 12)
+    contentRow.spacing = 8
+    contentRow.centerAlignContent()
+    buildEventContent(contentRow, ev, groupById, selected, p, past, true)
+
+    addPaddingZone(card, current.progress >= 0.5 ? (current.progress - 0.5) * 2 : null, p.accent)
   } else {
     card.backgroundColor = p.cardBg
     card.cornerRadius = 6
+    card.setPadding(7, 12, 7, 12)
+    card.spacing = 8
+    card.centerAlignContent()
+    buildEventContent(card, ev, groupById, selected, p, past, false)
   }
-  const padV = current ? CURRENT_CARD_PAD_V : 7
-  card.setPadding(padV, 12, padV, 12)
-  card.spacing = 8
-  card.centerAlignContent()
-
-  const timeCol = card.addStack()
-  timeCol.size = new Size(current ? 60 : 44, 0)
-  // Left-align (not center) so the time digits start at the same x in
-  // every row, even though the current card uses a wider column and a
-  // bigger font than past/future rows.
-  timeCol.leftAlignContent()
-
-  const time = timeCol.addText(formatTime12(ev.time))
-  time.font = current ? monoBoldFont(17) : monoFont(13)
-  time.textColor = current ? p.accent : p.fg
-  if (past) time.textOpacity = p.pastOpacity
-
-  const isFood = ev.type === "lunch" || ev.type === "special"
-
-  if (ev.type === "session") {
-    const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
-    if (onTrack.length) {
-      addMutedLabel(card, "On track", p, past)
-      for (const g of onTrack) {
-        const dim = selected.length > 0 && !selected.includes(g.id)
-        addGroupPill(card, g, dim || past)
-      }
-    }
-    if (ev.inClass && ev.inClass.length) {
-      addSeparator(card, p, past)
-      addMutedLabel(card, "In class", p, past)
-      const inClass = ev.inClass.map(id => groupById[id]).filter(Boolean)
-      for (const g of inClass) addGroupPill(card, g, past)
-    }
-  } else {
-    if (isFood) {
-      const icon = card.addText(ev.type === "lunch" ? "🍔" : "⭐")
-      icon.font = Font.systemFont(current ? 17 : 13)
-    }
-    const label = card.addText(ev.label)
-    label.font = isFood ? Font.boldSystemFont(current ? 15 : 12) : Font.systemFont(current ? 14 : 12)
-    label.textColor = p.fg
-    label.lineLimit = 1
-    if (past) label.textOpacity = p.pastOpacity
-  }
-
-  card.addSpacer()
 
   if (lineBelow) {
     w.addSpacer(3)
@@ -359,65 +322,91 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   w.addSpacer(6)
 }
 
-// Draw the current-event card background: rounded fill + a horizontal
-// blue rule INSIDE the card. The rule's Y is confined to the top
-// padding zone (progress < 0.5) or the bottom padding zone (progress ≥
-// 0.5), interpolating within each half. It never enters the content
-// zone in the middle where the event text sits.
-function makeHighlightBackground(width, height, progress, bgColor, lineColor) {
-  const ctx = new DrawContext()
-  ctx.size = new Size(width, height)
-  ctx.opaque = false
-  ctx.respectScreenScale = true
+// One of the current card's top/bottom padding rows. When `lineFraction`
+// is a number (0 = start of the zone, 1 = end of the zone, i.e. nearest
+// the event text), the now-line is drawn at that position within the
+// zone; when null, the zone is just blank vertical space.
+function addPaddingZone(card, lineFraction, lineColor) {
+  if (lineFraction === null) {
+    card.addSpacer(CURRENT_CARD_PAD_V)
+    return
+  }
+  const lineRowHeight = NOW_LINE_DOT_DIAMETER
+  const usable = Math.max(0, CURRENT_CARD_PAD_V - lineRowHeight - NOW_LINE_MARGIN * 2)
+  const before = NOW_LINE_MARGIN + lineFraction * usable
+  const after = Math.max(0, CURRENT_CARD_PAD_V - lineRowHeight - before)
+  card.addSpacer(before)
+  addNowLineRow(card, lineColor)
+  card.addSpacer(after)
+}
 
-  const cornerR = CURRENT_CARD_CORNER_RADIUS
-  const bgPath = new Path()
-  bgPath.addRoundedRect(new Rect(0, 0, width, height), cornerR, cornerR)
-  ctx.addPath(bgPath)
-  ctx.setFillColor(bgColor)
-  ctx.fillPath()
+// A small dot + a thin bar spanning the rest of the card's width, built
+// from plain WidgetStacks so the card's own rounding and layout always
+// clip and align it correctly.
+function addNowLineRow(card, color) {
+  const row = card.addStack()
+  row.centerAlignContent()
 
-  const thickness = 3
-  const dotDiameter = 12
-  const dotRadius = dotDiameter / 2
-  // Keep the dot clear of the rounded left corners (its bounding box
-  // must start at/after the corner radius) so it's never clipped by
-  // the card's own rounded-corner mask.
-  const dotInsetX = cornerR + 6
+  const dot = row.addStack()
+  dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
+  dot.backgroundColor = color
+  dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
 
-  // Padding zone height in image coords (2× card padding).
-  const padZ = CURRENT_CARD_PAD_V * 2
-  // Keep the marker's full vertical travel inside the canvas — its
-  // bounds must never cross y=0 or y=height, or the dot gets clipped.
-  const topMin = dotRadius + 4
-  const topMax = padZ - 4
-  const bottomMin = height - padZ + 4
-  const bottomMax = height - dotRadius - 4
+  row.addSpacer(4)
 
-  let y
-  if (progress < 0.5) {
-    // 0.0 → near top edge, 0.5 → just above the content zone.
-    const t = progress * 2
-    y = topMin + t * (topMax - topMin)
+  const bar = row.addStack()
+  bar.backgroundColor = color
+  bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
+  bar.addSpacer()
+}
+
+// Shared row content — time on the left, then session pills or an
+// event label — used for both the current card and regular rows so
+// they lay out (and align) identically.
+function buildEventContent(row, ev, groupById, selected, p, past, current) {
+  const timeCol = row.addStack()
+  timeCol.size = new Size(current ? 60 : 44, 0)
+
+  const time = timeCol.addText(formatTime12(ev.time))
+  time.font = current ? monoBoldFont(17) : monoFont(13)
+  time.textColor = current ? p.accent : p.fg
+  if (past) time.textOpacity = p.pastOpacity
+  // Scriptable stacks have no direct "start-align" API, so push the
+  // digits flush against the column's left edge with a trailing spacer
+  // instead — this keeps times lined up at the same x in every row,
+  // regardless of column width or font size.
+  timeCol.addSpacer()
+
+  const isFood = ev.type === "lunch" || ev.type === "special"
+
+  if (ev.type === "session") {
+    const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
+    if (onTrack.length) {
+      addMutedLabel(row, "On track", p, past)
+      for (const g of onTrack) {
+        const dim = selected.length > 0 && !selected.includes(g.id)
+        addGroupPill(row, g, dim || past)
+      }
+    }
+    if (ev.inClass && ev.inClass.length) {
+      addSeparator(row, p, past)
+      addMutedLabel(row, "In class", p, past)
+      const inClass = ev.inClass.map(id => groupById[id]).filter(Boolean)
+      for (const g of inClass) addGroupPill(row, g, past)
+    }
   } else {
-    // 0.5 → just below the content zone, 1.0 → near bottom edge.
-    const t = (progress - 0.5) * 2
-    y = bottomMin + t * (bottomMax - bottomMin)
+    if (isFood) {
+      const icon = row.addText(ev.type === "lunch" ? "🍔" : "⭐")
+      icon.font = Font.systemFont(current ? 17 : 13)
+    }
+    const label = row.addText(ev.label)
+    label.font = isFood ? Font.boldSystemFont(current ? 15 : 12) : Font.systemFont(current ? 14 : 12)
+    label.textColor = p.fg
+    label.lineLimit = 1
+    if (past) label.textOpacity = p.pastOpacity
   }
 
-  const linePath = new Path()
-  linePath.addRect(new Rect(0, y - thickness / 2, width, thickness))
-  ctx.addPath(linePath)
-  ctx.setFillColor(lineColor)
-  ctx.fillPath()
-
-  const dotPath = new Path()
-  dotPath.addEllipse(new Rect(dotInsetX, y - dotRadius, dotDiameter, dotDiameter))
-  ctx.addPath(dotPath)
-  ctx.setFillColor(lineColor)
-  ctx.fillPath()
-
-  return ctx.getImage()
+  row.addSpacer()
 }
 
 function drawSessionHeader(w, p, n) {
