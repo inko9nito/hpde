@@ -55,7 +55,7 @@ break | 10 minute corner worker break
 19:00 general | Post-event dinner
 20:00 general | Paddock hangout
 21:00 general | Night driving demo
-22:00 session 6 | on: purple
-22:30 session 6 | on: orange
+22:00 session 6 | on: purple | in: blue
+22:30 session 6 | on: orange | in: green
 23:00 general | Track cool-down
 23:45 general | Gates close

@@ -331,8 +331,22 @@ const CURRENT_CARD_BORDER_WIDTH = 2
 // intrinsic heights match — the dot in the left gutter, the bar
 // inside the card, and the bar continuation in the right gutter then
 // end up at the same y automatically, without depending on Scriptable
-// stretching a flexible spacer.
+// stretching a flexible spacer. Session events that carry both an
+// "on track" row and an "in class" row need more room because the
+// two rows stack vertically like the web app's SessionCard does.
 const CURRENT_CONTENT_HEIGHT = 24
+const CURRENT_CONTENT_HEIGHT_STACKED = 40
+
+// The vertical size the current card's content row needs for `ev` —
+// stacked when the session carries both on-track and in-class pills,
+// single-height otherwise. Non-session events always use the single
+// height.
+function currentContentHeightFor(ev) {
+  if (ev.type !== "session") return CURRENT_CONTENT_HEIGHT
+  const hasOn = ev.onTrack && ev.onTrack.length > 0
+  const hasIn = ev.inClass && ev.inClass.length > 0
+  return hasOn && hasIn ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
+}
 const NOW_LINE_DOT_DIAMETER = 8
 const NOW_LINE_BAR_HEIGHT = 3
 // Gutter widths outside each event card. Left is dot-sized so the dot
@@ -420,15 +434,17 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     // flexible spacer to line them up. Card omits the leading and
     // trailing border-pad spacers because those come from the
     // cardContainer's own padding.
+    const contentH = currentContentHeightFor(ev)
+
     leftGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
     addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent, false)
-    leftGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
+    leftGutter.addSpacer(contentH)
     addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent, true)
     leftGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
 
     addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
     const contentRow = card.addStack()
-    contentRow.size = new Size(0, CURRENT_CONTENT_HEIGHT)
+    contentRow.size = new Size(0, contentH)
     contentRow.setPadding(0, 12, 0, 12)
     contentRow.spacing = 8
     contentRow.centerAlignContent()
@@ -437,7 +453,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 
     rightGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
     addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent, false)
-    rightGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
+    rightGutter.addSpacer(contentH)
     addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent, true)
     rightGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
   } else {
@@ -545,19 +561,32 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
   const isFood = ev.type === "lunch" || ev.type === "special"
 
   if (ev.type === "session") {
+    // On-track and in-class rows stack vertically like the web app's
+    // SessionCard, so the two label + pill groups don't run together
+    // on a single line.
     const onTrack = (ev.onTrack || []).map(id => groupById[id]).filter(Boolean)
+    const inClass = (ev.inClass || []).map(id => groupById[id]).filter(Boolean)
+
+    const infoCol = row.addStack()
+    infoCol.layoutVertically()
+    infoCol.spacing = 3
+
     if (onTrack.length) {
-      addMutedLabel(row, "On track", p, past)
+      const onRow = infoCol.addStack()
+      onRow.centerAlignContent()
+      onRow.spacing = 6
+      addMutedLabel(onRow, "On track", p, past)
       for (const g of onTrack) {
         const dim = selected.length > 0 && !selected.includes(g.id)
-        addGroupPill(row, g, dim || past)
+        addGroupPill(onRow, g, dim || past)
       }
     }
-    if (ev.inClass && ev.inClass.length) {
-      addSeparator(row, p, past)
-      addMutedLabel(row, "In class", p, past)
-      const inClass = ev.inClass.map(id => groupById[id]).filter(Boolean)
-      for (const g of inClass) addGroupPill(row, g, past)
+    if (inClass.length) {
+      const inRow = infoCol.addStack()
+      inRow.centerAlignContent()
+      inRow.spacing = 6
+      addMutedLabel(inRow, "In class", p, past)
+      for (const g of inClass) addGroupPill(inRow, g, past)
     }
   } else {
     if (isFood) {
@@ -593,13 +622,6 @@ function addMutedLabel(row, text, p, past) {
   l.font = Font.systemFont(10)
   l.textColor = p.label
   if (past) l.textOpacity = p.pastOpacity
-}
-
-function addSeparator(row, p, past) {
-  const s = row.addText(" · ")
-  s.font = Font.systemFont(11)
-  s.textColor = p.muted
-  if (past) s.textOpacity = p.pastOpacity
 }
 
 // Colored pill matching the web app's GroupBadge — colored background
