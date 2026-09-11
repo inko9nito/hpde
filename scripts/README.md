@@ -10,6 +10,10 @@ next without opening the app.
 — always points at the current version on `main`, so it's the easiest thing
 to share or open straight from an iPhone.
 
+> **Known issue:** the widget isn't truly live — iOS controls when it
+> actually refreshes, so it can lag a bit behind what's happening on track.
+> See [Refresh cadence](#refresh-cadence) below.
+
 ## Install
 
 1. Install [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) on
