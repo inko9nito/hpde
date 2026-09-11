@@ -524,6 +524,22 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   const outerRow = w.addStack()
   outerRow.spacing = 0
 
+  // Align outerRow's children to the same edge the marker sits on.
+  // Both the card's embedded marker and the gutter's dot/bar are
+  // placed at a fixed MARKER_ROW_INSET from that edge, so when both
+  // columns are aligned to the same edge the two lands at the same
+  // y — no flex spacer needed, no dependence on knowing the card's
+  // natural height. This is what fixes the "dot floats below the
+  // bar" bug: a flex spacer in a shorter vertical child of a
+  // horizontal parent does NOT auto-stretch to the tallest
+  // sibling's height in Scriptable, so the old gutter stayed 13pt
+  // at the top of the row while the bar sat much lower in the card.
+  if (current && current.position === "below") {
+    outerRow.bottomAlignContent()
+  } else {
+    outerRow.topAlignContent()
+  }
+
   const leftGutter = outerRow.addStack()
   leftGutter.layoutVertically()
   leftGutter.size = new Size(LEFT_GUTTER_WIDTH, 0)
@@ -643,21 +659,19 @@ function addBarInCard(card, color) {
   bar.addSpacer()
 }
 
-// One of the two negative-space gutter columns. Places either the
-// dot (left gutter) or the bar continuation (right gutter) at
-// exactly the same y as the bar embedded in the card. Fixed spacer
-// on the marker side (MARKER_ROW_INSET, matching the same absolute
-// constant used inside the card) and a FLEX spacer on the empty
-// side, which auto-fills to whatever height the card's natural
-// content produces. The flex is scoped to the gutter — content
-// inside the card is not touched by it.
+// One of the two negative-space gutter columns. Places the dot or
+// the bar continuation at MARKER_ROW_INSET from the row's aligned
+// edge — matching the same fixed distance the marker sits from
+// that edge inside the card. drawEventRow sets outerRow's
+// topAlignContent()/bottomAlignContent() so both this column and
+// cardContainer align to the same edge, which is what makes the
+// dot land at the exact y as the embedded bar. Fully absolute:
+// spacers here are constants, no flex.
 function addGutterMarkerColumn(col, markerAtTop, elementType, color) {
   if (markerAtTop) {
     col.addSpacer(MARKER_ROW_INSET)
     addGutterMarkerElement(col, elementType, color)
-    col.addSpacer()
   } else {
-    col.addSpacer()
     addGutterMarkerElement(col, elementType, color)
     col.addSpacer(MARKER_ROW_INSET)
   }
@@ -748,11 +762,13 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
       infoBlock.addSpacer(current ? 6 : 8)
       addSectionRow(infoBlock, "In class", "graduationcap", inClass, selected, p, past, current)
     } else if (onTrack.length) {
+      // No trailing mainRow.addSpacer() — addSectionRow now sizes
+      // to natural width and left-aligns in mainRow on its own. See
+      // the note in addSectionRow for why the double flex spacer
+      // was truncating the pill label.
       addSectionRow(mainRow, "On track", "car", onTrack, selected, p, past, current)
-      mainRow.addSpacer()
     } else if (inClass.length) {
       addSectionRow(mainRow, "In class", "graduationcap", inClass, selected, p, past, current)
-      mainRow.addSpacer()
     }
   } else {
     const isFood = ev.type === "lunch" || ev.type === "special"
@@ -807,7 +823,13 @@ function addSectionRow(parent, labelText, iconName, groups, selected, p, past, c
     const dim = dimSelected && !selected.includes(g.id)
     addGroupPill(pillsStack, g, dim || past, current)
   }
-  row.addSpacer()
+  // No trailing flex spacer here. When the outer mainRow ALSO had
+  // a flex spacer (for session cards), the two competed and shared
+  // the extra horizontal space equally — which starved the section
+  // row of the pt or two it needed for the pill to be its natural
+  // width, and the pill's label truncated ("Oran…"). The row now
+  // grows only to its natural width (label col + pills), and the
+  // section row is left-aligned in its container by default.
 }
 
 // Label column with a small SF Symbol glyph to the left of the
