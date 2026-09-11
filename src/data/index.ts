@@ -1,7 +1,7 @@
 // TODO delete when done: the test-today entry (schedule + wrapper) is only
 // here to preview the widget's "now" line on today's date. Remove those two
 // files and the import + array entry below once done testing.
-import testToday from './events/2026-09-11_test-today'
+import testToday from './events/2026-09-10_test-today'
 import msrc17Sep from './events/2026-09-11_msrc-1-7'
 import msrScca from './events/2026-09-13_msr-scca'
 import msrc17 from './events/2026-06-06_msrc-1-7'
