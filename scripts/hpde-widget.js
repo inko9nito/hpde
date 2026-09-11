@@ -165,6 +165,7 @@ function palette(dark) {
     // No borders on either card variety; the tinted background on
     // the current card and the marker crossing it are enough.
     ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
+        mutedStrong: new Color("#a4a4aa"),
         cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
@@ -176,6 +177,7 @@ function palette(dark) {
     // would otherwise get interrupted where it crosses a border
     // strip.
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
+        mutedStrong: new Color("#6b7280"),
         cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
@@ -543,7 +545,7 @@ const FOOD_ICON_GAP = 8
 // Fine-tune knob for the AM/PM-to-time baseline alignment — see
 // addTimeColumn. Bump this up/down if AM/PM still looks off after a
 // font or size change.
-const AMPM_BASELINE_NUDGE = 2
+const AMPM_BASELINE_NUDGE = 1
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
@@ -888,13 +890,13 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   // bottom edge.
   const timeRow = timeCol.addStack()
   timeRow.bottomAlignContent()
-  timeRow.spacing = 2
+  // +2 over the base 2pt gap shifts the AM/PM text right.
+  timeRow.spacing = 4
 
   const time = timeRow.addText(formatTime12(hhmm))
-  // Same font on current and non-current — the current card's
-  // border + tinted background already carry the "this is now"
-  // signal, so we don't inflate the time on top.
-  time.font = rMediumFont(14)
+  // Bold on the current card so the time carries the "this is now"
+  // signal too, not just the card's border/tinted background.
+  time.font = current ? rBoldFont(14) : rMediumFont(14)
   time.textColor = p.fg
   time.lineLimit = 1
   if (past) time.textOpacity = p.pastOpacity
@@ -905,7 +907,7 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   ampmBox.layoutVertically()
   const ampm = ampmBox.addText(formatAmPm(hhmm))
   ampm.font = rFont(9)
-  ampm.textColor = p.muted
+  ampm.textColor = p.mutedStrong
   ampm.lineLimit = 1
   if (past) ampm.textOpacity = p.pastOpacity
   ampmBox.addSpacer(AMPM_BASELINE_NUDGE)
