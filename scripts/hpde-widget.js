@@ -299,6 +299,13 @@ function renderHeader(w, event, day, p, stale) {
 // stacks with `backgroundColor` don't have that limitation.
 const CURRENT_CARD_PAD_V = 20            // top/bottom padding in points
 const CURRENT_CARD_CORNER_RADIUS = 12
+// Fixed height for the current card's content row. All three columns
+// (leftGutter | card | rightGutter) pin this exact value so their
+// intrinsic heights match — the dot in the left gutter, the bar
+// inside the card, and the bar continuation in the right gutter then
+// end up at the same y automatically, without depending on Scriptable
+// stretching a flexible spacer.
+const CURRENT_CONTENT_HEIGHT = 24
 const NOW_LINE_DOT_DIAMETER = 8
 const NOW_LINE_BAR_HEIGHT = 3
 const NOW_LINE_MARGIN = 2                // min gap from the card edge / content
@@ -350,23 +357,27 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     const topFraction = lineAbove ? current.progress * 2 : null
     const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
 
-    // Left gutter — dot on the marker side, plain spacer on the other.
+    // All three columns get the same three-part vertical structure:
+    // padding zone (20pt) / content-row-sized block (CURRENT_CONTENT_HEIGHT)
+    // / padding zone (20pt). Because the intrinsic heights match, the
+    // dot, the bar inside the card, and the bar continuation in the
+    // right gutter land at the same y without depending on Scriptable
+    // stretching a flexible spacer to line them up.
     addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent)
-    leftGutter.addSpacer()
+    leftGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
     addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent)
 
-    // Card — bar on the marker side, content row in the middle.
     addMarkerColumnZone(card, topFraction, "bar", p.accent)
     const contentRow = card.addStack()
+    contentRow.size = new Size(0, CURRENT_CONTENT_HEIGHT)
     contentRow.setPadding(0, 12, 0, 12)
     contentRow.spacing = 8
     contentRow.centerAlignContent()
     buildEventContent(contentRow, ev, groupById, selected, p, past, true)
     addMarkerColumnZone(card, botFraction, "bar", p.accent)
 
-    // Right gutter — bar continuation on the marker side.
     addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent)
-    rightGutter.addSpacer()
+    rightGutter.addSpacer(CURRENT_CONTENT_HEIGHT)
     addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent)
   } else {
     card.backgroundColor = p.cardBg
