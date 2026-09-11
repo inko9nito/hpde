@@ -4,6 +4,10 @@ Track day schedule app for HPDE events. Optimized for mobile (iPhone 13 mini).
 
 **Live site:** https://inko9nito.github.io/hpde/
 
+## Screenshots
+
+<img src="docs/screenshots/app-today.png" width="260" alt="Today's schedule with the now-line" /> <img src="docs/screenshots/app-sessions.png" width="260" alt="Session rows with on-track / in-class run group badges" /> <img src="docs/screenshots/app-filter.png" width="260" alt="Run group filter dropdown" />
+
 ---
 
 ## Editing a schedule
@@ -101,6 +105,11 @@ Pushes to `main` automatically build and deploy to GitHub Pages via GitHub Actio
 
 ## iOS Home Screen widget
 
+<img src="docs/screenshots/widget-medium.jpg" width="260" alt="Scriptable Home Screen widget" />
+
 A [Scriptable](https://scriptable.app/) widget lives in [`scripts/`](./scripts/README.md).
 It reads `dist/api/events.json` (emitted by the Vite build) and renders the
 current day's schedule on the iPhone Home Screen.
+
+**Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
+— always points at the current version on `main`, so it's the one to share.
