@@ -7,7 +7,7 @@ import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { EVENTS } from './data'
-import { todayLocalISO } from './utils/time'
+import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
@@ -47,6 +47,16 @@ export default function App() {
   const todayDay = findTodayDay(activeEvent)
   const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
+
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!isToday) return
+    const id = setInterval(() => setTick(t => t + 1), 60000)
+    return () => clearInterval(id)
+  }, [isToday])
+
+  const hasPastEvents = isToday
+    && activeDay.events.some(e => e.type !== 'break' && parseMinutes(e.time) < nowMinutes())
 
   function switchEvent(event: EventConfig) {
     setActiveEventId(event.id)
@@ -121,7 +131,7 @@ export default function App() {
                 selected={selectedGroups}
                 onChange={setSelectedGroups}
               />
-              {isToday && (
+              {hasPastEvents && (
                 <Toggle
                   checked={hidePast}
                   onChange={() => setHidePast(h => !h)}
