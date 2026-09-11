@@ -1,7 +1,7 @@
 # TEST — DELETE ME
 subtitle: Test event · widget scrubber preview
 // This event exists only to preview the widget "now" line on today's date.
-// Delete this file, src/data/events/2026-09-10_test-today.ts, and the import
+// Delete this file, src/data/events/2026-09-11_test-today.ts, and the import
 // in src/data/index.ts once you're done testing.
 
 ## groups
@@ -11,7 +11,13 @@ purple | Purple | bg-purple-500 | text-white | Time Trial
 orange | Orange | bg-orange-500 | text-white | Track Day
 blue   | Blue   | bg-blue-500   | text-white | Novice
 
-## Thursday | 2026-09-10
+## Friday | 2026-09-11
+
+00:00 session 1 | on: red | in: blue | note: Pre-dawn test session
+00:30 session 1 | on: green | in: purple
+01:00 session 2 | on: orange | in: blue | note: Second test group up
+01:30 session 2 | on: red | in: green
+02:00 session 3 | on: purple | in: orange | note: Coffee run happens after
 
 06:30 general | Gates open
 07:00 general | Registration / check-in opens
