@@ -47,6 +47,20 @@ export function nowMinutes(): number {
   return d.getHours() * 60 + d.getMinutes()
 }
 
+/**
+ * Today's date as "YYYY-MM-DD" in the viewer's LOCAL timezone. Do not
+ * use `new Date().toISOString().split('T')[0]` for this — that returns
+ * the UTC date, which flips over at UTC midnight and makes an evening
+ * session read as "not today" once local time crosses UTC midnight.
+ */
+export function todayLocalISO(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 /** Current time as "H:MM AM/PM" */
 export function nowDisplay(): string {
   const d = new Date()

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN } from './time'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN, todayLocalISO } from './time'
 
 describe('parseMinutes', () => {
   it('converts "00:00" to 0', () => expect(parseMinutes('00:00')).toBe(0))
@@ -61,4 +61,29 @@ describe('formatCountdown', () => {
   it('formats 65 minutes as "1h 5m"', () => expect(formatCountdown(65)).toBe('1h 5m'))
   it('formats 90 minutes as "1h 30m"', () => expect(formatCountdown(90)).toBe('1h 30m'))
   it('formats 120 minutes as "2h"', () => expect(formatCountdown(120)).toBe('2h'))
+})
+
+describe('todayLocalISO', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('formats today as YYYY-MM-DD using the LOCAL calendar', () => {
+    // Pick a fixed instant. The result must reflect the runner's local
+    // getFullYear/getMonth/getDate — not the UTC date, which is the
+    // point of this helper.
+    vi.useFakeTimers()
+    const fixed = new Date(2026, 8, 10, 19, 59, 0) // 2026-09-10 19:59 local
+    vi.setSystemTime(fixed)
+    expect(todayLocalISO()).toBe('2026-09-10')
+  })
+
+  it('does not slip a day when local evening crosses UTC midnight', () => {
+    // Pathological case that broke the old toISOString() approach: local
+    // evening in a US timezone, where UTC has already ticked to the next
+    // day. Constructing Date with local Y/M/D/h fields guarantees the
+    // local getters return exactly those fields regardless of the
+    // runner's timezone.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 10, 23, 30, 0))
+    expect(todayLocalISO()).toBe('2026-09-10')
+  })
 })

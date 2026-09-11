@@ -7,6 +7,7 @@ import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { EVENTS } from './data'
+import { todayLocalISO } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
@@ -25,7 +26,7 @@ function useLocalStorage<T>(key: string, initial: T) {
 }
 
 function findTodayDay(event: EventConfig): DaySchedule | undefined {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayLocalISO()
   return event.days.find(d => d.date === today)
 }
 
@@ -41,7 +42,7 @@ export default function App() {
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
 
   const todayDay = findTodayDay(activeEvent)
-  const isToday = activeDay.date === new Date().toISOString().split('T')[0]
+  const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
 
   function switchEvent(event: EventConfig) {
