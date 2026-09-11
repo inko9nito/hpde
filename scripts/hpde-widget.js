@@ -760,13 +760,13 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     mainRow.spacing = TIME_INFO_SPACING
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
     container.addSpacer(3)
-    // Lunch/special rows carry a leading icon before the label, so
-    // the note needs the extra indent to land under the label text
-    // itself — matching how the web app aligns the subtitle under
-    // the title, not under the icon badge.
-    const isFood = ev.type === "lunch" || ev.type === "special"
+    // Lunch rows carry a leading icon before the label, so the note
+    // needs the extra indent to land under the label text itself —
+    // matching how the web app aligns the subtitle under the title,
+    // not under the icon badge. Special rows have no icon.
+    const hasIcon = ev.type === "lunch"
     const noteIndent = TIME_COLUMN_WIDTH + TIME_INFO_SPACING
-      + (isFood ? FOOD_ICON_SIZE + FOOD_ICON_GAP : 0)
+      + (hasIcon ? FOOD_ICON_SIZE + FOOD_ICON_GAP : 0)
     addNoteRow(container, note, p, past, current, noteIndent)
   } else {
     if (stacked) container.topAlignContent()
@@ -816,7 +816,8 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
     }
   } else {
     const isFood = ev.type === "lunch" || ev.type === "special"
-    if (isFood) {
+    const hasIcon = ev.type === "lunch"
+    if (hasIcon) {
       // Icon + label share their own tight-spaced row so mainRow's
       // wider TIME_INFO_SPACING only applies once, between the time
       // column and this block — matching how the on-track/in-class
@@ -824,23 +825,21 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
       const foodRow = mainRow.addStack()
       foodRow.centerAlignContent()
       foodRow.spacing = FOOD_ICON_GAP
-      addFoodIcon(foodRow, ev.type, p, past)
+      addFoodIcon(foodRow, p, past)
       addFoodLabel(foodRow, ev.label, p, past, true)
     } else {
-      addFoodLabel(mainRow, ev.label, p, past, false)
+      addFoodLabel(mainRow, ev.label, p, past, isFood)
     }
     mainRow.addSpacer()
   }
 }
 
-// SF Symbol for lunch/special rows — fork.knife mirrors the web
-// app's Utensils icon for lunch; star.fill stands in for any other
-// "special" event (e.g. a pizza party). Same tint/size/opacity
-// treatment as the on-track/in-class section icons so nothing in
-// the widget still relies on an emoji glyph.
-function addFoodIcon(row, evType, p, past) {
+// SF Symbol for the lunch row — fork.knife mirrors the web app's
+// Utensils icon. Same tint/size/opacity treatment as the on-track/
+// in-class section icons. Special events render with no icon at all.
+function addFoodIcon(row, p, past) {
   if (typeof SFSymbol === "undefined") return
-  const sym = SFSymbol.named(evType === "lunch" ? "fork.knife" : "star.fill")
+  const sym = SFSymbol.named("fork.knife")
   if (!sym) return
   const img = row.addImage(sym.image)
   img.imageSize = new Size(FOOD_ICON_SIZE, FOOD_ICON_SIZE)
