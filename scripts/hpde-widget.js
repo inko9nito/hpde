@@ -345,9 +345,9 @@ function makeWidget({ manifest, stale }) {
   // marker bar itself is drawn inside the card so it costs no extra
   // vertical space.
   const nowLineReserve = currentIdx === -1 ? NOW_LINE_BLOCK_HEIGHT : 0
-  // 40 = header row (~20, 16pt bold) + its 18pt bottom spacer + a
+  // 48 = header row (~22, 18pt bold) + its 24pt bottom spacer + a
   // couple pt of margin — keep in sync with renderHeader.
-  const availableH = widgetInteriorHeight() - 40 - nowLineReserve
+  const availableH = widgetInteriorHeight() - 48 - nowLineReserve
   const rows = []
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
@@ -416,7 +416,7 @@ function renderHeader(w, event, day, p, stale) {
   // on the right always needs its full width so it never gets
   // squeezed out.
   const title = row.addText(event.name)
-  title.font = rBoldFont(16)
+  title.font = rBoldFont(18)
   title.textColor = p.fg
   title.lineLimit = 1
 
@@ -432,7 +432,7 @@ function renderHeader(w, event, day, p, stale) {
   dayEl.lineLimit = 1
 
   outer.addSpacer(RIGHT_GUTTER_WIDTH)
-  w.addSpacer(18) // further increased from 12
+  w.addSpacer(24) // further increased from 18
 }
 
 // ----- now-marker sizing -----
