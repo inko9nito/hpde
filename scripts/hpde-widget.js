@@ -222,11 +222,13 @@ function estimateEventRowHeight(ev, isCurrent) {
     && (ev.inClass || []).length > 0
 
   if (isCurrent) {
-    // Wrapper border (2) + top/bot marker pad (2 * CURRENT_CARD_PAD_V)
-    // + content block + caption above/below + row-gap spacer.
+    // Wrapper border (2) + marker-side pad + no-marker pad +
+    // content block + caption above/below + row-gap spacer. Only
+    // one side gets the full CURRENT_CARD_PAD_V — the other side
+    // is NO_MARKER_PAD_V — so budget the sum, not 2 * PAD_V.
     let contentH = hasBoth ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
     if (hasNote) contentH += NOTE_ROW_HEIGHT
-    return 2 + CURRENT_CARD_PAD_V * 2 + contentH + 17 + 6
+    return 2 + CURRENT_CARD_PAD_V + NO_MARKER_PAD_V + contentH + 17 + 6
   }
 
   // Non-current: card content-height + inner top/bot padding + row-gap.
@@ -411,16 +413,18 @@ function renderHeader(w, event, day, p, stale) {
 
 // ----- current-card layout constants -----
 
-// Top/bottom pad zone inside the current card. Big enough to hold
-// Top/bottom pad zone inside the current card. Keep this small —
-// when the marker is at one end of the card (which it is most of
-// the time), the OTHER end shows as a blank strip of the card's
-// blue interior, and a 14pt strip looks like an "empty bottom"
-// bug on the current card. 6pt is the smallest we can go without
-// the marker's top-left pixel getting chewed by the card corner
-// arc (it does get slightly clipped, but the clip is a couple of
-// pixels and effectively invisible against the accent bar).
-const CURRENT_CARD_PAD_V = 6
+// Marker pad zone on whichever side of the current card the
+// marker sits (top when the event is in its first half, bottom
+// when in its second half). Must be at least the marker-row
+// height (NOW_LINE_DOT_DIAMETER = 8) so the marker fits without
+// overflowing into the wrapper's border strip — that overflow
+// was the "card border cutting through the marker" bug.
+const CURRENT_CARD_PAD_V = 10
+// Pad zone on the OTHER side of the card, where there is no
+// marker. Kept tiny so the card doesn't carry a big blank stripe
+// on the empty side ("extra padding at the bottom") — before this
+// change we spent the full CURRENT_CARD_PAD_V here too.
+const NO_MARKER_PAD_V = 2
 const CURRENT_CARD_CORNER_RADIUS = 8
 const CURRENT_CARD_BORDER_WIDTH = 1
 const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH
@@ -595,7 +599,10 @@ function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past) {
 
 function addMarkerColumnZone(col, fraction, elementType, color, isBottomZone) {
   if (fraction === null) {
-    col.addSpacer(CURRENT_CARD_PAD_V)
+    // Marker not in this zone — shrink the empty side so the card
+    // isn't top-heavy or bottom-heavy just because the marker's
+    // over on the other end.
+    col.addSpacer(NO_MARKER_PAD_V)
     return
   }
   const rowH = NOW_LINE_DOT_DIAMETER
@@ -858,18 +865,15 @@ function drawNowRule(w, p) {
   outer.spacing = 0
   outer.centerAlignContent()
 
-  // Dot column matches the card-row left gutter exactly — 8pt
-  // for the dot itself, then 4pt of transparent padding — so the
-  // bar starts at the same x as the card's left border below, not
-  // 4pt to its left.
-  const dotCol = outer.addStack()
-  dotCol.size = new Size(LEFT_GUTTER_WIDTH, NOW_LINE_DOT_DIAMETER)
-  dotCol.centerAlignContent()
-  const dot = dotCol.addStack()
+  // Dot at the far left, bar starts immediately at the dot's
+  // right edge — the two read as one continuous marker.
+  // Deliberately no 4pt gap here (the gap only lives in the
+  // card-row left gutter, not in the between-cards rule) so the
+  // line doesn't visually disconnect from the dot.
+  const dot = outer.addStack()
   dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
   dot.backgroundColor = p.accent
   dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
-  dotCol.addSpacer()   // fills the 4pt gap after the dot
 
   // No trailing spacer on outer — bar extends across the right
   // gutter and into the widget's zero-width right padding, all
