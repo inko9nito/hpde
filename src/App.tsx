@@ -118,11 +118,13 @@ export default function App() {
                 selected={selectedGroups}
                 onChange={setSelectedGroups}
               />
-              <Toggle
-                checked={hidePast}
-                onChange={() => setHidePast(h => !h)}
-                label="Hide past events"
-              />
+              {isToday && (
+                <Toggle
+                  checked={hidePast}
+                  onChange={() => setHidePast(h => !h)}
+                  label="Hide past events"
+                />
+              )}
             </div>
 
             <Timeline
