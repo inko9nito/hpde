@@ -196,8 +196,14 @@ function urgencyColor(min, p) {
 // cards with notes total ~668pt on a ~354pt-tall large widget).
 function widgetInteriorHeight() {
   const family = config.widgetFamily || "medium"
-  if (family === "small") return 130
-  if (family === "medium") return 135
+  // Small/medium bumped up from their old 130/135 by the same ~32pt
+  // the header card grew by (doubled bottom margin + its own
+  // background box) — otherwise the row-fit budget below still
+  // thinks the header costs what it used to, forces its always-on
+  // 2 rows past that budget, and the widget overflows into
+  // Scriptable's unpredictable-scroll-position bug.
+  if (family === "small") return 162
+  if (family === "medium") return 167
   if (family === "large") return 330
   return 330 // extraLarge (iPad)
 }
@@ -403,13 +409,20 @@ function drawMoreEventsFooter(w, p, count) {
   row.addSpacer()
 }
 
-// Vertical space the header block (top spacer + row + bottom
+// Vertical space the header block (top spacer + card + bottom
 // spacer) reserves in the row-fit budget below — keep in sync with
-// the addSpacer calls in renderHeader.
+// the addSpacer/padding calls in renderHeader. Literals rather than
+// the NONCURRENT_CARD_* constants below (those aren't declared yet
+// at this point in the file, and this is a top-level const that
+// evaluates immediately — see the note further down about the
+// temporal dead zone).
 const HEADER_TOP_SPACER = 4
-const HEADER_BOTTOM_SPACER = 10
+const HEADER_BOTTOM_SPACER = 20 // doubled from 10
 const HEADER_ROW_HEIGHT = 18
-const HEADER_BLOCK_HEIGHT = HEADER_TOP_SPACER + HEADER_ROW_HEIGHT + HEADER_BOTTOM_SPACER
+const HEADER_CARD_PAD_V = 8
+const HEADER_CARD_CORNER_RADIUS = 14
+const HEADER_CARD_HEIGHT = HEADER_ROW_HEIGHT + 2 * HEADER_CARD_PAD_V
+const HEADER_BLOCK_HEIGHT = HEADER_TOP_SPACER + HEADER_CARD_HEIGHT + HEADER_BOTTOM_SPACER
 
 function renderHeader(w, event, day, p, stale) {
   w.addSpacer(HEADER_TOP_SPACER)
@@ -417,7 +430,16 @@ function renderHeader(w, event, day, p, stale) {
   const outer = w.addStack()
   outer.spacing = 0
   outer.addSpacer(LEFT_GUTTER_WIDTH)
-  const row = outer.addStack()
+
+  // Gray card behind the title/day row — same background as the
+  // (non-current) event cards, so the header reads as part of the
+  // same card system instead of floating text.
+  const card = outer.addStack()
+  card.backgroundColor = p.cardBg
+  card.cornerRadius = HEADER_CARD_CORNER_RADIUS
+  card.setPadding(HEADER_CARD_PAD_V, 12, HEADER_CARD_PAD_V, 12)
+
+  const row = card.addStack()
   row.centerAlignContent()
 
   // Event name on the left, truncated if it doesn't fit — the day
