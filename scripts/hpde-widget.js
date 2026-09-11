@@ -217,14 +217,14 @@ function estimateEventRowHeight(ev, isCurrent) {
   if (hasNote) contentH += 18       // note line + spacer
 
   // Current cards use a bigger symmetric top/bottom pad (room for
-  // the marker to overlap without crowding the content) plus a 1pt
-  // border on each vertical side, and drag a caption block along
-  // right above or below the card. Non-current cards are the small
-  // pad plus row-gap only.
+  // the marker to overlap without crowding the content) and drag a
+  // caption block along right above or below the card. Non-current
+  // cards are the small pad plus row-gap only. No border on either
+  // (the current card lost its border so the marker line isn't
+  // interrupted at the sides).
   const innerPadV = isCurrent ? CURRENT_CARD_PAD_V : NONCURRENT_CARD_PAD_V
-  const borderV = isCurrent ? 2 : 0
   const captionBlock = isCurrent ? CURRENT_CAPTION_BLOCK_HEIGHT : 0
-  return 2 * innerPadV + borderV + contentH + captionBlock + 6
+  return 2 * innerPadV + contentH + captionBlock + 6
 }
 
 // The now-line block (caption + rule + spacer) that we inject
@@ -431,17 +431,14 @@ const NOW_LINE_BAR_HEIGHT = 2
 // content stays vertically centered.
 const CURRENT_CARD_PAD_V = 15
 const CURRENT_CARD_CORNER_RADIUS = 8
-const CURRENT_CARD_BORDER_WIDTH = 1
-const CURRENT_CARD_INNER_CORNER_RADIUS =
-  CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_BORDER_WIDTH
 
 // Where inside the top (or bottom) pad zone the marker row sits.
-// Chosen so the bar itself lands past the inner corner radius (7pt)
-// — i.e. in the straight-sides zone of the card, never inside the
+// Chosen so the bar itself lands past the corner radius (8pt) —
+// i.e. in the straight-sides zone of the card, never inside the
 // corner curve. Row is 8pt tall (the dot's diameter); the 2pt-tall
 // bar is centered vertically within it, so at MARKER_ROW_INSET=5
-// the bar sits at y=8-10 from the card top, safely past the y=7
-// inner corner boundary.
+// the bar sits at y=8-10 from the card top, safely at/past the
+// y=8 corner boundary.
 const MARKER_ROW_INSET = 5
 // Space between the marker row and the content block. Kept small so
 // the card stays compact but big enough that content doesn't crowd
@@ -574,50 +571,46 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 // left and right gutters are filled with pre-computed spacer heights
 // that put a dot / bar-continuation at exactly the same y as the
 // bar inside the card, faking the overlay.
+//
+// NO BORDER on the current card. Any 1pt border strip along the
+// card's left and right edges would show through as
+// currentCardBorder color where the horizontal marker meets it —
+// interrupting the continuous accent-blue line that reads as one
+// mark crossing the card. The tinted background (currentCardBg) is
+// enough to distinguish this card as current, especially with the
+// marker crossing it.
 function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     ev, groupById, selected, p, past, position) {
   const contentH = currentContentHeightFor(ev)
   const markerAtTop = position === "above"
 
   cardContainer.layoutVertically()
-  // Two-layer card: outer stack draws the 1pt border color, inner
-  // stack draws the tinted background.
-  cardContainer.backgroundColor = p.currentCardBorder
+  cardContainer.backgroundColor = p.currentCardBg
   cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
-  cardContainer.setPadding(
-    CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
-    CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
-  )
-
-  const card = cardContainer.addStack()
-  card.layoutVertically()
-  card.backgroundColor = p.currentCardBg
-  card.cornerRadius = CURRENT_CARD_INNER_CORNER_RADIUS
 
   // Top pad zone — marker or plain spacer, both CURRENT_CARD_PAD_V tall.
   if (markerAtTop) {
-    card.addSpacer(MARKER_ROW_INSET)
-    addBarInCard(card, p.accent)
-    card.addSpacer(MARKER_CONTENT_CLEARANCE)
+    cardContainer.addSpacer(MARKER_ROW_INSET)
+    addBarInCard(cardContainer, p.accent)
+    cardContainer.addSpacer(MARKER_CONTENT_CLEARANCE)
   } else {
-    card.addSpacer(CURRENT_CARD_PAD_V)
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
   // Fixed-height content block — its known height is what lets the
   // gutter columns compute matching spacer heights below.
-  const contentBlock = card.addStack()
+  const contentBlock = cardContainer.addStack()
   contentBlock.size = new Size(0, contentH)
-  const contentPadH = CARD_INNER_PAD_H - CURRENT_CARD_BORDER_WIDTH
-  contentBlock.setPadding(0, contentPadH, 0, contentPadH)
+  contentBlock.setPadding(0, CARD_INNER_PAD_H, 0, CARD_INNER_PAD_H)
   buildCardContent(contentBlock, ev, groupById, selected, p, past, true)
 
   // Bottom pad zone — mirror of top.
   if (!markerAtTop) {
-    card.addSpacer(MARKER_CONTENT_CLEARANCE)
-    addBarInCard(card, p.accent)
-    card.addSpacer(MARKER_ROW_INSET)
+    cardContainer.addSpacer(MARKER_CONTENT_CLEARANCE)
+    addBarInCard(cardContainer, p.accent)
+    cardContainer.addSpacer(MARKER_ROW_INSET)
   } else {
-    card.addSpacer(CURRENT_CARD_PAD_V)
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
   // Gutter columns match the card's y layout so the dot in the left
@@ -656,20 +649,19 @@ function addBarInCard(card, color) {
 // One of the two negative-space gutter columns. Emits a fixed-height
 // vertical stack that places either the dot (left gutter) or the
 // bar continuation (right gutter) at the exact y where the card's
-// interior bar sits — 1pt for the top border + MARKER_ROW_INSET +
-// 8pt for the marker row itself, mirrored for the "below" case.
-// Since every spacer height is derived from the same constants used
-// for the card interior, alignment can't drift.
+// interior bar sits — MARKER_ROW_INSET above the row + 8pt for the
+// marker row itself, mirrored for the "below" case. Since every
+// spacer height is derived from the same constants used for the
+// card interior, alignment can't drift. No border offset because
+// the current card has no border (see drawCurrentCard).
 function addGutterMarkerColumn(col, markerAtTop, contentH, elementType, color) {
-  const border = CURRENT_CARD_BORDER_WIDTH
-  const rowH = NOW_LINE_DOT_DIAMETER
   // Distance from cardContainer top to the marker row's top edge
   // when the marker is at the card's top pad zone.
-  const topOffset = border + MARKER_ROW_INSET
+  const topOffset = MARKER_ROW_INSET
   // Distance from the marker row's bottom edge to cardContainer
   // bottom — everything below the row when marker is at top.
   const belowRowIfTop =
-    MARKER_CONTENT_CLEARANCE + contentH + CURRENT_CARD_PAD_V + border
+    MARKER_CONTENT_CLEARANCE + contentH + CURRENT_CARD_PAD_V
 
   if (markerAtTop) {
     col.addSpacer(topOffset)
@@ -687,21 +679,26 @@ function addGutterMarkerElement(col, elementType, color) {
   row.size = new Size(0, NOW_LINE_DOT_DIAMETER)
   row.centerAlignContent()
   if (elementType === "dot") {
+    // Dot pinned to the leading edge of the gutter (widget-left side),
+    // then a thin bar segment fills the remaining gutter width right
+    // up to the card. Two things at once:
+    //  - the dot still sits 4pt away from the card's own left edge
+    //    (dot 8pt + trailing bar 4pt = 12pt = LEFT_GUTTER_WIDTH), so
+    //    it isn't squashed against the card — that's what issue #67
+    //    was about;
+    //  - and the dot no longer looks disconnected from the horizontal
+    //    line inside the card, because the bar segment bridges the
+    //    gap. The dot reads as a bulb with a thin tail leading into
+    //    the card's marker line, not a dot marooned in whitespace
+    //    (#77's complaint after the border fix).
     const dot = row.addStack()
     dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
     dot.backgroundColor = color
     dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
-    // Pin the dot to the leading edge of the gutter. Without this
-    // trailing spacer, the row is only 8pt wide (the dot's natural
-    // size) and Scriptable's default cross-axis alignment in a
-    // vertical parent centers narrow children — which would put the
-    // dot in the MIDDLE of the 12pt gutter (2pt on each side)
-    // instead of at its leading edge (4pt of empty gutter to the
-    // right). Adding the spacer makes the row stretch to the full
-    // gutter width, and the dot sits at x=0 with the trailing 4pt
-    // of gutter becoming the guaranteed 4pt gap between dot and
-    // card that issue #67 asked for (and #77 restated).
-    row.addSpacer()
+    const bridge = row.addStack()
+    bridge.backgroundColor = color
+    bridge.size = new Size(0, NOW_LINE_BAR_HEIGHT)
+    bridge.addSpacer()
   } else {
     const bar = row.addStack()
     bar.backgroundColor = color
@@ -723,14 +720,17 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     && (ev.onTrack || []).length > 0
     && (ev.inClass || []).length > 0
 
-  if (note) {
+  if (current) {
+    // The current card's contentBlock has a fixed height (needed so
+    // the gutter columns can pre-compute matching spacer heights).
+    // Wrap the actual content in flex spacers so any slop between
+    // the estimated height and the content's natural height shows up
+    // as EQUAL padding above and below — not dumped as extra space
+    // between content and the marker (that was #77's "padding above
+    // marker is too much" complaint: content was top-aligned, so all
+    // the slop piled up right above the bar).
     container.layoutVertically()
-    // Flexible spacers vertically center the main row + note pair
-    // inside the current card's fixed-height contentBlock. On a
-    // non-current card `container` is the card itself (no fixed
-    // height), and a flex spacer there would balloon the card, so
-    // we skip them.
-    if (current) container.addSpacer()
+    container.addSpacer()
 
     const mainRow = container.addStack()
     if (stacked) mainRow.topAlignContent()
@@ -738,9 +738,21 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     mainRow.spacing = TIME_INFO_SPACING
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
 
+    if (note) {
+      container.addSpacer(3)
+      addNoteRow(container, note, p, past, current)
+    }
+
+    container.addSpacer()
+  } else if (note) {
+    container.layoutVertically()
+    const mainRow = container.addStack()
+    if (stacked) mainRow.topAlignContent()
+    else mainRow.centerAlignContent()
+    mainRow.spacing = TIME_INFO_SPACING
+    buildMainContent(mainRow, ev, groupById, selected, p, past, current)
     container.addSpacer(3)
     addNoteRow(container, note, p, past, current)
-    if (current) container.addSpacer()
   } else {
     if (stacked) container.topAlignContent()
     else container.centerAlignContent()
@@ -917,6 +929,13 @@ function addGroupPill(row, g, dim, current) {
   // already carries the "dimmed" signal, and fading the text on
   // top makes the label unreadable. Matches the web app.
   label.textColor = new Color("#ffffff")
+  // Force single-line so the pill hugs the full text width. Without
+  // this, Scriptable treats the text as multi-line-wrappable and its
+  // ideal width collapses to one character, which lets the row's
+  // trailing flex spacer eat the space — the pill then either
+  // truncates ("Oran…") or, when there is vertical room, wraps to a
+  // second line. Neither is what we want.
+  label.lineLimit = 1
 }
 
 function drawNowCaption(w, p, now, nextEvent) {
