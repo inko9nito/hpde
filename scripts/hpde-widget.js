@@ -256,7 +256,12 @@ function makeWidget({ manifest, stale }) {
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
   w.backgroundColor = p.bg
-  w.setPadding(10, WIDGET_SIDE_PAD_LEFT, 10, WIDGET_SIDE_PAD_RIGHT)
+  // Top/left/right are 0 so the header's background can sit flush
+  // against those edges (it's a header, not a card floating inside
+  // the widget's padding). Bottom stays padded for footer breathing
+  // room; everything else restores its own left/right inset via
+  // LEFT_GUTTER_WIDTH / CONTENT_SIDE_PAD.
+  w.setPadding(0, 0, 10, 0)
   w.url = SITE_URL
 
   const picked = pickToday(manifest)
@@ -409,35 +414,28 @@ function drawMoreEventsFooter(w, p, count) {
   row.addSpacer()
 }
 
-// Vertical space the header block (top spacer + card + bottom
-// spacer) reserves in the row-fit budget below — keep in sync with
-// the addSpacer/padding calls in renderHeader. Literals rather than
-// the NONCURRENT_CARD_* constants below (those aren't declared yet
-// at this point in the file, and this is a top-level const that
+// Vertical space the header block (card + bottom spacer) reserves
+// in the row-fit budget below — keep in sync with the
+// addSpacer/padding calls in renderHeader. Literals rather than the
+// NONCURRENT_CARD_* constants below (those aren't declared yet at
+// this point in the file, and this is a top-level const that
 // evaluates immediately — see the note further down about the
-// temporal dead zone).
-const HEADER_TOP_SPACER = 4
+// temporal dead zone). No top spacer: the header sits flush against
+// the widget's (now zero) top padding.
 const HEADER_BOTTOM_SPACER = 20 // doubled from 10
 const HEADER_ROW_HEIGHT = 18
-const HEADER_CARD_PAD_V = 8
-const HEADER_CARD_CORNER_RADIUS = 14
+const HEADER_CARD_PAD_V = 10
 const HEADER_CARD_HEIGHT = HEADER_ROW_HEIGHT + 2 * HEADER_CARD_PAD_V
-const HEADER_BLOCK_HEIGHT = HEADER_TOP_SPACER + HEADER_CARD_HEIGHT + HEADER_BOTTOM_SPACER
+const HEADER_BLOCK_HEIGHT = HEADER_CARD_HEIGHT + HEADER_BOTTOM_SPACER
 
 function renderHeader(w, event, day, p, stale) {
-  w.addSpacer(HEADER_TOP_SPACER)
-
-  const outer = w.addStack()
-  outer.spacing = 0
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
-
-  // Gray card behind the title/day row — same background as the
-  // (non-current) event cards, so the header reads as part of the
-  // same card system instead of floating text.
-  const card = outer.addStack()
+  // Full-bleed background, flush against the widget's top/left/right
+  // edges — this is a header, not a floating card, so no gutters
+  // and no corner radius (rounding would leave a gap at the corners
+  // against the widget's own square content edge).
+  const card = w.addStack()
   card.backgroundColor = p.cardBg
-  card.cornerRadius = HEADER_CARD_CORNER_RADIUS
-  card.setPadding(HEADER_CARD_PAD_V, 12, HEADER_CARD_PAD_V, 12)
+  card.setPadding(HEADER_CARD_PAD_V, CONTENT_SIDE_PAD, HEADER_CARD_PAD_V, CONTENT_SIDE_PAD)
 
   const row = card.addStack()
   row.centerAlignContent()
@@ -461,7 +459,6 @@ function renderHeader(w, event, day, p, stale) {
   dayEl.textColor = p.muted
   dayEl.lineLimit = 1
 
-  outer.addSpacer(RIGHT_GUTTER_WIDTH)
   w.addSpacer(HEADER_BOTTOM_SPACER)
 }
 
@@ -524,22 +521,28 @@ const NONCURRENT_CARD_CORNER_RADIUS = 14
 
 // ----- widget-level padding -----
 //
-// Left side: WIDGET_SIDE_PAD_LEFT is the gap between the widget's
-// own left edge and the marker dot itself. LEFT_GUTTER_WIDTH is
-// the gap between the widget's content-start and the card's left
-// edge — the dot lives inside that gutter with the 4pt gap
-// between it and the card baked in (dot 8pt + 4pt = 12pt gutter).
-// Together that gives 4pt from widget left → dot → 4pt gap →
-// card, which is what issue #77 asked for.
+// The widget's own left/top/right padding is 0 (see makeWidget) so
+// the header's background can sit flush against those three edges.
+// Everything else restores its own left/right inset locally:
+// LEFT_GUTTER_WIDTH is the gap between the widget's true left edge
+// and a card's left edge for event rows — the marker dot lives
+// inside that gutter with the 4pt gap between it and the card baked
+// in (dot 8pt + 4pt gap + 4pt that used to be the widget's own left
+// padding = 16pt gutter). Together that gives the same 4pt-from-
+// widget-left → dot → 4pt-gap → card relationship issue #77 asked
+// for, just re-homed now that the widget itself has no left pad.
 //
-// Right side: widget's right padding stays at 0 and the right
-// gutter absorbs the visual right margin. That lets the now-line's
-// blue bar extend all the way to the widget's right edge instead
-// of stopping short at the card's right border.
-const WIDGET_SIDE_PAD_LEFT = 4
-const WIDGET_SIDE_PAD_RIGHT = 0
-const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER + 4   // dot + 4pt gap
+// Right side: the right gutter absorbs the visual right margin (no
+// widget-level right padding either), so the now-line's blue bar
+// can extend all the way to the widget's right edge instead of
+// stopping short of the card's right border.
+const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER + 4 + 4 // dot + 4pt gap + former widget pad
 const RIGHT_GUTTER_WIDTH = 16
+// Horizontal padding used to indent content in places that no
+// longer get it for free from the widget's own (now-zero) side
+// padding: the header card's own text inset, and the no-events /
+// error screens.
+const CONTENT_SIDE_PAD = 16
 
 const CARD_INNER_PAD_H = 12
 
@@ -1130,30 +1133,41 @@ function shortDate(iso) {
   return `${months[m - 1]} ${d}`
 }
 
+// Wrapper stack giving content its own left/top/right inset now
+// that the widget's own padding is 0 (freed up so the header can
+// sit flush against those edges).
+function contentPad(w) {
+  const stack = w.addStack()
+  stack.layoutVertically()
+  stack.setPadding(10, CONTENT_SIDE_PAD, 0, CONTENT_SIDE_PAD)
+  return stack
+}
+
 function renderNoEvents(w, p, stale, next) {
-  const title = w.addText("HPDE")
+  const c = contentPad(w)
+  const title = c.addText("HPDE")
   title.font = rBoldFont(14)
   title.textColor = p.fg
-  w.addSpacer(6)
+  c.addSpacer(6)
 
-  const msg = w.addText("No event today.")
+  const msg = c.addText("No event today.")
   msg.font = rFont(12)
   msg.textColor = p.muted
 
   if (next) {
-    w.addSpacer(4)
-    const nx = w.addText(`Next: ${next.event.name}`)
+    c.addSpacer(4)
+    const nx = c.addText(`Next: ${next.event.name}`)
     nx.font = rMediumFont(11)
     nx.textColor = p.fg
     nx.lineLimit = 1
-    const when = w.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
+    const when = c.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
     when.font = rFont(10)
     when.textColor = p.muted
   }
 
   if (stale) {
-    w.addSpacer(4)
-    const s = w.addText("(cached)")
+    c.addSpacer(4)
+    const s = c.addText("(cached)")
     s.font = rFont(9)
     s.textColor = p.muted
   }
@@ -1164,10 +1178,11 @@ function renderError(err) {
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
   w.backgroundColor = p.bg
-  const t = w.addText("HPDE widget error")
+  const c = contentPad(w)
+  const t = c.addText("HPDE widget error")
   t.font = rBoldFont(12)
   t.textColor = p.fg
-  const e = w.addText(String(err && err.message ? err.message : err))
+  const e = c.addText(String(err && err.message ? err.message : err))
   e.font = rFont(10)
   e.textColor = p.muted
   w.url = SITE_URL
