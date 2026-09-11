@@ -1,17 +1,24 @@
 # iOS Home Screen widget
 
+<img src="../docs/screenshots/widget-medium.jpg" width="260" alt="Scriptable Home Screen widget" />
+
 `hpde-widget.js` is a [Scriptable](https://scriptable.app/) script that renders
 the current day's HPDE schedule on the iPhone Home Screen. It fetches
 `https://inko9nito.github.io/hpde/api/events.json` — the manifest emitted at
 build time by `scripts/vite-plugin-events-json.ts` — and draws a medium-size
 widget that mirrors the web app's timeline.
 
+**Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
+— always points at the current version on `main`, so it's the easiest thing
+to share or open straight from an iPhone.
+
 ## Install
 
 1. Install [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) on
    your iPhone (free).
 2. Open Scriptable → `+` → paste the contents of
-   [`hpde-widget.js`](./hpde-widget.js) → title it "HPDE".
+   [`hpde-widget.js`](./hpde-widget.js) (or the evergreen link above) →
+   title it "HPDE".
 3. Long-press the Home Screen → **Add Widget** → **Scriptable** → pick
    **Medium** or **Large** → Add. The same script handles both sizes;
    Large fits ~10 rows around the "now" line, Medium fits ~3.
