@@ -152,6 +152,40 @@ function urgencyColor(min, p) {
   return p.muted
 }
 
+// Best-effort widget pixel width for the running host, so the
+// divider — whose width Scriptable will not auto-stretch — can be
+// sized to reach the card's right inner edge. Values below are
+// Apple's published medium-widget sizes indexed by screen portrait
+// width for common iPhones.
+function widgetWidth() {
+  const family = config.widgetFamily || "medium"
+  const s = Device.screenSize()
+  const sw = Math.round(Math.min(s.width, s.height))
+  let medium
+  if (sw <= 320) medium = 292
+  else if (sw <= 375) medium = 329
+  else if (sw <= 390) medium = 338
+  else if (sw <= 414) medium = 345
+  else if (sw <= 428) medium = 364
+  else medium = 364
+  if (family === "small") return Math.round(medium / 2) - 8
+  if (family === "extraLarge") return medium * 2 + 12
+  return medium
+}
+
+// The maximum divider width we can request without overflowing the
+// card's right inner edge. Assumes the current card's layout (whose
+// content interior is one border-width narrower than the
+// non-current card's, but LEFT/RIGHT gutter values match).
+function computeDividerWidth() {
+  const w = widgetWidth()
+  const cardOuter = w - WIDGET_SIDE_PAD_LEFT - WIDGET_SIDE_PAD_RIGHT
+    - LEFT_GUTTER_WIDTH - RIGHT_GUTTER_WIDTH
+  const cardInner = cardOuter - 2 * CURRENT_CARD_BORDER_WIDTH
+  const contentInner = cardInner - 2 * CARD_INNER_PAD_H
+  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - 8)
+}
+
 // ---------- rendering ----------
 
 function makeWidget({ manifest, stale }) {
@@ -306,10 +340,20 @@ const NOW_LINE_DOT_DIAMETER = 8
 const NOW_LINE_BAR_HEIGHT = 2
 
 // ----- widget-level padding -----
-const WIDGET_SIDE_PAD_LEFT = 4
-const WIDGET_SIDE_PAD_RIGHT = 4
-const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER + 4
-const RIGHT_GUTTER_WIDTH = LEFT_GUTTER_WIDTH
+//
+// Left side: dot sits flush against the card's left border (no
+// horizontal gap between them), so the marker dot reads as
+// connected to the card. WIDGET_SIDE_PAD_LEFT gives the dot itself
+// some breathing room before the widget's left edge.
+//
+// Right side: the widget's own right padding drops to 0, and the
+// right gutter absorbs the visual right margin. That lets the
+// between-cards blue rule extend all the way to the widget's right
+// edge instead of stopping short at the card's right border.
+const WIDGET_SIDE_PAD_LEFT = 8
+const WIDGET_SIDE_PAD_RIGHT = 0
+const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER   // dot only, no gap
+const RIGHT_GUTTER_WIDTH = 16
 
 const CURRENT_CAPTION_OUTER_PAD = 4
 const CARD_INNER_PAD_H = 12
@@ -320,11 +364,12 @@ const CARD_INNER_PAD_H = 12
 const TIME_COLUMN_WIDTH = 60
 const LABEL_COLUMN_WIDTH = 64
 
-// Divider width — fixed because Scriptable doesn't stretch a stack
-// to fill its parent width when the parent's width is auto. Chosen
-// so the divider reaches the medium widget's card right inner edge
-// without overflowing.
-const DIVIDER_WIDTH = 200
+// Session divider width: computed at runtime from the actual widget
+// width so the divider extends flush to the card's right inner edge
+// on every iPhone. Scriptable doesn't stretch a stack to fill its
+// parent's auto width, so the alternative is to guess — which is
+// what we did before, and why the divider fell short on Pro Max.
+const DIVIDER_WIDTH = computeDividerWidth()
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   const lineBelow = !!current && current.progress >= 0.5
@@ -628,12 +673,23 @@ function drawNowCaption(w, p, now, nextEvent) {
 function drawNowRule(w, p) {
   const outer = w.addStack()
   outer.spacing = 0
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  outer.centerAlignContent()
+
+  // Dot occupies the left gutter (same as the current-event card's
+  // marker dot), so the between-cards rule reads as the same
+  // marker style as the in-card marker.
+  const dot = outer.addStack()
+  dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
+  dot.backgroundColor = p.accent
+  dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
+
+  // No trailing spacer — bar extends across the right gutter and
+  // into the widget's zero-width right padding, all the way to the
+  // widget's right edge.
   const bar = outer.addStack()
   bar.backgroundColor = p.accent
-  bar.size = new Size(0, 1.5)
+  bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
   bar.addSpacer()
-  outer.addSpacer(RIGHT_GUTTER_WIDTH)
 }
 
 function drawNowLine(w, p, now, nextEvent, belowSpacer) {
