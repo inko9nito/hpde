@@ -345,7 +345,9 @@ function makeWidget({ manifest, stale }) {
   // marker bar itself is drawn inside the card so it costs no extra
   // vertical space.
   const nowLineReserve = currentIdx === -1 ? NOW_LINE_BLOCK_HEIGHT : 0
-  const availableH = widgetInteriorHeight() - 26 - nowLineReserve
+  // 48 = header row (~22, 18pt bold) + its 24pt bottom spacer + a
+  // couple pt of margin — keep in sync with renderHeader.
+  const availableH = widgetInteriorHeight() - 48 - nowLineReserve
   const rows = []
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
@@ -410,30 +412,27 @@ function renderHeader(w, event, day, p, stale) {
   const row = outer.addStack()
   row.centerAlignContent()
 
+  // Event name on the left, truncated if it doesn't fit — the day
+  // on the right always needs its full width so it never gets
+  // squeezed out.
   const title = row.addText(event.name)
-  title.font = rBoldFont(14)
+  title.font = rBoldFont(18)
   title.textColor = p.fg
   title.lineLimit = 1
 
-  const sep = row.addText("  ·  ")
-  sep.font = rFont(12)
-  sep.textColor = p.muted
-
-  const sub = row.addText(day.label)
-  sub.font = rFont(12)
-  sub.textColor = p.muted
-  sub.lineLimit = 1
-
   row.addSpacer()
 
-  if (stale) {
-    const s = row.addText("offline")
-    s.font = rFont(9)
-    s.textColor = p.muted
-  }
+  // Day on the right, right-aligned, formatted like "Friday (Sep
+  // 11)". The offline flag folds into the same string instead of a
+  // separate element so it can't crowd the day text out.
+  const dayText = `${day.label} (${shortDate(day.date)})`
+  const dayEl = row.addText(stale ? `offline · ${dayText}` : dayText)
+  dayEl.font = rFont(12)
+  dayEl.textColor = p.muted
+  dayEl.lineLimit = 1
 
   outer.addSpacer(RIGHT_GUTTER_WIDTH)
-  w.addSpacer(6)
+  w.addSpacer(24) // further increased from 18
 }
 
 // ----- now-marker sizing -----
