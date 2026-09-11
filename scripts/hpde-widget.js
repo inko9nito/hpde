@@ -762,6 +762,11 @@ function addGutterMarkerElement(col, elementType, color) {
     //    gap. The dot reads as a bulb with a thin tail leading into
     //    the card's marker line, not a dot marooned in whitespace
     //    (#77's complaint after the border fix).
+    // 4pt lead-in from the widget's true left edge — used to come
+    // for free from the widget's own left padding; that padding is
+    // now 0 (so the header can sit flush), so this gutter supplies
+    // the offset itself.
+    row.addSpacer(4)
     const dot = row.addStack()
     dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
     dot.backgroundColor = color
@@ -1094,11 +1099,13 @@ function drawNowRule(w, p) {
   outer.spacing = 0
   outer.centerAlignContent()
 
-  // Dot at the far left, bar starts immediately at the dot's
-  // right edge — the two read as one continuous marker.
-  // Deliberately no 4pt gap here (the gap only lives in the
-  // card-row left gutter, not in the between-cards rule) so the
-  // line doesn't visually disconnect from the dot.
+  // 4pt lead-in from the widget's true left edge, matching the
+  // card-row gutter's own offset — used to come for free from the
+  // widget's own left padding, now 0 so the header can sit flush.
+  outer.addSpacer(4)
+
+  // Dot right after that lead-in, bar starts immediately at the
+  // dot's right edge — the two read as one continuous marker.
   const dot = outer.addStack()
   dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
   dot.backgroundColor = p.accent
