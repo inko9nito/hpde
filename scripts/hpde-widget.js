@@ -104,6 +104,11 @@ function formatTime12(hhmm) {
   return `${hour}:${String(m).padStart(2, "0")}`
 }
 
+function formatAmPm(hhmm) {
+  const [h] = hhmm.split(":").map(Number)
+  return h >= 12 ? "PM" : "AM"
+}
+
 function formatCountdown(min) {
   if (min <= 0) return ""
   if (min < 60) return `${min}m`
@@ -160,6 +165,7 @@ function palette(dark) {
     // No borders on either card variety; the tinted background on
     // the current card and the marker crossing it are enough.
     ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
+        mutedStrong: new Color("#a4a4aa"),
         cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
@@ -171,6 +177,7 @@ function palette(dark) {
     // would otherwise get interrupted where it crosses a border
     // strip.
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
+        mutedStrong: new Color("#6b7280"),
         cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
@@ -520,8 +527,9 @@ const TIME_INFO_SPACING = 14
 
 // Unified column widths so every row's time and section labels line
 // up at the same x whether the row is the current card or a plain
-// event row.
-const TIME_COLUMN_WIDTH = 60
+// event row. Widened from 60 to fit the small AM/PM suffix next to
+// the time.
+const TIME_COLUMN_WIDTH = 68
 // Wide enough for "On track" plus a few characters of breathing
 // room at the current 12pt rounded font size, so the labels never
 // truncate: SF Symbol icon (14pt) + 8pt gap + label text
@@ -533,6 +541,11 @@ const LABEL_COLUMN_WIDTH = 100
 // reads at the same visual weight.
 const FOOD_ICON_SIZE = 14
 const FOOD_ICON_GAP = 8
+
+// Fine-tune knob for the AM/PM-to-time baseline alignment — see
+// addTimeColumn. Bump this up/down if AM/PM still looks off after a
+// font or size change.
+const AMPM_BASELINE_NUDGE = 1
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
@@ -866,14 +879,39 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   if (topAlign) timeCol.topAlignContent()
   else timeCol.centerAlignContent()
 
-  const time = timeCol.addText(formatTime12(hhmm))
-  // Same font on current and non-current — the current card's
-  // border + tinted background already carry the "this is now"
-  // signal, so we don't inflate the time on top.
-  time.font = rMediumFont(14)
+  // Scriptable stacks only offer top/center/bottom cross-axis
+  // alignment, no true text baseline. A flush bottom-edge alignment
+  // between the two font sizes isn't quite right either: a smaller
+  // font's descent is proportionally smaller than the time's, so
+  // its baseline ends up sitting BELOW the time's baseline once
+  // their box bottoms are flush. AMPM_BASELINE_NUDGE compensates by
+  // giving the AM/PM text a bit of padding below it, so its box —
+  // not the glyph itself — reaches all the way down to the shared
+  // bottom edge.
+  const timeRow = timeCol.addStack()
+  timeRow.bottomAlignContent()
+  // +2 over the base 2pt gap shifts the AM/PM text right.
+  timeRow.spacing = 4
+
+  const time = timeRow.addText(formatTime12(hhmm))
+  // Bold on the current card so the time carries the "this is now"
+  // signal too, not just the card's border/tinted background.
+  time.font = current ? rBoldFont(14) : rMediumFont(14)
   time.textColor = p.fg
   time.lineLimit = 1
   if (past) time.textOpacity = p.pastOpacity
+
+  // AM/PM suffix — smaller and muted so it reads as a qualifier,
+  // not part of the time itself.
+  const ampmBox = timeRow.addStack()
+  ampmBox.layoutVertically()
+  const ampm = ampmBox.addText(formatAmPm(hhmm))
+  ampm.font = rFont(9)
+  ampm.textColor = p.mutedStrong
+  ampm.lineLimit = 1
+  if (past) ampm.textOpacity = p.pastOpacity
+  ampmBox.addSpacer(AMPM_BASELINE_NUDGE)
+
   timeCol.addSpacer()
 }
 

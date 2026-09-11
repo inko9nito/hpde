@@ -41,6 +41,12 @@ export function formatTime(time: string): string {
   return `${hour}:${m.toString().padStart(2, '0')}`
 }
 
+/** "HH:MM" (24h) -> "AM" or "PM" */
+export function formatAmPm(time: string): 'AM' | 'PM' {
+  const [h] = time.split(':').map(Number)
+  return h >= 12 ? 'PM' : 'AM'
+}
+
 /** Current time in minutes since midnight */
 export function nowMinutes(): number {
   const d = new Date()
