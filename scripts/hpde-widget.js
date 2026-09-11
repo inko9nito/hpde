@@ -1015,7 +1015,10 @@ function addGroupPill(row, g, dim, current) {
   pill.backgroundColor = new Color(g.color, alpha)
   pill.cornerRadius = 100
   // Same padding and text sizing on every card, current or not.
-  pill.setPadding(2, 8, 2, 8)
+  // Top/bottom padding is 2pt more than the sides (issue #4) — the
+  // rounded pill otherwise looks visually tighter top-to-bottom than
+  // side-to-side.
+  pill.setPadding(4, 8, 4, 8)
   pill.centerAlignContent()
   const label = pill.addText(g.label)
   label.font = rMediumFont(10)
