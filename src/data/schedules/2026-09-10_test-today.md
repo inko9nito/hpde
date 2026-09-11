@@ -58,4 +58,4 @@ break | 10 minute corner worker break
 22:00 session 6 | on: purple | in: blue | note: Instructor briefing at start
 22:30 session 6 | on: orange | in: green | note: Last group of the day
 23:00 session 7 | on: red | in: green | note: Cool-down laps, 60 mph max
-23:45 general | Gates close | Have your parking pass ready
+23:45 session 8 | on: orange | in: purple | note: Final laps before gates close
