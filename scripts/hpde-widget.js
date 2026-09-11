@@ -181,6 +181,50 @@ function widgetWidth() {
   return medium
 }
 
+// Rough widget interior height (after our top/bottom widget
+// padding) for the running host. Used to decide dynamically how
+// many event rows we can afford to render before we blow past the
+// widget's actual height. On the Home Screen anything past the
+// widget's bottom edge is clipped, so a past card that pushes the
+// current card off-screen makes the widget useless; in Scriptable's
+// preview sheet, overflow makes the sheet scroll to a
+// hard-to-predict position (which is what "the widget seems to be
+// scrolled to a random position" was — 10 rows of stacked-session
+// cards with notes total ~668pt on a ~354pt-tall large widget).
+function widgetInteriorHeight() {
+  const family = config.widgetFamily || "medium"
+  if (family === "small") return 130
+  if (family === "medium") return 135
+  if (family === "large") return 330
+  return 330 // extraLarge (iPad)
+}
+
+// Rough vertical space a rendered event row will consume in the
+// widget's outer stack, including the 6pt gap after it.
+function estimateEventRowHeight(ev, isCurrent) {
+  const hasNote = !!(ev.note || ev.subtitle)
+  const isSession = ev.type === "session"
+  const hasBoth = isSession
+    && (ev.onTrack || []).length > 0
+    && (ev.inClass || []).length > 0
+
+  if (isCurrent) {
+    // Wrapper border (2) + top/bot marker pad (2 * CURRENT_CARD_PAD_V)
+    // + content block + caption above/below + row-gap spacer.
+    let contentH = hasBoth ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
+    if (hasNote) contentH += NOTE_ROW_HEIGHT
+    return 2 + CURRENT_CARD_PAD_V * 2 + contentH + 17 + 6
+  }
+
+  // Non-current: card content-height + inner top/bot padding + row-gap.
+  let contentH
+  if (hasBoth) contentH = 57       // on-row + spacer + divider + spacer + in-row
+  else if (isSession) contentH = 20 // single pill row
+  else contentH = 18                // plain event label
+  if (hasNote) contentH += 18       // note line + spacer
+  return 16 + contentH + 6
+}
+
 // The maximum divider width we can request without overflowing the
 // card's right inner edge. Assumes the current card's layout (whose
 // content interior is one border-width narrower than the
@@ -253,21 +297,36 @@ function makeWidget({ manifest, stale }) {
 
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
-  const maxRows = isLarge ? 10 : 3
-  // Always show exactly one past event before the current one,
-  // regardless of widget size. On large widgets this used to be 2,
-  // which pushed the current card (and its now-marker) two rows down
-  // from the top — with maxRows=10 the total content can be tall
-  // enough that the current card ends up requiring a scroll to reach
-  // in the Scriptable preview sheet (real Home Screen widgets don't
-  // scroll at all, so on-device that content was simply clipped off
-  // screen). Capping at 1 keeps the current card as close to the top
-  // as it can ever be.
+  // Absolute cap so we never render more rows than the widget can
+  // ever plausibly fit, even for a run of all-simple general events.
+  const maxRowsCap = isLarge ? 10 : 4
+  // Always show exactly one past event before the current one so the
+  // current card sits at row 1 — as close to the top as it can be
+  // without hiding what just happened.
   const maxPast = 1
 
   const anchorIdx = currentIdx !== -1 ? currentIdx : insertAt
   const start = Math.max(0, anchorIdx - maxPast)
-  const rows = visible.slice(start, start + maxRows)
+
+  // Dynamic row-fitting: pack rows into the widget's interior height
+  // instead of using a fixed row count. Past + current are always
+  // included so the "current" concept has an anchor; additional
+  // future rows are added only while they'd still fit. Otherwise
+  // (with the old maxRows=10 for large widgets) a run of stacked
+  // sessions with notes could pile ~668pt of content into a 354pt
+  // widget, and the Scriptable preview sheet ended up scrolled to a
+  // hard-to-predict middle position — the "widget seems to be
+  // scrolled to a random position" bug.
+  const availableH = widgetInteriorHeight() - 26  // subtract header + spacer
+  const rows = []
+  let usedH = 0
+  for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
+    const isCurrent = i === currentIdx
+    const rowH = estimateEventRowHeight(visible[i], isCurrent)
+    if (rows.length >= 2 && usedH + rowH > availableH) break
+    rows.push(visible[i])
+    usedH += rowH
+  }
 
   const nowLineBetweenAt = currentIdx === -1 ? insertAt - start : -1
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
