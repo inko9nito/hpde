@@ -871,9 +871,19 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   // vertical middle of a two-row card.
   if (topAlign) timeCol.topAlignContent()
   else timeCol.centerAlignContent()
-  timeCol.spacing = 2
 
-  const time = timeCol.addText(formatTime12(hhmm))
+  // Scriptable stacks only offer top/center/bottom cross-axis
+  // alignment, no true text baseline. Nesting the time + AM/PM in
+  // their own always-bottom-aligned row — separate from timeCol's
+  // own top/center positioning above — keeps digits and letters
+  // (neither has descenders) flush at the bottom edge, which reads
+  // as sitting on the same baseline no matter how timeCol itself is
+  // positioned in a stacked vs. single-line card.
+  const timeRow = timeCol.addStack()
+  timeRow.bottomAlignContent()
+  timeRow.spacing = 2
+
+  const time = timeRow.addText(formatTime12(hhmm))
   // Same font on current and non-current — the current card's
   // border + tinted background already carry the "this is now"
   // signal, so we don't inflate the time on top.
@@ -884,7 +894,7 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
 
   // AM/PM suffix — smaller and muted so it reads as a qualifier,
   // not part of the time itself.
-  const ampm = timeCol.addText(formatAmPm(hhmm))
+  const ampm = timeRow.addText(formatAmPm(hhmm))
   ampm.font = rFont(9)
   ampm.textColor = p.muted
   ampm.lineLimit = 1
