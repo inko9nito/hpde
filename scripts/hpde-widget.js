@@ -505,7 +505,14 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
 
   if (note) {
     container.layoutVertically()
-    container.addSpacer()
+    // Flexible spacers vertically center the main row + note pair
+    // inside the current card's fixed-height contentBlock. On a
+    // non-current card `container` is the card itself (no fixed
+    // height), and a flex spacer there balloons the card to fill
+    // whatever extra vertical space the widget's layout hands it
+    // — which is why an event-with-note previously rendered
+    // enormously tall.
+    if (current) container.addSpacer()
 
     const mainRow = container.addStack()
     mainRow.centerAlignContent()
@@ -514,7 +521,7 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
 
     container.addSpacer(3)
     addNoteRow(container, note, p, past, current)
-    container.addSpacer()
+    if (current) container.addSpacer()
   } else {
     container.centerAlignContent()
     container.spacing = 8
