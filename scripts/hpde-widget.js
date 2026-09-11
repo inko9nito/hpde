@@ -540,6 +540,11 @@ const LABEL_COLUMN_WIDTH = 100
 const FOOD_ICON_SIZE = 14
 const FOOD_ICON_GAP = 8
 
+// Fine-tune knob for the AM/PM-to-time baseline alignment — see
+// addTimeColumn. Bump this up/down if AM/PM still looks off after a
+// font or size change.
+const AMPM_BASELINE_NUDGE = 2
+
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
   // current card; the caption ("3:08 AM · Next in 3h 22m") sits
@@ -873,12 +878,14 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   else timeCol.centerAlignContent()
 
   // Scriptable stacks only offer top/center/bottom cross-axis
-  // alignment, no true text baseline. Nesting the time + AM/PM in
-  // their own always-bottom-aligned row — separate from timeCol's
-  // own top/center positioning above — keeps digits and letters
-  // (neither has descenders) flush at the bottom edge, which reads
-  // as sitting on the same baseline no matter how timeCol itself is
-  // positioned in a stacked vs. single-line card.
+  // alignment, no true text baseline. A flush bottom-edge alignment
+  // between the two font sizes isn't quite right either: a smaller
+  // font's descent is proportionally smaller than the time's, so
+  // its baseline ends up sitting BELOW the time's baseline once
+  // their box bottoms are flush. AMPM_BASELINE_NUDGE compensates by
+  // giving the AM/PM text a bit of padding below it, so its box —
+  // not the glyph itself — reaches all the way down to the shared
+  // bottom edge.
   const timeRow = timeCol.addStack()
   timeRow.bottomAlignContent()
   timeRow.spacing = 2
@@ -894,11 +901,14 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
 
   // AM/PM suffix — smaller and muted so it reads as a qualifier,
   // not part of the time itself.
-  const ampm = timeRow.addText(formatAmPm(hhmm))
+  const ampmBox = timeRow.addStack()
+  ampmBox.layoutVertically()
+  const ampm = ampmBox.addText(formatAmPm(hhmm))
   ampm.font = rFont(9)
   ampm.textColor = p.muted
   ampm.lineLimit = 1
   if (past) ampm.textOpacity = p.pastOpacity
+  ampmBox.addSpacer(AMPM_BASELINE_NUDGE)
 
   timeCol.addSpacer()
 }
