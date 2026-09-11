@@ -1,5 +1,5 @@
 import { Utensils, Pizza } from 'lucide-react'
-import { formatTime } from '../utils/time'
+import { formatTime, formatAmPm } from '../utils/time'
 import type { GeneralEvent } from '../types'
 
 interface Props {
@@ -17,8 +17,9 @@ export function EventCard({ event, past }: Props) {
         : 'border border-gray-200 bg-white'
     } ${past ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-4">
-        <div className="w-16 shrink-0 font-mono text-lg font-semibold text-gray-900">
+        <div className="flex w-20 shrink-0 items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
           {formatTime(event.time)}
+          <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(event.time)}</span>
         </div>
         {isFood && (
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white">

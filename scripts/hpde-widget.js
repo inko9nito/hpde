@@ -104,6 +104,11 @@ function formatTime12(hhmm) {
   return `${hour}:${String(m).padStart(2, "0")}`
 }
 
+function formatAmPm(hhmm) {
+  const [h] = hhmm.split(":").map(Number)
+  return h >= 12 ? "PM" : "AM"
+}
+
 function formatCountdown(min) {
   if (min <= 0) return ""
   if (min < 60) return `${min}m`
@@ -520,8 +525,9 @@ const TIME_INFO_SPACING = 14
 
 // Unified column widths so every row's time and section labels line
 // up at the same x whether the row is the current card or a plain
-// event row.
-const TIME_COLUMN_WIDTH = 60
+// event row. Widened from 60 to fit the small AM/PM suffix next to
+// the time.
+const TIME_COLUMN_WIDTH = 68
 // Wide enough for "On track" plus a few characters of breathing
 // room at the current 12pt rounded font size, so the labels never
 // truncate: SF Symbol icon (14pt) + 8pt gap + label text
@@ -865,6 +871,7 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   // vertical middle of a two-row card.
   if (topAlign) timeCol.topAlignContent()
   else timeCol.centerAlignContent()
+  timeCol.spacing = 2
 
   const time = timeCol.addText(formatTime12(hhmm))
   // Same font on current and non-current — the current card's
@@ -874,6 +881,15 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   time.textColor = p.fg
   time.lineLimit = 1
   if (past) time.textOpacity = p.pastOpacity
+
+  // AM/PM suffix — smaller and muted so it reads as a qualifier,
+  // not part of the time itself.
+  const ampm = timeCol.addText(formatAmPm(hhmm))
+  ampm.font = rFont(9)
+  ampm.textColor = p.muted
+  ampm.lineLimit = 1
+  if (past) ampm.textOpacity = p.pastOpacity
+
   timeCol.addSpacer()
 }
 
