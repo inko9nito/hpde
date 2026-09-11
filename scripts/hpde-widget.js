@@ -129,18 +129,19 @@ function parseGroupFilter() {
 
 // ---------- palette ----------
 
+// Palette values mirror the web app: gray-50 widget background, white
+// cards with a gray-200 border, gray-100 divider between session rows,
+// blue-500 accent for the current-event border and now-marker.
 function palette(dark) {
   return dark
-    ? { bg: new Color("#0b0b0f"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        cardBg: new Color("#141418"), currentCardBg: new Color("#122135"),
-        foodStroke: new Color("#f5f5f7"),
-        accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.25),
-        pastOpacity: 0.6 }
-    : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        cardBg: new Color("#fafafb"), currentCardBg: new Color("#eef4ff"),
-        foodStroke: new Color("#111827"),
-        accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.22),
-        pastOpacity: 0.6 }
+    ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
+        cardBg: new Color("#18181c"), cardBorder: new Color("#2a2a30"),
+        currentCardBg: new Color("#18181c"), divider: new Color("#26262c"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
+    : { bg: new Color("#f9fafb"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
+        cardBg: new Color("#ffffff"), cardBorder: new Color("#e5e7eb"),
+        currentCardBg: new Color("#ffffff"), divider: new Color("#f3f4f6"),
+        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
 
 function urgencyColor(min, p) {
@@ -236,20 +237,9 @@ function makeWidget({ manifest, stale }) {
   const nowLineBetweenAt = currentIdx === -1 ? insertAt - start : -1
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
-  let lastSessionNumber
   for (let i = 0; i < rows.length; i++) {
-    if (i === nowLineBetweenAt) {
-      drawNowLine(w, p, now, nextEvent, 6)
-      lastSessionNumber = undefined
-    }
+    if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextEvent, 6)
     const ev = rows[i]
-    if (ev.type === "session" && ev.sessionNumber !== undefined
-        && ev.sessionNumber !== lastSessionNumber) {
-      drawSessionHeader(w, p, ev.sessionNumber)
-      lastSessionNumber = ev.sessionNumber
-    } else if (ev.type !== "session") {
-      lastSessionNumber = undefined
-    }
     const isCurrentEvent = i === currentLocalIdx
     const past = !isCurrentEvent && parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past,
@@ -317,22 +307,20 @@ function renderHeader(w, event, day, p, stale) {
 // Top/bottom padding in points, sized to give the now-line room to
 // travel inside the straight-edge zone of the card, i.e. clear of the
 // corner-curve square at each corner.
-const CURRENT_CARD_PAD_V = 24
-const CURRENT_CARD_CORNER_RADIUS = 12
-// The current card is nested inside two concentric wrapper stacks
-// whose backgrounds show around it: a thin accent border (matching
-// the bar color, so the bar transitions through it seamlessly), and
-// a slightly wider low-alpha accent halo that reads as a soft blue
-// glow. The two wrappers' cornerRadii are chosen so the border is
-// visually uniform width all the way around.
+const CURRENT_CARD_PAD_V = 16
+const CURRENT_CARD_CORNER_RADIUS = 8
+// The current card is nested inside one wrapper stack whose accent
+// background shows as a thin border ring around the card. The border
+// color matches the marker bar exactly, so the bar transitions
+// through it seamlessly from inside the card to outside without a
+// visible color break.
 const CURRENT_CARD_BORDER_WIDTH = 1
-const CURRENT_CARD_GLOW_WIDTH = 2
-const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH + CURRENT_CARD_GLOW_WIDTH
+const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH
 // Effective clipping radius the marker rows need to stay outside — the
-// innermost of the three concentric cornerRadii — so the bar inside
-// the card doesn't get chewed by the card's own rounded corners.
+// card's own corner radius — so the bar inside the card doesn't get
+// chewed by the corners.
 const CURRENT_CARD_INNER_CORNER_RADIUS =
-  CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_GLOW_WIDTH - CURRENT_CARD_BORDER_WIDTH
+  CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_BORDER_WIDTH
 // Fixed height for the current card's content row. All three columns
 // (leftGutter | card | rightGutter) pin this exact value so their
 // intrinsic heights match — the dot in the left gutter, the bar
@@ -340,9 +328,10 @@ const CURRENT_CARD_INNER_CORNER_RADIUS =
 // end up at the same y automatically, without depending on Scriptable
 // stretching a flexible spacer. Session events that carry both an
 // "on track" row and an "in class" row need more room because the
-// two rows stack vertically like the web app's SessionCard does.
-const CURRENT_CONTENT_HEIGHT = 24
-const CURRENT_CONTENT_HEIGHT_STACKED = 46
+// two rows stack vertically like the web app's SessionCard does, with
+// a thin divider line between them.
+const CURRENT_CONTENT_HEIGHT = 22
+const CURRENT_CONTENT_HEIGHT_STACKED = 48
 
 // The vertical size the current card's content row needs for `ev` —
 // stacked when the session carries both on-track and in-class pills,
@@ -354,13 +343,13 @@ function currentContentHeightFor(ev) {
   const hasIn = ev.inClass && ev.inClass.length > 0
   return hasOn && hasIn ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
 }
-const NOW_LINE_DOT_DIAMETER = 8
-const NOW_LINE_BAR_HEIGHT = 3
+const NOW_LINE_DOT_DIAMETER = 6
+const NOW_LINE_BAR_HEIGHT = 2
 // Gutter widths outside each event card. Left is dot-sized so the dot
 // fills its gutter exactly; right is wider so the marker bar can
 // reach the widget's right edge alongside a zero right-side widget
 // padding (see WIDGET_SIDE_PAD_RIGHT).
-const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER   // 8pt
+const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER   // 6pt
 const RIGHT_GUTTER_WIDTH = 12
 const WIDGET_SIDE_PAD_LEFT = 4
 const WIDGET_SIDE_PAD_RIGHT = 0
@@ -375,9 +364,9 @@ const CURRENT_CAPTION_OUTER_PAD = 4
 const CARD_INNER_PAD_H = 12
 // Fixed width for the "On track" / "In class" section labels — sized
 // to hold "On track" fully at the current card's larger label font
-// with a little trailing space, so pills always line up at the same
-// x on both rows.
-const LABEL_COLUMN_WIDTH = 76
+// (16pt) with a little trailing space, so pills always line up at the
+// same x on both rows.
+const LABEL_COLUMN_WIDTH = 88
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
@@ -419,32 +408,20 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   rightGutter.size = new Size(RIGHT_GUTTER_WIDTH, 0)
 
   if (current) {
-    // Border + glow effect: nest the current card inside two concentric
-    // wrappers. The outer one's background is a low-alpha accent color
-    // that reads as a soft blue glow around the card. The inner one's
-    // background is full accent, a thin ring that reads as a border
-    // (and, because it's the same color as the bar, lets the bar
-    // transition through it seamlessly). All three cornerRadii are
-    // offset by each wrapper's padding so the border and glow rings
-    // stay a uniform width all the way around the card.
+    // Nest the current card inside a single accent-color wrapper whose
+    // padding shows as a thin border ring around the card interior.
+    // The border color matches the marker bar exactly, so the bar
+    // transitions through the border seamlessly from inside the card
+    // to the outer gutter without a visible color break.
     cardContainer.layoutVertically()
-    cardContainer.backgroundColor = p.accentGlow
+    cardContainer.backgroundColor = p.accent
     cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
     cardContainer.setPadding(
-      CURRENT_CARD_GLOW_WIDTH, CURRENT_CARD_GLOW_WIDTH,
-      CURRENT_CARD_GLOW_WIDTH, CURRENT_CARD_GLOW_WIDTH,
-    )
-
-    const borderWrapper = cardContainer.addStack()
-    borderWrapper.layoutVertically()
-    borderWrapper.backgroundColor = p.accent
-    borderWrapper.cornerRadius = CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_GLOW_WIDTH
-    borderWrapper.setPadding(
       CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
       CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
     )
 
-    const card = borderWrapper.addStack()
+    const card = cardContainer.addStack()
     card.layoutVertically()
     card.backgroundColor = p.currentCardBg
     card.cornerRadius = CURRENT_CARD_INNER_CORNER_RADIUS
@@ -453,12 +430,12 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
 
     // All three columns get the same vertical structure — outer pad
-    // (glow + border) / top zone / content-row-sized block / bottom
-    // zone / outer pad — so the dot in the left gutter, the bar inside
-    // the card, and the bar continuation in the right gutter land at
-    // the same y without depending on Scriptable stretching a flexible
+    // (border) / top zone / content-row-sized block / bottom zone /
+    // outer pad — so the dot in the left gutter, the bar inside the
+    // card, and the bar continuation in the right gutter land at the
+    // same y without depending on Scriptable stretching a flexible
     // spacer to line them up. The card omits its own outer-pad spacers
-    // because those come from the two wrapping stacks' paddings.
+    // because those come from the wrapping stack's padding.
     const contentH = currentContentHeightFor(ev)
 
     leftGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
@@ -470,7 +447,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
     const contentRow = card.addStack()
     contentRow.size = new Size(0, contentH)
-    // Two wrapping stacks (glow + border) already inset the content by
+    // The border wrapper already insets the content by
     // CURRENT_CARD_OUTER_PAD points on each side, so we shrink the
     // contentRow's own left/right padding by that amount to keep the
     // interior padding equal to CARD_INNER_PAD_H — matching the
@@ -489,12 +466,20 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent, true)
     rightGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
   } else {
-    cardContainer.backgroundColor = p.cardBg
-    cardContainer.cornerRadius = 6
-    cardContainer.setPadding(7, CARD_INNER_PAD_H, 7, CARD_INNER_PAD_H)
-    cardContainer.spacing = 8
-    cardContainer.centerAlignContent()
-    buildEventContent(cardContainer, ev, groupById, selected, p, past, false)
+    // Non-current cards get a 1pt gray border via the same
+    // wrapper-with-padding trick as the current card — matching the
+    // web app's `border border-gray-200 bg-white` SessionCard style.
+    cardContainer.backgroundColor = p.cardBorder
+    cardContainer.cornerRadius = 8
+    cardContainer.setPadding(1, 1, 1, 1)
+
+    const card = cardContainer.addStack()
+    card.backgroundColor = p.cardBg
+    card.cornerRadius = 7
+    card.setPadding(6, CARD_INNER_PAD_H - 1, 6, CARD_INNER_PAD_H - 1)
+    card.spacing = 8
+    card.centerAlignContent()
+    buildEventContent(card, ev, groupById, selected, p, past, false)
     // Gutters stay empty spacers; the horizontal outer stack stretches
     // them to match the card's height automatically.
   }
@@ -586,7 +571,7 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
 
   const time = timeCol.addText(formatTime12(ev.time))
   time.font = current ? monoBoldFont(17) : monoFont(13)
-  time.textColor = current ? p.accent : p.fg
+  time.textColor = p.fg
   if (past) time.textOpacity = p.pastOpacity
   // Scriptable stacks have no direct "start-align" API, so push the
   // digits flush against the column's left edge with a trailing spacer
@@ -605,7 +590,11 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
 
     const infoCol = row.addStack()
     infoCol.layoutVertically()
-    infoCol.spacing = 3
+    // Explicit spacers around the divider give the on-track / in-class
+    // rows the breathing room they lack when packed tight — matching
+    // the web app's SessionCard, which uses gap-3 plus a border-t
+    // between the two sections.
+    infoCol.spacing = 4
 
     if (onTrack.length) {
       const onRow = infoCol.addStack()
@@ -623,6 +612,7 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
         addGroupPill(pillsStack, g, dim || past)
       }
     }
+    if (onTrack.length && inClass.length) addRowDivider(infoCol, p)
     if (inClass.length) {
       const inRow = infoCol.addStack()
       inRow.centerAlignContent()
@@ -639,27 +629,13 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
       icon.font = Font.systemFont(current ? 17 : 13)
     }
     const label = row.addText(ev.label)
-    label.font = isFood ? Font.boldSystemFont(current ? 15 : 12) : Font.systemFont(current ? 14 : 12)
+    label.font = isFood ? Font.boldSystemFont(current ? 16 : 12) : Font.systemFont(current ? 16 : 12)
     label.textColor = p.fg
     label.lineLimit = 1
     if (past) label.textOpacity = p.pastOpacity
   }
 
   row.addSpacer()
-}
-
-function drawSessionHeader(w, p, n) {
-  w.addSpacer(4)
-  const outer = w.addStack()
-  outer.spacing = 0
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
-  const row = outer.addStack()
-  const label = row.addText(`SESSION ${n}`)
-  label.font = Font.boldSystemFont(9)
-  label.textColor = p.muted
-  row.addSpacer()
-  outer.addSpacer(RIGHT_GUTTER_WIDTH)
-  w.addSpacer(2)
 }
 
 // Fixed-width column holding a section label ("On track" / "In class").
@@ -671,13 +647,23 @@ function addSectionLabelColumn(row, text, p, past, current) {
   const col = row.addStack()
   col.size = new Size(LABEL_COLUMN_WIDTH, 0)
   const l = col.addText(text)
-  l.font = Font.systemFont(current ? 14 : 12)
+  l.font = Font.systemFont(current ? 16 : 12)
   l.textColor = p.fg
   l.lineLimit = 1
   if (past) l.textOpacity = p.pastOpacity
   // Trailing spacer pushes the label flush against the column's left
   // edge, same trick as the time column.
   col.addSpacer()
+}
+
+// Thin horizontal rule between the on-track and in-class rows of a
+// session card, matching the web app's `border-t border-gray-100`
+// separator.
+function addRowDivider(col, p) {
+  const line = col.addStack()
+  line.backgroundColor = p.divider
+  line.size = new Size(0, 1)
+  line.addSpacer()
 }
 
 // Colored pill matching the web app's GroupBadge — colored background
