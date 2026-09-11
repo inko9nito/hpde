@@ -20,12 +20,12 @@
 // isn't already here, keep saturation/lightness in the same ballpark as
 // the rest (roughly 50-65% saturation, 50-60% lightness) so it reads as
 // part of the family, and check white text stays as legible on it as on
-// the least-legible entry below (rungreen).
+// the least-legible entry below (runorange).
 export const runGroupColors: Record<string, string> = {
   runred: '#CF4A50',
   runorange: '#F49A34',
   runyellow: '#E4BC44',
-  rungreen: '#4ABF75',
+  rungreen: '#3CAA64',
   runblue: '#478AD1',
   // Pushed further from red's hue (was too close at a glance — issue #4)
   // and off Apple's stock pink to land closer to magenta.
