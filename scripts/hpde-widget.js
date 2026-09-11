@@ -254,7 +254,16 @@ function makeWidget({ manifest, stale }) {
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
   const maxRows = isLarge ? 10 : 3
-  const maxPast = isLarge ? 2 : 1
+  // Always show exactly one past event before the current one,
+  // regardless of widget size. On large widgets this used to be 2,
+  // which pushed the current card (and its now-marker) two rows down
+  // from the top — with maxRows=10 the total content can be tall
+  // enough that the current card ends up requiring a scroll to reach
+  // in the Scriptable preview sheet (real Home Screen widgets don't
+  // scroll at all, so on-device that content was simply clipped off
+  // screen). Capping at 1 keeps the current card as close to the top
+  // as it can ever be.
+  const maxPast = 1
 
   const anchorIdx = currentIdx !== -1 ? currentIdx : insertAt
   const start = Math.max(0, anchorIdx - maxPast)
