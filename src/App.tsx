@@ -36,18 +36,21 @@ function defaultDay(event: EventConfig): DaySchedule {
 
 export default function App() {
   const [view, setView] = useState<View>('schedule')
-  const [activeEvent, setActiveEvent] = useState<EventConfig>(EVENTS[0])
-  const [activeDay, setActiveDay] = useState<DaySchedule>(() => defaultDay(EVENTS[0]))
+  const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
+  const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
+
+  const activeEvent = EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
+  const activeDay = activeEvent.days.find(d => d.id === activeDayId) ?? defaultDay(activeEvent)
 
   const todayDay = findTodayDay(activeEvent)
   const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
 
   function switchEvent(event: EventConfig) {
-    setActiveEvent(event)
-    setActiveDay(defaultDay(event))
+    setActiveEventId(event.id)
+    setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
   }
 
@@ -86,7 +89,7 @@ export default function App() {
                   {activeEvent.days.map(day => (
                     <button
                       key={day.id}
-                      onClick={() => setActiveDay(day)}
+                      onClick={() => setActiveDayId(day.id)}
                       className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
                         activeDay.id === day.id
                           ? 'bg-gray-900 text-white'
@@ -98,7 +101,7 @@ export default function App() {
                   ))}
                 </div>
                 <button
-                  onClick={() => todayDay && setActiveDay(todayDay)}
+                  onClick={() => todayDay && setActiveDayId(todayDay.id)}
                   disabled={isToday || !todayDay}
                   className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
                     isToday || !todayDay
