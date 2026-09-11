@@ -374,6 +374,14 @@ const WIDGET_SIDE_PAD_RIGHT = 0
 // caption reads as belonging to the current row rather than crowding
 // its neighbour.
 const CURRENT_CAPTION_OUTER_PAD = 4
+// Horizontal inner padding used by every event card, so the time
+// digits inside them (and the now-caption above/below them) line up
+// at the same x on every row.
+const CARD_INNER_PAD_H = 12
+// Fixed width for the "On track" / "In class" section labels, so the
+// pills that follow them line up at the same x on both rows even
+// though the labels themselves have different natural widths.
+const LABEL_COLUMN_WIDTH = 48
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
@@ -466,7 +474,14 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
     const contentRow = card.addStack()
     contentRow.size = new Size(0, contentH)
-    contentRow.setPadding(0, 12, 0, 12)
+    // Two wrapping stacks (glow + border) already inset the content by
+    // CURRENT_CARD_OUTER_PAD points on each side, so we shrink the
+    // contentRow's own left/right padding by that amount to keep the
+    // interior padding equal to CARD_INNER_PAD_H — matching the
+    // non-current cards, so the time digits sit at the same x on every
+    // row.
+    const contentPadH = CARD_INNER_PAD_H - CURRENT_CARD_OUTER_PAD
+    contentRow.setPadding(0, contentPadH, 0, contentPadH)
     contentRow.spacing = 8
     contentRow.centerAlignContent()
     buildEventContent(contentRow, ev, groupById, selected, p, past, true)
@@ -480,7 +495,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   } else {
     cardContainer.backgroundColor = p.cardBg
     cardContainer.cornerRadius = 6
-    cardContainer.setPadding(7, 12, 7, 12)
+    cardContainer.setPadding(7, CARD_INNER_PAD_H, 7, CARD_INNER_PAD_H)
     cardContainer.spacing = 8
     cardContainer.centerAlignContent()
     buildEventContent(cardContainer, ev, groupById, selected, p, past, false)
@@ -600,7 +615,7 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
       const onRow = infoCol.addStack()
       onRow.centerAlignContent()
       onRow.spacing = 6
-      addMutedLabel(onRow, "On track", p, past)
+      addMutedLabelColumn(onRow, "On track", p, past)
       for (const g of onTrack) {
         const dim = selected.length > 0 && !selected.includes(g.id)
         addGroupPill(onRow, g, dim || past)
@@ -610,7 +625,7 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
       const inRow = infoCol.addStack()
       inRow.centerAlignContent()
       inRow.spacing = 6
-      addMutedLabel(inRow, "In class", p, past)
+      addMutedLabelColumn(inRow, "In class", p, past)
       for (const g of inClass) addGroupPill(inRow, g, past)
     }
   } else {
@@ -642,11 +657,20 @@ function drawSessionHeader(w, p, n) {
   w.addSpacer(2)
 }
 
-function addMutedLabel(row, text, p, past) {
-  const l = row.addText(text)
+// Fixed-width column holding a muted section label ("On track" /
+// "In class"). The fixed width equalises the different natural widths
+// of the labels themselves, so the pills that follow start at the
+// same x on both rows.
+function addMutedLabelColumn(row, text, p, past) {
+  const col = row.addStack()
+  col.size = new Size(LABEL_COLUMN_WIDTH, 0)
+  const l = col.addText(text)
   l.font = Font.systemFont(10)
   l.textColor = p.label
   if (past) l.textOpacity = p.pastOpacity
+  // Trailing spacer pushes the label flush against the column's left
+  // edge, same trick as the time column.
+  col.addSpacer()
 }
 
 // Colored pill matching the web app's GroupBadge — colored background
@@ -665,12 +689,13 @@ function addGroupPill(row, g, dim) {
 }
 
 // Web-app style header for the now-marker: current time on the left,
-// countdown to the next event on the right. Inset by the per-row
-// gutter widths so its edges line up with the cards.
+// countdown to the next event on the right. Inset so it lines up
+// horizontally with the time digits inside the cards — that way the
+// eye doesn't have to jump between the caption's x and the times' x.
 function drawNowCaption(w, p, now, nextEvent) {
   const outer = w.addStack()
   outer.spacing = 0
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  outer.addSpacer(LEFT_GUTTER_WIDTH + CARD_INNER_PAD_H)
   const row = outer.addStack()
   row.centerAlignContent()
 
@@ -691,7 +716,7 @@ function drawNowCaption(w, p, now, nextEvent) {
       label.textColor = urgencyColor(min, p)
     }
   }
-  outer.addSpacer(RIGHT_GUTTER_WIDTH)
+  outer.addSpacer(RIGHT_GUTTER_WIDTH + CARD_INNER_PAD_H)
 }
 
 // Thin horizontal accent-color rule, edges lined up with the cards.
