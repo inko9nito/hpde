@@ -1,12 +1,10 @@
-# iOS Home Screen widget
+# iPhone Home Screen widget
 
-<img src="../docs/screenshots/widget-medium.jpg" width="260" alt="Scriptable Home Screen widget" />
+<img src="../docs/screenshots/widget-medium.jpg" width="140" alt="Scriptable Home Screen widget" />
 
-`hpde-widget.js` is a [Scriptable](https://scriptable.app/) script that renders
-the current day's HPDE schedule on the iPhone Home Screen. It fetches
-`https://inko9nito.github.io/hpde/api/events.json` — the manifest emitted at
-build time by `scripts/vite-plugin-events-json.ts` — and draws a medium-size
-widget that mirrors the web app's timeline.
+`hpde-widget.js` is a [Scriptable](https://scriptable.app/) script that puts
+today's HPDE schedule on your iPhone Home Screen, so you can check what's
+next without opening the app.
 
 **Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
 — always points at the current version on `main`, so it's the easiest thing

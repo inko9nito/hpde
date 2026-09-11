@@ -1,12 +1,23 @@
 # HPDE Schedule
 
-Track day schedule app for HPDE events. Optimized for mobile (iPhone 13 mini).
+See the day's HPDE track schedule at a glance — what's happening now, what's
+next, and which sessions are yours. Built for checking on your phone between
+runs.
 
 **Live site:** https://inko9nito.github.io/hpde/
 
-## Screenshots
+## Features
 
-<img src="docs/screenshots/app-today.png" width="260" alt="Today's schedule with the now-line" /> <img src="docs/screenshots/app-sessions.png" width="260" alt="Session rows with on-track / in-class run group badges" /> <img src="docs/screenshots/app-filter.png" width="260" alt="Run group filter dropdown" />
+- **Live "now" line** shows what's happening at this moment and counts down
+  to what's next
+- **Run group filter** — pick your color(s) and the schedule highlights just
+  your sessions
+- **On track / in class** badges make it obvious who's driving and who's in
+  the classroom for each session
+- **iPhone Home Screen widget** — see the schedule without opening the app
+  (see below)
+
+<img src="docs/screenshots/app-today.png" width="140" alt="Today's schedule with the now-line" /> <img src="docs/screenshots/app-sessions.png" width="140" alt="Session rows with on-track / in-class run group badges" /> <img src="docs/screenshots/app-filter.png" width="140" alt="Run group filter dropdown" />
 
 ---
 
@@ -103,13 +114,12 @@ Editing an MD file while `npm run dev` is running will hot-reload the UI instant
 
 Pushes to `main` automatically build and deploy to GitHub Pages via GitHub Actions. No manual steps needed.
 
-## iOS Home Screen widget
+## iPhone Home Screen widget
 
-<img src="docs/screenshots/widget-medium.jpg" width="260" alt="Scriptable Home Screen widget" />
+<img src="docs/screenshots/widget-medium.jpg" width="140" alt="Scriptable Home Screen widget" />
 
-A [Scriptable](https://scriptable.app/) widget lives in [`scripts/`](./scripts/README.md).
-It reads `dist/api/events.json` (emitted by the Vite build) and renders the
-current day's schedule on the iPhone Home Screen.
+Add a widget to your Home Screen and see today's schedule without opening
+the app — see [`scripts/`](./scripts/README.md) for setup instructions.
 
 **Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
-— always points at the current version on `main`, so it's the one to share.
+— always the current version, the one to share.
