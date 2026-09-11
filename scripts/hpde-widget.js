@@ -147,7 +147,12 @@ function makeWidget({ manifest, stale }) {
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
   w.backgroundColor = p.bg
-  w.setPadding(10, 12, 10, 12)
+  // Small widget-level side padding — the per-row gutters (see
+  // drawEventRow) add another NOW_LINE_DOT_DIAMETER points on each
+  // side so that every card lines up at the same x as before, with
+  // NOW_LINE_DOT_DIAMETER points of "negative space" available beside
+  // each card for the current-event marker.
+  w.setPadding(10, 4, 10, 4)
   w.url = SITE_URL
 
   const picked = pickToday(manifest)
@@ -240,7 +245,10 @@ function makeWidget({ manifest, stale }) {
 }
 
 function renderHeader(w, event, day, p, stale) {
-  const row = w.addStack()
+  const outer = w.addStack()
+  outer.spacing = 0
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
+  const row = outer.addStack()
   row.centerAlignContent()
 
   const title = row.addText(event.name)
@@ -264,6 +272,7 @@ function renderHeader(w, event, day, p, stale) {
     s.font = Font.systemFont(9)
     s.textColor = p.muted
   }
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
   w.addSpacer(6)
 }
 
@@ -281,8 +290,7 @@ const NOW_LINE_MARGIN = 2                // min gap from the card edge / content
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
   // the first half of the event and BELOW when we're past the halfway
-  // point. The now-line itself lives INSIDE the card's top or bottom
-  // padding zone so it crosses the card without crossing the event text.
+  // point.
   const lineBelow = !!current && current.progress >= 0.5
   const lineAbove = !!current && !lineBelow
 
@@ -291,25 +299,59 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     w.addSpacer(3)
   }
 
-  const card = w.addStack()
+  // Every event row is a 3-column outer stack:
+  //   [leftGutter | card | rightGutter]
+  // The gutters occupy the widget's left/right side space, just outside
+  // each card. For the current event they hold the marker — a dot on
+  // the left (looks like it lives outside the card, sliding through)
+  // and a matching bar segment on the right (visually continuing the
+  // bar drawn inside the card past the card's right edge). Non-current
+  // gutters are empty spacers, so every card still lines up at the
+  // same x on both edges.
+  const outerRow = w.addStack()
+  outerRow.spacing = 0
+
+  const leftGutter = outerRow.addStack()
+  leftGutter.layoutVertically()
+  leftGutter.size = new Size(NOW_LINE_DOT_DIAMETER, 0)
+
+  const card = outerRow.addStack()
+
+  const rightGutter = outerRow.addStack()
+  rightGutter.layoutVertically()
+  rightGutter.size = new Size(NOW_LINE_DOT_DIAMETER, 0)
+
   if (current) {
-    // Current card stacks its three rows (top padding, content, bottom
-    // padding) vertically so the now-line can live in one of the padding
-    // zones. Non-current cards stay horizontal so time + labels lay out
-    // as a single row.
+    // Current card is laid out vertically: [top zone | content row |
+    // bottom zone]. The marker (bar) lives in whichever zone matches
+    // current progress. The left/right gutters mirror the same
+    // vertical structure so the dot / continuation bar sit at the
+    // same y as the bar inside the card.
     card.layoutVertically()
     card.backgroundColor = p.currentCardBg
     card.cornerRadius = CURRENT_CARD_CORNER_RADIUS
 
-    addPaddingZone(card, current.progress < 0.5 ? current.progress * 2 : null, p.accent)
+    const topFraction = lineAbove ? current.progress * 2 : null
+    const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
 
+    // Left gutter — dot on the marker side, plain spacer on the other.
+    addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent)
+    leftGutter.addSpacer()
+    addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent)
+
+    // Card — bar on the marker side, content row in the middle.
+    addMarkerColumnZone(card, topFraction, "bar", p.accent)
     const contentRow = card.addStack()
     contentRow.setPadding(0, 12, 0, 12)
     contentRow.spacing = 8
     contentRow.centerAlignContent()
     buildEventContent(contentRow, ev, groupById, selected, p, past, true)
+    addMarkerColumnZone(card, botFraction, "bar", p.accent)
 
-    addPaddingZone(card, current.progress >= 0.5 ? (current.progress - 0.5) * 2 : null, p.accent)
+    // Right gutter — bar continuation on the marker side.
+    addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent)
+    rightGutter.addSpacer()
+    addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent)
   } else {
     card.backgroundColor = p.cardBg
     card.cornerRadius = 6
@@ -317,6 +359,8 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     card.spacing = 8
     card.centerAlignContent()
     buildEventContent(card, ev, groupById, selected, p, past, false)
+    // Gutters stay empty spacers; the horizontal outer stack stretches
+    // them to match the card's height automatically.
   }
 
   if (lineBelow) {
@@ -326,50 +370,56 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   w.addSpacer(6)
 }
 
-// One of the current card's top/bottom padding rows. When `lineFraction`
-// is a number (0 = start of the zone, 1 = end of the zone, i.e. nearest
-// the event text), the now-line is drawn at that position within the
-// zone; when null, the zone is just blank vertical space.
-function addPaddingZone(card, lineFraction, lineColor) {
-  if (lineFraction === null) {
-    card.addSpacer(CURRENT_CARD_PAD_V)
+// One of the three-column outer stack's top or bottom padding zone.
+// When `fraction` is a number in [0,1], the marker element (dot or bar)
+// is placed within the CURRENT_CARD_PAD_V-tall zone at
+// (fraction * usable) points from the zone's inner margin. When
+// `fraction` is null, the zone is just blank vertical space of the
+// same height, so all three columns stay aligned.
+function addMarkerColumnZone(col, fraction, elementType, color) {
+  if (fraction === null) {
+    col.addSpacer(CURRENT_CARD_PAD_V)
     return
   }
-  const lineRowHeight = NOW_LINE_DOT_DIAMETER
-  const usable = Math.max(0, CURRENT_CARD_PAD_V - lineRowHeight - NOW_LINE_MARGIN * 2)
-  const before = NOW_LINE_MARGIN + lineFraction * usable
-  const after = Math.max(0, CURRENT_CARD_PAD_V - lineRowHeight - before)
-  card.addSpacer(before)
-  addNowLineRow(card, lineColor)
-  card.addSpacer(after)
+  const rowH = NOW_LINE_DOT_DIAMETER
+  const usable = Math.max(0, CURRENT_CARD_PAD_V - rowH - NOW_LINE_MARGIN * 2)
+  const before = NOW_LINE_MARGIN + fraction * usable
+  const after = Math.max(0, CURRENT_CARD_PAD_V - rowH - before)
+  col.addSpacer(before)
+  addMarkerElementRow(col, elementType, color)
+  col.addSpacer(after)
 }
 
-// A small dot + a thin bar spanning the rest of the card's width, built
-// from plain WidgetStacks so the card's own rounding and layout always
-// clip and align it correctly.
-function addNowLineRow(card, color) {
-  const row = card.addStack()
+// A fixed-height (dot-diameter) row containing the marker element.
+// Height is unified across dot and bar variants so the two align
+// vertically across the three columns even though the bar is thinner
+// than the dot.
+function addMarkerElementRow(col, elementType, color) {
+  const row = col.addStack()
+  row.size = new Size(0, NOW_LINE_DOT_DIAMETER)
   row.centerAlignContent()
-
-  const dot = row.addStack()
-  dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
-  dot.backgroundColor = color
-  dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
-
-  row.addSpacer(4)
-
-  const bar = row.addStack()
-  bar.backgroundColor = color
-  bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
-  bar.addSpacer()
+  if (elementType === "dot") {
+    const dot = row.addStack()
+    dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
+    dot.backgroundColor = color
+    dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
+  } else if (elementType === "bar") {
+    const bar = row.addStack()
+    bar.backgroundColor = color
+    bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
+    bar.addSpacer()
+  }
 }
 
 // Shared row content — time on the left, then session pills or an
 // event label — used for both the current card and regular rows so
 // they lay out (and align) identically.
 function buildEventContent(row, ev, groupById, selected, p, past, current) {
+  // Fixed time-column width, same for current and non-current cards, so
+  // labels line up at the same x on every row and the 12-hour times
+  // through 11:xx don't get truncated in the smaller font.
   const timeCol = row.addStack()
-  timeCol.size = new Size(current ? 60 : 44, 0)
+  timeCol.size = new Size(60, 0)
 
   const time = timeCol.addText(formatTime12(ev.time))
   time.font = current ? monoBoldFont(17) : monoFont(13)
@@ -415,11 +465,15 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
 
 function drawSessionHeader(w, p, n) {
   w.addSpacer(4)
-  const row = w.addStack()
+  const outer = w.addStack()
+  outer.spacing = 0
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
+  const row = outer.addStack()
   const label = row.addText(`SESSION ${n}`)
   label.font = Font.boldSystemFont(9)
   label.textColor = p.muted
   row.addSpacer()
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
   w.addSpacer(2)
 }
 
@@ -453,9 +507,13 @@ function addGroupPill(row, g, dim) {
 }
 
 // Web-app style header for the now-marker: current time on the left,
-// countdown to the next event on the right.
+// countdown to the next event on the right. Inset by the per-row
+// gutter width so its edges line up with the cards.
 function drawNowCaption(w, p, now, nextEvent) {
-  const row = w.addStack()
+  const outer = w.addStack()
+  outer.spacing = 0
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
+  const row = outer.addStack()
   row.centerAlignContent()
 
   const time = row.addText(nowHM().toUpperCase())
@@ -475,15 +533,19 @@ function drawNowCaption(w, p, now, nextEvent) {
       label.textColor = urgencyColor(min, p)
     }
   }
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
 }
 
-// Thin horizontal accent-color rule spanning the widget width.
+// Thin horizontal accent-color rule, edges lined up with the cards.
 function drawNowRule(w, p) {
-  const line = w.addStack()
-  const bar = line.addStack()
+  const outer = w.addStack()
+  outer.spacing = 0
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
+  const bar = outer.addStack()
   bar.backgroundColor = p.accent
   bar.size = new Size(0, 1.5)
   bar.addSpacer()
+  outer.addSpacer(NOW_LINE_DOT_DIAMETER)
 }
 
 // Between-cards now-marker: caption on top of a thin rule (used when no
