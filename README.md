@@ -31,8 +31,6 @@ the app — see [`scripts/`](./scripts/README.md) for setup instructions.
 **Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
 — always the current version, the one to share.
 
-> **Known issues:** 
-* The widget doesn't update instantly — iOS controls when
-> widgets actually refresh, so there can be a short delay before it catches
-> up to what's happening on track.
+**Known issues:** 
+* The widget doesn't update instantly — iOS controls when widgets actually refresh, so there can be a short delay before it catches up to what's happening on track.
 * The widhet is optinized for the Large widget type, and supports medium size but not optimally. Small size is unsupported. 
