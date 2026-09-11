@@ -33,4 +33,4 @@ the app — see [`scripts/`](./scripts/README.md) for setup instructions.
 
 **Known issues:** 
 * The widget doesn't update instantly — iOS controls when widgets actually refresh, so there can be a short delay before it catches up to what's happening on track.
-* The widhet is optinized for the Large widget type, and supports medium size but not optimally. Small size is unsupported. 
+* The widget is optimized for the Large widget type, and while it supports Medium size, it is not optimized for it.  Small size is unsupported. 
