@@ -50,12 +50,12 @@ break | 10 minute corner worker break
 17:15 general | Refreshments and trophies
 
 17:35 general | Track re-opens for fun laps
-18:00 session 5 | on: red | in: blue
+18:00 session 5 | on: red | in: blue | note: Bring your logbook
 18:30 session 5 | on: green
-19:00 general | Post-event dinner
+19:00 general | Post-event dinner | Chef's choice buffet
 20:00 general | Paddock hangout
-21:00 general | Night driving demo
-22:00 session 6 | on: purple | in: blue
-22:30 session 6 | on: orange | in: green
-23:00 general | Track cool-down
-23:45 general | Gates close
+21:00 general | Night driving demo | Bring a jacket
+22:00 session 6 | on: purple | in: blue | note: Instructor briefing at start
+22:30 session 6 | on: orange | in: green | note: Last group of the day
+23:00 session 7 | on: red | in: green | note: Cool-down laps, 60 mph max
+23:45 general | Gates close | Have your parking pass ready
