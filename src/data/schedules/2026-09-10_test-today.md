@@ -1,7 +1,7 @@
 # TEST — DELETE ME
 subtitle: Test event · widget scrubber preview
 // This event exists only to preview the widget "now" line on today's date.
-// Delete this file, src/data/events/2026-09-11_test-today.ts, and the import
+// Delete this file, src/data/events/2026-09-10_test-today.ts, and the import
 // in src/data/index.ts once you're done testing.
 
 ## groups
@@ -11,7 +11,7 @@ purple | Purple | bg-purple-500 | text-white | Time Trial
 orange | Orange | bg-orange-500 | text-white | Track Day
 blue   | Blue   | bg-blue-500   | text-white | Novice
 
-## Friday | 2026-09-11
+## Thursday | 2026-09-10
 
 06:30 general | Gates open
 07:00 general | Registration / check-in opens

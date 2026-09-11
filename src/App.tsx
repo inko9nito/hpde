@@ -157,6 +157,9 @@ export default function App() {
         )}
 
       </div>
+      <div className="pb-6 text-center font-mono text-[10px] text-gray-300">
+        build {__BUILD_SHA__}
+      </div>
     </div>
     </PullToRefresh>
   )
