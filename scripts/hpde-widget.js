@@ -138,12 +138,14 @@ function palette(dark) {
         label: new Color("#c4c4c8"),
         cardBg: new Color("#141418"), currentCardBg: new Color("#122135"),
         foodStroke: new Color("#f5f5f7"),
-        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
+        accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.25),
+        pastOpacity: 0.6 }
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
         label: new Color("#4b5563"),
         cardBg: new Color("#fafafb"), currentCardBg: new Color("#eef4ff"),
         foodStroke: new Color("#111827"),
-        accent: new Color("#3b82f6"), pastOpacity: 0.6 }
+        accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.22),
+        pastOpacity: 0.6 }
 }
 
 function urgencyColor(min, p) {
@@ -322,10 +324,20 @@ function renderHeader(w, event, day, p, stale) {
 // corner-curve square at each corner.
 const CURRENT_CARD_PAD_V = 24
 const CURRENT_CARD_CORNER_RADIUS = 12
-// Border drawn around the current card — implemented by nesting the
-// card inside a same-shape wrapper stack whose background is the
-// border color and whose padding is the border thickness.
-const CURRENT_CARD_BORDER_WIDTH = 2
+// The current card is nested inside two concentric wrapper stacks
+// whose backgrounds show around it: a thin accent border (matching
+// the bar color, so the bar transitions through it seamlessly), and
+// a slightly wider low-alpha accent halo that reads as a soft blue
+// glow. The two wrappers' cornerRadii are chosen so the border is
+// visually uniform width all the way around.
+const CURRENT_CARD_BORDER_WIDTH = 1
+const CURRENT_CARD_GLOW_WIDTH = 2
+const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH + CURRENT_CARD_GLOW_WIDTH
+// Effective clipping radius the marker rows need to stay outside — the
+// innermost of the three concentric cornerRadii — so the bar inside
+// the card doesn't get chewed by the card's own rounded corners.
+const CURRENT_CARD_INNER_CORNER_RADIUS =
+  CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_GLOW_WIDTH - CURRENT_CARD_BORDER_WIDTH
 // Fixed height for the current card's content row. All three columns
 // (leftGutter | card | rightGutter) pin this exact value so their
 // intrinsic heights match — the dot in the left gutter, the bar
@@ -403,44 +415,53 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   rightGutter.size = new Size(RIGHT_GUTTER_WIDTH, 0)
 
   if (current) {
-    // Border effect: nest the current card inside a wrapper whose
-    // background is the accent color and whose padding is the border
-    // thickness. The wrapper's rounded rect peeks out around the card
-    // as a 2pt accent border, making the current event stand out.
-    // Because the border color matches the bar color, the bar inside
-    // the card and the bar continuation in the right gutter appear
-    // to run through the border seamlessly.
+    // Border + glow effect: nest the current card inside two concentric
+    // wrappers. The outer one's background is a low-alpha accent color
+    // that reads as a soft blue glow around the card. The inner one's
+    // background is full accent, a thin ring that reads as a border
+    // (and, because it's the same color as the bar, lets the bar
+    // transition through it seamlessly). All three cornerRadii are
+    // offset by each wrapper's padding so the border and glow rings
+    // stay a uniform width all the way around the card.
     cardContainer.layoutVertically()
-    cardContainer.backgroundColor = p.accent
+    cardContainer.backgroundColor = p.accentGlow
     cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
     cardContainer.setPadding(
+      CURRENT_CARD_GLOW_WIDTH, CURRENT_CARD_GLOW_WIDTH,
+      CURRENT_CARD_GLOW_WIDTH, CURRENT_CARD_GLOW_WIDTH,
+    )
+
+    const borderWrapper = cardContainer.addStack()
+    borderWrapper.layoutVertically()
+    borderWrapper.backgroundColor = p.accent
+    borderWrapper.cornerRadius = CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_GLOW_WIDTH
+    borderWrapper.setPadding(
       CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
       CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
     )
 
-    const card = cardContainer.addStack()
+    const card = borderWrapper.addStack()
     card.layoutVertically()
     card.backgroundColor = p.currentCardBg
-    card.cornerRadius = CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_BORDER_WIDTH
+    card.cornerRadius = CURRENT_CARD_INNER_CORNER_RADIUS
 
     const topFraction = lineAbove ? current.progress * 2 : null
     const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
 
-    // All three columns get the same vertical structure — border
-    // top-pad / top zone / content-row-sized block / bottom zone /
-    // border bottom-pad — so the dot in the left gutter, the bar
-    // inside the card, and the bar continuation in the right gutter
-    // land at the same y without depending on Scriptable stretching a
-    // flexible spacer to line them up. Card omits the leading and
-    // trailing border-pad spacers because those come from the
-    // cardContainer's own padding.
+    // All three columns get the same vertical structure — outer pad
+    // (glow + border) / top zone / content-row-sized block / bottom
+    // zone / outer pad — so the dot in the left gutter, the bar inside
+    // the card, and the bar continuation in the right gutter land at
+    // the same y without depending on Scriptable stretching a flexible
+    // spacer to line them up. The card omits its own outer-pad spacers
+    // because those come from the two wrapping stacks' paddings.
     const contentH = currentContentHeightFor(ev)
 
-    leftGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
+    leftGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
     addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent, false)
     leftGutter.addSpacer(contentH)
     addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent, true)
-    leftGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
+    leftGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
 
     addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
     const contentRow = card.addStack()
@@ -451,11 +472,11 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
     buildEventContent(contentRow, ev, groupById, selected, p, past, true)
     addMarkerColumnZone(card, botFraction, "bar", p.accent, true)
 
-    rightGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
+    rightGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
     addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent, false)
     rightGutter.addSpacer(contentH)
     addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent, true)
-    rightGutter.addSpacer(CURRENT_CARD_BORDER_WIDTH)
+    rightGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
   } else {
     cardContainer.backgroundColor = p.cardBg
     cardContainer.cornerRadius = 6
@@ -497,7 +518,11 @@ function addMarkerColumnZone(col, fraction, elementType, color, isBottomZone) {
     return
   }
   const rowH = NOW_LINE_DOT_DIAMETER
-  const cr = CURRENT_CARD_CORNER_RADIUS
+  // Only the innermost cornerRadius clips the bar (the outer wrappers
+  // are concentric with matching padding, so their corner arcs sit
+  // outside the card's own arc). Using the innermost cornerRadius here
+  // gives the marker more travel room within each padding zone.
+  const cr = CURRENT_CARD_INNER_CORNER_RADIUS
   // Range of legal row_top offsets within the zone (relative to
   // zone_top). In the top zone the corner square hugs the zone's top
   // (row_top >= cr); in the bottom zone it hugs the zone's bottom
