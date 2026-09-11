@@ -12,7 +12,17 @@ const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
 const LAST_EVENT_FALLBACK_MIN = 30
+// The current event stops being "current" this many minutes before the
+// next event begins — the marker leaves the card and moves into the
+// between-cards gap.
 const CURRENT_END_LOOKAHEAD_MIN = 5
+// The marker sits OVERLAPPING THE TOP of the current card for the
+// first few minutes of the event, then flips to OVERLAPPING THE
+// BOTTOM for the rest of the "current" window. Both states use the
+// three-column illusion (dot in the left gutter, bar inside the card
+// interior, bar in the right gutter) that makes the marker appear to
+// cross over the card.
+const CURRENT_TOP_PHASE_MIN = 5
 
 // ---------- data fetching (with offline cache) ----------
 
@@ -144,22 +154,25 @@ function parseGroupFilter() {
 
 function palette(dark) {
   return dark
+    // Dark mode keeps its "cards are slightly LIGHTER than the
+    // widget background" relationship — that's the convention that
+    // makes dark cards read as raised over a deeper widget ground.
+    // No borders on either card variety; the tinted background on
+    // the current card and the marker crossing it are enough.
     ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        cardBg: new Color("#18181c"), cardBorder: new Color("#2a2a30"),
+        cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
-        // Subtle border for the current card — just a shade lighter
-        // than the card interior, matching the same contrast ratio
-        // the non-current gray border has against the white card.
-        currentCardBorder: new Color("#1e3050"),
         divider: new Color("#26262c"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
-    : { bg: new Color("#f9fafb"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        cardBg: new Color("#ffffff"), cardBorder: new Color("#e5e7eb"),
+    // Light mode: widget background is now white and non-current
+    // cards use the light gray that USED to be the widget
+    // background (swap of the two, no border). The current card
+    // keeps its blue tint. No borders anywhere — the marker line
+    // would otherwise get interrupted where it crosses a border
+    // strip.
+    : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
+        cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
-        // Tailwind blue-200-ish — a slight blue tint over the
-        // card's blue-50 interior, comparable to the gray-200
-        // border on a white card.
-        currentCardBorder: new Color("#bfdbfe"),
         divider: new Color("#e5e7eb"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
@@ -168,27 +181,6 @@ function urgencyColor(min, p) {
   if (min <= 5) return new Color("#ef4444")
   if (min <= 10) return new Color("#f97316")
   return p.muted
-}
-
-// Best-effort widget pixel width for the running host, so the
-// divider — whose width Scriptable will not auto-stretch — can be
-// sized to reach the card's right inner edge. Values below are
-// Apple's published medium-widget sizes indexed by screen portrait
-// width for common iPhones.
-function widgetWidth() {
-  const family = config.widgetFamily || "medium"
-  const s = Device.screenSize()
-  const sw = Math.round(Math.min(s.width, s.height))
-  let medium
-  if (sw <= 320) medium = 292
-  else if (sw <= 375) medium = 329
-  else if (sw <= 390) medium = 338
-  else if (sw <= 414) medium = 345
-  else if (sw <= 428) medium = 364
-  else medium = 364
-  if (family === "small") return Math.round(medium / 2) - 8
-  if (family === "extraLarge") return medium * 2 + 12
-  return medium
 }
 
 // Rough widget interior height (after our top/bottom widget
@@ -221,48 +213,34 @@ function estimateEventRowHeight(ev, isCurrent) {
     && (ev.onTrack || []).length > 0
     && (ev.inClass || []).length > 0
 
-  if (isCurrent) {
-    // Wrapper border (2) + marker-side pad + no-marker pad +
-    // content block + caption above/below + row-gap spacer. Only
-    // one side gets the full CURRENT_CARD_PAD_V — the other side
-    // is NO_MARKER_PAD_V — so budget the sum, not 2 * PAD_V.
-    let contentH = hasBoth ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
-    if (hasNote) contentH += NOTE_ROW_HEIGHT
-    return 2 + CURRENT_CARD_PAD_V + NO_MARKER_PAD_V + contentH + 17 + 6
-  }
-
-  // Non-current: card content-height + inner top/bot padding + row-gap.
   let contentH
   if (hasBoth) contentH = 57       // on-row + spacer + divider + spacer + in-row
   else if (isSession) contentH = 20 // single pill row
   else contentH = 18                // plain event label
   if (hasNote) contentH += 18       // note line + spacer
-  return 16 + contentH + 6
+
+  // Current cards use a bigger symmetric top/bottom pad (room for
+  // the marker to overlap without crowding the content) and drag a
+  // caption block along right above or below the card. Non-current
+  // cards are the small pad plus row-gap only. No border on either
+  // (the current card lost its border so the marker line isn't
+  // interrupted at the sides).
+  const innerPadV = isCurrent ? CURRENT_CARD_PAD_V : NONCURRENT_CARD_PAD_V
+  const captionBlock = isCurrent ? CURRENT_CAPTION_BLOCK_HEIGHT : 0
+  return 2 * innerPadV + contentH + captionBlock + 6
 }
 
-// The maximum divider width we can request without overflowing the
-// card's right inner edge. Assumes the current card's layout (whose
-// content interior is one border-width narrower than the
-// non-current card's, but LEFT/RIGHT gutter values match).
-function computeDividerWidth() {
-  const w = widgetWidth()
-  const cardOuter = w - WIDGET_SIDE_PAD_LEFT - WIDGET_SIDE_PAD_RIGHT
-    - LEFT_GUTTER_WIDTH - RIGHT_GUTTER_WIDTH
-  const cardInner = cardOuter - 2 * CURRENT_CARD_BORDER_WIDTH
-  const contentInner = cardInner - 2 * CARD_INNER_PAD_H
-  // Info block starts at time column + time-info gap from the
-  // card's content left edge, so the divider — sitting at the
-  // start of the info block — is at most this wide before it'd
-  // overflow the card's right inner edge. Add a fudge factor
-  // because the widgetWidth() table below is a rough
-  // approximation of Apple's published widget sizes and
-  // empirically undershoots the actual widget width by ~15-20pt
-  // on the phones users test on. Undershooting is what leaves
-  // the divider ending in a visible right gutter (#71), and a
-  // small overshoot is clipped by the card's stack layout, so
-  // erring on the generous side is the safer default.
-  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - TIME_INFO_SPACING + 20)
-}
+// The now-line block (caption + rule + spacer) that we inject
+// between cards when there is no current event to overlap. Budgeted
+// separately from card rows so the row-fit loop knows to leave
+// room for it — but only in the between-cards case; when a current
+// event exists its caption is baked into its own row estimate.
+const NOW_LINE_BLOCK_HEIGHT = 22
+// Caption block reserved above (or below) the current card — just
+// the caption text and its two small outer spacers, no rule (the
+// rule is inside the card, drawn as the marker bar).
+const CURRENT_CAPTION_BLOCK_HEIGHT = 21
+const NONCURRENT_CARD_PAD_V = 8
 
 // ---------- rendering ----------
 
@@ -298,7 +276,12 @@ function makeWidget({ manifest, stale }) {
   const now = nowMinutes()
 
   let currentIdx = -1
-  let currentProgress = 0
+  // "above" — marker sits just above the current card (first minutes
+  // of the event). "below" — marker sits just below the current card
+  // (rest of the "current" window). Null when nothing is current, in
+  // which case the marker floats between the last past and next
+  // future cards instead.
+  let currentPosition = null
   let lastPastIdx = -1
   for (let i = 0; i < visible.length; i++) {
     if (parseMinutes(visible[i].time) <= now) lastPastIdx = i
@@ -307,13 +290,25 @@ function makeWidget({ manifest, stale }) {
   if (lastPastIdx !== -1) {
     const start = parseMinutes(visible[lastPastIdx].time)
     const nextEv = visible[lastPastIdx + 1]
-    const end = nextEv ? parseMinutes(nextEv.time) : start + LAST_EVENT_FALLBACK_MIN
+    const nextStart = nextEv
+      ? parseMinutes(nextEv.time)
+      : start + LAST_EVENT_FALLBACK_MIN
+    // Current window ends CURRENT_END_LOOKAHEAD_MIN before the next
+    // event, at which point the marker leaves the card and joins the
+    // between-cards gap. The Math.max floor keeps back-to-back events
+    // (nextStart very close to start) from producing a negative
+    // window that would flip the card to "not current" before it even
+    // began.
     const currentEndsAt = nextEv
-      ? Math.max(start, end - CURRENT_END_LOOKAHEAD_MIN)
-      : end
+      ? Math.max(start, nextStart - CURRENT_END_LOOKAHEAD_MIN)
+      : nextStart
     if (now < currentEndsAt) {
       currentIdx = lastPastIdx
-      currentProgress = end === start ? 0 : (now - start) / (end - start)
+      // Top-phase end caps at the current window's own end so a very
+      // short window (events less than TOP_PHASE_MIN apart) doesn't
+      // spend its entire life in the "above" phase.
+      const topPhaseEnds = Math.min(start + CURRENT_TOP_PHASE_MIN, currentEndsAt)
+      currentPosition = now < topPhaseEnds ? "above" : "below"
     }
   }
 
@@ -343,7 +338,13 @@ function makeWidget({ manifest, stale }) {
   // widget, and the Scriptable preview sheet ended up scrolled to a
   // hard-to-predict middle position — the "widget seems to be
   // scrolled to a random position" bug.
-  const availableH = widgetInteriorHeight() - 26  // subtract header + spacer
+  // Reserve the between-cards now-line block only when we actually
+  // need one. When a current event exists, its caption is baked into
+  // its own row estimate (via CURRENT_CAPTION_BLOCK_HEIGHT), and the
+  // marker bar itself is drawn inside the card so it costs no extra
+  // vertical space.
+  const nowLineReserve = currentIdx === -1 ? NOW_LINE_BLOCK_HEIGHT : 0
+  const availableH = widgetInteriorHeight() - 26 - nowLineReserve
   const rows = []
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
@@ -363,7 +364,7 @@ function makeWidget({ manifest, stale }) {
     const isCurrentEvent = i === currentLocalIdx
     const past = !isCurrentEvent && parseMinutes(ev.time) < now
     drawEventRow(w, ev, groupById, selected, p, past,
-      isCurrentEvent ? { progress: currentProgress, now, nextEvent } : null)
+      isCurrentEvent ? { position: currentPosition, now, nextEvent } : null)
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
@@ -411,32 +412,51 @@ function renderHeader(w, event, day, p, stale) {
   w.addSpacer(6)
 }
 
+// ----- now-marker sizing -----
+// Declared before the current-card constants below because
+// MARKER_CONTENT_CLEARANCE reads NOW_LINE_DOT_DIAMETER in its
+// initializer. Top-level `const` declarations are in the temporal
+// dead zone until their own line runs, so referencing a `const`
+// declared later in the file throws at load time (that was the
+// "ReferenceError: Cannot access uninitialized variable" this
+// widget hit before this section moved up here).
+const NOW_LINE_DOT_DIAMETER = 8
+const NOW_LINE_BAR_HEIGHT = 2
+
 // ----- current-card layout constants -----
 
-// Marker pad zone on whichever side of the current card the
-// marker sits (top when the event is in its first half, bottom
-// when in its second half). Must be at least the marker-row
-// height (NOW_LINE_DOT_DIAMETER = 8) so the marker fits without
-// overflowing into the wrapper's border strip — that overflow
-// was the "card border cutting through the marker" bug.
-const CURRENT_CARD_PAD_V = 10
-// Pad zone on the OTHER side of the card, where there is no
-// marker. Kept tiny so the card doesn't carry a big blank stripe
-// on the empty side ("extra padding at the bottom") — before this
-// change we spent the full CURRENT_CARD_PAD_V here too.
-const NO_MARKER_PAD_V = 2
+// Symmetric top/bottom padding on the current card. Big enough to
+// hold the now-marker bar in the card's straight-sides zone (past
+// the rounded corners) AND leave breathing room to the content
+// underneath it. Both top and bottom use the same value so the card
+// doesn't visibly change shape when the marker flips from top to
+// bottom — the empty side still consumes the same pad, and the
+// content stays vertically centered.
+// Distance from the marker row's outer edge to the nearest card
+// edge (5pt). Chosen so the bar lands past the corner radius (8pt)
+// — the 8pt-tall marker row starts at y=5 with the 2pt bar centered
+// at y=8-10, safely in the straight-sides zone of the card.
+const MARKER_ROW_INSET = 5
+// Distance from the marker row's inner edge to the content. Set
+// equal to MARKER_ROW_INSET so the visible gap above the marker
+// (MARKER_CONTENT_CLEARANCE + 3pt bar-to-row-top) matches the
+// visible gap below (3pt bar-to-row-bottom + MARKER_ROW_INSET).
+// This was the "padding above marker is too much" bug — MCC used
+// to be 2pt while MRI was 5pt, so the visible gaps differed by
+// 3pt AND the fixed-height contentBlock added slack on top of
+// that.
+const MARKER_CONTENT_CLEARANCE = MARKER_ROW_INSET
+// Total vertical pad on each side of the card. Absolute — same
+// whether the marker is on this side or not — so content position
+// is deterministic and the card doesn't shift when the marker
+// flips.
+const CURRENT_CARD_PAD_V =
+  MARKER_ROW_INSET + NOW_LINE_DOT_DIAMETER + MARKER_CONTENT_CLEARANCE
 const CURRENT_CARD_CORNER_RADIUS = 8
-const CURRENT_CARD_BORDER_WIDTH = 1
-const CURRENT_CARD_OUTER_PAD = CURRENT_CARD_BORDER_WIDTH
-const CURRENT_CARD_INNER_CORNER_RADIUS =
-  CURRENT_CARD_CORNER_RADIUS - CURRENT_CARD_BORDER_WIDTH
-
-const CURRENT_CONTENT_HEIGHT = 26
-const CURRENT_CONTENT_HEIGHT_STACKED = 58
-// Extra vertical space added to the current card when the event
-// carries a note (or a general-event subtitle), so the note line
-// fits below the main content row without pushing the marker zones.
-const NOTE_ROW_HEIGHT = 17
+// Space between the current card and its caption ("3:08 AM · Next
+// in 3h 22m") on the outside — matches the pre-#77 spacing so the
+// caption reads as a footer/header for the card.
+const CURRENT_CAPTION_OUTER_PAD = 4
 
 function eventNote(ev) {
   // Only general-event subtitles surface in the widget. Session
@@ -447,37 +467,27 @@ function eventNote(ev) {
   return ev.subtitle || null
 }
 
-function currentContentHeightFor(ev) {
-  const hasBoth = ev.type === "session"
-    && (ev.onTrack || []).length > 0 && (ev.inClass || []).length > 0
-  const baseH = hasBoth ? CURRENT_CONTENT_HEIGHT_STACKED : CURRENT_CONTENT_HEIGHT
-  return baseH + (eventNote(ev) ? NOTE_ROW_HEIGHT : 0)
-}
-
 const NONCURRENT_CARD_CORNER_RADIUS = 14
-
-// ----- now-marker sizing -----
-const NOW_LINE_DOT_DIAMETER = 8
-const NOW_LINE_BAR_HEIGHT = 2
 
 // ----- widget-level padding -----
 //
-// Left side: 4pt breathing room between the dot and the card
-// border, so the marker dot reads as a separate element sitting
-// alongside the card, not squashed against it.
-// WIDGET_SIDE_PAD_LEFT gives the dot itself room before the
-// widget's own left edge.
+// Left side: WIDGET_SIDE_PAD_LEFT is the gap between the widget's
+// own left edge and the marker dot itself. LEFT_GUTTER_WIDTH is
+// the gap between the widget's content-start and the card's left
+// edge — the dot lives inside that gutter with the 4pt gap
+// between it and the card baked in (dot 8pt + 4pt = 12pt gutter).
+// Together that gives 4pt from widget left → dot → 4pt gap →
+// card, which is what issue #77 asked for.
 //
 // Right side: widget's right padding stays at 0 and the right
-// gutter absorbs the visual right margin. That lets the
-// between-cards blue rule extend all the way to the widget's
-// right edge instead of stopping short at the card's right border.
-const WIDGET_SIDE_PAD_LEFT = 8
+// gutter absorbs the visual right margin. That lets the now-line's
+// blue bar extend all the way to the widget's right edge instead
+// of stopping short at the card's right border.
+const WIDGET_SIDE_PAD_LEFT = 4
 const WIDGET_SIDE_PAD_RIGHT = 0
 const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER + 4   // dot + 4pt gap
 const RIGHT_GUTTER_WIDTH = 16
 
-const CURRENT_CAPTION_OUTER_PAD = 4
 const CARD_INNER_PAD_H = 12
 
 // Horizontal gap between the time column and the info block —
@@ -495,25 +505,40 @@ const TIME_COLUMN_WIDTH = 60
 // ("On track" ~55pt) + 20-ish pt of margin ≈ 100pt.
 const LABEL_COLUMN_WIDTH = 100
 
-// Session divider width: computed at runtime from the actual widget
-// width so the divider extends flush to the card's right inner edge
-// on every iPhone. Scriptable doesn't stretch a stack to fill its
-// parent's auto width, so the alternative is to guess — which is
-// what we did before, and why the divider fell short on Pro Max.
-const DIVIDER_WIDTH = computeDividerWidth()
-
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
-  const lineBelow = !!current && current.progress >= 0.5
-  const lineAbove = !!current && !lineBelow
-
-  if (lineAbove) {
+  // "Above": the marker overlaps the TOP straight-sides zone of the
+  // current card; the caption ("3:08 AM · Next in 3h 22m") sits
+  // just above the card.
+  if (current && current.position === "above") {
     w.addSpacer(CURRENT_CAPTION_OUTER_PAD)
     drawNowCaption(w, p, current.now, current.nextEvent)
     w.addSpacer(3)
   }
 
+  // Three-column outerRow: leftGutter (dot in negative space) |
+  // cardContainer (card with the bar embedded inside its interior
+  // at the marker row's y) | rightGutter (bar continuation in
+  // negative space). Scriptable can't do true overlays, so this
+  // stack composition is what makes the marker LOOK like one line
+  // crossing over the card.
   const outerRow = w.addStack()
   outerRow.spacing = 0
+
+  // Align outerRow's children to the same edge the marker sits on.
+  // Both the card's embedded marker and the gutter's dot/bar are
+  // placed at a fixed MARKER_ROW_INSET from that edge, so when both
+  // columns are aligned to the same edge the two lands at the same
+  // y — no flex spacer needed, no dependence on knowing the card's
+  // natural height. This is what fixes the "dot floats below the
+  // bar" bug: a flex spacer in a shorter vertical child of a
+  // horizontal parent does NOT auto-stretch to the tallest
+  // sibling's height in Scriptable, so the old gutter stayed 13pt
+  // at the top of the row while the bar sat much lower in the card.
+  if (current && current.position === "below") {
+    outerRow.bottomAlignContent()
+  } else {
+    outerRow.topAlignContent()
+  }
 
   const leftGutter = outerRow.addStack()
   leftGutter.layoutVertically()
@@ -527,12 +552,16 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 
   if (current) {
     drawCurrentCard(cardContainer, leftGutter, rightGutter,
-      ev, groupById, selected, p, past, current, lineAbove, lineBelow)
+      ev, groupById, selected, p, past, current.position)
   } else {
     drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past)
+    // Gutters stay empty — they auto-size to 0 height and take up no
+    // vertical space, so the non-current row is as compact as before.
   }
 
-  if (lineBelow) {
+  // "Below": the marker overlaps the BOTTOM zone of the card; the
+  // caption sits just below.
+  if (current && current.position === "below") {
     w.addSpacer(3)
     drawNowCaption(w, p, current.now, current.nextEvent)
     w.addSpacer(CURRENT_CAPTION_OUTER_PAD)
@@ -540,94 +569,140 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   w.addSpacer(6)
 }
 
+// Three-column current card. The card interior manually stacks
+// [top pad zone] + [fixed-height content block] + [bottom pad zone];
+// one of the two pad zones carries the marker bar, the other is
+// just a spacer of the same height (that's the "symmetric padding"
+// promise — content stays put regardless of marker position). The
+// left and right gutters are filled with pre-computed spacer heights
+// that put a dot / bar-continuation at exactly the same y as the
+// bar inside the card, faking the overlay.
+//
+// NO BORDER on the current card. Any 1pt border strip along the
+// card's left and right edges would show through as
+// currentCardBorder color where the horizontal marker meets it —
+// interrupting the continuous accent-blue line that reads as one
+// mark crossing the card. The tinted background (currentCardBg) is
+// enough to distinguish this card as current, especially with the
+// marker crossing it.
 function drawCurrentCard(cardContainer, leftGutter, rightGutter,
-    ev, groupById, selected, p, past, current, lineAbove, lineBelow) {
+    ev, groupById, selected, p, past, position) {
+  const markerAtTop = position === "above"
+
   cardContainer.layoutVertically()
-  // Subtle border color instead of full accent — matches the
-  // web app's soft edge on the current card. The now-marker
-  // bar/dot are still accent-color, they just no longer wrap
-  // the entire card in loud blue.
-  cardContainer.backgroundColor = p.currentCardBorder
+  cardContainer.backgroundColor = p.currentCardBg
   cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
-  cardContainer.setPadding(
-    CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
-    CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
-  )
 
-  const card = cardContainer.addStack()
-  card.layoutVertically()
-  card.backgroundColor = p.currentCardBg
-  card.cornerRadius = CURRENT_CARD_INNER_CORNER_RADIUS
+  // Top pad zone. Absolute — either the marker + its clearance
+  // (both sum to CURRENT_CARD_PAD_V) or a plain spacer of the same
+  // height. Same either way, so the content below sits at the exact
+  // same y regardless of where the marker is.
+  if (markerAtTop) {
+    cardContainer.addSpacer(MARKER_ROW_INSET)
+    addBarInCard(cardContainer, p.accent)
+    cardContainer.addSpacer(MARKER_CONTENT_CLEARANCE)
+  } else {
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
+  }
 
-  const topFraction = lineAbove ? current.progress * 2 : null
-  const botFraction = lineBelow ? (current.progress - 0.5) * 2 : null
-
-  const contentH = currentContentHeightFor(ev)
-
-  leftGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
-  addMarkerColumnZone(leftGutter, topFraction, "dot", p.accent, false)
-  leftGutter.addSpacer(contentH)
-  addMarkerColumnZone(leftGutter, botFraction, "dot", p.accent, true)
-  leftGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
-
-  addMarkerColumnZone(card, topFraction, "bar", p.accent, false)
-
-  const contentBlock = card.addStack()
-  contentBlock.size = new Size(0, contentH)
-  const contentPadH = CARD_INNER_PAD_H - CURRENT_CARD_OUTER_PAD
-  contentBlock.setPadding(0, contentPadH, 0, contentPadH)
-
+  // Content grows to its natural height — no fixed-height wrapper.
+  // The fixed wrapper we had before ate the "above marker" gap with
+  // top-aligned slack; now the content is exactly as tall as it
+  // wants, and the pad zones above/below are absolute constants.
+  const contentBlock = cardContainer.addStack()
+  contentBlock.setPadding(0, CARD_INNER_PAD_H, 0, CARD_INNER_PAD_H)
   buildCardContent(contentBlock, ev, groupById, selected, p, past, true)
 
-  addMarkerColumnZone(card, botFraction, "bar", p.accent, true)
+  // Bottom pad zone — mirror of top.
+  if (!markerAtTop) {
+    cardContainer.addSpacer(MARKER_CONTENT_CLEARANCE)
+    addBarInCard(cardContainer, p.accent)
+    cardContainer.addSpacer(MARKER_ROW_INSET)
+  } else {
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
+  }
 
-  rightGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
-  addMarkerColumnZone(rightGutter, topFraction, "bar", p.accent, false)
-  rightGutter.addSpacer(contentH)
-  addMarkerColumnZone(rightGutter, botFraction, "bar", p.accent, true)
-  rightGutter.addSpacer(CURRENT_CARD_OUTER_PAD)
+  // Gutter columns place the dot / bar-continuation at exactly the
+  // same y as the bar embedded in the card. Since content height is
+  // no longer a fixed constant, the gutter columns use a flex
+  // spacer on the empty side to auto-fill to the card's natural
+  // height. Flex is limited to the gutter — it does NOT touch
+  // content position inside the card.
+  addGutterMarkerColumn(leftGutter, markerAtTop, "dot", p.accent)
+  addGutterMarkerColumn(rightGutter, markerAtTop, "bar", p.accent)
 }
 
 function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past) {
+  // No border. Non-current cards are just tinted (light gray on
+  // white) rounded rectangles, matching the current card's
+  // border-less look so the whole widget reads as one system.
   cardContainer.backgroundColor = p.cardBg
-  cardContainer.borderColor = p.cardBorder
-  cardContainer.borderWidth = 1
   cardContainer.cornerRadius = NONCURRENT_CARD_CORNER_RADIUS
-  cardContainer.setPadding(8, CARD_INNER_PAD_H, 8, CARD_INNER_PAD_H)
+  cardContainer.setPadding(
+    NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
+    NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
+  )
   buildCardContent(cardContainer, ev, groupById, selected, p, past, false)
 }
 
-function addMarkerColumnZone(col, fraction, elementType, color, isBottomZone) {
-  if (fraction === null) {
-    // Marker not in this zone — shrink the empty side so the card
-    // isn't top-heavy or bottom-heavy just because the marker's
-    // over on the other end.
-    col.addSpacer(NO_MARKER_PAD_V)
-    return
-  }
-  const rowH = NOW_LINE_DOT_DIAMETER
-  const cr = CURRENT_CARD_INNER_CORNER_RADIUS
-  const safeMin = isBottomZone ? 0 : Math.min(cr, CURRENT_CARD_PAD_V - rowH)
-  const safeMax = isBottomZone
-    ? Math.max(safeMin, CURRENT_CARD_PAD_V - rowH - cr)
-    : Math.max(safeMin, CURRENT_CARD_PAD_V - rowH)
-  const before = safeMin + fraction * (safeMax - safeMin)
-  const after = Math.max(0, CURRENT_CARD_PAD_V - rowH - before)
-  col.addSpacer(before)
-  addMarkerElementRow(col, elementType, color)
-  col.addSpacer(after)
+// Bar drawn inside the current card, at the top or bottom pad zone.
+// Sits in an 8pt-tall row (matches NOW_LINE_DOT_DIAMETER so its y
+// aligns with the dot in the gutter) with a 2pt bar centered
+// vertically inside.
+function addBarInCard(card, color) {
+  const row = card.addStack()
+  row.size = new Size(0, NOW_LINE_DOT_DIAMETER)
+  row.centerAlignContent()
+  const bar = row.addStack()
+  bar.backgroundColor = color
+  bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
+  bar.addSpacer()
 }
 
-function addMarkerElementRow(col, elementType, color) {
+// One of the two negative-space gutter columns. Places the dot or
+// the bar continuation at MARKER_ROW_INSET from the row's aligned
+// edge — matching the same fixed distance the marker sits from
+// that edge inside the card. drawEventRow sets outerRow's
+// topAlignContent()/bottomAlignContent() so both this column and
+// cardContainer align to the same edge, which is what makes the
+// dot land at the exact y as the embedded bar. Fully absolute:
+// spacers here are constants, no flex.
+function addGutterMarkerColumn(col, markerAtTop, elementType, color) {
+  if (markerAtTop) {
+    col.addSpacer(MARKER_ROW_INSET)
+    addGutterMarkerElement(col, elementType, color)
+  } else {
+    addGutterMarkerElement(col, elementType, color)
+    col.addSpacer(MARKER_ROW_INSET)
+  }
+}
+
+function addGutterMarkerElement(col, elementType, color) {
   const row = col.addStack()
   row.size = new Size(0, NOW_LINE_DOT_DIAMETER)
   row.centerAlignContent()
   if (elementType === "dot") {
+    // Dot pinned to the leading edge of the gutter (widget-left side),
+    // then a thin bar segment fills the remaining gutter width right
+    // up to the card. Two things at once:
+    //  - the dot still sits 4pt away from the card's own left edge
+    //    (dot 8pt + trailing bar 4pt = 12pt = LEFT_GUTTER_WIDTH), so
+    //    it isn't squashed against the card — that's what issue #67
+    //    was about;
+    //  - and the dot no longer looks disconnected from the horizontal
+    //    line inside the card, because the bar segment bridges the
+    //    gap. The dot reads as a bulb with a thin tail leading into
+    //    the card's marker line, not a dot marooned in whitespace
+    //    (#77's complaint after the border fix).
     const dot = row.addStack()
     dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
     dot.backgroundColor = color
     dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
-  } else if (elementType === "bar") {
+    const bridge = row.addStack()
+    bridge.backgroundColor = color
+    bridge.size = new Size(0, NOW_LINE_BAR_HEIGHT)
+    bridge.addSpacer()
+  } else {
     const bar = row.addStack()
     bar.backgroundColor = color
     bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
@@ -650,22 +725,13 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
 
   if (note) {
     container.layoutVertically()
-    // Flexible spacers vertically center the main row + note pair
-    // inside the current card's fixed-height contentBlock. On a
-    // non-current card `container` is the card itself (no fixed
-    // height), and a flex spacer there balloons the card to fill
-    // whatever extra vertical space the widget's layout hands it.
-    if (current) container.addSpacer()
-
     const mainRow = container.addStack()
     if (stacked) mainRow.topAlignContent()
     else mainRow.centerAlignContent()
     mainRow.spacing = TIME_INFO_SPACING
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
-
     container.addSpacer(3)
     addNoteRow(container, note, p, past, current)
-    if (current) container.addSpacer()
   } else {
     if (stacked) container.topAlignContent()
     else container.centerAlignContent()
@@ -695,7 +761,17 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
       addRowDivider(infoBlock, p)
       infoBlock.addSpacer(current ? 6 : 8)
       addSectionRow(infoBlock, "In class", "graduationcap", inClass, selected, p, past, current)
+      // No mainRow.addSpacer() here — the divider inside infoBlock
+      // uses its own addSpacer to stretch full width, which cascades
+      // out and makes cardContainer fill the widget width.
     } else if (onTrack.length) {
+      // Trailing flex spacer stretches the CARDCONTAINER to the
+      // widget's full width, so the card doesn't visibly shrink to
+      // its natural content width (time + label + pill). Safe now
+      // that addSectionRow no longer carries its own trailing flex
+      // spacer — only this ONE flex sits in the horizontal chain,
+      // so the pill inside gets its full natural width (no double-
+      // flex competition that would truncate the label).
       addSectionRow(mainRow, "On track", "car", onTrack, selected, p, past, current)
       mainRow.addSpacer()
     } else if (inClass.length) {
@@ -755,7 +831,13 @@ function addSectionRow(parent, labelText, iconName, groups, selected, p, past, c
     const dim = dimSelected && !selected.includes(g.id)
     addGroupPill(pillsStack, g, dim || past, current)
   }
-  row.addSpacer()
+  // No trailing flex spacer here. When the outer mainRow ALSO had
+  // a flex spacer (for session cards), the two competed and shared
+  // the extra horizontal space equally — which starved the section
+  // row of the pt or two it needed for the pill to be its natural
+  // width, and the pill's label truncated ("Oran…"). The row now
+  // grows only to its natural width (label col + pills), and the
+  // section row is left-aligned in its container by default.
 }
 
 // Label column with a small SF Symbol glyph to the left of the
@@ -795,9 +877,20 @@ function addSectionLabelColumn(row, text, iconName, p, past, current) {
 }
 
 function addRowDivider(col, p) {
+  // Dynamic-stretch pattern: a horizontal-layout stack (Scriptable
+  // stacks are horizontal by default) containing only a flex
+  // spacer expands to fill the parent's remaining horizontal
+  // width. Same trick the now-line bar and pill rows already use
+  // successfully elsewhere in this file. This replaces the old
+  // fixed-DIVIDER_WIDTH computed from a screen-size lookup table
+  // that was always either too short (undershooting on Pro Max)
+  // or too long (overshooting on smaller phones) — the root cause
+  // of the "divider doesn't reach the right edge" complaints in
+  // #71 and #77.
   const line = col.addStack()
   line.backgroundColor = p.divider
-  line.size = new Size(DIVIDER_WIDTH, 1)
+  line.size = new Size(0, 1)
+  line.addSpacer()
 }
 
 // Small muted note / subtitle line beneath the main content row.
@@ -831,6 +924,13 @@ function addGroupPill(row, g, dim, current) {
   // already carries the "dimmed" signal, and fading the text on
   // top makes the label unreadable. Matches the web app.
   label.textColor = new Color("#ffffff")
+  // Force single-line so the pill hugs the full text width. Without
+  // this, Scriptable treats the text as multi-line-wrappable and its
+  // ideal width collapses to one character, which lets the row's
+  // trailing flex spacer eat the space — the pill then either
+  // truncates ("Oran…") or, when there is vertical room, wraps to a
+  // second line. Neither is what we want.
+  label.lineLimit = 1
 }
 
 function drawNowCaption(w, p, now, nextEvent) {
