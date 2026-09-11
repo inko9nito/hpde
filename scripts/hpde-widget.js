@@ -130,18 +130,13 @@ function parseGroupFilter() {
 // ---------- palette ----------
 
 function palette(dark) {
-  // `label` is a stronger-contrast muted color used for section labels
-  // like "On track" / "In class" so they read clearly, without going
-  // all the way to the full fg tone.
   return dark
     ? { bg: new Color("#0b0b0f"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
-        label: new Color("#c4c4c8"),
         cardBg: new Color("#141418"), currentCardBg: new Color("#122135"),
         foodStroke: new Color("#f5f5f7"),
         accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.25),
         pastOpacity: 0.6 }
     : { bg: new Color("#ffffff"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
-        label: new Color("#4b5563"),
         cardBg: new Color("#fafafb"), currentCardBg: new Color("#eef4ff"),
         foodStroke: new Color("#111827"),
         accent: new Color("#3b82f6"), accentGlow: new Color("#3b82f6", 0.22),
@@ -347,7 +342,7 @@ const CURRENT_CARD_INNER_CORNER_RADIUS =
 // "on track" row and an "in class" row need more room because the
 // two rows stack vertically like the web app's SessionCard does.
 const CURRENT_CONTENT_HEIGHT = 24
-const CURRENT_CONTENT_HEIGHT_STACKED = 40
+const CURRENT_CONTENT_HEIGHT_STACKED = 46
 
 // The vertical size the current card's content row needs for `ev` —
 // stacked when the session carries both on-track and in-class pills,
@@ -378,10 +373,11 @@ const CURRENT_CAPTION_OUTER_PAD = 4
 // digits inside them (and the now-caption above/below them) line up
 // at the same x on every row.
 const CARD_INNER_PAD_H = 12
-// Fixed width for the "On track" / "In class" section labels, so the
-// pills that follow them line up at the same x on both rows even
-// though the labels themselves have different natural widths.
-const LABEL_COLUMN_WIDTH = 48
+// Fixed width for the "On track" / "In class" section labels — sized
+// to hold "On track" fully at the current card's larger label font
+// with a little trailing space, so pills always line up at the same
+// x on both rows.
+const LABEL_COLUMN_WIDTH = 76
 
 function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // Caption (current time + countdown) sits ABOVE the card when we're in
@@ -614,19 +610,28 @@ function buildEventContent(row, ev, groupById, selected, p, past, current) {
     if (onTrack.length) {
       const onRow = infoCol.addStack()
       onRow.centerAlignContent()
-      onRow.spacing = 6
-      addMutedLabelColumn(onRow, "On track", p, past)
+      // Row spacing here is the gap between the label column and the
+      // pills stack. Pills themselves sit inside pillsStack below with
+      // a tighter spacing so multiple pills don't drift too far apart.
+      onRow.spacing = 10
+      addSectionLabelColumn(onRow, "On track", p, past, current)
+      const pillsStack = onRow.addStack()
+      pillsStack.centerAlignContent()
+      pillsStack.spacing = 6
       for (const g of onTrack) {
         const dim = selected.length > 0 && !selected.includes(g.id)
-        addGroupPill(onRow, g, dim || past)
+        addGroupPill(pillsStack, g, dim || past)
       }
     }
     if (inClass.length) {
       const inRow = infoCol.addStack()
       inRow.centerAlignContent()
-      inRow.spacing = 6
-      addMutedLabelColumn(inRow, "In class", p, past)
-      for (const g of inClass) addGroupPill(inRow, g, past)
+      inRow.spacing = 10
+      addSectionLabelColumn(inRow, "In class", p, past, current)
+      const pillsStack = inRow.addStack()
+      pillsStack.centerAlignContent()
+      pillsStack.spacing = 6
+      for (const g of inClass) addGroupPill(pillsStack, g, past)
     }
   } else {
     if (isFood) {
@@ -657,16 +662,18 @@ function drawSessionHeader(w, p, n) {
   w.addSpacer(2)
 }
 
-// Fixed-width column holding a muted section label ("On track" /
-// "In class"). The fixed width equalises the different natural widths
-// of the labels themselves, so the pills that follow start at the
-// same x on both rows.
-function addMutedLabelColumn(row, text, p, past) {
+// Fixed-width column holding a section label ("On track" / "In class").
+// The fixed width equalises the labels' different natural widths so the
+// pills that follow line up at the same x on both rows. Font size and
+// color match the plain event label (e.g. "Paddock hangout") on the
+// same card, so all card text reads at a single visual weight.
+function addSectionLabelColumn(row, text, p, past, current) {
   const col = row.addStack()
   col.size = new Size(LABEL_COLUMN_WIDTH, 0)
   const l = col.addText(text)
-  l.font = Font.systemFont(10)
-  l.textColor = p.label
+  l.font = Font.systemFont(current ? 14 : 12)
+  l.textColor = p.fg
+  l.lineLimit = 1
   if (past) l.textOpacity = p.pastOpacity
   // Trailing spacer pushes the label flush against the column's left
   // edge, same trick as the time column.
