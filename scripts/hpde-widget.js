@@ -368,15 +368,38 @@ function makeWidget({ manifest, stale }) {
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
-  // Flex spacer at the very end forces the widget's content stack
-  // to top-align. Without it, Scriptable's ListWidget centers
-  // whatever content it has vertically when it's shorter than the
-  // widget's box, which showed up as awkward empty gutters above
-  // the header and below the bottom card.
+  // Count events that came after the last rendered row — either
+  // dropped by the row-fit budget or capped by maxRowsCap. Past
+  // events skipped at the top (before `start`) are already over,
+  // not "more" of anything, so we don't count them here.
+  const lastRenderedIdx = rows.length > 0 ? start + rows.length - 1 : start - 1
+  const remaining = visible.length - 1 - lastRenderedIdx
+
+  // Flex spacer forces the widget's content stack to top-align.
+  // Without it, Scriptable's ListWidget centers whatever content
+  // it has vertically when it's shorter than the widget's box,
+  // which showed up as awkward empty gutters above the header and
+  // below the bottom card. When more events fell off the bottom,
+  // drop a muted "X more events" line into that empty area so it
+  // doesn't read as if the last rendered event were the last one.
   w.addSpacer()
+  if (remaining > 0) {
+    drawMoreEventsFooter(w, p, remaining)
+    w.addSpacer()
+  }
 
   w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
   return w
+}
+
+function drawMoreEventsFooter(w, p, count) {
+  const row = w.addStack()
+  row.centerAlignContent()
+  row.addSpacer()
+  const text = row.addText(`${count} more event${count === 1 ? "" : "s"}`)
+  text.font = rFont(11)
+  text.textColor = p.muted
+  row.addSpacer()
 }
 
 function renderHeader(w, event, day, p, stale) {
