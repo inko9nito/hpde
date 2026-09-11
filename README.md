@@ -62,8 +62,8 @@ Format: `id | Display name | Tailwind background class | Tailwind text class | o
 
 Background classes come from the run-group palette in
 `src/theme/runGroupColors.ts` (`bg-run<color>-500` — red, orange, yellow,
-green, blue, pink, purple, skyblue, indigo, brown, gray, tan). See that
-file's comment for how to add another color.
+green, blue, pink, purple, brown, gray, tan). See that file's comment for
+how to add another color.
 
 If any group has a descriptor, a small legend renders at the bottom of the schedule mapping color → descriptor (e.g. Blue · Novice). Keep the display name short — just the color usually — so filter chips and session badges stay clean.
 
