@@ -761,14 +761,22 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
       addRowDivider(infoBlock, p)
       infoBlock.addSpacer(current ? 6 : 8)
       addSectionRow(infoBlock, "In class", "graduationcap", inClass, selected, p, past, current)
+      // No mainRow.addSpacer() here — the divider inside infoBlock
+      // uses its own addSpacer to stretch full width, which cascades
+      // out and makes cardContainer fill the widget width.
     } else if (onTrack.length) {
-      // No trailing mainRow.addSpacer() — addSectionRow now sizes
-      // to natural width and left-aligns in mainRow on its own. See
-      // the note in addSectionRow for why the double flex spacer
-      // was truncating the pill label.
+      // Trailing flex spacer stretches the CARDCONTAINER to the
+      // widget's full width, so the card doesn't visibly shrink to
+      // its natural content width (time + label + pill). Safe now
+      // that addSectionRow no longer carries its own trailing flex
+      // spacer — only this ONE flex sits in the horizontal chain,
+      // so the pill inside gets its full natural width (no double-
+      // flex competition that would truncate the label).
       addSectionRow(mainRow, "On track", "car", onTrack, selected, p, past, current)
+      mainRow.addSpacer()
     } else if (inClass.length) {
       addSectionRow(mainRow, "In class", "graduationcap", inClass, selected, p, past, current)
+      mainRow.addSpacer()
     }
   } else {
     const isFood = ev.type === "lunch" || ev.type === "special"
