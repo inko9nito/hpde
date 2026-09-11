@@ -41,7 +41,7 @@ a small "offline" tag in the header.
   orange ≤10 min, otherwise gray) — matches the web app's `TimeIndicator`
 - Session rows show colored dots for each run group on track, plus "in <color>"
   when there's a classroom group
-- Lunch / special rows use bold text with 🍔 / ⭐
+- Lunch / special rows use bold text with an SF Symbol icon (fork.knife / star.fill)
 
 If no event is scheduled for today, the widget renders a small "No event
 today." card. (Future work could show a preview of the next upcoming event
