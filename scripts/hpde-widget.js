@@ -146,11 +146,21 @@ function palette(dark) {
   return dark
     ? { bg: new Color("#0e0e11"), fg: new Color("#f5f5f7"), muted: new Color("#8a8a8f"),
         cardBg: new Color("#18181c"), cardBorder: new Color("#2a2a30"),
-        currentCardBg: new Color("#122135"), divider: new Color("#26262c"),
+        currentCardBg: new Color("#122135"),
+        // Subtle border for the current card — just a shade lighter
+        // than the card interior, matching the same contrast ratio
+        // the non-current gray border has against the white card.
+        currentCardBorder: new Color("#1e3050"),
+        divider: new Color("#26262c"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
     : { bg: new Color("#f9fafb"), fg: new Color("#111827"), muted: new Color("#9ca3af"),
         cardBg: new Color("#ffffff"), cardBorder: new Color("#e5e7eb"),
-        currentCardBg: new Color("#eef4ff"), divider: new Color("#e5e7eb"),
+        currentCardBg: new Color("#eef4ff"),
+        // Tailwind blue-200-ish — a slight blue tint over the
+        // card's blue-50 interior, comparable to the gray-200
+        // border on a white card.
+        currentCardBorder: new Color("#bfdbfe"),
+        divider: new Color("#e5e7eb"),
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
 
@@ -238,7 +248,12 @@ function computeDividerWidth() {
     - LEFT_GUTTER_WIDTH - RIGHT_GUTTER_WIDTH
   const cardInner = cardOuter - 2 * CURRENT_CARD_BORDER_WIDTH
   const contentInner = cardInner - 2 * CARD_INNER_PAD_H
-  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - 8)
+  // Info block starts at time column + time-info gap from the
+  // card's content left edge, so the divider — sitting at the
+  // start of the info block — is at most this wide before it'd
+  // overflow the card's right inner edge and stick out past the
+  // border on the right (#71).
+  return Math.max(120, contentInner - TIME_COLUMN_WIDTH - TIME_INFO_SPACING)
 }
 
 // ---------- rendering ----------
@@ -432,30 +447,38 @@ const NOW_LINE_BAR_HEIGHT = 2
 
 // ----- widget-level padding -----
 //
-// Left side: dot sits flush against the card's left border (no
-// horizontal gap between them), so the marker dot reads as
-// connected to the card. WIDGET_SIDE_PAD_LEFT gives the dot itself
-// some breathing room before the widget's left edge.
+// Left side: 4pt breathing room between the dot and the card
+// border, so the marker dot reads as a separate element sitting
+// alongside the card, not squashed against it.
+// WIDGET_SIDE_PAD_LEFT gives the dot itself room before the
+// widget's own left edge.
 //
-// Right side: the widget's own right padding drops to 0, and the
-// right gutter absorbs the visual right margin. That lets the
-// between-cards blue rule extend all the way to the widget's right
-// edge instead of stopping short at the card's right border.
+// Right side: widget's right padding stays at 0 and the right
+// gutter absorbs the visual right margin. That lets the
+// between-cards blue rule extend all the way to the widget's
+// right edge instead of stopping short at the card's right border.
 const WIDGET_SIDE_PAD_LEFT = 8
 const WIDGET_SIDE_PAD_RIGHT = 0
-const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER   // dot only, no gap
+const LEFT_GUTTER_WIDTH = NOW_LINE_DOT_DIAMETER + 4   // dot + 4pt gap
 const RIGHT_GUTTER_WIDTH = 16
 
 const CURRENT_CAPTION_OUTER_PAD = 4
 const CARD_INNER_PAD_H = 12
 
+// Horizontal gap between the time column and the info block —
+// bigger than the default 8pt so the time isn't crammed up
+// against the "On track" text.
+const TIME_INFO_SPACING = 14
+
 // Unified column widths so every row's time and section labels line
 // up at the same x whether the row is the current card or a plain
 // event row.
 const TIME_COLUMN_WIDTH = 60
-// Widened to hold the SF Symbol (14pt) + 8pt gap + "On track" or
-// "In class" at the current-card font size, without truncating.
-const LABEL_COLUMN_WIDTH = 88
+// Wide enough for "On track" plus a few characters of breathing
+// room at the current 12pt rounded font size, so the labels never
+// truncate: SF Symbol icon (14pt) + 8pt gap + label text
+// ("On track" ~55pt) + 20-ish pt of margin ≈ 100pt.
+const LABEL_COLUMN_WIDTH = 100
 
 // Session divider width: computed at runtime from the actual widget
 // width so the divider extends flush to the card's right inner edge
@@ -505,7 +528,11 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
 function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     ev, groupById, selected, p, past, current, lineAbove, lineBelow) {
   cardContainer.layoutVertically()
-  cardContainer.backgroundColor = p.accent
+  // Subtle border color instead of full accent — matches the
+  // web app's soft edge on the current card. The now-marker
+  // bar/dot are still accent-color, they just no longer wrap
+  // the entire card in loud blue.
+  cardContainer.backgroundColor = p.currentCardBorder
   cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
   cardContainer.setPadding(
     CURRENT_CARD_BORDER_WIDTH, CURRENT_CARD_BORDER_WIDTH,
@@ -615,7 +642,7 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
     const mainRow = container.addStack()
     if (stacked) mainRow.topAlignContent()
     else mainRow.centerAlignContent()
-    mainRow.spacing = 8
+    mainRow.spacing = TIME_INFO_SPACING
     buildMainContent(mainRow, ev, groupById, selected, p, past, current)
 
     container.addSpacer(3)
@@ -624,7 +651,7 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
   } else {
     if (stacked) container.topAlignContent()
     else container.centerAlignContent()
-    container.spacing = 8
+    container.spacing = TIME_INFO_SPACING
     buildMainContent(container, ev, groupById, selected, p, past, current)
   }
 }
@@ -661,13 +688,13 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
     const isFood = ev.type === "lunch" || ev.type === "special"
     if (isFood) {
       const icon = mainRow.addText(ev.type === "lunch" ? "🍔" : "⭐")
-      icon.font = rFont(current ? 16 : 13)
+      icon.font = rFont(13)
       mainRow.addSpacer(6)
     }
     const label = mainRow.addText(ev.label)
-    label.font = isFood
-      ? rBoldFont(current ? 15 : 12)
-      : rMediumFont(current ? 15 : 12)
+    // Same font on current and non-current — the border and
+    // background do the emphasising, not the type.
+    label.font = isFood ? rBoldFont(12) : rMediumFont(12)
     label.textColor = p.fg
     label.lineLimit = 1
     if (past) label.textOpacity = p.pastOpacity
@@ -678,18 +705,17 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
 function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   const timeCol = row.addStack()
   timeCol.size = new Size(TIME_COLUMN_WIDTH, 0)
-  // For stacked-session cards (both on-track and in-class rows),
-  // pin the time to the top of the card so it visually aligns with
-  // the "On track" text line, rather than floating at the center
-  // between the two rows.
+  // Stacked-session cards top-align the time with the "On track"
+  // row so the eye doesn't have to hunt for the time in the
+  // vertical middle of a two-row card.
   if (topAlign) timeCol.topAlignContent()
   else timeCol.centerAlignContent()
 
   const time = timeCol.addText(formatTime12(hhmm))
-  // Same 14pt on the current card as on the non-current cards — the
-  // accent border and light-blue background do enough to mark the
-  // current row without also inflating the time text.
-  time.font = current ? rBoldFont(14) : rMediumFont(14)
+  // Same font on current and non-current — the current card's
+  // border + tinted background already carry the "this is now"
+  // signal, so we don't inflate the time on top.
+  time.font = rMediumFont(14)
   time.textColor = p.fg
   time.lineLimit = 1
   if (past) time.textOpacity = p.pastOpacity
@@ -737,10 +763,13 @@ function addSectionLabelColumn(row, text, iconName, p, past, current) {
   }
 
   const l = col.addText(text)
-  l.font = rFont(current ? 13 : 12)
-  // Same p.fg as every other text element on the card so the label
-  // doesn't fade into the background — matches the web app's dark
-  // gray section labels, not the earlier gray-400 muted variant.
+  // Same font on every card — current and non-current alike —
+  // so labels don't visually bump up in size when a row goes
+  // from "next" to "current".
+  l.font = rFont(12)
+  // Same p.fg as every other text element on the card so the
+  // label doesn't fade into the background — matches the web
+  // app's dark section labels.
   l.textColor = p.fg
   l.lineLimit = 1
   if (past) l.textOpacity = p.pastOpacity
@@ -758,9 +787,11 @@ function addRowDivider(col, p) {
 // above it — reads as belonging to the event, not the widget.
 function addNoteRow(container, note, p, past, current) {
   const row = container.addStack()
-  row.addSpacer(TIME_COLUMN_WIDTH + 8)
+  row.addSpacer(TIME_COLUMN_WIDTH + TIME_INFO_SPACING)
   const text = row.addText(note)
-  text.font = rFont(current ? 12 : 11)
+  // Same font on current and non-current so subtitles read at
+  // one consistent visual weight everywhere.
+  text.font = rFont(11)
   text.textColor = p.muted
   text.lineLimit = 1
   if (past) text.textOpacity = p.pastOpacity
@@ -772,14 +803,11 @@ function addGroupPill(row, g, dim, current) {
   const pill = row.addStack()
   pill.backgroundColor = new Color(g.color, alpha)
   pill.cornerRadius = 100
-  if (current) {
-    pill.setPadding(3, 12, 3, 12)
-  } else {
-    pill.setPadding(2, 8, 2, 8)
-  }
+  // Same padding and text sizing on every card, current or not.
+  pill.setPadding(2, 8, 2, 8)
   pill.centerAlignContent()
   const label = pill.addText(g.label)
-  label.font = current ? rBoldFont(13) : rMediumFont(10)
+  label.font = rMediumFont(10)
   // Pill text stays fully opaque even when the pill is dimmed
   // (past event / not-in-selected-groups) — the background alpha
   // already carries the "dimmed" signal, and fading the text on
@@ -819,17 +847,22 @@ function drawNowRule(w, p) {
   outer.spacing = 0
   outer.centerAlignContent()
 
-  // Dot occupies the left gutter (same as the current-event card's
-  // marker dot), so the between-cards rule reads as the same
-  // marker style as the in-card marker.
-  const dot = outer.addStack()
+  // Dot column matches the card-row left gutter exactly — 8pt
+  // for the dot itself, then 4pt of transparent padding — so the
+  // bar starts at the same x as the card's left border below, not
+  // 4pt to its left.
+  const dotCol = outer.addStack()
+  dotCol.size = new Size(LEFT_GUTTER_WIDTH, NOW_LINE_DOT_DIAMETER)
+  dotCol.centerAlignContent()
+  const dot = dotCol.addStack()
   dot.size = new Size(NOW_LINE_DOT_DIAMETER, NOW_LINE_DOT_DIAMETER)
   dot.backgroundColor = p.accent
   dot.cornerRadius = NOW_LINE_DOT_DIAMETER / 2
+  dotCol.addSpacer()   // fills the 4pt gap after the dot
 
-  // No trailing spacer — bar extends across the right gutter and
-  // into the widget's zero-width right padding, all the way to the
-  // widget's right edge.
+  // No trailing spacer on outer — bar extends across the right
+  // gutter and into the widget's zero-width right padding, all
+  // the way to the widget's right edge.
   const bar = outer.addStack()
   bar.backgroundColor = p.accent
   bar.size = new Size(0, NOW_LINE_BAR_HEIGHT)
