@@ -29,7 +29,7 @@ export function SessionCard({ event, runGroups, past }: Props) {
         <div className="flex flex-1 flex-col gap-3">
           {onTrack.length > 0 && (
             <div className="flex items-center gap-3">
-              <span className="w-16 shrink-0 text-xs text-gray-400">On track</span>
+              <span className="w-16 shrink-0 text-xs text-gray-900">On track</span>
               <div className="flex flex-wrap gap-1.5">
                 {onTrack.map(g => <GroupBadge key={g.id} group={g} />)}
               </div>
@@ -39,7 +39,7 @@ export function SessionCard({ event, runGroups, past }: Props) {
             <>
               {onTrack.length > 0 && <div className="border-t border-gray-100" />}
               <div className="flex items-center gap-3">
-                <span className="w-16 shrink-0 text-xs text-gray-400">In class</span>
+                <span className="w-16 shrink-0 text-xs text-gray-900">In class</span>
                 <div className="flex flex-wrap gap-1.5">
                   {inClass.map(g => <GroupBadge key={g.id} group={g} />)}
                 </div>
