@@ -38,7 +38,10 @@ function defaultDay(event: EventConfig): DaySchedule {
 function useHashRoute() {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
-    const onHashChange = () => setHash(window.location.hash)
+    const onHashChange = () => {
+      setHash(window.location.hash)
+      window.scrollTo(0, 0)
+    }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
