@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Copy } from 'lucide-react'
 import widgetScript from '../../scripts/hpde-widget.js?raw'
 
 export function WidgetScriptPage() {
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
   async function handleCopy() {
     await navigator.clipboard.writeText(widgetScript)
