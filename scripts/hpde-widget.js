@@ -264,12 +264,15 @@ function makeWidget({ manifest, stale }) {
   const groupById = Object.fromEntries(event.runGroups.map(g => [g.id, g]))
   const selected = parseGroupFilter()
 
-  const visible = day.events.filter(e => {
+  const visible = day.events.map(e => {
+    if (e.type !== "session" || selected.length === 0) return e
+    const onTrack = (e.onTrack || []).filter(id => selected.includes(id))
+    const inClass = (e.inClass || []).filter(id => selected.includes(id))
+    return { ...e, onTrack, inClass }
+  }).filter(e => {
     if (e.type !== "session") return true
     if (selected.length === 0) return true
-    const on = (e.onTrack || []).some(id => selected.includes(id))
-    const inC = (e.inClass || []).some(id => selected.includes(id))
-    return on || inC
+    return (e.onTrack.length > 0) || (e.inClass.length > 0)
   }).filter(e => e.type !== "break")
 
   renderHeader(w, event, day, p, stale)
