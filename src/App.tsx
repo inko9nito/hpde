@@ -6,6 +6,7 @@ import { EventPicker } from './components/EventPicker'
 import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
+import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { EVENTS } from './data'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
@@ -34,7 +35,18 @@ function defaultDay(event: EventConfig): DaySchedule {
   return findTodayDay(event) ?? event.days[0]
 }
 
+function useHashRoute() {
+  const [hash, setHash] = useState(() => window.location.hash)
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+  return hash
+}
+
 export default function App() {
+  const hash = useHashRoute()
   const [view, setView] = useState<View>('schedule')
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
@@ -62,6 +74,10 @@ export default function App() {
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
+  }
+
+  if (hash === '#/widget-script') {
+    return <WidgetScriptPage />
   }
 
   return (
@@ -173,6 +189,10 @@ export default function App() {
 
       </div>
       <div className="pb-6 text-center font-mono text-[10px] text-gray-300">
+        <a href="#/widget-script" className="hover:text-gray-400">
+          widget script
+        </a>
+        {' · '}
         build {__BUILD_SHA__}
       </div>
     </div>
