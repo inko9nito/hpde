@@ -38,8 +38,8 @@ describe('hidePast toggle', () => {
 
   it('hides events before current time when hidePast is true', () => {
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
-    expect(screen.queryByText('Drivers meeting')).not.toBeInTheDocument()
-    expect(screen.getByText('Lunch')).toBeInTheDocument()
+    expect(screen.getByText('Drivers meeting').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
+    expect(screen.getByText('Lunch').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'false')
   })
 
   it('shows all events when hidePast is true but isToday is false', () => {
@@ -50,8 +50,8 @@ describe('hidePast toggle', () => {
   it('shows a zero state when hidePast hides every event', () => {
     vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60) // 11:00 PM, after every event
     render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
-    expect(screen.queryByText('Lunch')).not.toBeInTheDocument()
-    expect(screen.getByText(/wrap/i)).toBeInTheDocument()
+    expect(screen.getByText('Lunch').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
+    expect(screen.getByText(/wrap/i).closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'false')
   })
 
   it('does not show the zero state when there are no events at all', () => {
@@ -144,7 +144,7 @@ describe('break events', () => {
     ]
     render(<Timeline events={withBreak} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     // 08:00 is past (now=10:00), so the break is orphaned and should be hidden
-    expect(screen.queryByText('Instructor break')).not.toBeInTheDocument()
+    expect(screen.getByText('Instructor break').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
   })
 })
 

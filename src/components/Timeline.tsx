@@ -13,6 +13,23 @@ interface Props {
   hidePast: boolean
 }
 
+// Animates an item sliding away instead of vanishing instantly. Stays
+// mounted while collapsed so the transition has something to animate —
+// the grid-template-rows 1fr/0fr trick collapses height without knowing
+// the content's natural height up front.
+function Collapse({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      data-collapsed={collapsed}
+      aria-hidden={collapsed}
+      className="grid transition-[grid-template-rows,opacity,margin-bottom] duration-300 ease-in-out"
+      style={{ gridTemplateRows: collapsed ? '0fr' : '1fr', opacity: collapsed ? 0 : 1, marginBottom: collapsed ? 0 : '0.5rem' }}
+    >
+      <div className="overflow-hidden">{children}</div>
+    </div>
+  )
+}
+
 export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast }: Props) {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
@@ -43,20 +60,20 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
     return [{ ...event, onTrack, inClass }]
   })
 
-  const withoutPast = hidePast && isToday
-    ? visible.filter(e => e.type === 'break' || parseMinutes(e.time) >= now)
-    : visible
-  const filtered = withoutPast.filter((e, idx) => {
-    if (e.type !== 'break') return true
-    return withoutPast.slice(0, idx).some(prev => prev.type !== 'break')
+  // Timed events collapse once they're in the past and hidePast is on.
+  // A break only collapses once every event before it has collapsed too
+  // (or there simply isn't one) — otherwise it'd be left dangling above
+  // whatever's now the first visible card.
+  const collapsed = visible.map(e => e.type !== 'break' && hidePast && isToday && parseMinutes(e.time) < now)
+  visible.forEach((e, idx) => {
+    if (e.type !== 'break') return
+    const hasVisiblePrior = visible.slice(0, idx).some((prev, i) => prev.type !== 'break' && !collapsed[i])
+    collapsed[idx] = !hasVisiblePrior
   })
 
-  // findCurrentEvent is used only to keep the "current" card at full opacity
-  // while `now` sits inside its inferred duration. The time marker itself
-  // always sits between the last past and first future card.
   const timedIndices: number[] = []
   const timedTimes: string[] = []
-  filtered.forEach((e, i) => {
+  visible.forEach((e, i) => {
     if (e.type !== 'break') {
       timedIndices.push(i)
       timedTimes.push((e as { time: string }).time)
@@ -68,26 +85,25 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
   const currentIdx = currentTimedIdx === -1 ? -1 : timedIndices[currentTimedIdx]
 
   const indicatorIndex = isToday
-    ? filtered.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
+    ? visible.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
     : -1
-  const indicatorAtEnd = isToday && indicatorIndex === -1 && filtered.length > 0
+  const indicatorAtEnd = isToday && indicatorIndex === -1 && visible.length > 0
 
-  const allPastHidden = hidePast && isToday && visible.length > 0 && filtered.length === 0
+  const allCollapsed = visible.length > 0 && collapsed.every(Boolean)
 
   let lastSessionNumber: number | undefined = undefined
 
-  if (allPastHidden) {
-    return (
-      <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
-        <p className="text-sm font-medium text-gray-500">That's a wrap for today</p>
-        <p className="text-xs text-gray-400">Every event on today's schedule has already happened.</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex flex-col gap-2 pb-10">
-      {filtered.map((event, idx) => {
+    <div className="flex flex-col pb-10">
+      {visible.length > 0 && (
+        <Collapse collapsed={!allCollapsed}>
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
+            <p className="text-sm font-medium text-gray-500">That's a wrap for today</p>
+            <p className="text-xs text-gray-400">Every event on today's schedule has already happened.</p>
+          </div>
+        </Collapse>
+      )}
+      {visible.map((event, idx) => {
         const isCurrentEvent = idx === currentIdx
         const past = isToday
           && event.type !== 'break'
@@ -95,7 +111,7 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
           && parseMinutes(event.time) < now
 
         let sessionHeader: React.ReactNode = null
-        if (event.type === 'session' && event.sessionNumber !== undefined && event.sessionNumber !== lastSessionNumber) {
+        if (!collapsed[idx] && event.type === 'session' && event.sessionNumber !== undefined && event.sessionNumber !== lastSessionNumber) {
           lastSessionNumber = event.sessionNumber
           sessionHeader = (
             <div className="mt-5 mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
@@ -117,14 +133,14 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
             : <EventCard event={event} past={past} />
 
         return (
-          <div key={idx}>
-            {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={filtered} />}
+          <Collapse key={idx} collapsed={collapsed[idx]}>
+            {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={visible} />}
             {sessionHeader}
             {card}
-          </div>
+          </Collapse>
         )
       })}
-      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} events={filtered} />}
+      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} events={visible} />}
     </div>
   )
 }
