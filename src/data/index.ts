@@ -5,4 +5,6 @@ import msrc31 from './events/2025-11-07_msrc-3-1'
 import ecr27 from './events/2026-05-30_ecr-2-7'
 import type { EventConfig } from '../types'
 
-export const EVENTS: EventConfig[] = [msrc17Sep, msrScca, msrc17, ecr27, msrc31]
+export const EVENTS: EventConfig[] = [msrc17Sep, msrScca, msrc17, ecr27, msrc31].sort((a, b) =>
+  b.id.localeCompare(a.id)
+)
