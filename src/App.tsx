@@ -64,6 +64,9 @@ export default function App() {
   const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
 
+  const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
+  const isPastEvent = lastEventDate < todayLocalISO()
+
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!isToday) return
@@ -113,6 +116,12 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {isPastEvent && (
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-center text-sm text-gray-600">
+            This event has passed.
+          </div>
+        )}
 
         {view === 'schedule' && (
           <>
