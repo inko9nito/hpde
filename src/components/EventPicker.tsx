@@ -1,11 +1,26 @@
 import { useState } from 'react'
 import { ChevronDown, Check, ExternalLink } from 'lucide-react'
+import { todayLocalISO } from '../utils/time'
 import type { EventConfig } from '../types'
 
 interface Props {
   events: EventConfig[]
   active: EventConfig
   onChange: (event: EventConfig) => void
+}
+
+function isEventLive(event: EventConfig): boolean {
+  const today = todayLocalISO()
+  return event.days.some(d => d.date === today)
+}
+
+function LiveBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+      <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+      Live
+    </span>
+  )
 }
 
 export function EventPicker({ events, active, onChange }: Props) {
@@ -19,6 +34,7 @@ export function EventPicker({ events, active, onChange }: Props) {
           className="flex items-center gap-1 text-left group min-w-0"
         >
           <h1 className="text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
+          {isEventLive(active) && <LiveBadge />}
           <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
         </button>
         {active.link && (
@@ -46,7 +62,10 @@ export function EventPicker({ events, active, onChange }: Props) {
                 className="flex w-full items-center justify-between rounded-lg px-4 py-2.5 hover:bg-gray-50 text-left"
               >
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">{e.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-semibold text-gray-900">{e.name}</span>
+                    {isEventLive(e) && <LiveBadge />}
+                  </div>
                   <div className="text-xs text-gray-400">{e.subtitle}</div>
                 </div>
                 {e.id === active.id && <Check size={14} className="text-blue-500 ml-3 shrink-0" />}
