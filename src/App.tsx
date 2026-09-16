@@ -7,8 +7,9 @@ import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
+import { SharePage } from './components/SharePage'
 import { EVENTS } from './data'
-import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
+import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
@@ -81,6 +82,10 @@ export default function App() {
 
   if (hash === '#/widget-script') {
     return <WidgetScriptPage />
+  }
+
+  if (hash === '#/share') {
+    return <SharePage />
   }
 
   return (
@@ -191,12 +196,19 @@ export default function App() {
         )}
 
       </div>
-      <div className="pb-6 text-center font-mono text-[10px] text-gray-300">
-        <a href="#/widget-script" className="hover:text-gray-400">
-          widget script
-        </a>
-        {' · '}
-        build {__BUILD_SHA__}
+      <div className="pb-6 text-center text-xs">
+        <div>
+          <a href="#/widget-script" className="text-gray-600 underline hover:text-gray-800">
+            iOS widget
+          </a>
+          {' · '}
+          <a href="#/share" className="text-gray-600 underline hover:text-gray-800">
+            Share
+          </a>
+        </div>
+        <div className="mt-1 font-mono text-[10px] text-gray-300">
+          build {formatBuildTime(__BUILD_TIME__)}
+        </div>
       </div>
     </div>
     </PullToRefresh>
