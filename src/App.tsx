@@ -8,7 +8,7 @@ import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
-import { EVENTS } from './data'
+import { EVENTS, ALL_EVENTS } from './data'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
 
@@ -72,7 +72,7 @@ export default function App() {
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
 
-  const activeEvent = EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
+  const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
   const activeDay = activeEvent.days.find(d => d.id === activeDayId) ?? defaultDay(activeEvent)
 
   const todayDay = findTodayDay(activeEvent)
@@ -106,7 +106,7 @@ export default function App() {
   useEffect(() => {
     const hashEventId = eventIdFromHash(hash)
     if (hashEventId) {
-      const matched = EVENTS.find(e => e.id === hashEventId)
+      const matched = ALL_EVENTS.find(e => e.id === hashEventId)
       if (matched && matched.id !== activeEventId) switchEvent(matched)
       return
     }

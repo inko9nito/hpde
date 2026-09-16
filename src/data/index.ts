@@ -3,8 +3,14 @@ import msrScca from './events/2026-09-13_msr-scca'
 import msrc17 from './events/2026-06-06_msrc-1-7'
 import msrc31 from './events/2025-11-07_msrc-3-1'
 import ecr27 from './events/2026-05-30_ecr-2-7'
+import testLive from './events/test-live'
 import type { EventConfig } from '../types'
 
+// Shown in the event picker dropdown.
 export const EVENTS: EventConfig[] = [msrc17Sep, msrScca, msrc17, ecr27, msrc31].sort((a, b) =>
   b.id.localeCompare(a.id)
 )
+
+// Every event, including ones hidden from the dropdown — reachable only
+// by their unique URL (e.g. the standing test-live fixture).
+export const ALL_EVENTS: EventConfig[] = [...EVENTS, testLive]
