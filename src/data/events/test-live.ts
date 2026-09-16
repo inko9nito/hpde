@@ -9,7 +9,9 @@ import type { EventConfig } from '../../types'
 const today = todayLocalISO()
 
 const event: EventConfig = {
-  id: `${today}_test`,
+  // A stable id (rather than date-prefixed) so this fixture's URL never
+  // changes — its "date" is always today, whenever that is.
+  id: 'test-live',
   name: 'Test Event',
   subtitle: 'Test data, not a real event',
   runGroups: [
