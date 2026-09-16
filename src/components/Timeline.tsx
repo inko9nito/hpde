@@ -3,7 +3,7 @@ import { SessionCard } from './SessionCard'
 import { EventCard } from './EventCard'
 import { TimeIndicator } from './TimeIndicator'
 import { parseMinutes, nowMinutes, findCurrentEvent } from '../utils/time'
-import type { ScheduleEvent, RunGroupConfig } from '../types'
+import type { ScheduleEvent, RunGroupConfig, SessionLog } from '../types'
 
 interface Props {
   events: ScheduleEvent[]
@@ -11,6 +11,7 @@ interface Props {
   isToday: boolean
   selectedGroups: string[]
   hidePast: boolean
+  sessionLogs?: SessionLog[]
 }
 
 // Animates an item sliding away instead of vanishing instantly. Stays
@@ -30,7 +31,7 @@ function Collapse({ collapsed, children }: { collapsed: boolean; children: React
   )
 }
 
-export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast }: Props) {
+export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast, sessionLogs }: Props) {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
 
@@ -93,6 +94,16 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
 
   let lastSessionNumber: number | undefined = undefined
 
+  // Session logs (notes, instructor eval, tire pressures) attach once per
+  // session number, to its first row in the visible list — independent of
+  // hidePast collapsing, so the log doesn't jump rows as things collapse.
+  const logAttachedAt = new Map<number, number>()
+  visible.forEach((event, idx) => {
+    if (event.type === 'session' && event.sessionNumber !== undefined && !logAttachedAt.has(event.sessionNumber)) {
+      logAttachedAt.set(event.sessionNumber, idx)
+    }
+  })
+
   return (
     <div className="flex flex-col pb-10">
       {visible.length > 0 && (
@@ -129,7 +140,18 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
             </div>
           )
           : event.type === 'session'
-            ? <SessionCard event={event} runGroups={runGroups} past={past} />
+            ? (
+              <SessionCard
+                event={event}
+                runGroups={runGroups}
+                past={past}
+                log={
+                  event.sessionNumber !== undefined && logAttachedAt.get(event.sessionNumber) === idx
+                    ? sessionLogs?.find(l => l.sessionNumber === event.sessionNumber)
+                    : undefined
+                }
+              />
+            )
             : <EventCard event={event} past={past} />
 
         return (

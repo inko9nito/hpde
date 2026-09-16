@@ -109,3 +109,181 @@ red | Red | bg-red-500 | text-white
     expect(days[1].events).toHaveLength(2)
   })
 })
+
+describe('phase-1 logbook sections', () => {
+  const FULL = `
+# Full Event
+subtitle: Sep 13, 2026 · MSR
+
+## groups
+red   | Red   | bg-runred-500   | text-white
+blue  | Blue  | bg-runblue-500  | text-white
+green | Green | bg-rungreen-500 | text-white
+
+## notes
+Great weekend overall.
+Car ran strong all day.
+
+## vitals
+attended: John Harms, Steve
+summary: Warm, clear day. First time on this layout.
+
+## media
+photos | Weekend album | https://photos.example.com/album
+video | Session 3 onboard | https://youtu.be/abc123
+
+## car
+tires: Michelin PS4S 245/40R18
+brakes: Ferodo DS2500 front
+ride height: stock
+alignment: -2.0 front camber
+aids: PSM Sport, TC off, ABS on
+
+## Sunday | 2026-09-13
+
+08:30 session 1 | on: red
+break | corner worker break
+10:25 session 2 | on: red
+
+### weather
+high: 88
+low: 68
+track: 112
+precip: dry
+notes: Windy in the afternoon, dust picked up after lunch.
+
+### session 1
+notes: Really happy with braking today. Picked up more confidence in Turn 3.
+tires cold: fl=32 fr=32 rl=30 rr=30
+tires hot: fl=38 fr=37 rl=34 rr=33
+aids: PSM Sport, TC off
+eval.track: MSRC 1.7cw
+eval.instructor: John Harms
+eval.student: Vera Maxakova
+eval.car: Porsche Panamerica
+eval.skill.flags: 65
+eval.skill.passing: 95
+eval.skill.smoothInputs: 95
+eval.skill.looksAhead: 80
+eval.skill.consistency: 80
+eval.skill.carControl: 95
+eval.skill.pace: 95
+eval.skill.referencePoints: 95
+eval.skill.trackAwareness: 95
+eval.aggressiveness=skill: yes
+eval.aidsOveractivated: 25
+eval.recommend.sameDirection: blue
+eval.recommend.newDirection: green
+eval.recommend.newTrack: green
+eval.notes: Worked on braking successfully, picked up on initial hard braking and then slowly releasing into throttle.
+media: video | Session 1 lap | https://youtu.be/session1
+`.trim()
+
+  it('parses event-wide notes as a joined block', () => {
+    const config = parseScheduleMD('full', FULL)
+    expect(config.notes).toBe('Great weekend overall.\nCar ran strong all day.')
+  })
+
+  it('parses vitals with attended list and freeform summary', () => {
+    const config = parseScheduleMD('full', FULL)
+    expect(config.vitals?.attended).toEqual(['John Harms', 'Steve'])
+    expect(config.vitals?.summary).toBe('Warm, clear day. First time on this layout.')
+  })
+
+  it('parses event-level media links', () => {
+    const config = parseScheduleMD('full', FULL)
+    expect(config.media).toEqual([
+      { kind: 'photos', label: 'Weekend album', url: 'https://photos.example.com/album' },
+      { kind: 'video', label: 'Session 3 onboard', url: 'https://youtu.be/abc123' },
+    ])
+  })
+
+  it('parses the car config snapshot', () => {
+    const config = parseScheduleMD('full', FULL)
+    expect(config.carConfig).toEqual({
+      tires: 'Michelin PS4S 245/40R18',
+      brakes: 'Ferodo DS2500 front',
+      rideHeight: 'stock',
+      alignment: '-2.0 front camber',
+      aids: 'PSM Sport, TC off, ABS on',
+    })
+  })
+
+  it('still parses the schedule rows for a day that also has weather/session sections', () => {
+    const config = parseScheduleMD('full', FULL)
+    const day = config.days[0]
+    expect(day.events.filter(e => e.type === 'session')).toHaveLength(2)
+    expect(day.events.some(e => e.type === 'break')).toBe(true)
+  })
+
+  it('parses per-day weather', () => {
+    const config = parseScheduleMD('full', FULL)
+    expect(config.days[0].weather).toEqual({
+      highF: 88,
+      lowF: 68,
+      trackTempF: 112,
+      precipitation: 'dry',
+      notes: 'Windy in the afternoon, dust picked up after lunch.',
+    })
+  })
+
+  it('parses per-session tire pressures', () => {
+    const config = parseScheduleMD('full', FULL)
+    const log = config.days[0].sessionLogs?.find(s => s.sessionNumber === 1)
+    expect(log?.tirePressures).toEqual({
+      cold: { fl: 32, fr: 32, rl: 30, rr: 30 },
+      hot: { fl: 38, fr: 37, rl: 34, rr: 33 },
+    })
+  })
+
+  it('parses per-session notes and car aids override', () => {
+    const config = parseScheduleMD('full', FULL)
+    const log = config.days[0].sessionLogs?.find(s => s.sessionNumber === 1)
+    expect(log?.notes).toBe('Really happy with braking today. Picked up more confidence in Turn 3.')
+    expect(log?.carAids).toBe('PSM Sport, TC off')
+  })
+
+  it('parses the structured instructor evaluation', () => {
+    const config = parseScheduleMD('full', FULL)
+    const log = config.days[0].sessionLogs?.find(s => s.sessionNumber === 1)
+    expect(log?.instructorEval).toEqual({
+      track: 'MSRC 1.7cw',
+      instructor: 'John Harms',
+      student: 'Vera Maxakova',
+      car: 'Porsche Panamerica',
+      skills: {
+        flags: 65,
+        passing: 95,
+        smoothInputs: 95,
+        looksAhead: 80,
+        consistency: 80,
+        carControl: 95,
+        pace: 95,
+        referencePoints: 95,
+        trackAwareness: 95,
+      },
+      aggressivenessEqualsSkill: true,
+      aidsOveractivatedPct: 25,
+      recommend: { sameDirection: 'blue', newDirection: 'green', newTrack: 'green' },
+      notes: 'Worked on braking successfully, picked up on initial hard braking and then slowly releasing into throttle.',
+    })
+  })
+
+  it('parses per-session media links', () => {
+    const config = parseScheduleMD('full', FULL)
+    const log = config.days[0].sessionLogs?.find(s => s.sessionNumber === 1)
+    expect(log?.media).toEqual([
+      { kind: 'video', label: 'Session 1 lap', url: 'https://youtu.be/session1' },
+    ])
+  })
+
+  it('leaves phase-1 fields undefined for events with none of the new sections', () => {
+    const config = parseScheduleMD('test', SAMPLE)
+    expect(config.notes).toBeUndefined()
+    expect(config.vitals).toBeUndefined()
+    expect(config.media).toBeUndefined()
+    expect(config.carConfig).toBeUndefined()
+    expect(config.days[0].weather).toBeUndefined()
+    expect(config.days[0].sessionLogs).toBeUndefined()
+  })
+})
