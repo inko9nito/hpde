@@ -196,7 +196,7 @@ export default function App() {
         )}
 
       </div>
-      <div className="pb-6 text-center text-xs">
+      <div className="mt-6 pb-8 text-center text-xs">
         <div>
           <a href="#/widget-script" className="text-gray-600 underline hover:text-gray-800">
             iOS widget
@@ -206,7 +206,7 @@ export default function App() {
             Share
           </a>
         </div>
-        <div className="mt-1 font-mono text-[10px] text-gray-300">
+        <div className="mt-2 font-mono text-[10px] text-gray-300">
           build {formatBuildTime(__BUILD_TIME__)}
         </div>
       </div>
