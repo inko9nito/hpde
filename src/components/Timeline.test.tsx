@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { Timeline } from './Timeline'
-import type { ScheduleEvent, RunGroupConfig } from '../types'
+import type { ScheduleEvent, RunGroupConfig, SessionLog } from '../types'
 import * as timeModule from '../utils/time'
 
 vi.mock('../utils/time', async importOriginal => {
@@ -166,5 +166,30 @@ describe('session number headers', () => {
     ]
     render(<Timeline events={repeated} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getAllByText('Session 1')).toHaveLength(1)
+  })
+})
+
+describe('session logs', () => {
+  it('attaches a session log only to the first row for that session number', () => {
+    const repeated: ScheduleEvent[] = [
+      { time: '09:50', type: 'session', sessionNumber: 1, onTrack: ['orange'] },
+      { time: '10:00', type: 'session', sessionNumber: 1, onTrack: ['pink'] },
+    ]
+    const sessionLogs: SessionLog[] = [{ sessionNumber: 1, notes: 'Great session' }]
+    render(<Timeline events={repeated} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} sessionLogs={sessionLogs} />)
+
+    const expandButtons = screen.getAllByLabelText(/show session details/i)
+    expect(expandButtons).toHaveLength(1)
+
+    fireEvent.click(expandButtons[0])
+    expect(screen.getByText('Great session')).toBeInTheDocument()
+  })
+
+  it('does not show an expand affordance when there are no session logs', () => {
+    const withSession: ScheduleEvent[] = [
+      { time: '09:50', type: 'session', sessionNumber: 1, onTrack: ['orange'] },
+    ]
+    render(<Timeline events={withSession} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    expect(screen.queryByLabelText(/show session details/i)).not.toBeInTheDocument()
   })
 })

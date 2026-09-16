@@ -8,6 +8,10 @@ import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
+import { CarPage } from './components/CarPage'
+import { WeatherCard } from './components/WeatherCard'
+import { MediaLinks } from './components/MediaLinks'
+import { CollapsibleCard } from './components/CollapsibleCard'
 import { EVENTS } from './data'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
@@ -88,6 +92,10 @@ export default function App() {
     return <SharePage />
   }
 
+  if (hash === '#/car') {
+    return <CarPage />
+  }
+
   return (
     <PullToRefresh>
     <div className="min-h-screen bg-gray-50">
@@ -164,15 +172,66 @@ export default function App() {
               )}
             </div>
 
+            {activeDay.weather && (
+              <div className="mb-4">
+                <WeatherCard weather={activeDay.weather} />
+              </div>
+            )}
+
             <Timeline
               events={activeDay.events}
               runGroups={activeEvent.runGroups}
               isToday={isToday}
               selectedGroups={selectedGroups}
               hidePast={hidePast}
+              sessionLogs={activeDay.sessionLogs}
             />
 
             <Legend groups={activeEvent.runGroups} />
+
+            {(activeEvent.notes || activeEvent.vitals || activeEvent.carConfig || (activeEvent.media && activeEvent.media.length > 0)) && (
+              <div className="mt-2 flex flex-col gap-2">
+                {activeEvent.notes && (
+                  <CollapsibleCard title="Notes">
+                    <p className="whitespace-pre-line text-sm text-gray-600">{activeEvent.notes}</p>
+                  </CollapsibleCard>
+                )}
+                {activeEvent.vitals && (activeEvent.vitals.summary || (activeEvent.vitals.attended?.length ?? 0) > 0) && (
+                  <CollapsibleCard title="Event vitals">
+                    <div className="flex flex-col gap-2 text-sm text-gray-600">
+                      {activeEvent.vitals.summary && <p>{activeEvent.vitals.summary}</p>}
+                      {activeEvent.vitals.attended && activeEvent.vitals.attended.length > 0 && (
+                        <p><span className="font-medium text-gray-900">Who was there:</span> {activeEvent.vitals.attended.join(', ')}</p>
+                      )}
+                    </div>
+                  </CollapsibleCard>
+                )}
+                {activeEvent.carConfig && (
+                  <CollapsibleCard title="Car setup">
+                    <dl className="flex flex-col gap-1.5 text-sm text-gray-600">
+                      {activeEvent.carConfig.tires && (
+                        <div><dt className="inline font-medium text-gray-900">Tires: </dt><dd className="inline">{activeEvent.carConfig.tires}</dd></div>
+                      )}
+                      {activeEvent.carConfig.brakes && (
+                        <div><dt className="inline font-medium text-gray-900">Brakes: </dt><dd className="inline">{activeEvent.carConfig.brakes}</dd></div>
+                      )}
+                      {activeEvent.carConfig.rideHeight && (
+                        <div><dt className="inline font-medium text-gray-900">Ride height: </dt><dd className="inline">{activeEvent.carConfig.rideHeight}</dd></div>
+                      )}
+                      {activeEvent.carConfig.alignment && (
+                        <div><dt className="inline font-medium text-gray-900">Alignment: </dt><dd className="inline">{activeEvent.carConfig.alignment}</dd></div>
+                      )}
+                      {activeEvent.carConfig.aids && (
+                        <div><dt className="inline font-medium text-gray-900">Car aids: </dt><dd className="inline">{activeEvent.carConfig.aids}</dd></div>
+                      )}
+                    </dl>
+                  </CollapsibleCard>
+                )}
+                {activeEvent.media && activeEvent.media.length > 0 && (
+                  <MediaLinks media={activeEvent.media} />
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -204,6 +263,10 @@ export default function App() {
           {' · '}
           <a href="#/share" className="text-gray-600 underline hover:text-gray-800">
             Share
+          </a>
+          {' · '}
+          <a href="#/car" className="text-gray-600 underline hover:text-gray-800">
+            Car
           </a>
         </div>
         <div className="mt-4 font-mono text-[10px] text-gray-300">
