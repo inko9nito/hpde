@@ -85,3 +85,12 @@ export function formatCountdown(minutes: number): string {
   const m = minutes % 60
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
+
+/** ISO build timestamp -> readable local "Mon D, YYYY, H:MM AM/PM" */
+export function formatBuildTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return `${date}, ${time}`
+}
