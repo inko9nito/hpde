@@ -37,20 +37,35 @@ function defaultDay(event: EventConfig): DaySchedule {
 }
 
 function useHashRoute() {
-  const [hash, setHash] = useState(() => window.location.hash)
+  const [hash, setHashState] = useState(() => window.location.hash)
   useEffect(() => {
     const onHashChange = () => {
-      setHash(window.location.hash)
+      setHashState(window.location.hash)
       window.scrollTo(0, 0)
     }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
-  return hash
+  function setHash(next: string) {
+    if (window.location.hash === next) return
+    window.location.hash = next
+  }
+  return [hash, setHash] as const
+}
+
+const EVENT_HASH_PREFIX = '#/event/'
+
+function eventHash(eventId: string): string {
+  return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
+}
+
+function eventIdFromHash(hash: string): string | null {
+  if (!hash.startsWith(EVENT_HASH_PREFIX)) return null
+  return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
 }
 
 export default function App() {
-  const hash = useHashRoute()
+  const [hash, setHash] = useHashRoute()
   const [view, setView] = useState<View>('schedule')
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
@@ -81,7 +96,24 @@ export default function App() {
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
+    setHash(eventHash(event.id))
   }
+
+  // Keep the URL in sync with the active event: a direct link to
+  // `#/event/<id>` selects that event, and picking an event from the
+  // dropdown (via switchEvent) publishes its URL so the schedule is
+  // shareable and bookmarkable.
+  useEffect(() => {
+    const hashEventId = eventIdFromHash(hash)
+    if (hashEventId) {
+      const matched = EVENTS.find(e => e.id === hashEventId)
+      if (matched && matched.id !== activeEventId) switchEvent(matched)
+      return
+    }
+    if (hash === '' || hash === '#') {
+      setHash(eventHash(activeEventId))
+    }
+  }, [hash])
 
   if (hash === '#/widget-script') {
     return <WidgetScriptPage />
