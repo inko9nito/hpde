@@ -206,7 +206,7 @@ export default function App() {
             Share
           </a>
         </div>
-        <div className="mt-2 font-mono text-[10px] text-gray-300">
+        <div className="mt-4 font-mono text-[10px] text-gray-300">
           build {formatBuildTime(__BUILD_TIME__)}
         </div>
       </div>
