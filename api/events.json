@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T21:54:14.633Z",
+  "generatedAt": "2026-09-17T21:57:02.973Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -559,7 +559,8 @@
     },
     {
       "id": "2026-06-06_msrc-1-7",
-      "name": "MSRC 1.7 Fast Track",
+      "name": "TDE at MSRC 1.7 Fast Track",
+      "link": "https://www.motorsportreg.com/events/drivers-edge-motorsport-ranch-cresson-hpde-509072",
       "runGroups": [
         {
           "id": "instructors",
