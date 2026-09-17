@@ -124,7 +124,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
                   <Row icon={MapPin} label="Location" subtitle={event.city}>{event.track}</Row>
                 )}
                 {trackConfiguration && (
-                  <Row icon={Route} label="Config">{trackConfiguration}</Row>
+                  <Row icon={Route} label="Track config">{trackConfiguration}</Row>
                 )}
                 {event.link && (
                   <Row icon={Link2} label="Event page">
