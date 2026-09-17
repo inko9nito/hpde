@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
 import type { EventConfig, DaySchedule } from '../types'
 
@@ -47,14 +47,10 @@ function Row({ label, children }: RowProps) {
 }
 
 export function EventDetailsDrawer({ event, open, onClose }: Props) {
-  const closeBtnRef = useRef<HTMLButtonElement | null>(null)
-
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    // Move focus to the back button so keyboard users can dismiss immediately.
-    closeBtnRef.current?.focus()
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
@@ -70,20 +66,20 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
       inert={!open}
       className="fixed inset-0 z-50 flex justify-center bg-gray-50"
       style={{
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transform: open ? 'translate3d(0,0,0)' : 'translate3d(100%,0,0)',
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         boxShadow: open ? '-8px 0 24px rgba(0,0,0,0.08)' : 'none',
+        willChange: 'transform',
       }}
     >
       <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto">
         <div className="mb-5 flex items-start gap-2">
           <button
-            ref={closeBtnRef}
             onClick={onClose}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-gray-200 bg-white py-2 pl-1.5 pr-3 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:border-gray-400"
+            aria-label="Back"
+            className="inline-grid h-9 w-9 shrink-0 -ml-1.5 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
           >
-            <ChevronLeft size={18} className="text-gray-500" />
-            <span>Back</span>
+            <ChevronLeft size={20} />
           </button>
           <h2
             id="event-details-title"

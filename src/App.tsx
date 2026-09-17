@@ -126,6 +126,7 @@ export default function App() {
   }
 
   return (
+    <>
     <PullToRefresh>
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
@@ -259,11 +260,12 @@ export default function App() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
     <EventDetailsDrawer
       event={activeEvent}
       open={detailsOpen}
       onClose={() => setDetailsOpen(false)}
     />
-    </PullToRefresh>
+    </>
   )
 }
