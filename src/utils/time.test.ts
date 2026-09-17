@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN, todayLocalISO } from './time'
+import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN, todayLocalISO, formatDateRange, eventSubtitle } from './time'
+import type { DaySchedule } from '../types'
+
+function day(date: string): DaySchedule {
+  return { id: date, label: date, date, events: [] }
+}
 
 describe('parseMinutes', () => {
   it('converts "00:00" to 0', () => expect(parseMinutes('00:00')).toBe(0))
@@ -61,6 +66,41 @@ describe('formatCountdown', () => {
   it('formats 65 minutes as "1h 5m"', () => expect(formatCountdown(65)).toBe('1h 5m'))
   it('formats 90 minutes as "1h 30m"', () => expect(formatCountdown(90)).toBe('1h 30m'))
   it('formats 120 minutes as "2h"', () => expect(formatCountdown(120)).toBe('2h'))
+})
+
+describe('formatDateRange', () => {
+  it('returns "" for no days', () => expect(formatDateRange([])).toBe(''))
+
+  it('formats a single day', () => {
+    expect(formatDateRange([day('2026-06-06')])).toBe('Jun 6, 2026')
+  })
+
+  it('formats a range within the same month as "Mon D–D, YYYY"', () => {
+    expect(formatDateRange([day('2026-09-11'), day('2026-09-12')])).toBe('Sep 11–12, 2026')
+  })
+
+  it('formats a range spanning months in the same year', () => {
+    expect(formatDateRange([day('2025-11-28'), day('2025-12-02')])).toBe('Nov 28 – Dec 2, 2025')
+  })
+
+  it('formats a range spanning years', () => {
+    expect(formatDateRange([day('2025-12-30'), day('2026-01-02')])).toBe('Dec 30, 2025 – Jan 2, 2026')
+  })
+
+  it('sorts unordered days before computing the range', () => {
+    expect(formatDateRange([day('2026-09-12'), day('2026-09-11')])).toBe('Sep 11–12, 2026')
+  })
+})
+
+describe('eventSubtitle', () => {
+  it('uses the computed date range when no subtitle is set', () => {
+    expect(eventSubtitle({ days: [day('2026-06-06')] })).toBe('Jun 6, 2026')
+  })
+
+  it('uses the explicit subtitle when set, ignoring the days', () => {
+    expect(eventSubtitle({ subtitle: 'Test data, not a real event', days: [day('2000-01-01')] }))
+      .toBe('Test data, not a real event')
+  })
 })
 
 describe('todayLocalISO', () => {

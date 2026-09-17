@@ -4,7 +4,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   const lines = src.split('\n').map(l => l.trim())
 
   let name = ''
-  let subtitle = ''
+  let subtitle: string | undefined
   let link: string | undefined
   let organizer: string | undefined
   let track: string | undefined
@@ -25,7 +25,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     }
 
     if (line.startsWith('subtitle:')) {
-      subtitle = line.slice('subtitle:'.length).trim()
+      subtitle = line.slice('subtitle:'.length).trim() || undefined
       continue
     }
 
@@ -110,7 +110,8 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   }
 
   return {
-    id, name, subtitle,
+    id, name,
+    ...(subtitle ? { subtitle } : {}),
     ...(link ? { link } : {}),
     ...(organizer ? { organizer } : {}),
     ...(track ? { track } : {}),

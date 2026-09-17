@@ -39,7 +39,12 @@ export interface DaySchedule {
 export interface EventConfig {
   id: string
   name: string
-  subtitle: string
+  /**
+   * Overrides the computed date-range line shown under the event name.
+   * Only needed for a non-standard event (e.g. a test fixture) — leave
+   * unset to auto-derive it from `days` via `eventSubtitle()`.
+   */
+  subtitle?: string
   link?: string
   mapImage?: string
   organizer?: string

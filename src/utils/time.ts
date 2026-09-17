@@ -1,3 +1,30 @@
+import type { DaySchedule, EventConfig } from '../types'
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Human-readable date range spanning all of an event's days, e.g. "Sep 11–12, 2026" */
+export function formatDateRange(days: DaySchedule[]): string {
+  if (days.length === 0) return ''
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date))
+  const first = sorted[0].date
+  const last = sorted[sorted.length - 1].date
+  const [fy, fm, fd] = first.split('-').map(Number)
+  const [ly, lm, ld] = last.split('-').map(Number)
+  if (first === last) return `${MONTHS[fm - 1]} ${fd}, ${fy}`
+  if (fy === ly && fm === lm) return `${MONTHS[fm - 1]} ${fd}–${ld}, ${fy}`
+  if (fy === ly) return `${MONTHS[fm - 1]} ${fd} – ${MONTHS[lm - 1]} ${ld}, ${fy}`
+  return `${MONTHS[fm - 1]} ${fd}, ${fy} – ${MONTHS[lm - 1]} ${ld}, ${ly}`
+}
+
+/**
+ * The line shown under an event's name: its own `subtitle` when the
+ * schedule file sets one (for a non-standard event), otherwise the
+ * computed date range.
+ */
+export function eventSubtitle(event: Pick<EventConfig, 'subtitle' | 'days'>): string {
+  return event.subtitle ?? formatDateRange(event.days)
+}
+
 /** Convert "HH:MM" (24h) to total minutes since midnight */
 export function parseMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number)

@@ -19,7 +19,7 @@ export interface SerializedDay {
 export interface SerializedEvent {
   id: string
   name: string
-  subtitle: string
+  subtitle?: string
   link?: string
   runGroups: SerializedRunGroup[]
   days: SerializedDay[]
@@ -68,7 +68,7 @@ export function serializeEvents(events: EventConfig[], now: Date = new Date()): 
     events: events.map(e => ({
       id: e.id,
       name: e.name,
-      subtitle: e.subtitle,
+      ...(e.subtitle ? { subtitle: e.subtitle } : {}),
       ...(e.link ? { link: e.link } : {}),
       runGroups: e.runGroups.map(g => ({
         id: g.id,

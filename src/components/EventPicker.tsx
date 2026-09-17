@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, Check, Info } from 'lucide-react'
-import { todayLocalISO } from '../utils/time'
+import { todayLocalISO, eventSubtitle } from '../utils/time'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -38,7 +38,7 @@ export function EventPicker({ events, active, onChange, onOpenDetails }: Props) 
         <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
       </button>
       <div className="flex items-center gap-0.5">
-        <p className="text-sm text-gray-500">{active.subtitle}</p>
+        <p className="text-sm text-gray-500">{eventSubtitle(active)}</p>
         <button
           onClick={onOpenDetails}
           aria-label="Event details"
@@ -63,7 +63,7 @@ export function EventPicker({ events, active, onChange, onOpenDetails }: Props) 
                     <span className="text-sm font-semibold text-gray-900">{e.name}</span>
                     {isEventLive(e) && <LiveBadge />}
                   </div>
-                  <div className="text-xs text-gray-400">{e.subtitle}</div>
+                  <div className="text-xs text-gray-400">{eventSubtitle(e)}</div>
                 </div>
                 {e.id === active.id && <Check size={14} className="text-blue-500 ml-3 shrink-0" />}
               </button>
