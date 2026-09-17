@@ -8,6 +8,7 @@ import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
+import { EventDetailsDrawer } from './components/EventDetailsDrawer'
 import { EVENTS, ALL_EVENTS } from './data'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
@@ -71,6 +72,7 @@ export default function App() {
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
   const activeDay = activeEvent.days.find(d => d.id === activeDayId) ?? defaultDay(activeEvent)
@@ -130,7 +132,12 @@ export default function App() {
 
         {/* Header */}
         <div className="mb-4 flex items-start justify-between gap-3">
-          <EventPicker events={EVENTS} active={activeEvent} onChange={switchEvent} />
+          <EventPicker
+            events={EVENTS}
+            active={activeEvent}
+            onChange={switchEvent}
+            onOpenDetails={() => setDetailsOpen(true)}
+          />
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('schedule')}
@@ -252,6 +259,11 @@ export default function App() {
         </div>
       </div>
     </div>
+    <EventDetailsDrawer
+      event={activeEvent}
+      open={detailsOpen}
+      onClose={() => setDetailsOpen(false)}
+    />
     </PullToRefresh>
   )
 }

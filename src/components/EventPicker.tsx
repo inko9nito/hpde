@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Check, ExternalLink } from 'lucide-react'
+import { ChevronDown, Check, Info } from 'lucide-react'
 import { todayLocalISO } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -7,6 +7,7 @@ interface Props {
   events: EventConfig[]
   active: EventConfig
   onChange: (event: EventConfig) => void
+  onOpenDetails: () => void
 }
 
 function isEventLive(event: EventConfig): boolean {
@@ -23,33 +24,29 @@ function LiveBadge() {
   )
 }
 
-export function EventPicker({ events, active, onChange }: Props) {
+export function EventPicker({ events, active, onChange, onOpenDetails }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
     <div className="relative min-w-0 pl-1">
-      <div className="flex items-center gap-1">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 text-left group min-w-0"
+      >
+        <h1 className="text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
+        {isEventLive(active) && <LiveBadge />}
+        <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
+      </button>
+      <div className="flex items-center gap-0.5">
+        <p className="text-sm text-gray-500">{active.subtitle}</p>
         <button
-          onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1 text-left group min-w-0"
+          onClick={onOpenDetails}
+          aria-label="Event details"
+          className="inline-grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
         >
-          <h1 className="text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
-          {isEventLive(active) && <LiveBadge />}
-          <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
+          <Info size={14} />
         </button>
-        {active.link && (
-          <a
-            href={active.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Event page"
-            className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:text-gray-700"
-          >
-            <ExternalLink size={14} />
-          </a>
-        )}
       </div>
-      <p className="text-sm text-gray-500">{active.subtitle}</p>
 
       {open && (
         <>
