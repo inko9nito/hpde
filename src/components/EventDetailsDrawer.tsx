@@ -81,10 +81,10 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
           <button
             ref={closeBtnRef}
             onClick={onClose}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-gray-200 bg-white py-2 pl-1.5 pr-3 text-sm font-medium text-gray-900 shadow-sm transition-colors hover:border-gray-400"
+            aria-label="Back"
+            className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:border-gray-400 hover:text-gray-900"
           >
-            <ChevronLeft size={18} className="text-gray-500" />
-            <span>Back</span>
+            <ChevronLeft size={18} />
           </button>
           <h2
             id="event-details-title"
