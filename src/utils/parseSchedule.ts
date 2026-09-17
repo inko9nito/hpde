@@ -4,7 +4,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   const lines = src.split('\n').map(l => l.trim())
 
   let name = ''
-  let subtitle = ''
+  let subtitle: string | undefined
   let link: string | undefined
   let organizer: string | undefined
   let track: string | undefined
@@ -15,8 +15,9 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let currentDay: DaySchedule | null = null
   let inGroups = false
 
-  for (const line of lines) {
-    if (!line || line.startsWith('//')) continue
+  for (const rawLine of lines) {
+    if (!rawLine || rawLine.startsWith('//')) continue
+    const line = rawLine.replace(/^-\s+/, '')
 
     if (line.startsWith('# ')) {
       name = line.slice(2).trim()
@@ -24,7 +25,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     }
 
     if (line.startsWith('subtitle:')) {
-      subtitle = line.slice('subtitle:'.length).trim()
+      subtitle = line.slice('subtitle:'.length).trim() || undefined
       continue
     }
 
@@ -109,7 +110,8 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   }
 
   return {
-    id, name, subtitle,
+    id, name,
+    ...(subtitle ? { subtitle } : {}),
     ...(link ? { link } : {}),
     ...(organizer ? { organizer } : {}),
     ...(track ? { track } : {}),
@@ -146,10 +148,10 @@ function parseActivityLine(line: string): ScheduleActivity | null {
     let note: string | undefined
 
     for (const token of rest) {
-      if (token.startsWith('on:')) {
-        onTrack = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
-      } else if (token.startsWith('in:')) {
-        inClass = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
+      if (token.startsWith('track:')) {
+        onTrack = token.slice(6).trim().split(',').map(s => s.trim()).filter(Boolean)
+      } else if (token.startsWith('class:')) {
+        inClass = token.slice(6).trim().split(',').map(s => s.trim()).filter(Boolean)
       } else if (token.startsWith('note:')) {
         note = token.slice(5).trim() || undefined
       }

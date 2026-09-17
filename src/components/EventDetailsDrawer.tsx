@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { ChevronLeft, ExternalLink, X } from 'lucide-react'
-import type { EventConfig, DaySchedule } from '../types'
+import { formatDateRange } from '../utils/time'
+import type { EventConfig } from '../types'
 
 interface Props {
   event: EventConfig
@@ -12,21 +13,6 @@ interface Props {
 // easing curve. Same values in the design mock.
 const PUSH_DURATION_MS = 350
 const PUSH_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
-
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-function formatDateRange(days: DaySchedule[]): string {
-  if (days.length === 0) return ''
-  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date))
-  const first = sorted[0].date
-  const last = sorted[sorted.length - 1].date
-  const [fy, fm, fd] = first.split('-').map(Number)
-  const [ly, lm, ld] = last.split('-').map(Number)
-  if (first === last) return `${MONTHS[fm - 1]} ${fd}, ${fy}`
-  if (fy === ly && fm === lm) return `${MONTHS[fm - 1]} ${fd}–${ld}, ${fy}`
-  if (fy === ly) return `${MONTHS[fm - 1]} ${fd} – ${MONTHS[lm - 1]} ${ld}, ${fy}`
-  return `${MONTHS[fm - 1]} ${fd}, ${fy} – ${MONTHS[lm - 1]} ${ld}, ${ly}`
-}
 
 function linkDisplay(url: string): string {
   try {

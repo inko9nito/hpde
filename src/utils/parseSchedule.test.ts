@@ -3,22 +3,22 @@ import { parseScheduleMD } from './parseSchedule'
 
 const SAMPLE = `
 # Test Event
-subtitle: Jan 1, 2030
+- subtitle: Jan 1, 2030
 
 ## groups
-orange | Orange | bg-orange-500 | text-white
-pink | Pink | bg-pink-500 | text-white
+- orange | Orange | bg-orange-500 | text-white
+- pink | Pink | bg-pink-500 | text-white
 
 ## Saturday | 2030-01-01
 
-08:00 general | Drivers meeting
-08:30 general | Track goes hot
-08:30 session | on: orange | in: pink
-09:00 session 1 | on: orange
-break | Instructor break
-10:00 session 2 | on: pink | in: orange
-12:00 lunch | Lunch break | Bring your own food
-17:00 general | Track goes cold
+- 08:00 general | Drivers meeting
+- 08:30 general | Track goes hot
+- 08:30 session | track: orange | class: pink
+- 09:00 session 1 | track: orange
+- break | Instructor break
+- 10:00 session 2 | track: pink | class: orange
+- 12:00 lunch | Lunch break | Bring your own food
+- 17:00 general | Track goes cold
 `.trim()
 
 describe('parseScheduleMD', () => {
@@ -32,19 +32,19 @@ describe('parseScheduleMD', () => {
   it('parses optional event-details header fields', () => {
     const src = `
 # Full Details
-subtitle: Feb 2, 2030
-link: https://example.com/reg
-organizer: Example Racing Club
-track: Example Motor Speedway
-configuration: 2.5 mile
-direction: Clockwise
+- subtitle: Feb 2, 2030
+- link: https://example.com/reg
+- organizer: Example Racing Club
+- track: Example Motor Speedway
+- configuration: 2.5 mile
+- direction: Clockwise
 
 ## groups
-red | Red | bg-red-500 | text-white
+- red | Red | bg-red-500 | text-white
 
 ## Saturday | 2030-02-02
 
-08:00 general | Gates open
+- 08:00 general | Gates open
 `.trim()
     const c = parseScheduleMD('full', src)
     expect(c.link).toBe('https://example.com/reg')
@@ -57,14 +57,14 @@ red | Red | bg-red-500 | text-white
   it('accepts "config:" as a shorthand for "configuration:"', () => {
     const src = `
 # X
-config: 1.7 mile
+- config: 1.7 mile
 
 ## groups
-red | Red | bg-red-500 | text-white
+- red | Red | bg-red-500 | text-white
 
 ## Saturday | 2030-02-02
 
-08:00 general | Gates open
+- 08:00 general | Gates open
 `.trim()
     expect(parseScheduleMD('x', src).configuration).toBe('1.7 mile')
   })
@@ -131,10 +131,10 @@ red | Red | bg-red-500 | text-white
     const multiSrc = `
 # X
 ## groups
-red | Red | bg-red-500 | text-white
-yellow | Yellow | bg-yellow-400 | text-black
+- red | Red | bg-red-500 | text-white
+- yellow | Yellow | bg-yellow-400 | text-black
 ## Day | 2030-06-01
-10:00 session | on: red, yellow
+- 10:00 session | track: red, yellow
 `.trim()
     const { days } = parseScheduleMD('x', multiSrc)
     const s = days[0].activities[0] as { onTrack: string[] }
@@ -145,16 +145,49 @@ yellow | Yellow | bg-yellow-400 | text-black
     const multiDay = `
 # Y
 ## groups
-red | Red | bg-red-500 | text-white
+- red | Red | bg-red-500 | text-white
 ## Friday | 2030-01-03
-08:00 general | Open
+- 08:00 general | Open
 ## Saturday | 2030-01-04
-08:00 general | Open
-09:00 session | on: red
+- 08:00 general | Open
+- 09:00 session | track: red
 `.trim()
     const { days } = parseScheduleMD('y', multiDay)
     expect(days).toHaveLength(2)
     expect(days[0].activities).toHaveLength(1)
     expect(days[1].activities).toHaveLength(2)
+  })
+
+  it('parses lines with or without the leading "- " bullet marker', () => {
+    const mixed = `
+# Z
+subtitle: Mixed bullets
+## groups
+red | Red | bg-red-500 | text-white
+## Saturday | 2030-03-01
+- 08:00 general | Bulleted
+09:00 general | Not bulleted
+`.trim()
+    const { subtitle, runGroups, days } = parseScheduleMD('z', mixed)
+    expect(subtitle).toBe('Mixed bullets')
+    expect(runGroups).toHaveLength(1)
+    expect(days[0].activities).toHaveLength(2)
+  })
+
+  it('ignores "//" comment lines, even ones that look like real fields', () => {
+    const withComment = `
+# Commented
+// subtitle: this must not be used
+- subtitle: Real subtitle
+## groups
+- red | Red | bg-red-500 | text-white
+## Saturday | 2030-04-01
+// - 08:00 general | this must not appear
+- 08:00 general | Real event
+`.trim()
+    const { subtitle, days } = parseScheduleMD('commented', withComment)
+    expect(subtitle).toBe('Real subtitle')
+    expect(days[0].activities).toHaveLength(1)
+    expect(days[0].activities[0]).toMatchObject({ label: 'Real event' })
   })
 })
