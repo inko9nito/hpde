@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T21:57:02.973Z",
+  "generatedAt": "2026-09-17T21:57:44.259Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -751,7 +751,7 @@
     },
     {
       "id": "2026-05-30_ecr-2-7",
-      "name": "ECR 2.7",
+      "name": "TDE at ECR 2.7",
       "runGroups": [
         {
           "id": "instructors",
