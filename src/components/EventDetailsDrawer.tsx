@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ChevronLeft, ExternalLink } from 'lucide-react'
+import { ChevronLeft, ExternalLink, X } from 'lucide-react'
 import type { EventConfig, DaySchedule } from '../types'
 
 interface Props {
@@ -64,7 +64,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
       aria-modal={open}
       aria-labelledby="event-details-title"
       inert={!open}
-      className="fixed inset-0 z-50 flex justify-center bg-gray-50"
+      className="fixed inset-y-0 right-0 z-50 flex w-full bg-gray-50 md:w-[480px] md:max-w-[60vw]"
       style={{
         transform: open ? 'translate3d(0,0,0)' : 'translate3d(100%,0,0)',
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
@@ -72,12 +72,12 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
         willChange: 'transform',
       }}
     >
-      <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto">
-        <div className="mb-5 flex items-start gap-2">
+      <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto md:mx-0 md:max-w-none">
+        <div className="mb-5 flex items-start gap-2 md:justify-between md:gap-4">
           <button
             onClick={onClose}
             aria-label="Back"
-            className="inline-grid h-9 w-9 shrink-0 -ml-1.5 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            className="inline-grid h-9 w-9 shrink-0 -ml-1.5 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 md:hidden"
           >
             <ChevronLeft size={20} />
           </button>
@@ -87,6 +87,13 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
           >
             Event details
           </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="hidden h-9 w-9 shrink-0 -mr-1.5 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 md:inline-grid"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {hasAny ? (
