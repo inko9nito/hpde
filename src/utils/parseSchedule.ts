@@ -8,6 +8,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let link: string | undefined
   let organizer: string | undefined
   let track: string | undefined
+  let city: string | undefined
   let configuration: string | undefined
   let direction: string | undefined
   const runGroups: RunGroupConfig[] = []
@@ -41,6 +42,11 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (line.startsWith('track:')) {
       track = line.slice('track:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('city:')) {
+      city = line.slice('city:'.length).trim() || undefined
       continue
     }
 
@@ -115,6 +121,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     ...(link ? { link } : {}),
     ...(organizer ? { organizer } : {}),
     ...(track ? { track } : {}),
+    ...(city ? { city } : {}),
     ...(configuration ? { configuration } : {}),
     ...(direction ? { direction } : {}),
     runGroups, days,

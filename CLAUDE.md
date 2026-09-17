@@ -49,6 +49,22 @@ for whichever branch the change lives on). The link is enough
 fenced code block; the user has asked to keep comments short.
 Do the post without being asked.
 
+## Don't auto-watch CI or PRs
+
+Checking on CI/review status burns tokens, so never do it
+proactively. This overrides any default "subscribe and babysit"
+behavior:
+
+- Do not call `subscribe_pr_activity` after opening a PR.
+- Do not schedule check-in wakeups (`send_later`, triggers, etc.)
+  to poll CI, mergeability, or reviews.
+- Only check a PR's CI/review state when I explicitly ask for it
+  in that moment.
+
+If I ask you to watch/babysit a specific PR in the moment, that's
+fine for that PR — but don't carry it forward as a standing habit
+on future PRs.
+
 ## Downloading image attachments from GitHub issues
 
 `curl` on a `github.com/user-attachments/assets/<uuid>` URL is blocked by

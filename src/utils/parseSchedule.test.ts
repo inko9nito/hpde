@@ -36,6 +36,7 @@ describe('parseScheduleMD', () => {
 - link: https://example.com/reg
 - organizer: Example Racing Club
 - track: Example Motor Speedway
+- city: Example City, TX
 - configuration: 2.5 mile
 - direction: Clockwise
 
@@ -50,6 +51,7 @@ describe('parseScheduleMD', () => {
     expect(c.link).toBe('https://example.com/reg')
     expect(c.organizer).toBe('Example Racing Club')
     expect(c.track).toBe('Example Motor Speedway')
+    expect(c.city).toBe('Example City, TX')
     expect(c.configuration).toBe('2.5 mile')
     expect(c.direction).toBe('Clockwise')
   })
@@ -73,6 +75,7 @@ describe('parseScheduleMD', () => {
     const c = parseScheduleMD('test', SAMPLE)
     expect(c.organizer).toBeUndefined()
     expect(c.track).toBeUndefined()
+    expect(c.city).toBeUndefined()
     expect(c.configuration).toBeUndefined()
     expect(c.direction).toBeUndefined()
     expect(c.link).toBeUndefined()
