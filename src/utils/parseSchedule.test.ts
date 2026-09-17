@@ -29,6 +29,55 @@ describe('parseScheduleMD', () => {
     expect(config.subtitle).toBe('Jan 1, 2030')
   })
 
+  it('parses optional event-details header fields', () => {
+    const src = `
+# Full Details
+subtitle: Feb 2, 2030
+link: https://example.com/reg
+organizer: Example Racing Club
+track: Example Motor Speedway
+configuration: 2.5 mile
+direction: Clockwise
+
+## groups
+red | Red | bg-red-500 | text-white
+
+## Saturday | 2030-02-02
+
+08:00 general | Gates open
+`.trim()
+    const c = parseScheduleMD('full', src)
+    expect(c.link).toBe('https://example.com/reg')
+    expect(c.organizer).toBe('Example Racing Club')
+    expect(c.track).toBe('Example Motor Speedway')
+    expect(c.configuration).toBe('2.5 mile')
+    expect(c.direction).toBe('Clockwise')
+  })
+
+  it('accepts "config:" as a shorthand for "configuration:"', () => {
+    const src = `
+# X
+config: 1.7 mile
+
+## groups
+red | Red | bg-red-500 | text-white
+
+## Saturday | 2030-02-02
+
+08:00 general | Gates open
+`.trim()
+    expect(parseScheduleMD('x', src).configuration).toBe('1.7 mile')
+  })
+
+  it('omits event-details fields when absent from the source', () => {
+    const c = parseScheduleMD('test', SAMPLE)
+    expect(c.organizer).toBeUndefined()
+    expect(c.track).toBeUndefined()
+    expect(c.configuration).toBeUndefined()
+    expect(c.direction).toBeUndefined()
+    expect(c.link).toBeUndefined()
+  })
+
   it('parses run groups', () => {
     const { runGroups } = parseScheduleMD('test', SAMPLE)
     expect(runGroups).toHaveLength(2)

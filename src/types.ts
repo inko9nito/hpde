@@ -42,6 +42,10 @@ export interface EventConfig {
   subtitle: string
   link?: string
   mapImage?: string
+  organizer?: string
+  track?: string
+  configuration?: string
+  direction?: string
   runGroups: RunGroupConfig[]
   days: DaySchedule[]
 }

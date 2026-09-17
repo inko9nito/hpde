@@ -6,6 +6,10 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let name = ''
   let subtitle = ''
   let link: string | undefined
+  let organizer: string | undefined
+  let track: string | undefined
+  let configuration: string | undefined
+  let direction: string | undefined
   const runGroups: RunGroupConfig[] = []
   const days: DaySchedule[] = []
   let currentDay: DaySchedule | null = null
@@ -26,6 +30,31 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (line.startsWith('link:')) {
       link = line.slice('link:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('organizer:')) {
+      organizer = line.slice('organizer:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('track:')) {
+      track = line.slice('track:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('configuration:')) {
+      configuration = line.slice('configuration:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('config:')) {
+      configuration = line.slice('config:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('direction:')) {
+      direction = line.slice('direction:'.length).trim() || undefined
       continue
     }
 
@@ -79,7 +108,15 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     }
   }
 
-  return { id, name, subtitle, ...(link ? { link } : {}), runGroups, days }
+  return {
+    id, name, subtitle,
+    ...(link ? { link } : {}),
+    ...(organizer ? { organizer } : {}),
+    ...(track ? { track } : {}),
+    ...(configuration ? { configuration } : {}),
+    ...(direction ? { direction } : {}),
+    runGroups, days,
+  }
 }
 
 function parseEventLine(line: string): ScheduleEvent | null {
