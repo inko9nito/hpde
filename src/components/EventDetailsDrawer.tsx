@@ -70,9 +70,10 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
       inert={!open}
       className="fixed inset-0 z-50 flex justify-center bg-gray-50"
       style={{
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transform: open ? 'translate3d(0,0,0)' : 'translate3d(100%,0,0)',
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         boxShadow: open ? '-8px 0 24px rgba(0,0,0,0.08)' : 'none',
+        willChange: 'transform',
       }}
     >
       <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto">
