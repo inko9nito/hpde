@@ -1,5 +1,15 @@
 # Notes for Claude working in this repo
 
+## Session title
+
+Session title is `Issue #<n> <durable topic>`, where the topic mirrors
+the GitHub issue's own title — not the current phase of work
+(not "design review", "fix jerky drawer", etc.). If the session was
+opened with a phase-of-work title, or drifts toward one as work
+progresses, rename it back to the issue's durable topic via
+`set_session_title`. The branch name is fixed for the life of the
+PR; the session title isn't, so keep it accurate.
+
 ## Keeping GitHub issues up to date
 
 Chat is ephemeral; the issue is the durable record. Whenever
