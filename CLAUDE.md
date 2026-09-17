@@ -27,6 +27,16 @@ work merged, blocked). Keep comments short (a few lines +
 links, not a wall of text); a design or preview goes in as a
 link, not inlined.
 
+## Open a PR for every issue
+
+GitHub only links a branch in an issue's Development panel if it
+was created via that issue's own "Create a branch" button, or a PR
+references the issue with a closing keyword (`Closes #<n>`) in its
+body — pushing a branch and mentioning it in a comment does neither.
+So once there's a pushed commit for an issue, open a PR from that
+branch with `Closes #<n>` in the body, even before the work is
+finished or ready for review. Do this without being asked.
+
 ## Handing the widget script back to the user
 
 The user tests `scripts/hpde-widget.js` by pasting it into
