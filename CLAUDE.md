@@ -1,5 +1,22 @@
 # Notes for Claude working in this repo
 
+## Keeping GitHub issues up to date
+
+Chat is ephemeral; the issue is the durable record. Whenever
+work on an issue pauses in a state I might not come back to
+right away — you're going idle, end of day, blocked on a
+decision from me, or done and pushed — post a short summary
+and next-steps comment on the relevant issue before you stop.
+Include any open questions with enough context that I can
+answer them by replying on the issue, not by scrolling back
+through chat.
+
+Don't post for every turn — only when there's a state change
+worth persisting (design ready to review, waiting on my input,
+work merged, blocked). Keep comments short (a few lines +
+links, not a wall of text); a design or preview goes in as a
+link, not inlined.
+
 ## Handing the widget script back to the user
 
 The user tests `scripts/hpde-widget.js` by pasting it into
