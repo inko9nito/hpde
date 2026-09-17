@@ -11,13 +11,13 @@ const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
 
-const LAST_EVENT_FALLBACK_MIN = 30
-// The current event stops being "current" this many minutes before the
-// next event begins — the marker leaves the card and moves into the
+const LAST_ACTIVITY_FALLBACK_MIN = 30
+// The current activity stops being "current" this many minutes before the
+// next activity begins — the marker leaves the card and moves into the
 // between-cards gap.
 const CURRENT_END_LOOKAHEAD_MIN = 5
 // The marker sits OVERLAPPING THE TOP of the current card for the
-// first few minutes of the event, then flips to OVERLAPPING THE
+// first few minutes of the activity, then flips to OVERLAPPING THE
 // BOTTOM for the rest of the "current" window. Both states use the
 // three-column illusion (dot in the left gutter, bar inside the card
 // interior, bar in the right gutter) that makes the marker appear to
@@ -186,7 +186,7 @@ function urgencyColor(min, p) {
 
 // Rough widget interior height (after our top/bottom widget
 // padding) for the running host. Used to decide dynamically how
-// many event rows we can afford to render before we blow past the
+// many activity rows we can afford to render before we blow past the
 // widget's actual height. On the Home Screen anything past the
 // widget's bottom edge is clipped, so a past card that pushes the
 // current card off-screen makes the widget useless; in Scriptable's
@@ -202,11 +202,11 @@ function widgetInteriorHeight() {
   return 330 // extraLarge (iPad)
 }
 
-// Rough vertical space a rendered event row will consume in the
+// Rough vertical space a rendered activity row will consume in the
 // widget's outer stack, including the 6pt gap after it.
-function estimateEventRowHeight(ev, isCurrent) {
-  // Only general-event subtitles render as a note line. Session
-  // `note` fields are dropped (see `eventNote`), so we don't
+function estimateActivityRowHeight(ev, isCurrent) {
+  // Only general-activity subtitles render as a note line. Session
+  // `note` fields are dropped (see `activityNote`), so we don't
   // budget space for them here either.
   const hasNote = !!ev.subtitle
   const isSession = ev.type === "session"
@@ -217,7 +217,7 @@ function estimateEventRowHeight(ev, isCurrent) {
   let contentH
   if (hasBoth) contentH = 57       // on-row + spacer + divider + spacer + in-row
   else if (isSession) contentH = 20 // single pill row
-  else contentH = 18                // plain event label
+  else contentH = 18                // plain activity label
   if (hasNote) contentH += 18       // note line + spacer
 
   // Current cards use a bigger symmetric top/bottom pad (room for
@@ -232,10 +232,10 @@ function estimateEventRowHeight(ev, isCurrent) {
 }
 
 // The now-line block (caption + rule + spacer) that we inject
-// between cards when there is no current event to overlap. Budgeted
+// between cards when there is no current activity to overlap. Budgeted
 // separately from card rows so the row-fit loop knows to leave
 // room for it — but only in the between-cards case; when a current
-// event exists its caption is baked into its own row estimate.
+// activity exists its caption is baked into its own row estimate.
 const NOW_LINE_BLOCK_HEIGHT = 22
 // Caption block reserved above (or below) the current card — just
 // the caption text and its two small outer spacers, no rule (the
@@ -264,7 +264,7 @@ function makeWidget({ manifest, stale }) {
   const groupById = Object.fromEntries(event.runGroups.map(g => [g.id, g]))
   const selected = parseGroupFilter()
 
-  const visible = day.events.map(e => {
+  const visible = day.activities.map(e => {
     if (e.type !== "session" || selected.length === 0) return e
     const onTrack = (e.onTrack || []).filter(id => selected.includes(id))
     const inClass = (e.inClass || []).filter(id => selected.includes(id))
@@ -281,7 +281,7 @@ function makeWidget({ manifest, stale }) {
 
   let currentIdx = -1
   // "above" — marker sits just above the current card (first minutes
-  // of the event). "below" — marker sits just below the current card
+  // of the activity). "below" — marker sits just below the current card
   // (rest of the "current" window). Null when nothing is current, in
   // which case the marker floats between the last past and next
   // future cards instead.
@@ -296,10 +296,10 @@ function makeWidget({ manifest, stale }) {
     const nextEv = visible[lastPastIdx + 1]
     const nextStart = nextEv
       ? parseMinutes(nextEv.time)
-      : start + LAST_EVENT_FALLBACK_MIN
+      : start + LAST_ACTIVITY_FALLBACK_MIN
     // Current window ends CURRENT_END_LOOKAHEAD_MIN before the next
-    // event, at which point the marker leaves the card and joins the
-    // between-cards gap. The Math.max floor keeps back-to-back events
+    // activity, at which point the marker leaves the card and joins the
+    // between-cards gap. The Math.max floor keeps back-to-back activities
     // (nextStart very close to start) from producing a negative
     // window that would flip the card to "not current" before it even
     // began.
@@ -309,7 +309,7 @@ function makeWidget({ manifest, stale }) {
     if (now < currentEndsAt) {
       currentIdx = lastPastIdx
       // Top-phase end caps at the current window's own end so a very
-      // short window (events less than TOP_PHASE_MIN apart) doesn't
+      // short window (activities less than TOP_PHASE_MIN apart) doesn't
       // spend its entire life in the "above" phase.
       const topPhaseEnds = Math.min(start + CURRENT_TOP_PHASE_MIN, currentEndsAt)
       currentPosition = now < topPhaseEnds ? "above" : "below"
@@ -318,14 +318,14 @@ function makeWidget({ manifest, stale }) {
 
   const nextIdx = visible.findIndex(e => parseMinutes(e.time) > now)
   const insertAt = nextIdx === -1 ? visible.length : nextIdx
-  const nextEvent = insertAt < visible.length ? visible[insertAt] : null
+  const nextActivity = insertAt < visible.length ? visible[insertAt] : null
 
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
   // Absolute cap so we never render more rows than the widget can
-  // ever plausibly fit, even for a run of all-simple general events.
+  // ever plausibly fit, even for a run of all-simple general activities.
   const maxRowsCap = isLarge ? 10 : 4
-  // Always show exactly one past event before the current one so the
+  // Always show exactly one past activity before the current one so the
   // current card sits at row 1 — as close to the top as it can be
   // without hiding what just happened.
   const maxPast = 1
@@ -343,7 +343,7 @@ function makeWidget({ manifest, stale }) {
   // hard-to-predict middle position — the "widget seems to be
   // scrolled to a random position" bug.
   // Reserve the between-cards now-line block only when we actually
-  // need one. When a current event exists, its caption is baked into
+  // need one. When a current activity exists, its caption is baked into
   // its own row estimate (via CURRENT_CAPTION_BLOCK_HEIGHT), and the
   // marker bar itself is drawn inside the card so it costs no extra
   // vertical space.
@@ -355,7 +355,7 @@ function makeWidget({ manifest, stale }) {
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
     const isCurrent = i === currentIdx
-    const rowH = estimateEventRowHeight(visible[i], isCurrent)
+    const rowH = estimateActivityRowHeight(visible[i], isCurrent)
     if (rows.length >= 2 && usedH + rowH > availableH) break
     rows.push(visible[i])
     usedH += rowH
@@ -365,18 +365,18 @@ function makeWidget({ manifest, stale }) {
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
   for (let i = 0; i < rows.length; i++) {
-    if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextEvent, 6)
+    if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextActivity, 6)
     const ev = rows[i]
-    const isCurrentEvent = i === currentLocalIdx
-    const past = !isCurrentEvent && parseMinutes(ev.time) < now
-    drawEventRow(w, ev, groupById, selected, p, past,
-      isCurrentEvent ? { position: currentPosition, now, nextEvent } : null)
+    const isCurrentActivity = i === currentLocalIdx
+    const past = !isCurrentActivity && parseMinutes(ev.time) < now
+    drawActivityRow(w, ev, groupById, selected, p, past,
+      isCurrentActivity ? { position: currentPosition, now, nextActivity } : null)
   }
   if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
 
-  // Count events that came after the last rendered row — either
+  // Count activities that came after the last rendered row — either
   // dropped by the row-fit budget or capped by maxRowsCap. Past
-  // events skipped at the top (before `start`) are already over,
+  // activities skipped at the top (before `start`) are already over,
   // not "more" of anything, so we don't count them here.
   const lastRenderedIdx = rows.length > 0 ? start + rows.length - 1 : start - 1
   const remaining = visible.length - 1 - lastRenderedIdx
@@ -385,12 +385,12 @@ function makeWidget({ manifest, stale }) {
   // Without it, Scriptable's ListWidget centers whatever content
   // it has vertically when it's shorter than the widget's box,
   // which showed up as awkward empty gutters above the header and
-  // below the bottom card. When more events fell off the bottom,
-  // drop a muted "X more events" line into that empty area so it
-  // doesn't read as if the last rendered event were the last one.
+  // below the bottom card. When more activities fell off the bottom,
+  // drop a muted "X more activities" line into that empty area so it
+  // doesn't read as if the last rendered activity were the last one.
   w.addSpacer()
   if (remaining > 0) {
-    drawMoreEventsFooter(w, p, remaining)
+    drawMoreActivitiesFooter(w, p, remaining)
     w.addSpacer()
   }
 
@@ -398,11 +398,11 @@ function makeWidget({ manifest, stale }) {
   return w
 }
 
-function drawMoreEventsFooter(w, p, count) {
+function drawMoreActivitiesFooter(w, p, count) {
   const row = w.addStack()
   row.centerAlignContent()
   row.addSpacer()
-  const text = row.addText(`${count} more event${count === 1 ? "" : "s"}`)
+  const text = row.addText(`${count} more activit${count === 1 ? "y" : "ies"}`)
   text.font = rFont(11)
   text.textColor = p.muted
   row.addSpacer()
@@ -484,8 +484,8 @@ const CURRENT_CARD_CORNER_RADIUS = 8
 // caption reads as a footer/header for the card.
 const CURRENT_CAPTION_OUTER_PAD = 4
 
-function eventNote(ev) {
-  // Only general-event subtitles surface in the widget. Session
+function activityNote(ev) {
+  // Only general-activity subtitles surface in the widget. Session
   // `note` fields are intentionally dropped — a session card is
   // already carrying a time + on-track pills + in-class pills, and
   // adding a note line pushes the whole card taller than it needs
@@ -523,7 +523,7 @@ const TIME_INFO_SPACING = 14
 
 // Unified column widths so every row's time and section labels line
 // up at the same x whether the row is the current card or a plain
-// event row. Widened from 60 to fit the small AM/PM suffix next to
+// activity row. Widened from 60 to fit the small AM/PM suffix next to
 // the time.
 const TIME_COLUMN_WIDTH = 68
 // Wide enough for "On track" plus a few characters of breathing
@@ -543,13 +543,13 @@ const FOOD_ICON_GAP = 8
 // font or size change.
 const AMPM_BASELINE_NUDGE = 1
 
-function drawEventRow(w, ev, groupById, selected, p, past, current) {
+function drawActivityRow(w, ev, groupById, selected, p, past, current) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
   // current card; the caption ("3:08 AM · Next in 3h 22m") sits
   // just above the card.
   if (current && current.position === "above") {
     w.addSpacer(CURRENT_CAPTION_OUTER_PAD)
-    drawNowCaption(w, p, current.now, current.nextEvent)
+    drawNowCaption(w, p, current.now, current.nextActivity)
     w.addSpacer(3)
   }
 
@@ -601,7 +601,7 @@ function drawEventRow(w, ev, groupById, selected, p, past, current) {
   // caption sits just below.
   if (current && current.position === "below") {
     w.addSpacer(3)
-    drawNowCaption(w, p, current.now, current.nextEvent)
+    drawNowCaption(w, p, current.now, current.nextActivity)
     w.addSpacer(CURRENT_CAPTION_OUTER_PAD)
   }
   w.addSpacer(6)
@@ -700,7 +700,7 @@ function addBarInCard(card, color) {
 // One of the two negative-space gutter columns. Places the dot or
 // the bar continuation at MARKER_ROW_INSET from the row's aligned
 // edge — matching the same fixed distance the marker sits from
-// that edge inside the card. drawEventRow sets outerRow's
+// that edge inside the card. drawActivityRow sets outerRow's
 // topAlignContent()/bottomAlignContent() so both this column and
 // cardContainer align to the same edge, which is what makes the
 // dot land at the exact y as the embedded bar. Fully absolute:
@@ -749,10 +749,10 @@ function addGutterMarkerElement(col, elementType, color) {
 }
 
 // Card interior. Builds either a single main row [time | info] or,
-// when the event carries a note or subtitle, a vertical layout with
+// when the activity carries a note or subtitle, a vertical layout with
 // the main row on top and the note line below.
 function buildCardContent(container, ev, groupById, selected, p, past, current) {
-  const note = eventNote(ev)
+  const note = activityNote(ev)
   // Stacked sessions (both on-track and in-class rows) top-align
   // the time column with the "On track" row instead of centering
   // it between the two rows, so the eye doesn't have to hunt for
@@ -845,7 +845,7 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
 
 // SF Symbol for the lunch row — fork.knife mirrors the web app's
 // Utensils icon. Same tint/size/opacity treatment as the on-track/
-// in-class section icons. Special events render with no icon at all.
+// in-class section icons. Special activities render with no icon at all.
 function addFoodIcon(row, p, past) {
   if (typeof SFSymbol === "undefined") return
   const sym = SFSymbol.named("fork.knife")
@@ -991,7 +991,7 @@ function addRowDivider(col, p) {
 // Small muted note / subtitle line beneath the main content row.
 // Indented past the time column (and, for food rows, past the icon
 // too) so it aligns with the label above it — reads as belonging to
-// the event, not the widget.
+// the activity, not the widget.
 function addNoteRow(container, note, p, past, current, indent) {
   const row = container.addStack()
   row.addSpacer(indent)
@@ -1019,7 +1019,7 @@ function addGroupPill(row, g, dim, current) {
   const label = pill.addText(g.label)
   label.font = rMediumFont(10)
   // Pill text stays fully opaque even when the pill is dimmed
-  // (past event / not-in-selected-groups) — the background alpha
+  // (past activity / not-in-selected-groups) — the background alpha
   // already carries the "dimmed" signal, and fading the text on
   // top makes the label unreadable. Matches the web app.
   label.textColor = new Color("#ffffff")
@@ -1032,7 +1032,7 @@ function addGroupPill(row, g, dim, current) {
   label.lineLimit = 1
 }
 
-function drawNowCaption(w, p, now, nextEvent) {
+function drawNowCaption(w, p, now, nextActivity) {
   const outer = w.addStack()
   outer.spacing = 0
   outer.addSpacer(LEFT_GUTTER_WIDTH + CARD_INNER_PAD_H)
@@ -1045,8 +1045,8 @@ function drawNowCaption(w, p, now, nextEvent) {
 
   row.addSpacer()
 
-  if (nextEvent) {
-    const min = parseMinutes(nextEvent.time) - now
+  if (nextActivity) {
+    const min = parseMinutes(nextActivity.time) - now
     if (min > 0) {
       const prefix = row.addText("Next in ")
       prefix.font = rFont(10)
@@ -1083,8 +1083,8 @@ function drawNowRule(w, p) {
   bar.addSpacer()
 }
 
-function drawNowLine(w, p, now, nextEvent, belowSpacer) {
-  drawNowCaption(w, p, now, nextEvent)
+function drawNowLine(w, p, now, nextActivity, belowSpacer) {
+  drawNowCaption(w, p, now, nextActivity)
   w.addSpacer(2)
   drawNowRule(w, p)
   if (belowSpacer > 0) w.addSpacer(belowSpacer)

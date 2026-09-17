@@ -6,14 +6,14 @@ export interface RunGroupConfig {
   description?: string
 }
 
-export interface GeneralEvent {
+export interface GeneralActivity {
   time: string
   type: 'general' | 'lunch' | 'special'
   label: string
   subtitle?: string
 }
 
-export interface SessionEvent {
+export interface SessionActivity {
   time: string
   type: 'session'
   sessionNumber?: number
@@ -22,18 +22,18 @@ export interface SessionEvent {
   note?: string
 }
 
-export interface BreakEvent {
+export interface BreakActivity {
   type: 'break'
   label: string
 }
 
-export type ScheduleEvent = GeneralEvent | SessionEvent | BreakEvent
+export type ScheduleActivity = GeneralActivity | SessionActivity | BreakActivity
 
 export interface DaySchedule {
   id: string
   label: string
   date: string
-  events: ScheduleEvent[]
+  activities: ScheduleActivity[]
 }
 
 export interface EventConfig {

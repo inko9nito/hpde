@@ -1,9 +1,9 @@
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
-import type { SessionEvent, RunGroupConfig } from '../types'
+import type { SessionActivity, RunGroupConfig } from '../types'
 
 interface Props {
-  event: SessionEvent
+  activity: SessionActivity
   runGroups: RunGroupConfig[]
   past?: boolean
 }
@@ -15,16 +15,16 @@ function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig
   })
 }
 
-export function SessionCard({ event, runGroups, past }: Props) {
-  const onTrack = resolveGroups(event.onTrack, runGroups)
-  const inClass = resolveGroups(event.inClass ?? [], runGroups)
+export function SessionCard({ activity, runGroups, past }: Props) {
+  const onTrack = resolveGroups(activity.onTrack, runGroups)
+  const inClass = resolveGroups(activity.inClass ?? [], runGroups)
 
   return (
     <div className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-opacity ${past ? 'opacity-60' : ''}`}>
       <div className="flex gap-4">
         <div className="flex w-20 shrink-0 items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
-          {formatTime(event.time)}
-          <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(event.time)}</span>
+          {formatTime(activity.time)}
+          <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(activity.time)}</span>
         </div>
         <div className="flex flex-1 flex-col gap-3">
           {onTrack.length > 0 && (
@@ -46,8 +46,8 @@ export function SessionCard({ event, runGroups, past }: Props) {
               </div>
             </>
           )}
-          {event.note && (
-            <p className="text-xs italic text-gray-500">{event.note}</p>
+          {activity.note && (
+            <p className="text-xs italic text-gray-500">{activity.note}</p>
           )}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import tailwindColors from 'tailwindcss/colors'
 import { runGroupColors } from '../theme/runGroupColors'
-import type { EventConfig, ScheduleEvent } from '../types'
+import type { EventConfig, ScheduleActivity } from '../types'
 
 export interface SerializedRunGroup {
   id: string
@@ -13,7 +13,7 @@ export interface SerializedDay {
   id: string
   label: string
   date: string
-  events: ScheduleEvent[]
+  activities: ScheduleActivity[]
 }
 
 export interface SerializedEvent {
@@ -80,7 +80,7 @@ export function serializeEvents(events: EventConfig[], now: Date = new Date()): 
         id: d.id,
         label: d.label,
         date: d.date,
-        events: d.events,
+        activities: d.activities,
       })),
     })),
   }

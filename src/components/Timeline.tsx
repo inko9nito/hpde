@@ -1,12 +1,12 @@
 import { useRef, useEffect, useState } from 'react'
 import { SessionCard } from './SessionCard'
-import { EventCard } from './EventCard'
+import { ActivityCard } from './ActivityCard'
 import { TimeIndicator } from './TimeIndicator'
-import { parseMinutes, nowMinutes, findCurrentEvent } from '../utils/time'
-import type { ScheduleEvent, RunGroupConfig } from '../types'
+import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
+import type { ScheduleActivity, RunGroupConfig } from '../types'
 
 interface Props {
-  events: ScheduleEvent[]
+  activities: ScheduleActivity[]
   runGroups: RunGroupConfig[]
   isToday: boolean
   selectedGroups: string[]
@@ -30,7 +30,7 @@ function Collapse({ collapsed, children }: { collapsed: boolean; children: React
   )
 }
 
-export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast }: Props) {
+export function Timeline({ activities, runGroups, isToday, selectedGroups, hidePast }: Props) {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
 
@@ -50,42 +50,42 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
 
   const now = nowMinutes()
 
-  const visible = events.flatMap<ScheduleEvent>(event => {
-    if (event.type !== 'session') return [event]
-    if (selectedGroups.length === 0) return [event]
+  const visible = activities.flatMap<ScheduleActivity>(activity => {
+    if (activity.type !== 'session') return [activity]
+    if (selectedGroups.length === 0) return [activity]
 
-    const onTrack = event.onTrack.filter(id => selectedGroups.includes(id))
-    const inClass = (event.inClass ?? []).filter(id => selectedGroups.includes(id))
+    const onTrack = activity.onTrack.filter(id => selectedGroups.includes(id))
+    const inClass = (activity.inClass ?? []).filter(id => selectedGroups.includes(id))
     if (onTrack.length === 0 && inClass.length === 0) return []
-    return [{ ...event, onTrack, inClass }]
+    return [{ ...activity, onTrack, inClass }]
   })
 
-  // Timed events collapse once they're in the past and hidePast is on.
-  // A break only collapses once every event before it has collapsed too
+  // Timed activities collapse once they're in the past and hidePast is on.
+  // A break only collapses once every activity before it has collapsed too
   // (or there simply isn't one) — otherwise it'd be left dangling above
   // whatever's now the first visible card.
-  const collapsed = visible.map(e => e.type !== 'break' && hidePast && isToday && parseMinutes(e.time) < now)
-  visible.forEach((e, idx) => {
-    if (e.type !== 'break') return
+  const collapsed = visible.map(a => a.type !== 'break' && hidePast && isToday && parseMinutes(a.time) < now)
+  visible.forEach((a, idx) => {
+    if (a.type !== 'break') return
     const hasVisiblePrior = visible.slice(0, idx).some((prev, i) => prev.type !== 'break' && !collapsed[i])
     collapsed[idx] = !hasVisiblePrior
   })
 
   const timedIndices: number[] = []
   const timedTimes: string[] = []
-  visible.forEach((e, i) => {
-    if (e.type !== 'break') {
+  visible.forEach((a, i) => {
+    if (a.type !== 'break') {
       timedIndices.push(i)
-      timedTimes.push((e as { time: string }).time)
+      timedTimes.push((a as { time: string }).time)
     }
   })
   const { index: currentTimedIdx } = isToday
-    ? findCurrentEvent(timedTimes, now)
+    ? findCurrentActivity(timedTimes, now)
     : { index: -1 }
   const currentIdx = currentTimedIdx === -1 ? -1 : timedIndices[currentTimedIdx]
 
   const indicatorIndex = isToday
-    ? visible.findIndex(e => e.type !== 'break' && parseMinutes(e.time) > now)
+    ? visible.findIndex(a => a.type !== 'break' && parseMinutes(a.time) > now)
     : -1
   const indicatorAtEnd = isToday && indicatorIndex === -1 && visible.length > 0
 
@@ -99,48 +99,48 @@ export function Timeline({ events, runGroups, isToday, selectedGroups, hidePast 
         <Collapse collapsed={!allCollapsed}>
           <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
             <p className="text-sm font-medium text-gray-500">That's a wrap for today</p>
-            <p className="text-xs text-gray-400">Every event on today's schedule has already happened.</p>
+            <p className="text-xs text-gray-400">Every activity on today's schedule has already happened.</p>
           </div>
         </Collapse>
       )}
-      {visible.map((event, idx) => {
-        const isCurrentEvent = idx === currentIdx
+      {visible.map((activity, idx) => {
+        const isCurrentActivity = idx === currentIdx
         const past = isToday
-          && event.type !== 'break'
-          && !isCurrentEvent
-          && parseMinutes(event.time) < now
+          && activity.type !== 'break'
+          && !isCurrentActivity
+          && parseMinutes(activity.time) < now
 
         let sessionHeader: React.ReactNode = null
-        if (!collapsed[idx] && event.type === 'session' && event.sessionNumber !== undefined && event.sessionNumber !== lastSessionNumber) {
-          lastSessionNumber = event.sessionNumber
+        if (!collapsed[idx] && activity.type === 'session' && activity.sessionNumber !== undefined && activity.sessionNumber !== lastSessionNumber) {
+          lastSessionNumber = activity.sessionNumber
           sessionHeader = (
             <div className="mt-5 mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
-              Session {event.sessionNumber}
+              Session {activity.sessionNumber}
             </div>
           )
         }
 
-        const card = event.type === 'break'
+        const card = activity.type === 'break'
           ? (
             <div className="flex items-center gap-2 py-1">
               <div className="h-px flex-1 bg-gray-200" />
-              <span className="text-xs text-gray-400 italic">{event.label}</span>
+              <span className="text-xs text-gray-400 italic">{activity.label}</span>
               <div className="h-px flex-1 bg-gray-200" />
             </div>
           )
-          : event.type === 'session'
-            ? <SessionCard event={event} runGroups={runGroups} past={past} />
-            : <EventCard event={event} past={past} />
+          : activity.type === 'session'
+            ? <SessionCard activity={activity} runGroups={runGroups} past={past} />
+            : <ActivityCard activity={activity} past={past} />
 
         return (
           <Collapse key={idx} collapsed={collapsed[idx]}>
-            {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} events={visible} />}
+            {idx === indicatorIndex && <TimeIndicator ref={indicatorRef} activities={visible} />}
             {sessionHeader}
             {card}
           </Collapse>
         )
       })}
-      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} events={visible} />}
+      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} activities={visible} />}
     </div>
   )
 }

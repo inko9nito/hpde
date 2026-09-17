@@ -91,8 +91,8 @@ export default function App() {
     return () => clearInterval(id)
   }, [isToday])
 
-  const hasPastEvents = isToday
-    && activeDay.events.some(e => e.type !== 'break' && parseMinutes(e.time) < nowMinutes())
+  const hasPastActivities = isToday
+    && activeDay.activities.some(a => a.type !== 'break' && parseMinutes(a.time) < nowMinutes())
 
   function switchEvent(event: EventConfig) {
     setActiveEventId(event.id)
@@ -204,17 +204,17 @@ export default function App() {
                 selected={selectedGroups}
                 onChange={setSelectedGroups}
               />
-              {hasPastEvents && (
+              {hasPastActivities && (
                 <Toggle
                   checked={hidePast}
                   onChange={() => setHidePast(h => !h)}
-                  label="Hide past events"
+                  label="Hide past activities"
                 />
               )}
             </div>
 
             <Timeline
-              events={activeDay.events}
+              activities={activeDay.activities}
               runGroups={activeEvent.runGroups}
               isToday={isToday}
               selectedGroups={selectedGroups}

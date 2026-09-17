@@ -1,13 +1,13 @@
 import { useEffect, useState, forwardRef } from 'react'
 import { nowDisplay, nowMinutes, parseMinutes, formatCountdown } from '../utils/time'
-import type { ScheduleEvent } from '../types'
+import type { ScheduleActivity } from '../types'
 
 interface Props {
-  events: ScheduleEvent[]
+  activities: ScheduleActivity[]
 }
 
 export const TimeIndicator = forwardRef<HTMLDivElement, Props>(
-  ({ events }, ref) => {
+  ({ activities }, ref) => {
     const [, setTick] = useState(0)
 
     useEffect(() => {
@@ -16,9 +16,9 @@ export const TimeIndicator = forwardRef<HTMLDivElement, Props>(
     }, [])
 
     const now = nowMinutes()
-    const timed = events.filter((e): e is Extract<ScheduleEvent, { time: string }> => 'time' in e)
-    const nextEvent = timed.find(e => parseMinutes(e.time) > now)
-    const minsUntilNext = nextEvent ? parseMinutes(nextEvent.time) - now : null
+    const timed = activities.filter((a): a is Extract<ScheduleActivity, { time: string }> => 'time' in a)
+    const nextActivity = timed.find(a => parseMinutes(a.time) > now)
+    const minsUntilNext = nextActivity ? parseMinutes(nextActivity.time) - now : null
 
     const urgencyClass = minsUntilNext !== null
       ? minsUntilNext <= 5  ? 'text-red-500'
@@ -37,7 +37,7 @@ export const TimeIndicator = forwardRef<HTMLDivElement, Props>(
         </span>
         {minsUntilNext !== null && (
           <span className={`absolute right-0 -top-5 text-xs ${urgencyClass}`}>
-            Next event starts in <span className="font-semibold">{formatCountdown(minsUntilNext)}</span>
+            Next activity starts in <span className="font-semibold">{formatCountdown(minsUntilNext)}</span>
           </span>
         )}
       </div>
