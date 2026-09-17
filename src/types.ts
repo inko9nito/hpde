@@ -49,8 +49,14 @@ export interface EventConfig {
   mapImage?: string
   organizer?: string
   track?: string
+  city?: string
   configuration?: string
   direction?: string
+  /**
+   * The original schedule artifacts (photos, scans) this event's data was
+   * transcribed from, shown in their own section in Event Details.
+   */
+  scheduleScans?: string[]
   runGroups: RunGroupConfig[]
   days: DaySchedule[]
 }

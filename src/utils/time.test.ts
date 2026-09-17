@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown, findCurrentActivity, LAST_ACTIVITY_FALLBACK_MIN, todayLocalISO, formatDateRange, eventSubtitle } from './time'
+import { parseMinutes, formatTime, formatCountdown, findCurrentActivity, LAST_ACTIVITY_FALLBACK_MIN, todayLocalISO, formatDateRange, formatDateRangeWithWeekday, eventSubtitle } from './time'
 import type { DaySchedule } from '../types'
 
 function day(date: string): DaySchedule {
@@ -89,6 +89,24 @@ describe('formatDateRange', () => {
 
   it('sorts unordered days before computing the range', () => {
     expect(formatDateRange([day('2026-09-12'), day('2026-09-11')])).toBe('Sep 11–12, 2026')
+  })
+})
+
+describe('formatDateRangeWithWeekday', () => {
+  it('returns "" for no days', () => expect(formatDateRangeWithWeekday([])).toBe(''))
+
+  it('appends the weekday for a single day', () => {
+    expect(formatDateRangeWithWeekday([day('2026-09-13')])).toBe('Sep 13, 2026 (Sunday)')
+  })
+
+  it('appends both weekdays for a range', () => {
+    expect(formatDateRangeWithWeekday([day('2026-09-12'), day('2026-09-13')]))
+      .toBe('Sep 12–13, 2026 (Saturday–Sunday)')
+  })
+
+  it('sorts unordered days before computing weekdays', () => {
+    expect(formatDateRangeWithWeekday([day('2026-09-13'), day('2026-09-12')]))
+      .toBe('Sep 12–13, 2026 (Saturday–Sunday)')
   })
 })
 
