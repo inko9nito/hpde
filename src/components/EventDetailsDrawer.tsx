@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
 import type { EventConfig, DaySchedule } from '../types'
 
@@ -47,14 +47,10 @@ function Row({ label, children }: RowProps) {
 }
 
 export function EventDetailsDrawer({ event, open, onClose }: Props) {
-  const closeBtnRef = useRef<HTMLButtonElement | null>(null)
-
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    // Move focus to the back button so keyboard users can dismiss immediately.
-    closeBtnRef.current?.focus()
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
@@ -79,7 +75,6 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
       <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto">
         <div className="mb-5 flex items-start gap-2">
           <button
-            ref={closeBtnRef}
             onClick={onClose}
             aria-label="Back"
             className="inline-grid h-9 w-9 shrink-0 -ml-1.5 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
