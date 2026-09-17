@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T20:35:44.303Z",
+  "generatedAt": "2026-09-17T21:11:36.268Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -43,7 +43,7 @@
           "id": "sunday",
           "label": "Sunday",
           "date": "2026-09-13",
-          "events": [
+          "activities": [
             {
               "time": "06:30",
               "type": "general",
@@ -305,7 +305,7 @@
           "id": "friday",
           "label": "Friday",
           "date": "2026-09-11",
-          "events": [
+          "activities": [
             {
               "time": "16:00",
               "type": "general",
@@ -328,7 +328,7 @@
           "id": "saturday",
           "label": "Saturday",
           "date": "2026-09-12",
-          "events": [
+          "activities": [
             {
               "time": "06:30",
               "type": "general",
@@ -585,7 +585,7 @@
           "id": "saturday",
           "label": "Saturday",
           "date": "2026-06-06",
-          "events": [
+          "activities": [
             {
               "time": "07:00",
               "type": "general",
@@ -782,7 +782,7 @@
           "id": "saturday",
           "label": "Saturday",
           "date": "2026-05-30",
-          "events": [
+          "activities": [
             {
               "time": "06:30",
               "type": "general",
@@ -1056,7 +1056,7 @@
           "id": "friday",
           "label": "Friday",
           "date": "2025-11-07",
-          "events": [
+          "activities": [
             {
               "time": "16:00",
               "type": "general",
@@ -1078,7 +1078,7 @@
           "id": "saturday",
           "label": "Saturday",
           "date": "2025-11-08",
-          "events": [
+          "activities": [
             {
               "time": "06:30",
               "type": "general",
@@ -1309,7 +1309,7 @@
           "id": "sunday",
           "label": "Sunday",
           "date": "2025-11-09",
-          "events": [
+          "activities": [
             {
               "time": "07:00",
               "type": "general",
