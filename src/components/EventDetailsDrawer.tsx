@@ -40,7 +40,7 @@ function formatTrackConfiguration(configuration?: string, direction?: string): s
 interface RowProps { icon: LucideIcon; label: string; subtitle?: string; children: React.ReactNode }
 function Row({ icon: Icon, label, subtitle, children }: RowProps) {
   return (
-    <div className="grid grid-cols-[96px_1fr] items-center gap-3 border-b border-gray-100 py-3 last:border-b-0">
+    <div className="grid grid-cols-[112px_1fr] items-center gap-3 border-b border-gray-100 py-3 last:border-b-0">
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-gray-500">
         <Icon size={14} className="shrink-0 text-gray-400" />
         {label}
@@ -117,14 +117,14 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
 
           {hasAny ? (
             <>
-              <div>
+              <div className="pl-1">
                 {dates && <Row icon={Calendar} label="Dates">{dates}</Row>}
                 {event.organizer && <Row icon={Users} label="Organizer">{event.organizer}</Row>}
                 {event.track && (
                   <Row icon={MapPin} label="Location" subtitle={event.city}>{event.track}</Row>
                 )}
                 {trackConfiguration && (
-                  <Row icon={Route} label="Track configuration">{trackConfiguration}</Row>
+                  <Row icon={Route} label="Config">{trackConfiguration}</Row>
                 )}
                 {event.link && (
                   <Row icon={Link2} label="Event page">
@@ -142,7 +142,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
               </div>
 
               {hasScans && (
-                <div className="mt-6">
+                <div className="mt-6 pl-1">
                   <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-gray-500">
                     <ImageIcon size={14} className="shrink-0 text-gray-400" />
                     Original schedule
