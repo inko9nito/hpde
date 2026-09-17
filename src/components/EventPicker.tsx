@@ -16,8 +16,8 @@ function isEventLive(event: EventConfig): boolean {
 
 function LiveBadge() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-100 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-red-700">
-      <span className="h-1 w-1 rounded-full bg-red-700 animate-pulse" />
+    <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-green-700">
+      <span className="h-1 w-1 rounded-full bg-green-700 animate-pulse" />
       Live
     </span>
   )
