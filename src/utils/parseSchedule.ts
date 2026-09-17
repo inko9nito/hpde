@@ -15,8 +15,9 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let currentDay: DaySchedule | null = null
   let inGroups = false
 
-  for (const line of lines) {
-    if (!line || line.startsWith('//')) continue
+  for (const rawLine of lines) {
+    if (!rawLine || rawLine.startsWith('//')) continue
+    const line = rawLine.replace(/^-\s+/, '')
 
     if (line.startsWith('# ')) {
       name = line.slice(2).trim()
@@ -146,10 +147,10 @@ function parseEventLine(line: string): ScheduleEvent | null {
     let note: string | undefined
 
     for (const token of rest) {
-      if (token.startsWith('on:')) {
-        onTrack = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
-      } else if (token.startsWith('in:')) {
-        inClass = token.slice(3).trim().split(',').map(s => s.trim()).filter(Boolean)
+      if (token.startsWith('track:')) {
+        onTrack = token.slice(6).trim().split(',').map(s => s.trim()).filter(Boolean)
+      } else if (token.startsWith('class:')) {
+        inClass = token.slice(6).trim().split(',').map(s => s.trim()).filter(Boolean)
       } else if (token.startsWith('note:')) {
         note = token.slice(5).trim() || undefined
       }
