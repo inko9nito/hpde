@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T21:30:50.847Z",
+  "generatedAt": "2026-09-17T21:50:21.114Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -275,7 +275,7 @@
     },
     {
       "id": "2026-09-11_msrc-1-7",
-      "name": "MSRC 1.7",
+      "name": "TDE at MSRC 1.7CW",
       "runGroups": [
         {
           "id": "instructors",
