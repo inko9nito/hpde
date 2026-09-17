@@ -59,6 +59,6 @@ green | Green | bg-green-500 | text-white
 
     expect(event.days).toHaveLength(1)
     expect(event.days[0].date).toBe('2026-09-13')
-    expect(event.days[0].events).toHaveLength(3)
+    expect(event.days[0].activities).toHaveLength(3)
   })
 })
