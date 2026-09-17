@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { parseMinutes, formatTime, formatCountdown, findCurrentEvent, LAST_EVENT_FALLBACK_MIN, todayLocalISO, formatDateRange, eventSubtitle } from './time'
+import { parseMinutes, formatTime, formatCountdown, findCurrentActivity, LAST_ACTIVITY_FALLBACK_MIN, todayLocalISO, formatDateRange, eventSubtitle } from './time'
 import type { DaySchedule } from '../types'
 
 function day(date: string): DaySchedule {
-  return { id: date, label: date, date, events: [] }
+  return { id: date, label: date, date, activities: [] }
 }
 
 describe('parseMinutes', () => {
@@ -22,38 +22,38 @@ describe('formatTime', () => {
   it('formats "09:05" as "9:05"', () => expect(formatTime('09:05')).toBe('9:05'))
 })
 
-describe('findCurrentEvent', () => {
+describe('findCurrentActivity', () => {
   const times = ['08:30', '09:00', '10:30', '11:00']
 
-  it('returns -1 before the first event', () => {
-    expect(findCurrentEvent(times, parseMinutes('08:00'))).toEqual({ index: -1, progress: 0 })
+  it('returns -1 before the first activity', () => {
+    expect(findCurrentActivity(times, parseMinutes('08:00'))).toEqual({ index: -1, progress: 0 })
   })
-  it('returns index 0 at the very start of the first event', () => {
-    expect(findCurrentEvent(times, parseMinutes('08:30'))).toEqual({ index: 0, progress: 0 })
+  it('returns index 0 at the very start of the first activity', () => {
+    expect(findCurrentActivity(times, parseMinutes('08:30'))).toEqual({ index: 0, progress: 0 })
   })
   it('returns index 0 with progress at midpoint between 08:30 and 09:00', () => {
-    const r = findCurrentEvent(times, parseMinutes('08:45'))
+    const r = findCurrentActivity(times, parseMinutes('08:45'))
     expect(r.index).toBe(0)
     expect(r.progress).toBeCloseTo(0.5, 5)
   })
-  it('flips to the next event as soon as it starts', () => {
-    expect(findCurrentEvent(times, parseMinutes('09:00'))).toEqual({ index: 1, progress: 0 })
+  it('flips to the next activity as soon as it starts', () => {
+    expect(findCurrentActivity(times, parseMinutes('09:00'))).toEqual({ index: 1, progress: 0 })
   })
-  it('progress on 09:00 → 10:30 event goes 0.20 at 09:18', () => {
-    const r = findCurrentEvent(times, parseMinutes('09:18'))
+  it('progress on 09:00 → 10:30 activity goes 0.20 at 09:18', () => {
+    const r = findCurrentActivity(times, parseMinutes('09:18'))
     expect(r.index).toBe(1)
     expect(r.progress).toBeCloseTo(18 / 90, 5)
   })
-  it('uses the 30 min fallback for the last event of the day', () => {
-    const r = findCurrentEvent(times, parseMinutes('11:15'))
+  it('uses the 30 min fallback for the last activity of the day', () => {
+    const r = findCurrentActivity(times, parseMinutes('11:15'))
     expect(r.index).toBe(3)
     expect(r.progress).toBeCloseTo(0.5, 5)
   })
-  it('returns -1 once the fallback duration has elapsed on the last event', () => {
-    expect(findCurrentEvent(times, parseMinutes('11:30'))).toEqual({ index: -1, progress: 0 })
+  it('returns -1 once the fallback duration has elapsed on the last activity', () => {
+    expect(findCurrentActivity(times, parseMinutes('11:30'))).toEqual({ index: -1, progress: 0 })
   })
-  it('LAST_EVENT_FALLBACK_MIN is 30 (kept in sync with the widget)', () => {
-    expect(LAST_EVENT_FALLBACK_MIN).toBe(30)
+  it('LAST_ACTIVITY_FALLBACK_MIN is 30 (kept in sync with the widget)', () => {
+    expect(LAST_ACTIVITY_FALLBACK_MIN).toBe(30)
   })
 })
 

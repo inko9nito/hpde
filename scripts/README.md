@@ -46,7 +46,7 @@ a small "offline" tag in the header.
 
 - Event name + day
 - Up to ~5 rows around now: 1 recent past + 4 upcoming
-- A blue "now" line with a countdown to the next event (red ≤5 min,
+- A blue "now" line with a countdown to the next activity (red ≤5 min,
   orange ≤10 min, otherwise gray) — matches the web app's `TimeIndicator`
 - Session rows show colored dots for each run group on track, plus "in <color>"
   when there's a classroom group

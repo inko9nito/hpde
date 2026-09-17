@@ -1,4 +1,4 @@
-import type { EventConfig, DaySchedule, ScheduleEvent, RunGroupConfig } from '../types'
+import type { EventConfig, DaySchedule, ScheduleActivity, RunGroupConfig } from '../types'
 
 export function parseScheduleMD(id: string, src: string): EventConfig {
   const lines = src.split('\n').map(l => l.trim())
@@ -74,7 +74,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
           id: parts[0].toLowerCase().replace(/\s+/g, '-'),
           label: parts[0],
           date: parts[1],
-          events: [],
+          activities: [],
         }
         days.push(currentDay)
       } else {
@@ -100,11 +100,11 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (currentDay) {
       if (/^\d{2}:\d{2}/.test(line)) {
-        const event = parseEventLine(line)
-        if (event) currentDay.events.push(event)
+        const activity = parseActivityLine(line)
+        if (activity) currentDay.activities.push(activity)
       } else if (/^break\s*\|/.test(line)) {
         const label = line.slice(line.indexOf('|') + 1).trim()
-        currentDay.events.push({ type: 'break', label })
+        currentDay.activities.push({ type: 'break', label })
       }
     }
   }
@@ -121,7 +121,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   }
 }
 
-function parseEventLine(line: string): ScheduleEvent | null {
+function parseActivityLine(line: string): ScheduleActivity | null {
   const tokens = line.split('|').map(s => s.trim())
   const firstToken = tokens[0]
   const rest = tokens.slice(1)

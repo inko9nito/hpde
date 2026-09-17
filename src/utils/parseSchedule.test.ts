@@ -93,37 +93,37 @@ describe('parseScheduleMD', () => {
     expect(days[0].date).toBe('2030-01-01')
   })
 
-  it('parses general events', () => {
+  it('parses general activities', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const general = days[0].events.filter(e => e.type === 'general')
+    const general = days[0].activities.filter(a => a.type === 'general')
     expect(general).toHaveLength(3)
     expect(general[0]).toMatchObject({ time: '08:00', type: 'general', label: 'Drivers meeting' })
   })
 
-  it('parses lunch event with subtitle', () => {
+  it('parses lunch activity with subtitle', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const lunch = days[0].events.find(e => e.type === 'lunch')
+    const lunch = days[0].activities.find(a => a.type === 'lunch')
     expect(lunch).toMatchObject({ time: '12:00', type: 'lunch', label: 'Lunch break', subtitle: 'Bring your own food' })
   })
 
   it('parses session with onTrack and inClass', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const session = days[0].events.find(e => e.type === 'session' && (e as { onTrack: string[] }).onTrack.includes('orange') && (e as { inClass?: string[] }).inClass?.includes('pink'))
+    const session = days[0].activities.find(a => a.type === 'session' && (a as { onTrack: string[] }).onTrack.includes('orange') && (a as { inClass?: string[] }).inClass?.includes('pink'))
     expect(session).toBeDefined()
     expect(session).toMatchObject({ time: '08:30', type: 'session', onTrack: ['orange'], inClass: ['pink'] })
   })
 
   it('parses session number', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const s1 = days[0].events.find(e => e.type === 'session' && (e as { sessionNumber?: number }).sessionNumber === 1)
+    const s1 = days[0].activities.find(a => a.type === 'session' && (a as { sessionNumber?: number }).sessionNumber === 1)
     expect(s1).toMatchObject({ sessionNumber: 1, onTrack: ['orange'] })
-    const s2 = days[0].events.find(e => e.type === 'session' && (e as { sessionNumber?: number }).sessionNumber === 2)
+    const s2 = days[0].activities.find(a => a.type === 'session' && (a as { sessionNumber?: number }).sessionNumber === 2)
     expect(s2).toMatchObject({ sessionNumber: 2 })
   })
 
-  it('parses break event', () => {
+  it('parses break activity', () => {
     const { days } = parseScheduleMD('test', SAMPLE)
-    const brk = days[0].events.find(e => e.type === 'break')
+    const brk = days[0].activities.find(a => a.type === 'break')
     expect(brk).toMatchObject({ type: 'break', label: 'Instructor break' })
   })
 
@@ -137,11 +137,11 @@ describe('parseScheduleMD', () => {
 - 10:00 session | track: red, yellow
 `.trim()
     const { days } = parseScheduleMD('x', multiSrc)
-    const s = days[0].events[0] as { onTrack: string[] }
+    const s = days[0].activities[0] as { onTrack: string[] }
     expect(s.onTrack).toEqual(['red', 'yellow'])
   })
 
-  it('produces the correct number of events for a multi-day event', () => {
+  it('produces the correct number of activities for a multi-day event', () => {
     const multiDay = `
 # Y
 ## groups
@@ -154,8 +154,8 @@ describe('parseScheduleMD', () => {
 `.trim()
     const { days } = parseScheduleMD('y', multiDay)
     expect(days).toHaveLength(2)
-    expect(days[0].events).toHaveLength(1)
-    expect(days[1].events).toHaveLength(2)
+    expect(days[0].activities).toHaveLength(1)
+    expect(days[1].activities).toHaveLength(2)
   })
 
   it('parses lines with or without the leading "- " bullet marker', () => {
@@ -171,7 +171,7 @@ red | Red | bg-red-500 | text-white
     const { subtitle, runGroups, days } = parseScheduleMD('z', mixed)
     expect(subtitle).toBe('Mixed bullets')
     expect(runGroups).toHaveLength(1)
-    expect(days[0].events).toHaveLength(2)
+    expect(days[0].activities).toHaveLength(2)
   })
 
   it('ignores "//" comment lines, even ones that look like real fields', () => {
@@ -187,7 +187,7 @@ red | Red | bg-red-500 | text-white
 `.trim()
     const { subtitle, days } = parseScheduleMD('commented', withComment)
     expect(subtitle).toBe('Real subtitle')
-    expect(days[0].events).toHaveLength(1)
-    expect(days[0].events[0]).toMatchObject({ label: 'Real event' })
+    expect(days[0].activities).toHaveLength(1)
+    expect(days[0].activities[0]).toMatchObject({ label: 'Real event' })
   })
 })

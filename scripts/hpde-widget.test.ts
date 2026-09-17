@@ -117,7 +117,7 @@ const RICH_MANIFEST = {
     days: [{
       date: today,
       label: 'Friday',
-      events: [
+      activities: [
         { time: '01:30', type: 'session', onTrack: ['red'], inClass: ['green'] },
         { time: '02:00', type: 'session', onTrack: ['purple'], inClass: ['orange'] },
         { time: '06:30', type: 'general', label: 'Gates open' },

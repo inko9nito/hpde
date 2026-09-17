@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Timeline } from './Timeline'
-import type { ScheduleEvent, RunGroupConfig } from '../types'
+import type { ScheduleActivity, RunGroupConfig } from '../types'
 import * as timeModule from '../utils/time'
 
 vi.mock('../utils/time', async importOriginal => {
@@ -15,8 +15,8 @@ const runGroups: RunGroupConfig[] = [
   { id: 'purple', label: 'Purple', bgClass: 'bg-purple-500', textClass: 'text-white' },
 ]
 
-// now = 10:00 (600 min); events at 08:xx are past, 10:30+ are future
-const events: ScheduleEvent[] = [
+// now = 10:00 (600 min); activities at 08:xx are past, 10:30+ are future
+const activities: ScheduleActivity[] = [
   { time: '08:00', type: 'general', label: 'Drivers meeting' },
   { time: '08:30', type: 'session', onTrack: ['orange'] },
   { time: '09:00', type: 'session', onTrack: ['pink'] },
@@ -30,39 +30,39 @@ beforeEach(() => {
 })
 
 describe('hidePast toggle', () => {
-  it('shows all events when hidePast is false', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+  it('shows all activities when hidePast is false', () => {
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
     expect(screen.getByText('Lunch')).toBeInTheDocument()
   })
 
-  it('hides events before current time when hidePast is true', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+  it('hides activities before current time when hidePast is true', () => {
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText('Drivers meeting').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
     expect(screen.getByText('Lunch').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'false')
   })
 
-  it('shows all events when hidePast is true but isToday is false', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={true} />)
+  it('shows all activities when hidePast is true but isToday is false', () => {
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
   })
 
-  it('shows a zero state when hidePast hides every event', () => {
-    vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60) // 11:00 PM, after every event
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+  it('shows a zero state when hidePast hides every activity', () => {
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60) // 11:00 PM, after every activity
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText('Lunch').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
     expect(screen.getByText(/wrap/i).closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'false')
   })
 
-  it('does not show the zero state when there are no events at all', () => {
-    render(<Timeline events={[]} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+  it('does not show the zero state when there are no activities at all', () => {
+    render(<Timeline activities={[]} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     expect(screen.queryByText(/wrap/i)).not.toBeInTheDocument()
   })
 })
 
-describe('past event opacity', () => {
+describe('past activity opacity', () => {
   it('applies opacity-60 to cards before current time on today', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const cards = document.querySelectorAll('.rounded-xl')
     const pastCards = Array.from(cards).filter(el => el.classList.contains('opacity-60'))
     const futureCards = Array.from(cards).filter(el => !el.classList.contains('opacity-60'))
@@ -72,14 +72,14 @@ describe('past event opacity', () => {
   })
 
   it('does not apply opacity-60 when isToday is false', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(document.querySelectorAll('.opacity-60')).toHaveLength(0)
   })
 
-  it('keeps the current event at full opacity while `now` sits inside its inferred duration', () => {
+  it('keeps the current activity at full opacity while `now` sits inside its inferred duration', () => {
     // now = 10:35, session 10:30 → next 11:00 → progress ~1/6
     vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 35)
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const cards = document.querySelectorAll('.rounded-xl')
     // The 10:30 card is current and must not be faded.
     const orangeCurrent = Array.from(cards).find(el => el.textContent?.includes('Orange') && !el.classList.contains('opacity-60'))
@@ -89,17 +89,17 @@ describe('past event opacity', () => {
 
 describe('time indicator placement', () => {
   it('renders the time indicator between the last past card and the first future card', () => {
-    // now = 10:00, next timed event is 10:30 session → indicator sits before it
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    // now = 10:00, next timed activity is 10:30 session → indicator sits before it
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const indicators = document.querySelectorAll('[data-time-indicator]')
     expect(indicators).toHaveLength(1)
     expect(indicators[0].classList.contains('relative')).toBe(true)
   })
 
   it('does not overlay the indicator on the current card', () => {
-    // now = 10:45, current event is 10:30 (10:30 → 11:00) — no overlay, just between
+    // now = 10:45, current activity is 10:30 (10:30 → 11:00) — no overlay, just between
     vi.mocked(timeModule.nowMinutes).mockReturnValue(10 * 60 + 45)
-    render(<Timeline events={events} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
     const overlay = document.querySelector('[data-time-indicator].absolute')
     expect(overlay).toBeNull()
   })
@@ -107,42 +107,42 @@ describe('time indicator placement', () => {
 
 describe('run group filter', () => {
   it('shows all sessions when no groups selected', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getAllByText('Orange')).toHaveLength(2)
     expect(screen.getByText('Pink')).toBeInTheDocument()
   })
 
   it('hides sessions not matching the selected group', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={['orange']} hidePast={false} />)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={false} selectedGroups={['orange']} hidePast={false} />)
     expect(screen.getAllByText('Orange')).toHaveLength(2)
     expect(screen.queryByText('Pink')).not.toBeInTheDocument()
   })
 
-  it('always shows general events regardless of group filter', () => {
-    render(<Timeline events={events} runGroups={runGroups} isToday={false} selectedGroups={['orange']} hidePast={false} />)
+  it('always shows general activities regardless of group filter', () => {
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={false} selectedGroups={['orange']} hidePast={false} />)
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
     expect(screen.getByText('Lunch')).toBeInTheDocument()
   })
 })
 
-describe('break events', () => {
+describe('break activities', () => {
   it('renders a break label between sessions', () => {
-    const withBreak: ScheduleEvent[] = [
+    const withBreak: ScheduleActivity[] = [
       { time: '09:15', type: 'session', onTrack: ['purple'] },
       { type: 'break', label: 'Instructor break' },
       { time: '09:50', type: 'session', onTrack: ['orange'] },
     ]
-    render(<Timeline events={withBreak} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={withBreak} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getByText('Instructor break')).toBeInTheDocument()
   })
 
-  it('hides an orphaned break when hidePast removes all preceding events', () => {
-    const withBreak: ScheduleEvent[] = [
+  it('hides an orphaned break when hidePast removes all preceding activities', () => {
+    const withBreak: ScheduleActivity[] = [
       { time: '08:00', type: 'session', onTrack: ['purple'] },
       { type: 'break', label: 'Instructor break' },
       { time: '10:30', type: 'session', onTrack: ['orange'] },
     ]
-    render(<Timeline events={withBreak} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    render(<Timeline activities={withBreak} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     // 08:00 is past (now=10:00), so the break is orphaned and should be hidden
     expect(screen.getByText('Instructor break').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
   })
@@ -150,21 +150,21 @@ describe('break events', () => {
 
 describe('session number headers', () => {
   it('renders a Session N header when sessionNumber is set', () => {
-    const withSession: ScheduleEvent[] = [
+    const withSession: ScheduleActivity[] = [
       { time: '09:50', type: 'session', sessionNumber: 1, onTrack: ['orange'] },
       { time: '11:45', type: 'session', sessionNumber: 2, onTrack: ['orange'] },
     ]
-    render(<Timeline events={withSession} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={withSession} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getByText('Session 1')).toBeInTheDocument()
     expect(screen.getByText('Session 2')).toBeInTheDocument()
   })
 
   it('does not repeat a session header for the same sessionNumber', () => {
-    const repeated: ScheduleEvent[] = [
+    const repeated: ScheduleActivity[] = [
       { time: '09:50', type: 'session', sessionNumber: 1, onTrack: ['orange'] },
       { time: '10:00', type: 'session', sessionNumber: 1, onTrack: ['pink'] },
     ]
-    render(<Timeline events={repeated} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
+    render(<Timeline activities={repeated} runGroups={runGroups} isToday={false} selectedGroups={[]} hidePast={false} />)
     expect(screen.getAllByText('Session 1')).toHaveLength(1)
   })
 })
