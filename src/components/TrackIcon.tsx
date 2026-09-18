@@ -1,20 +1,23 @@
 /**
  * Track-shape icons shown next to event names in the header and the
- * event picker dropdown (#145). Each icon is a single-line centerline
- * traced from the reference maps in that issue, rendered with a
- * consistent square container and a thick round stroke.
+ * event picker dropdown (#145). Each icon is a hand-traced racing line
+ * from the reference maps in that issue, rendered with a consistent
+ * square container and a thick round stroke.
  *
- * MSRC 3.1 is one traced centerline; the 1.7 and 1.3 configs re-use
- * that same trace and highlight only the portion each one runs, so
- * they overlay exactly on the gray 3.1 base.
+ * MSRC 3.1 is composed of four sub-shapes (east lobe, west lobe, Toilet
+ * Bowl inner loop, and middle Rattlesnake/Wagon Wheel/Ricochet
+ * connector) in one shared coordinate space. The 1.7 icon paints the
+ * east lobe darker over a gray full-3.1 base; the 1.3 icon does the
+ * same but repaints west + Toilet Bowl.
  */
 
 import {
   MSRC_VIEWBOX,
   ECR_VIEWBOX,
-  MSRC_FULL_PATH,
-  MSRC_ONE_SEVEN_PATH,
-  MSRC_ONE_THREE_PATH,
+  MSRC_EAST_PATH,
+  MSRC_WEST_PATH,
+  MSRC_TOILET_BOWL_PATH,
+  MSRC_MIDDLE_PATH,
   ECR_PATH,
 } from './trackPaths'
 
@@ -28,47 +31,41 @@ interface Props {
 const BASE_STROKE = '#d1d5db' // gray-300 — the "unused" portion of a multi-config MSRC track
 const HIGHLIGHT_STROKE = 'currentColor'
 
-// Stroke width as a fraction of the LARGER viewBox dimension. Tuned so
-// the ribbon reads as a real track at 28px and stays clean up to 240px+,
-// and so tall (MSRC) and short (ECR) source viewBoxes render at the
-// same visible thickness at any given icon size.
+// Stroke width as a fraction of the larger viewBox dimension so MSRC
+// (tall) and ECR (wide) render at the same visible thickness at any
+// given icon size.
 const STROKE_FRACTION = 0.055
+
+const MSRC_PIECES = [MSRC_EAST_PATH, MSRC_WEST_PATH, MSRC_TOILET_BOWL_PATH, MSRC_MIDDLE_PATH]
+const MSRC_1_7_HIGHLIGHTED = [MSRC_EAST_PATH]
+const MSRC_1_3_HIGHLIGHTED = [MSRC_WEST_PATH, MSRC_TOILET_BOWL_PATH]
 
 export function TrackIcon({ trackId, size = 28, className = '', title }: Props) {
   const label = title ?? (trackId ? `${trackId} track` : 'Track')
 
-  if (trackId === 'msrc-3-1') return <MsrcIcon config="full" size={size} className={className} label={label} />
-  if (trackId === 'msrc-1-7') return <MsrcIcon config="oneSeven" size={size} className={className} label={label} />
-  if (trackId === 'msrc-1-3') return <MsrcIcon config="oneThree" size={size} className={className} label={label} />
+  if (trackId === 'msrc-3-1') {
+    return (
+      <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX}
+        paths={MSRC_PIECES.map(d => ({ d, stroke: HIGHLIGHT_STROKE }))} />
+    )
+  }
+  if (trackId === 'msrc-1-7' || trackId === 'msrc-1-3') {
+    const highlighted = trackId === 'msrc-1-7' ? MSRC_1_7_HIGHLIGHTED : MSRC_1_3_HIGHLIGHTED
+    return (
+      <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX}
+        paths={[
+          ...MSRC_PIECES.map(d => ({ d, stroke: BASE_STROKE })),
+          ...highlighted.map(d => ({ d, stroke: HIGHLIGHT_STROKE })),
+        ]} />
+    )
+  }
   if (trackId === 'ecr') {
     return (
-      <TrackShape
-        size={size}
-        className={className}
-        label={label}
-        viewBox={ECR_VIEWBOX}
-        paths={[{ d: ECR_PATH, stroke: HIGHLIGHT_STROKE, closed: true }]}
-      />
+      <TrackShape size={size} className={className} label={label} viewBox={ECR_VIEWBOX}
+        paths={[{ d: ECR_PATH, stroke: HIGHLIGHT_STROKE }]} />
     )
   }
   return <PlaceholderIcon size={size} className={className} label={label} />
-}
-
-interface MsrcProps { config: 'full' | 'oneSeven' | 'oneThree'; size: number; className: string; label: string }
-
-function MsrcIcon({ config, size, className, label }: MsrcProps) {
-  const paths =
-    config === 'full'
-      ? [{ d: MSRC_FULL_PATH, stroke: HIGHLIGHT_STROKE, closed: true }]
-      : [
-          { d: MSRC_FULL_PATH, stroke: BASE_STROKE, closed: true },
-          {
-            d: config === 'oneSeven' ? MSRC_ONE_SEVEN_PATH : MSRC_ONE_THREE_PATH,
-            stroke: HIGHLIGHT_STROKE,
-            closed: true,
-          },
-        ]
-  return <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX} paths={paths} />
 }
 
 interface TrackShapeProps {
@@ -76,7 +73,7 @@ interface TrackShapeProps {
   className: string
   label: string
   viewBox: { w: number; h: number }
-  paths: { d: string; stroke: string; closed: boolean }[]
+  paths: { d: string; stroke: string }[]
 }
 
 function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps) {
@@ -107,7 +104,6 @@ function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps)
 }
 
 // ── Placeholder ─────────────────────────────────────────────────────
-// Shown for events whose track we don't have a shape for yet.
 interface PlaceholderProps { size: number; className: string; label: string }
 
 function PlaceholderIcon({ size, className, label }: PlaceholderProps) {
