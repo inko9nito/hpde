@@ -1,15 +1,22 @@
 /**
- * Traced track-shape icons shown next to event names in the header
- * and the event picker dropdown (#145). The paths were traced with
- * potrace from the reference maps in that issue, then despeckled to
- * strip corner numbers and labels — see `trackPaths.ts`.
+ * Track-shape icons shown next to event names in the header and the
+ * event picker dropdown (#145). Each icon is a single-line centerline
+ * traced from the reference maps in that issue, rendered with a
+ * consistent square container and a thick round stroke.
  *
- * MSRC's three configurations share the 3.1-mile viewBox and its
- * coordinate space: the shorter configs render the full 3.1 shape
- * in light gray and paint the portion being run darker on top of it.
+ * MSRC's three configurations share the same source coordinate space,
+ * so 1.7 and 1.3 draw a gray full 3.1 shape underneath and paint the
+ * portion being run in the darker highlight on top.
  */
 
-import { MSRC_3_1_PATH, MSRC_1_7_PATH, MSRC_1_3_PATH, ECR_PATH } from './trackPaths'
+import {
+  MSRC_VIEWBOX,
+  ECR_VIEWBOX,
+  MSRC_3_1_PATH,
+  MSRC_1_7_PATH,
+  MSRC_1_3_PATH,
+  ECR_PATH,
+} from './trackPaths'
 
 interface Props {
   trackId?: string
@@ -18,14 +25,13 @@ interface Props {
   title?: string
 }
 
-const BASE_FILL = '#e5e7eb' // gray-200 — the "unused" portion of a multi-config MSRC track
-const HIGHLIGHT_FILL = 'currentColor'
+const BASE_STROKE = '#d1d5db' // gray-300 — the "unused" portion of a multi-config MSRC track
+const HIGHLIGHT_STROKE = 'currentColor'
 
-// Source images were all traced at their native pixel dimensions.
-const MSRC_W = 1536
-const MSRC_H = 1117
-const ECR_W = 1728
-const ECR_H = 796
+// The source images have different aspect ratios; render each into the
+// same square container so icons line up in a list. Track paths are
+// drawn at ~4% of the viewBox height, tuned to read at 28px.
+const STROKE_FRACTION = 0.055
 
 export function TrackIcon({ trackId, size = 28, className = '', title }: Props) {
   const label = title ?? (trackId ? `${trackId} track` : 'Track')
@@ -33,57 +39,57 @@ export function TrackIcon({ trackId, size = 28, className = '', title }: Props) 
   if (trackId === 'msrc-3-1') return <MsrcIcon config="full" size={size} className={className} label={label} />
   if (trackId === 'msrc-1-7') return <MsrcIcon config="oneSeven" size={size} className={className} label={label} />
   if (trackId === 'msrc-1-3') return <MsrcIcon config="oneThree" size={size} className={className} label={label} />
-  if (trackId === 'ecr') return <EcrIcon size={size} className={className} label={label} />
+  if (trackId === 'ecr') return <TrackShape size={size} className={className} label={label}
+    viewBox={ECR_VIEWBOX} paths={[{ d: ECR_PATH, stroke: HIGHLIGHT_STROKE }]} />
   return <PlaceholderIcon size={size} className={className} label={label} />
 }
 
 interface MsrcProps { config: 'full' | 'oneSeven' | 'oneThree'; size: number; className: string; label: string }
 
 function MsrcIcon({ config, size, className, label }: MsrcProps) {
-  const width = (size * MSRC_W) / MSRC_H
-  return (
-    <svg
-      viewBox={`0 0 ${MSRC_W} ${MSRC_H}`}
-      width={width}
-      height={size}
-      className={className}
-      role="img"
-      aria-label={label}
-    >
-      <g transform={`translate(0 ${MSRC_H}) scale(0.1 -0.1)`}>
-        {config === 'full' ? (
-          <path d={MSRC_3_1_PATH} fill={HIGHLIGHT_FILL} fillRule="evenodd" />
-        ) : (
-          <>
-            <path d={MSRC_3_1_PATH} fill={BASE_FILL} fillRule="evenodd" />
-            <path
-              d={config === 'oneSeven' ? MSRC_1_7_PATH : MSRC_1_3_PATH}
-              fill={HIGHLIGHT_FILL}
-              fillRule="evenodd"
-            />
-          </>
-        )}
-      </g>
-    </svg>
-  )
+  const paths =
+    config === 'full'
+      ? [{ d: MSRC_3_1_PATH, stroke: HIGHLIGHT_STROKE }]
+      : [
+          { d: MSRC_3_1_PATH, stroke: BASE_STROKE },
+          { d: config === 'oneSeven' ? MSRC_1_7_PATH : MSRC_1_3_PATH, stroke: HIGHLIGHT_STROKE },
+        ]
+  return <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX} paths={paths} />
 }
 
-interface EcrProps { size: number; className: string; label: string }
+interface TrackShapeProps {
+  size: number
+  className: string
+  label: string
+  viewBox: { w: number; h: number }
+  paths: { d: string; stroke: string }[]
+}
 
-function EcrIcon({ size, className, label }: EcrProps) {
-  const width = (size * ECR_W) / ECR_H
+function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps) {
+  // Consistent square container — the track shape is scaled to fit inside.
+  const strokeWidth = viewBox.h * STROKE_FRACTION
   return (
     <svg
-      viewBox={`0 0 ${ECR_W} ${ECR_H}`}
-      width={width}
+      viewBox={`0 0 ${viewBox.w} ${viewBox.h}`}
+      width={size}
       height={size}
       className={className}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={label}
     >
-      <g transform={`translate(0 ${ECR_H}) scale(0.1 -0.1)`}>
-        <path d={ECR_PATH} fill={HIGHLIGHT_FILL} fillRule="evenodd" />
-      </g>
+      {paths.map(({ d, stroke }, i) => (
+        <path
+          key={i}
+          d={d}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          fillRule="evenodd"
+        />
+      ))}
     </svg>
   )
 }
@@ -96,11 +102,12 @@ function PlaceholderIcon({ size, className, label }: PlaceholderProps) {
   return (
     <svg
       viewBox="0 0 48 32"
-      width={(size * 48) / 32}
+      width={size}
       height={size}
+      preserveAspectRatio="xMidYMid meet"
       className={className}
       fill="none"
-      stroke={BASE_FILL}
+      stroke={BASE_STROKE}
       strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
