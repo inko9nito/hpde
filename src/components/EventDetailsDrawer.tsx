@@ -63,6 +63,24 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  useEffect(() => {
+    if (!open) return
+    // Lock background scroll: without this, wheel/touch input over the
+    // drawer bubbles past its (often non-scrolling) content and scrolls
+    // the page behind it instead. `body` has no explicit height, so it's
+    // `html` (left at its default `overflow: visible`) that actually
+    // produces the viewport scrollbar — both need locking.
+    const html = document.documentElement
+    const previousHtmlOverflow = html.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+    html.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      html.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [open])
+
   const dates = formatDateRangeWithWeekday(event.days)
   const trackConfiguration = formatTrackConfiguration(event.configuration, event.direction)
   const hasScans = !!event.scheduleScans?.length
