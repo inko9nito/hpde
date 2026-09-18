@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const widgetSrc = readFileSync(join(__dirname, 'hpde-widget.js'), 'utf8')
 
-function installScriptableMocks(manifest: unknown) {
+function installScriptableMocks(manifest: unknown, widgetParameter: string | null = null) {
   const g = globalThis as any
   g.Color = class { constructor(_hex?: string, _alpha?: number) {} }
   g.Size = class {
@@ -89,11 +89,24 @@ function installScriptableMocks(manifest: unknown) {
   }
   g.SFSymbol = { named: () => ({ image: {} }) }
   g.Script = { setWidget: () => {}, complete: () => {} }
-  g.args = { widgetParameter: null }
+  g.args = { widgetParameter }
+  class NotificationStub {
+    identifier = ''
+    title = ''
+    body = ''
+    threadIdentifier = ''
+    openURL = ''
+    deliveryDate: Date | null = null
+    async schedule() { g.__scheduled = (g.__scheduled || 0) + 1 }
+  }
+  ;(NotificationStub as any).allPending = async () => []
+  ;(NotificationStub as any).removePending = async (_: string[]) => {}
+  g.Notification = NotificationStub
+  g.__scheduled = 0
 }
 
-async function runWidget(widgetFamily: string, manifest: unknown) {
-  installScriptableMocks(manifest)
+async function runWidget(widgetFamily: string, manifest: unknown, widgetParameter: string | null = null) {
+  installScriptableMocks(manifest, widgetParameter)
   ;(globalThis as any).config = { widgetFamily, runsInWidget: false }
   // Widget script uses top-level await; wrap in an async IIFE so
   // it can be evaled and awaited from here.
@@ -102,7 +115,14 @@ async function runWidget(widgetFamily: string, manifest: unknown) {
   await eval(wrapped)
 }
 
-const today = new Date().toISOString().slice(0, 10)
+function isoDate(offsetDays: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return d.toISOString().slice(0, 10)
+}
+
+const today = isoDate(0)
+const future = isoDate(30)
 
 const RICH_MANIFEST = {
   events: [{
@@ -130,6 +150,34 @@ const RICH_MANIFEST = {
 
 const NO_EVENTS_MANIFEST = { events: [] }
 
+// A manifest whose activities are all in the future (dated 30 days out),
+// so notification scheduling produces a deterministic result no matter
+// what wall-clock time the test runs at. The widget will render as
+// "no event today" — that's fine for the notification-only assertions.
+const FUTURE_MANIFEST = {
+  events: [{
+    id: 'future-event',
+    name: 'Future event',
+    runGroups: [
+      { id: 'red', label: 'Red', color: '#ef4444' },
+      { id: 'blue', label: 'Blue', color: '#3b82f6' },
+      { id: 'orange', label: 'Orange', color: '#f97316' },
+    ],
+    days: [{
+      date: future,
+      label: 'Saturday',
+      activities: [
+        { time: '08:00', type: 'general', label: 'Drivers meeting', subtitle: 'In clubhouse' },
+        { time: '08:30', type: 'session', onTrack: ['red'], inClass: ['blue'] },
+        { time: '08:50', type: 'session', onTrack: ['orange'] },
+        { time: '09:10', type: 'session', onTrack: ['blue'] },
+        { type: 'break', label: '10 minute break' },
+        { time: '12:00', type: 'lunch', label: 'Lunch', subtitle: '60 minutes' },
+      ],
+    }],
+  }],
+}
+
 describe('scriptable widget loads and renders', () => {
   it('module loads without a TDZ / reference error', async () => {
     await expect(runWidget('medium', RICH_MANIFEST)).resolves.toBeUndefined()
@@ -145,5 +193,30 @@ describe('scriptable widget loads and renders', () => {
 
   it('renders the no-events-today path', async () => {
     await expect(runWidget('medium', NO_EVENTS_MANIFEST)).resolves.toBeUndefined()
+  })
+})
+
+describe('notifications', () => {
+  it('schedules all-drivers + every group session when the filter is empty', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, '')
+    // 1 general + 1 lunch + 3 onTrack + 1 inClass = 6 notifications
+    expect((globalThis as any).__scheduled).toBe(6)
+  })
+
+  it('filters to just the named groups but still schedules all-drivers events', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'orange|15m')
+    // orange on-track (1) + drivers meeting (1) + lunch (1) = 3
+    expect((globalThis as any).__scheduled).toBe(3)
+  })
+
+  it('parses `Nm` as lead time even without a pipe or before the groups', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, '15m,blue')
+    // blue on-track (1) + blue in-class (1) + drivers meeting (1) + lunch (1) = 4
+    expect((globalThis as any).__scheduled).toBe(4)
+  })
+
+  it('schedules nothing when there are no future activities', async () => {
+    await runWidget('medium', NO_EVENTS_MANIFEST, '')
+    expect((globalThis as any).__scheduled).toBe(0)
   })
 })
