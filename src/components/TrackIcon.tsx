@@ -4,17 +4,17 @@
  * traced from the reference maps in that issue, rendered with a
  * consistent square container and a thick round stroke.
  *
- * MSRC's three configurations share the same source coordinate space,
- * so 1.7 and 1.3 draw a gray full 3.1 shape underneath and paint the
- * portion being run in the darker highlight on top.
+ * MSRC 3.1 is one traced centerline; the 1.7 and 1.3 configs re-use
+ * that same trace and highlight only the portion each one runs, so
+ * they overlay exactly on the gray 3.1 base.
  */
 
 import {
   MSRC_VIEWBOX,
   ECR_VIEWBOX,
-  MSRC_3_1_PATH,
-  MSRC_1_7_PATH,
-  MSRC_1_3_PATH,
+  MSRC_FULL_PATH,
+  MSRC_EAST_PATH,
+  MSRC_WEST_PATH,
   ECR_PATH,
 } from './trackPaths'
 
@@ -28,9 +28,8 @@ interface Props {
 const BASE_STROKE = '#d1d5db' // gray-300 — the "unused" portion of a multi-config MSRC track
 const HIGHLIGHT_STROKE = 'currentColor'
 
-// The source images have different aspect ratios; render each into the
-// same square container so icons line up in a list. Track paths are
-// drawn at ~4% of the viewBox height, tuned to read at 28px.
+// Stroke width as a fraction of the viewBox height. Tuned so the ribbon
+// reads as a real track at 28px and stays clean up to 240px+.
 const STROKE_FRACTION = 0.055
 
 export function TrackIcon({ trackId, size = 28, className = '', title }: Props) {
@@ -39,8 +38,17 @@ export function TrackIcon({ trackId, size = 28, className = '', title }: Props) 
   if (trackId === 'msrc-3-1') return <MsrcIcon config="full" size={size} className={className} label={label} />
   if (trackId === 'msrc-1-7') return <MsrcIcon config="oneSeven" size={size} className={className} label={label} />
   if (trackId === 'msrc-1-3') return <MsrcIcon config="oneThree" size={size} className={className} label={label} />
-  if (trackId === 'ecr') return <TrackShape size={size} className={className} label={label}
-    viewBox={ECR_VIEWBOX} paths={[{ d: ECR_PATH, stroke: HIGHLIGHT_STROKE }]} />
+  if (trackId === 'ecr') {
+    return (
+      <TrackShape
+        size={size}
+        className={className}
+        label={label}
+        viewBox={ECR_VIEWBOX}
+        paths={[{ d: ECR_PATH, stroke: HIGHLIGHT_STROKE, closed: true }]}
+      />
+    )
+  }
   return <PlaceholderIcon size={size} className={className} label={label} />
 }
 
@@ -49,10 +57,14 @@ interface MsrcProps { config: 'full' | 'oneSeven' | 'oneThree'; size: number; cl
 function MsrcIcon({ config, size, className, label }: MsrcProps) {
   const paths =
     config === 'full'
-      ? [{ d: MSRC_3_1_PATH, stroke: HIGHLIGHT_STROKE }]
+      ? [{ d: MSRC_FULL_PATH, stroke: HIGHLIGHT_STROKE, closed: true }]
       : [
-          { d: MSRC_3_1_PATH, stroke: BASE_STROKE },
-          { d: config === 'oneSeven' ? MSRC_1_7_PATH : MSRC_1_3_PATH, stroke: HIGHLIGHT_STROKE },
+          { d: MSRC_FULL_PATH, stroke: BASE_STROKE, closed: true },
+          {
+            d: config === 'oneSeven' ? MSRC_EAST_PATH : MSRC_WEST_PATH,
+            stroke: HIGHLIGHT_STROKE,
+            closed: false,
+          },
         ]
   return <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX} paths={paths} />
 }
@@ -62,11 +74,10 @@ interface TrackShapeProps {
   className: string
   label: string
   viewBox: { w: number; h: number }
-  paths: { d: string; stroke: string }[]
+  paths: { d: string; stroke: string; closed: boolean }[]
 }
 
 function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps) {
-  // Consistent square container — the track shape is scaled to fit inside.
   const strokeWidth = viewBox.h * STROKE_FRACTION
   return (
     <svg
@@ -87,7 +98,6 @@ function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps)
           strokeWidth={strokeWidth}
           strokeLinejoin="round"
           strokeLinecap="round"
-          fillRule="evenodd"
         />
       ))}
     </svg>
