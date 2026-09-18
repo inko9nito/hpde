@@ -1105,7 +1105,7 @@ function shortDate(iso) {
 
 function renderNoEvents(w, p, stale, next) {
   const title = w.addText("HPDE")
-  title.font = rBoldFont(14)
+  title.font = rBoldFont(18)
   title.textColor = p.fg
   w.addSpacer(6)
 
@@ -1114,7 +1114,7 @@ function renderNoEvents(w, p, stale, next) {
   msg.textColor = p.muted
 
   if (next) {
-    w.addSpacer(4)
+    w.addSpacer(10)
     const nx = w.addText(`Next: ${next.event.name}`)
     nx.font = rMediumFont(11)
     nx.textColor = p.fg
@@ -1130,6 +1130,12 @@ function renderNoEvents(w, p, stale, next) {
     s.font = rFont(9)
     s.textColor = p.muted
   }
+
+  // Flex spacer forces the widget's content stack to top-align, same
+  // as makeWidget's populated path — without it Scriptable's
+  // ListWidget centers this short content vertically, which is what
+  // produced the huge empty gutters above and below in #116.
+  w.addSpacer()
 }
 
 function renderError(err) {
