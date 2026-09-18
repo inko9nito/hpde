@@ -10,6 +10,11 @@
 //     orange,blue|15m      — same filter, 15-min lead
 //     15m                  — no filter, 15-min lead
 //     (blank)              — no filter, default 10-min lead
+//     test                 — debug flag: show the Test Event as today's
+//                            event so a notification-schedule end-to-end
+//                            can be verified even without a real HPDE
+//                            today. Combine with anything else, e.g.
+//                            `test,orange|10m`.
 //   Run-group filtering also drives notifications: sessions in the filtered
 //   groups are alerted N minutes before start; all-drivers events (anything
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.
@@ -64,19 +69,20 @@ async function loadManifest() {
     req.timeoutInterval = 8
     const manifest = await req.loadJSON()
     try { fm.writeString(path, JSON.stringify(manifest)) } catch (_) {}
-    return { manifest: rewriteFixtures(manifest), stale: false }
+    return { manifest, stale: false }
   } catch (e) {
     if (fm.fileExists(path)) {
-      return { manifest: rewriteFixtures(JSON.parse(fm.readString(path))), stale: true }
+      return { manifest: JSON.parse(fm.readString(path)), stale: true }
     }
     throw e
   }
 }
 
-// Standing fixture events (test-live) carry the site build day's date in
-// the manifest. Rewrite their day dates to "today" here so they stay
-// exercisable from the widget without depending on when the site was
-// last rebuilt.
+// Standing fixture events (test-live) ship in the manifest at their
+// natural date (Jan 1 2000) so real users never see them as today's
+// event. Rewriting them to "today" is opt-in via the `test` flag on
+// the widget parameter — the widget calls this only when the user
+// asks for it.
 const FIXTURE_EVENT_IDS = new Set(["test-live"])
 function rewriteFixtures(manifest) {
   if (!manifest || !Array.isArray(manifest.events)) return manifest
@@ -182,16 +188,23 @@ function pickNextFuture(manifest) {
   return future[0] || null
 }
 
+// Reserved parameter tokens that aren't run-group ids: they flip debug
+// switches instead. Keep this small — every keyword here excludes a
+// potential future run-group id.
+const RESERVED_FLAG_TOKENS = new Set(["test"])
+
 // Parse the widget's optional user parameter into a filter list plus a lead
-// time for notifications. Format is `<groups>|<Nm>`; either half is
-// optional. Any comma-separated token matching `\d+m` (case-insensitive) is
-// treated as the lead time even if the user forgot the pipe (`10m` alone
-// or `orange,10m` both work). Anything else is a group id — unknown group
-// ids get sifted into `invalid` later, once we have a manifest to check
-// against.
+// time for notifications and a debug-flag set. Format is `<groups>|<Nm>`;
+// either half is optional. Any comma-separated token matching `\d+m`
+// (case-insensitive) is treated as the lead time even if the user forgot
+// the pipe (`10m` alone or `orange,10m` both work). A reserved flag token
+// (e.g. `test`) is recorded in `flags` and skips the group list. Anything
+// else is a group id — unknown group ids get sifted into `invalid` later,
+// once we have a manifest to check against.
 function parseWidgetParameter(raw) {
   const source = String(raw == null ? "" : raw).trim()
   const groups = []
+  const flags = {}
   let leadMinutes = DEFAULT_LEAD_MIN
   const invalidLead = []
   if (source) {
@@ -204,13 +217,15 @@ function parseWidgetParameter(raw) {
           const n = parseInt(m[1], 10)
           if (n >= 0 && n <= 24 * 60) leadMinutes = n
           else invalidLead.push(tok)
+        } else if (RESERVED_FLAG_TOKENS.has(tok.toLowerCase())) {
+          flags[tok.toLowerCase()] = true
         } else {
           groups.push(tok)
         }
       }
     }
   }
-  return { rawParam: source, groups, leadMinutes, invalid: invalidLead }
+  return { rawParam: source, groups, leadMinutes, flags, invalid: invalidLead }
 }
 
 function readWidgetParameter() {
@@ -1537,7 +1552,13 @@ async function refreshNotifications(manifest, parsed) {
 let widget
 try {
   const data = await loadManifest()
-  const parsed = validateWidgetParameter(readWidgetParameter(), data.manifest)
+  const parsedRaw = readWidgetParameter()
+  // Fixture events (test-live) ship in the manifest at their natural
+  // date and are only rewritten to "today" when the user opts in via
+  // the `test` flag. Real users' widgets are never haunted by the
+  // Test Event this way.
+  if (parsedRaw.flags && parsedRaw.flags.test) rewriteFixtures(data.manifest)
+  const parsed = validateWidgetParameter(parsedRaw, data.manifest)
   let notifStatus = { scheduled: 0, denied: false }
   try {
     notifStatus = await refreshNotifications(data.manifest, parsed)

@@ -230,3 +230,37 @@ describe('notifications', () => {
     expect((globalThis as any).__scheduled).toBe(0)
   })
 })
+
+describe('test-live fixture gating', () => {
+  // A manifest that carries the standing fixture at its natural (past)
+  // date. Without the `test` flag the widget should treat it as ancient
+  // and schedule nothing; with `test`, the widget rewrites its day to
+  // today and every activity becomes future work.
+  const FIXTURE_MANIFEST = {
+    events: [{
+      id: 'test-live',
+      name: 'Test Event',
+      runGroups: [
+        { id: 'red', label: 'Red', color: '#ef4444' },
+        { id: 'blue', label: 'Blue', color: '#3b82f6' },
+      ],
+      days: [{
+        date: '2000-01-01',
+        label: 'Saturday',
+        activities: [
+          { time: '23:59', type: 'general', label: 'Late-night check-in' },
+        ],
+      }],
+    }],
+  }
+
+  it('leaves the test-live fixture in the past when no `test` flag is set', async () => {
+    await runWidget('medium', FIXTURE_MANIFEST, '')
+    expect((globalThis as any).__scheduled).toBe(0)
+  })
+
+  it('rewrites the test-live fixture to today when the `test` flag is set', async () => {
+    await runWidget('medium', FIXTURE_MANIFEST, 'test')
+    expect((globalThis as any).__scheduled).toBe(1)
+  })
+})
