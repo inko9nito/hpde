@@ -16,11 +16,22 @@ to share or open straight from an iPhone.
 
 ## Install
 
+Two ways to set up the widget — pick one:
+
+**Auto-updating (recommended):** paste
+[`hpde-widget-loader.js`](./hpde-widget-loader.js) instead of the main
+script. It's a tiny stub that fetches the real script from `main` on every
+run (falling back to its last successful fetch if offline), so future
+updates need no more copy-pasting — see
+[`hpde-widget-loader.js`](./hpde-widget-loader.js) for how it works.
+
+**Manual:** paste `hpde-widget.js` itself. You'll need to re-paste it
+whenever it changes.
+
 1. Install [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) on
    your iPhone (free).
-2. Open Scriptable → `+` → paste the contents of
-   [`hpde-widget.js`](./hpde-widget.js) (or the evergreen link above) →
-   title it "HPDE".
+2. Open Scriptable → `+` → paste the contents of one of the two scripts
+   above → title it "HPDE".
 3. Long-press the Home Screen → **Add Widget** → **Scriptable** → pick
    **Medium** or **Large** → Add. The same script handles both sizes;
    Large fits ~10 rows around the "now" line, Medium fits ~3.
