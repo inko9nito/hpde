@@ -39,15 +39,26 @@ finished or ready for review. Do this without being asked.
 
 ## Handing the widget script back to the user
 
-The user tests `scripts/hpde-widget.js` by pasting it into
-Scriptable on their iPhone. Every time you change that file:
-push the change, then post the direct GitHub raw-file link
-in a comment on the issue you're working on
-(`https://raw.githubusercontent.com/inko9nito/hpde/<branch>/scripts/hpde-widget.js`
-for whichever branch the change lives on). The link is enough
-— DO NOT paste the full script into the comment body as a
-fenced code block; the user has asked to keep comments short.
-Do the post without being asked.
+The user runs a small paste-once loader (`scripts/hpde-widget-loader.js`)
+in Scriptable that fetches `scripts/hpde-widget.js` from `main` on
+every widget run. So once a change to the widget script lands on
+`main`, the loader picks it up automatically — the user doesn't
+re-paste anything. Practically:
+
+- On a PR that changes `scripts/hpde-widget.js`, don't tell the
+  user to paste the new script. Just say the loader will pick it
+  up when the PR merges.
+- If the user wants to test the branch BEFORE merging, they can
+  temporarily change the `SCRIPT_URL` constant in the loader they
+  already have installed to point at the branch's raw file
+  (`https://raw.githubusercontent.com/inko9nito/hpde/<branch>/scripts/hpde-widget.js`),
+  run the widget, then revert to `main`. Mention this option in a
+  short comment on the issue when a widget-script change ships.
+- DO NOT paste the full widget script into the comment body as a
+  fenced code block; the user has asked to keep comments short.
+
+Do the "loader will pick it up on merge, here's how to preview
+early if you want" post without being asked.
 
 ## Don't auto-watch CI or PRs
 

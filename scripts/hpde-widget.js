@@ -4,12 +4,34 @@
 //
 // Setup: install Scriptable → paste this script → long-press Home Screen →
 //   Add Widget → Scriptable → Medium → Edit Widget → Script = this script.
-// Optional Parameter: comma-separated run group ids (e.g. "orange,blue") to
-//   filter session rows. Leave blank to show everything.
+// Optional Parameter: comma-separated run group ids and an optional lead
+//   time as `Nm`, split by `|` for readability. Examples:
+//     orange,blue          — filter to orange + blue, default 10-min lead
+//     orange,blue|15m      — same filter, 15-min lead
+//     15m                  — no filter, 15-min lead
+//     (blank)              — no filter, default 10-min lead
+//   Run-group filtering also drives notifications: sessions in the filtered
+//   groups are alerted N minutes before start; all-drivers events (anything
+//   without a run-group tag — meetings, lunch, etc.) always fire an alert.
 
 const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
 const SITE_URL = "https://inko9nito.github.io/hpde/"
 const CACHE_FILENAME = "hpde-events.json"
+const NOTIF_STATE_FILENAME = "hpde-notif-state.json"
+const NOTIF_ID_PREFIX = "hpde:"
+const NOTIF_THREAD_ID = "hpde"
+const DEFAULT_LEAD_MIN = 10
+// Instance entries in the shared state file age out after this many days
+// without a widget refresh, so a widget instance that was removed stops
+// contributing its filter/lead to the merged notification set.
+const NOTIF_STALE_INSTANCE_DAYS = 3
+// iOS caps pending notifications per app at 64; leave headroom under that
+// so the widget's own alerts don't crowd out anything else Scriptable
+// might schedule.
+const NOTIF_MAX_PENDING = 60
+// A same-group session immediately after an on-track slot only counts as
+// a "follows" hint if it starts within this many minutes.
+const NOTIF_FOLLOW_WINDOW_MIN = 60
 
 const LAST_ACTIVITY_FALLBACK_MIN = 30
 // The current activity stops being "current" this many minutes before the
@@ -143,10 +165,57 @@ function pickNextFuture(manifest) {
   return future[0] || null
 }
 
-function parseGroupFilter() {
+// Parse the widget's optional user parameter into a filter list plus a lead
+// time for notifications. Format is `<groups>|<Nm>`; either half is
+// optional. Any comma-separated token matching `\d+m` (case-insensitive) is
+// treated as the lead time even if the user forgot the pipe (`10m` alone
+// or `orange,10m` both work). Anything else is a group id — unknown group
+// ids get sifted into `invalid` later, once we have a manifest to check
+// against.
+function parseWidgetParameter(raw) {
+  const source = String(raw == null ? "" : raw).trim()
+  const groups = []
+  let leadMinutes = DEFAULT_LEAD_MIN
+  const invalidLead = []
+  if (source) {
+    for (const chunk of source.split("|")) {
+      for (const t of chunk.split(",")) {
+        const tok = t.trim()
+        if (!tok) continue
+        const m = tok.match(/^(\d+)\s*m$/i)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n >= 0 && n <= 24 * 60) leadMinutes = n
+          else invalidLead.push(tok)
+        } else {
+          groups.push(tok)
+        }
+      }
+    }
+  }
+  return { rawParam: source, groups, leadMinutes, invalid: invalidLead }
+}
+
+function readWidgetParameter() {
   const raw = typeof args !== "undefined" && args.widgetParameter
-  if (!raw) return []
-  return String(raw).split(",").map(s => s.trim()).filter(Boolean)
+  return parseWidgetParameter(raw)
+}
+
+// Validates group ids against a manifest's known run groups; unknown ids
+// are moved into `invalid` for the widget footer. Mutates and returns the
+// parsed object.
+function validateWidgetParameter(parsed, manifest) {
+  const known = new Set()
+  for (const event of (manifest && manifest.events) || []) {
+    for (const g of event.runGroups || []) known.add(g.id)
+  }
+  const kept = []
+  for (const gid of parsed.groups) {
+    if (known.has(gid)) kept.push(gid)
+    else parsed.invalid.push(gid)
+  }
+  parsed.groups = kept
+  return parsed
 }
 
 // ---------- palette ----------
@@ -245,7 +314,7 @@ const NONCURRENT_CARD_PAD_V = 8
 
 // ---------- rendering ----------
 
-function makeWidget({ manifest, stale }) {
+function makeWidget({ manifest, stale }, parsed, notifStatus) {
   const w = new ListWidget()
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
@@ -256,13 +325,14 @@ function makeWidget({ manifest, stale }) {
   const picked = pickToday(manifest)
   if (!picked) {
     renderNoEvents(w, p, stale, pickNextFuture(manifest))
+    drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
     return w
   }
 
   const { event, day } = picked
   const groupById = Object.fromEntries(event.runGroups.map(g => [g.id, g]))
-  const selected = parseGroupFilter()
+  const selected = (parsed && parsed.groups) || []
 
   const visible = day.activities.map(e => {
     if (e.type !== "session" || selected.length === 0) return e
@@ -393,9 +463,38 @@ function makeWidget({ manifest, stale }) {
     drawMoreActivitiesFooter(w, p, remaining)
     w.addSpacer()
   }
+  drawStatusFooter(w, p, stale, parsed, notifStatus)
 
   w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
   return w
+}
+
+function drawStatusFooter(w, p, stale, parsed, notifStatus) {
+  const bits = []
+  if (notifStatus && notifStatus.denied) {
+    bits.push({ text: "🔕 notifications off", warn: true })
+  }
+  if (stale) bits.push({ text: "cached schedule", warn: false })
+  const invalid = (parsed && parsed.invalid) || []
+  if (invalid.length > 0) {
+    bits.push({ text: `⚠ invalid: ${invalid.join(", ")}`, warn: true })
+  }
+  if (bits.length === 0) return
+  w.addSpacer(2)
+  const row = w.addStack()
+  row.centerAlignContent()
+  row.addSpacer()
+  for (let i = 0; i < bits.length; i++) {
+    if (i > 0) {
+      const dot = row.addText(" · ")
+      dot.font = rFont(9)
+      dot.textColor = p.muted
+    }
+    const el = row.addText(bits[i].text)
+    el.font = rFont(9)
+    el.textColor = bits[i].warn ? new Color("#ef4444") : p.muted
+  }
+  row.addSpacer()
 }
 
 function drawMoreActivitiesFooter(w, p, count) {
@@ -1153,12 +1252,276 @@ function renderError(err) {
   return w
 }
 
+// ---------- notifications ----------
+//
+// Model: every widget refresh (from every widget instance on this device)
+// merges each live instance's filter + lead time and rewrites the full
+// pending-notification set for the app. The merge uses one global identifier
+// namespace `hpde:<sessionKey>`, so any refresh converges to the same end
+// state regardless of order — two widgets covering the same session never
+// produce duplicate alerts. Cross-instance merge rules:
+//
+//   - A session is scheduled if ANY live instance's filter includes its
+//     group (or its filter is empty, i.e. "notify for all groups"). All-
+//     drivers events (activities without a run-group tag: meetings, lunch,
+//     etc.) are always scheduled, regardless of any instance's filter.
+//   - Its lead time is the MAX across the instances that want it, so the
+//     earliest warning wins.
+//
+// Instance state lives in `hpde-notif-state.json` next to the manifest
+// cache. Each instance keys itself by a hash of its parameter string; an
+// entry ages out after NOTIF_STALE_INSTANCE_DAYS without a refresh, which
+// is how a removed widget stops contributing.
+
+function paramHash(source) {
+  let h = 5381
+  const s = String(source == null ? "" : source)
+  for (let i = 0; i < s.length; i++) {
+    h = (((h << 5) + h) + s.charCodeAt(i)) >>> 0
+  }
+  return h.toString(36)
+}
+
+function slug(s) {
+  return String(s == null ? "" : s)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "activity"
+}
+
+function activityDate(dateStr, timeHhmm) {
+  const [y, m, d] = String(dateStr).split("-").map(Number)
+  const [h, mm] = String(timeHhmm).split(":").map(Number)
+  return new Date(y, m - 1, d, h, mm, 0, 0)
+}
+
+function loadNotifState() {
+  try {
+    const fm = getFm()
+    const path = fm.joinPath(fm.documentsDirectory(), NOTIF_STATE_FILENAME)
+    if (fm.fileExists(path)) {
+      const parsed = JSON.parse(fm.readString(path))
+      if (parsed && typeof parsed === "object") return parsed
+    }
+  } catch (_) {}
+  return { instances: {} }
+}
+
+function saveNotifState(state) {
+  try {
+    const fm = getFm()
+    const path = fm.joinPath(fm.documentsDirectory(), NOTIF_STATE_FILENAME)
+    fm.writeString(path, JSON.stringify(state))
+  } catch (_) {}
+}
+
+// Collect one notification target per (activity × group) or per all-drivers
+// activity in the future. Each target carries enough context to build its
+// title/body and to compute a follow-up hint.
+function collectNotifTargets(manifest, now) {
+  const targets = []
+  const nowMs = now.getTime()
+  for (const event of (manifest && manifest.events) || []) {
+    for (const day of event.days || []) {
+      const activities = day.activities || []
+      for (let i = 0; i < activities.length; i++) {
+        const a = activities[i]
+        if (!a || a.type === "break" || !a.time) continue
+        const when = activityDate(day.date, a.time)
+        if (when.getTime() <= nowMs) continue
+        const keyBase = `${event.id}:${day.date}:${a.time}`
+        if (a.type === "session") {
+          for (const gid of (a.onTrack || [])) {
+            targets.push({
+              event, day, activityIdx: i, activity: a,
+              kind: "onTrack", groupId: gid, when,
+              sessionKey: `${keyBase}:sess:onTrack:${gid}`,
+            })
+          }
+          for (const gid of (a.inClass || [])) {
+            targets.push({
+              event, day, activityIdx: i, activity: a,
+              kind: "inClass", groupId: gid, when,
+              sessionKey: `${keyBase}:sess:inClass:${gid}`,
+            })
+          }
+        } else {
+          targets.push({
+            event, day, activityIdx: i, activity: a,
+            kind: "all", groupId: null, when,
+            sessionKey: `${keyBase}:gen:${slug(a.label)}`,
+          })
+        }
+      }
+    }
+  }
+  return targets
+}
+
+function findFollowUp(target) {
+  if (target.kind === "all") return null
+  const activities = target.day.activities || []
+  const gid = target.groupId
+  for (let j = target.activityIdx + 1; j < activities.length; j++) {
+    const a = activities[j]
+    if (!a || a.type !== "session" || !a.time) continue
+    const inTrack = (a.onTrack || []).includes(gid)
+    const inClass = (a.inClass || []).includes(gid)
+    if (!inTrack && !inClass) continue
+    const followKind = inTrack ? "onTrack" : "inClass"
+    if (followKind === target.kind) return null
+    const nextWhen = activityDate(target.day.date, a.time)
+    const gapMin = (nextWhen.getTime() - target.when.getTime()) / 60000
+    if (gapMin <= 0 || gapMin > NOTIF_FOLLOW_WINDOW_MIN) return null
+    return { kind: followKind, time: a.time }
+  }
+  return null
+}
+
+function groupLabel(event, groupId) {
+  const g = ((event && event.runGroups) || []).find(x => x.id === groupId)
+  return (g && g.label) || groupId
+}
+
+function formatTimeWithAmPm(hhmm) {
+  return `${formatTime12(hhmm)} ${formatAmPm(hhmm)}`
+}
+
+function buildNotifContent(target, leadMinutes) {
+  const timeStr = formatTimeWithAmPm(target.activity.time)
+  if (target.kind === "all") {
+    const label = target.activity.label || "Activity"
+    const body = target.activity.subtitle
+      ? `${timeStr} · ${target.activity.subtitle}`
+      : timeStr
+    return { title: `${label} · ${leadMinutes}m`, body }
+  }
+  const g = groupLabel(target.event, target.groupId)
+  const verb = target.kind === "onTrack" ? "On track at" : "Classroom at"
+  let body = `${verb} ${timeStr}`
+  const follow = findFollowUp(target)
+  if (follow) {
+    const fTime = formatTimeWithAmPm(follow.time)
+    const fLabel = follow.kind === "onTrack" ? "On track" : "Classroom"
+    body += ` · ${fLabel} follows at ${fTime}.`
+  }
+  return { title: `${g} · ${leadMinutes}m`, body }
+}
+
+function computeMergedSpecs(manifest, state, now) {
+  const targets = collectNotifTargets(manifest, now)
+  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_DAYS * 86400 * 1000
+  const liveInstances = []
+  for (const inst of Object.values(state.instances || {})) {
+    if (!inst || typeof inst !== "object") continue
+    const t = Date.parse(inst.lastRefreshed || "")
+    if (isFinite(t) && t >= cutoffMs) liveInstances.push(inst)
+  }
+  const specs = []
+  for (const target of targets) {
+    let maxLead = -1
+    for (const inst of liveInstances) {
+      const groups = inst.groups || []
+      const wants =
+        target.kind === "all" ||
+        groups.length === 0 ||
+        groups.includes(target.groupId)
+      if (wants) {
+        const lead = Number.isFinite(inst.leadMinutes) ? inst.leadMinutes : DEFAULT_LEAD_MIN
+        if (lead > maxLead) maxLead = lead
+      }
+    }
+    if (maxLead < 0) continue
+    const fireAt = new Date(target.when.getTime() - maxLead * 60 * 1000)
+    if (fireAt.getTime() <= now.getTime()) continue
+    const { title, body } = buildNotifContent(target, maxLead)
+    specs.push({
+      identifier: NOTIF_ID_PREFIX + target.sessionKey,
+      title, body, fireAt,
+    })
+  }
+  specs.sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime())
+  if (specs.length > NOTIF_MAX_PENDING) specs.length = NOTIF_MAX_PENDING
+  return specs
+}
+
+async function cancelExistingHpdeNotifications() {
+  if (typeof Notification === "undefined" || !Notification.allPending) return
+  const pending = await Notification.allPending()
+  const ids = []
+  for (const n of (pending || [])) {
+    if (n && typeof n.identifier === "string" &&
+        n.identifier.indexOf(NOTIF_ID_PREFIX) === 0) {
+      ids.push(n.identifier)
+    }
+  }
+  if (ids.length > 0 && Notification.removePending) {
+    await Notification.removePending(ids)
+  }
+}
+
+async function scheduleSpecs(specs) {
+  let scheduled = 0
+  let denied = false
+  for (const s of specs) {
+    try {
+      const n = new Notification()
+      n.identifier = s.identifier
+      n.title = s.title
+      n.body = s.body
+      n.threadIdentifier = NOTIF_THREAD_ID
+      n.openURL = SITE_URL
+      n.deliveryDate = s.fireAt
+      await n.schedule()
+      scheduled++
+    } catch (_) {
+      // Permission denial or another scheduling failure. iOS won't
+      // re-prompt after a "Don't Allow", so bail rather than repeat
+      // the same failing call for every remaining spec.
+      denied = true
+      break
+    }
+  }
+  return { scheduled, denied }
+}
+
+async function refreshNotifications(manifest, parsed) {
+  if (typeof Notification === "undefined") return { scheduled: 0, denied: false }
+  const now = new Date()
+  const state = loadNotifState()
+  if (!state.instances || typeof state.instances !== "object") state.instances = {}
+  const hash = paramHash(parsed.rawParam)
+  state.instances[hash] = {
+    params: parsed.rawParam,
+    groups: parsed.groups,
+    leadMinutes: parsed.leadMinutes,
+    lastRefreshed: now.toISOString(),
+  }
+  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_DAYS * 86400 * 1000
+  for (const [k, v] of Object.entries(state.instances)) {
+    const t = v && Date.parse(v.lastRefreshed || "")
+    if (!isFinite(t) || t < cutoffMs) delete state.instances[k]
+  }
+  saveNotifState(state)
+
+  const specs = computeMergedSpecs(manifest, state, now)
+  try {
+    await cancelExistingHpdeNotifications()
+  } catch (_) {}
+  return await scheduleSpecs(specs)
+}
+
 // ---------- entrypoint ----------
 
 let widget
 try {
   const data = await loadManifest()
-  widget = makeWidget(data)
+  const parsed = validateWidgetParameter(readWidgetParameter(), data.manifest)
+  let notifStatus = { scheduled: 0, denied: false }
+  try {
+    notifStatus = await refreshNotifications(data.manifest, parsed)
+  } catch (_) {}
+  widget = makeWidget(data, parsed, notifStatus)
 } catch (err) {
   widget = renderError(err)
 }
