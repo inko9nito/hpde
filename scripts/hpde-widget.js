@@ -1104,29 +1104,37 @@ function shortDate(iso) {
 }
 
 function renderNoEvents(w, p, stale, next) {
-  const title = w.addText("HPDE")
+  // Same LEFT_GUTTER_WIDTH inset renderHeader uses, so this text lines
+  // up with the populated header instead of sitting flush against the
+  // widget's own (much smaller) base padding.
+  const outer = w.addStack()
+  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  const col = outer.addStack()
+  col.layoutVertically()
+
+  const title = col.addText("HPDE")
   title.font = rBoldFont(18)
   title.textColor = p.fg
-  w.addSpacer(6)
+  col.addSpacer(6)
 
-  const msg = w.addText("No event today.")
+  const msg = col.addText("No event today.")
   msg.font = rFont(12)
   msg.textColor = p.muted
 
   if (next) {
-    w.addSpacer(10)
-    const nx = w.addText(`Next: ${next.event.name}`)
+    col.addSpacer(10)
+    const nx = col.addText(`Next: ${next.event.name}`)
     nx.font = rMediumFont(11)
     nx.textColor = p.fg
     nx.lineLimit = 1
-    const when = w.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
+    const when = col.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
     when.font = rFont(10)
     when.textColor = p.muted
   }
 
   if (stale) {
-    w.addSpacer(4)
-    const s = w.addText("(cached)")
+    col.addSpacer(4)
+    const s = col.addText("(cached)")
     s.font = rFont(9)
     s.textColor = p.muted
   }
