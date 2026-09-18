@@ -64,13 +64,30 @@ async function loadManifest() {
     req.timeoutInterval = 8
     const manifest = await req.loadJSON()
     try { fm.writeString(path, JSON.stringify(manifest)) } catch (_) {}
-    return { manifest, stale: false }
+    return { manifest: rewriteFixtures(manifest), stale: false }
   } catch (e) {
     if (fm.fileExists(path)) {
-      return { manifest: JSON.parse(fm.readString(path)), stale: true }
+      return { manifest: rewriteFixtures(JSON.parse(fm.readString(path))), stale: true }
     }
     throw e
   }
+}
+
+// Standing fixture events (test-live) carry the site build day's date in
+// the manifest. Rewrite their day dates to "today" here so they stay
+// exercisable from the widget without depending on when the site was
+// last rebuilt.
+const FIXTURE_EVENT_IDS = new Set(["test-live"])
+function rewriteFixtures(manifest) {
+  if (!manifest || !Array.isArray(manifest.events)) return manifest
+  const iso = todayIso()
+  for (const event of manifest.events) {
+    if (!event || !FIXTURE_EVENT_IDS.has(event.id)) continue
+    for (const day of event.days || []) {
+      if (day && typeof day === "object") day.date = iso
+    }
+  }
+  return manifest
 }
 
 // ---------- date + time helpers ----------
