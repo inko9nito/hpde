@@ -1,6 +1,414 @@
 {
-  "generatedAt": "2026-09-18T17:20:41.922Z",
+  "generatedAt": "2026-09-18T17:33:40.091Z",
   "events": [
+    {
+      "id": "test-live",
+      "name": "Test Event",
+      "subtitle": "Test data, not a real event",
+      "runGroups": [
+        {
+          "id": "red",
+          "label": "Red",
+          "color": "#CF4A50",
+          "description": "Time Trial"
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "color": "#3CAA64",
+          "description": "Time Trial"
+        },
+        {
+          "id": "purple",
+          "label": "Purple",
+          "color": "#A261D1",
+          "description": "Time Trial"
+        },
+        {
+          "id": "orange",
+          "label": "Orange",
+          "color": "#F49A34",
+          "description": "Track Day"
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "color": "#478AD1",
+          "description": "Novice"
+        }
+      ],
+      "days": [
+        {
+          "id": "today",
+          "label": "Today",
+          "date": "2026-09-18",
+          "activities": [
+            {
+              "time": "00:00",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "blue"
+              ],
+              "note": "Pre-dawn test session"
+            },
+            {
+              "time": "00:30",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "green"
+              ],
+              "inClass": [
+                "purple"
+              ]
+            },
+            {
+              "time": "01:00",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "orange"
+              ],
+              "inClass": [
+                "blue"
+              ],
+              "note": "Second test group up"
+            },
+            {
+              "time": "01:30",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "green"
+              ]
+            },
+            {
+              "time": "02:00",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "purple"
+              ],
+              "inClass": [
+                "orange"
+              ],
+              "note": "Coffee run happens after"
+            },
+            {
+              "time": "06:30",
+              "type": "general",
+              "label": "Gates open"
+            },
+            {
+              "time": "07:00",
+              "type": "general",
+              "label": "Registration / check-in opens"
+            },
+            {
+              "time": "07:45",
+              "type": "general",
+              "label": "Instructor's meeting"
+            },
+            {
+              "time": "08:00",
+              "type": "general",
+              "label": "Mandatory all drivers meeting",
+              "subtitle": "In clubhouse"
+            },
+            {
+              "time": "08:30",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "blue"
+              ]
+            },
+            {
+              "time": "08:50",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "green"
+              ]
+            },
+            {
+              "time": "09:10",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "purple"
+              ]
+            },
+            {
+              "time": "09:30",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "orange"
+              ]
+            },
+            {
+              "time": "09:50",
+              "type": "session",
+              "sessionNumber": 1,
+              "onTrack": [
+                "blue"
+              ]
+            },
+            {
+              "type": "break",
+              "label": "10 minute corner worker break"
+            },
+            {
+              "time": "10:25",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "blue"
+              ]
+            },
+            {
+              "time": "10:45",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "green"
+              ]
+            },
+            {
+              "time": "11:05",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "purple"
+              ]
+            },
+            {
+              "time": "11:25",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "orange"
+              ]
+            },
+            {
+              "time": "11:45",
+              "type": "session",
+              "sessionNumber": 2,
+              "onTrack": [
+                "blue"
+              ]
+            },
+            {
+              "time": "12:10",
+              "type": "lunch",
+              "label": "Lunch",
+              "subtitle": "60 minutes"
+            },
+            {
+              "time": "13:10",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "orange"
+              ]
+            },
+            {
+              "time": "13:30",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "green"
+              ]
+            },
+            {
+              "time": "13:50",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "purple"
+              ]
+            },
+            {
+              "time": "14:10",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "orange"
+              ]
+            },
+            {
+              "time": "14:30",
+              "type": "session",
+              "sessionNumber": 3,
+              "onTrack": [
+                "blue"
+              ]
+            },
+            {
+              "type": "break",
+              "label": "10 minute corner worker break"
+            },
+            {
+              "time": "15:05",
+              "type": "session",
+              "sessionNumber": 4,
+              "onTrack": [
+                "red"
+              ]
+            },
+            {
+              "time": "15:25",
+              "type": "session",
+              "sessionNumber": 4,
+              "onTrack": [
+                "green"
+              ]
+            },
+            {
+              "time": "15:45",
+              "type": "session",
+              "sessionNumber": 4,
+              "onTrack": [
+                "purple"
+              ]
+            },
+            {
+              "time": "16:05",
+              "type": "session",
+              "sessionNumber": 4,
+              "onTrack": [
+                "orange"
+              ]
+            },
+            {
+              "time": "16:25",
+              "type": "session",
+              "sessionNumber": 4,
+              "onTrack": [
+                "blue"
+              ]
+            },
+            {
+              "time": "17:00",
+              "type": "general",
+              "label": "Track is cold"
+            },
+            {
+              "time": "17:15",
+              "type": "general",
+              "label": "Refreshments and trophies"
+            },
+            {
+              "time": "17:35",
+              "type": "general",
+              "label": "Track re-opens for fun laps"
+            },
+            {
+              "time": "18:00",
+              "type": "session",
+              "sessionNumber": 5,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "blue"
+              ],
+              "note": "Bring your logbook"
+            },
+            {
+              "time": "18:30",
+              "type": "session",
+              "sessionNumber": 5,
+              "onTrack": [
+                "green"
+              ]
+            },
+            {
+              "time": "19:00",
+              "type": "general",
+              "label": "Post-event dinner",
+              "subtitle": "Chef's choice buffet"
+            },
+            {
+              "time": "20:00",
+              "type": "general",
+              "label": "Paddock hangout"
+            },
+            {
+              "time": "21:00",
+              "type": "general",
+              "label": "Night driving demo",
+              "subtitle": "Bring a jacket"
+            },
+            {
+              "time": "22:00",
+              "type": "session",
+              "sessionNumber": 6,
+              "onTrack": [
+                "purple"
+              ],
+              "inClass": [
+                "blue"
+              ],
+              "note": "Instructor briefing at start"
+            },
+            {
+              "time": "22:30",
+              "type": "session",
+              "sessionNumber": 6,
+              "onTrack": [
+                "orange"
+              ],
+              "inClass": [
+                "green"
+              ],
+              "note": "Last group of the day"
+            },
+            {
+              "time": "23:00",
+              "type": "session",
+              "sessionNumber": 7,
+              "onTrack": [
+                "red"
+              ],
+              "inClass": [
+                "green"
+              ],
+              "note": "Cool-down laps, 60 mph max"
+            },
+            {
+              "time": "23:45",
+              "type": "session",
+              "sessionNumber": 8,
+              "onTrack": [
+                "orange"
+              ],
+              "inClass": [
+                "purple"
+              ],
+              "note": "Final laps before gates close"
+            }
+          ]
+        }
+      ]
+    },
     {
       "id": "2026-09-13_msr-scca",
       "name": "SCCA at MSRC 1.7 CW",
