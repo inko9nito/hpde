@@ -1488,7 +1488,11 @@ async function scheduleSpecs(specs) {
       n.body = s.body
       n.threadIdentifier = NOTIF_THREAD_ID
       n.openURL = SITE_URL
-      n.deliveryDate = s.fireAt
+      // Scriptable's `deliveryDate` is READ-ONLY (it reports when the
+      // notification actually fired). To schedule for a future moment
+      // you must call setTriggerDate(); without it, `schedule()` fires
+      // the notification immediately.
+      n.setTriggerDate(s.fireAt)
       await n.schedule()
       scheduled++
     } catch (_) {

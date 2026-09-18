@@ -97,7 +97,17 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     threadIdentifier = ''
     openURL = ''
     deliveryDate: Date | null = null
-    async schedule() { g.__scheduled = (g.__scheduled || 0) + 1 }
+    nextTriggerDate: Date | null = null
+    setTriggerDate(d: Date) { this.nextTriggerDate = d }
+    async schedule() {
+      if (!this.nextTriggerDate) {
+        // Guardrail: the real Scriptable API delivers immediately when
+        // no trigger date is set, which is what happened in production
+        // before we switched from deliveryDate= to setTriggerDate().
+        throw new Error('missing setTriggerDate — would fire immediately')
+      }
+      g.__scheduled = (g.__scheduled || 0) + 1
+    }
   }
   ;(NotificationStub as any).allPending = async () => []
   ;(NotificationStub as any).removePending = async (_: string[]) => {}
