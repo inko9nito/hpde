@@ -56,7 +56,9 @@ export function EventPicker({ events, active, onChange, onOpenDetails }: Props) 
               <button
                 key={e.id}
                 onClick={() => { onChange(e); setOpen(false) }}
-                className="flex w-full items-center justify-between rounded-lg px-4 py-2.5 hover:bg-gray-50 text-left"
+                className={`flex w-full items-center justify-between rounded-lg px-4 py-2.5 text-left ${
+                  e.id === active.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                }`}
               >
                 <div>
                   <div className="flex items-center gap-1.5">
