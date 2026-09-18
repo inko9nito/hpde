@@ -8,6 +8,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let link: string | undefined
   let organizer: string | undefined
   let track: string | undefined
+  let trackId: string | undefined
   let city: string | undefined
   let configuration: string | undefined
   let direction: string | undefined
@@ -37,6 +38,11 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (line.startsWith('organizer:')) {
       organizer = line.slice('organizer:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('trackId:')) {
+      trackId = line.slice('trackId:'.length).trim() || undefined
       continue
     }
 
@@ -121,6 +127,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     ...(link ? { link } : {}),
     ...(organizer ? { organizer } : {}),
     ...(track ? { track } : {}),
+    ...(trackId ? { trackId } : {}),
     ...(city ? { city } : {}),
     ...(configuration ? { configuration } : {}),
     ...(direction ? { direction } : {}),

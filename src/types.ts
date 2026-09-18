@@ -47,6 +47,12 @@ export interface EventConfig {
   subtitle?: string
   link?: string
   mapImage?: string
+  /**
+   * Which stylized track icon to show in the event picker
+   * (see `TrackIcon`). Falls back to a generic placeholder icon
+   * for unknown values or when unset.
+   */
+  trackId?: string
   organizer?: string
   track?: string
   city?: string
