@@ -21,6 +21,11 @@ export interface SerializedEvent {
   name: string
   subtitle?: string
   link?: string
+  organizer?: string
+  track?: string
+  city?: string
+  configuration?: string
+  direction?: string
   runGroups: SerializedRunGroup[]
   days: SerializedDay[]
 }
@@ -70,6 +75,11 @@ export function serializeEvents(events: EventConfig[], now: Date = new Date()): 
       name: e.name,
       ...(e.subtitle ? { subtitle: e.subtitle } : {}),
       ...(e.link ? { link: e.link } : {}),
+      ...(e.organizer ? { organizer: e.organizer } : {}),
+      ...(e.track ? { track: e.track } : {}),
+      ...(e.city ? { city: e.city } : {}),
+      ...(e.configuration ? { configuration: e.configuration } : {}),
+      ...(e.direction ? { direction: e.direction } : {}),
       runGroups: e.runGroups.map(g => ({
         id: g.id,
         label: g.label,
