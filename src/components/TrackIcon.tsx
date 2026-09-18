@@ -13,8 +13,8 @@ import {
   MSRC_VIEWBOX,
   ECR_VIEWBOX,
   MSRC_FULL_PATH,
-  MSRC_EAST_PATH,
-  MSRC_WEST_PATH,
+  MSRC_ONE_SEVEN_PATH,
+  MSRC_ONE_THREE_PATH,
   ECR_PATH,
 } from './trackPaths'
 
@@ -28,8 +28,10 @@ interface Props {
 const BASE_STROKE = '#d1d5db' // gray-300 — the "unused" portion of a multi-config MSRC track
 const HIGHLIGHT_STROKE = 'currentColor'
 
-// Stroke width as a fraction of the viewBox height. Tuned so the ribbon
-// reads as a real track at 28px and stays clean up to 240px+.
+// Stroke width as a fraction of the LARGER viewBox dimension. Tuned so
+// the ribbon reads as a real track at 28px and stays clean up to 240px+,
+// and so tall (MSRC) and short (ECR) source viewBoxes render at the
+// same visible thickness at any given icon size.
 const STROKE_FRACTION = 0.055
 
 export function TrackIcon({ trackId, size = 28, className = '', title }: Props) {
@@ -61,9 +63,9 @@ function MsrcIcon({ config, size, className, label }: MsrcProps) {
       : [
           { d: MSRC_FULL_PATH, stroke: BASE_STROKE, closed: true },
           {
-            d: config === 'oneSeven' ? MSRC_EAST_PATH : MSRC_WEST_PATH,
+            d: config === 'oneSeven' ? MSRC_ONE_SEVEN_PATH : MSRC_ONE_THREE_PATH,
             stroke: HIGHLIGHT_STROKE,
-            closed: false,
+            closed: true,
           },
         ]
   return <TrackShape size={size} className={className} label={label} viewBox={MSRC_VIEWBOX} paths={paths} />
@@ -78,7 +80,7 @@ interface TrackShapeProps {
 }
 
 function TrackShape({ size, className, label, viewBox, paths }: TrackShapeProps) {
-  const strokeWidth = viewBox.h * STROKE_FRACTION
+  const strokeWidth = Math.max(viewBox.w, viewBox.h) * STROKE_FRACTION
   return (
     <svg
       viewBox={`0 0 ${viewBox.w} ${viewBox.h}`}
