@@ -63,6 +63,16 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  useEffect(() => {
+    if (!open) return
+    // Lock background scroll: without this, wheel/touch input over the
+    // drawer bubbles past its (often non-scrolling) content and scrolls
+    // the page behind it instead.
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [open])
+
   const dates = formatDateRangeWithWeekday(event.days)
   const trackConfiguration = formatTrackConfiguration(event.configuration, event.direction)
   const hasScans = !!event.scheduleScans?.length
