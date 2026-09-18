@@ -3,15 +3,13 @@ import path from 'node:path'
 import type { Plugin } from 'vite'
 import { parseScheduleMD } from '../src/utils/parseSchedule'
 import { serializeEvents } from '../src/utils/eventsJson'
-import { todayLocalISO } from '../src/utils/time'
 import type { EventConfig } from '../src/types'
 
-// Fixtures that carry a fixed-date schedule on disk (2000-01-01) but should
-// be published with the build day's date so that Home Screen widget users
-// have a live "today" event to test against. Mirrors the runtime override
-// in src/data/events/test-live.ts. The published date is only accurate on
-// the day of the build; the widget also does a client-side rewrite so it
-// stays "today" until the next site rebuild.
+// Fixtures that carry a fixed-date schedule on disk and ship in
+// events.json alongside real events. The widget doesn't treat these as
+// today's event unless the user opts in via the `test` flag on the
+// widget parameter, at which point the widget rewrites their days to
+// "today" client-side. Real users' widgets never see them as active.
 const FIXTURES: { id: string; sourceFile: string }[] = [
   { id: 'test-live', sourceFile: 'src/data/fixtures/test-live.md' },
 ]
@@ -33,11 +31,9 @@ export function eventsJsonPlugin(): Plugin {
           return parseScheduleMD(id, src)
         })
 
-      const today = todayLocalISO()
       const fixtures: EventConfig[] = FIXTURES.map(({ id, sourceFile }) => {
         const src = fs.readFileSync(path.resolve(sourceFile), 'utf8')
-        const parsed = parseScheduleMD(id, src)
-        return { ...parsed, days: parsed.days.map(d => ({ ...d, date: today })) }
+        return parseScheduleMD(id, src)
       })
 
       const events = [...scheduled, ...fixtures].sort((a, b) => {
