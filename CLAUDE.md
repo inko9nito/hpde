@@ -37,6 +37,13 @@ So once there's a pushed commit for an issue, open a PR from that
 branch with `Closes #<n>` in the body, even before the work is
 finished or ready for review. Do this without being asked.
 
+Every PR body also gets a preview link, since the `pr-preview`
+workflow deploys one for every PR automatically:
+`https://inko9nito.github.io/hpde/pr-preview/pr-<n>/ (after the
+preview workflow runs)`. Include it even right after opening the
+PR, before the workflow has actually finished deploying — the URL
+is deterministic from the PR number.
+
 ## Handing the widget script back to the user
 
 The user tests `scripts/hpde-widget.js` by pasting it into
