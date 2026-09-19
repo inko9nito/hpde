@@ -1443,10 +1443,14 @@ function buildNotifContent(target, leadMinutes) {
   const timeStr = formatTimeWithAmPm(target.activity.time)
   if (target.kind === "all") {
     const label = target.activity.label || "Activity"
+    // Lunch is the one all-drivers activity type that carries its own
+    // recognizable icon — everything else stays plain so the group's
+    // colored circle keeps its "this one's yours" visual weight.
+    const prefix = target.activity.type === "lunch" ? "🥙 " : ""
     const body = target.activity.subtitle
       ? `${timeStr} · ${target.activity.subtitle}`
       : timeStr
-    return { title: `${label} · in ${leadMinutes}m`, body }
+    return { title: `${prefix}${label} · in ${leadMinutes}m`, body }
   }
   const g = groupLabel(target.event, target.groupId)
   const emoji = groupEmoji(target.groupId)

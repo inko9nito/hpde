@@ -282,11 +282,19 @@ describe('notification content', () => {
     expect(orange!.body).toBe('On track at 8:50 AM')
   })
 
-  it('leaves all-drivers events without a group emoji but still says "in Nm"', async () => {
+  it('leaves general all-drivers events without a group emoji but still says "in Nm"', async () => {
     await runWidget('medium', FUTURE_MANIFEST, '|20m')
     const notifs = (globalThis as any).__notifs as Array<{ title: string }>
     const meeting = notifs.find(n => n.title.startsWith('Drivers meeting'))
     expect(meeting).toBeDefined()
     expect(meeting!.title).toBe('Drivers meeting · in 20m')
+  })
+
+  it('prefixes lunch with 🥙 so it reads distinct from other all-drivers items', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, '|20m')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string }>
+    const lunch = notifs.find(n => n.title.includes('Lunch'))
+    expect(lunch).toBeDefined()
+    expect(lunch!.title).toBe('🥙 Lunch · in 20m')
   })
 })
