@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Calendar, Home, Map } from 'lucide-react'
+import { Home, Info } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
@@ -14,7 +14,7 @@ import { PushPage } from './components/PushPage'
 import { EVENTS, ALL_EVENTS } from './data'
 import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
-import type { EventConfig, DaySchedule, View } from './types'
+import type { EventConfig, DaySchedule } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -75,7 +75,6 @@ function isEmptyHash(hash: string): boolean {
 
 export default function App() {
   const [hash, setHash] = useHashRoute()
-  const [view, setView] = useState<View>('schedule')
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -176,24 +175,17 @@ export default function App() {
               events={EVENTS}
               active={activeEvent}
               onChange={switchEvent}
-              onOpenDetails={() => setDetailsOpen(true)}
               onGoHome={goHome}
             />
           </div>
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
-              onClick={() => setView('schedule')}
-              className={`rounded-md p-2 transition-colors ${view === 'schedule' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              onClick={() => setDetailsOpen(true)}
+              aria-label="Event details"
+              className="rounded-md p-2 text-gray-400 transition-colors hover:text-gray-600"
               style={{ minWidth: 36, minHeight: 36 }}
             >
-              <Calendar size={18} />
-            </button>
-            <button
-              onClick={() => setView('map')}
-              className={`rounded-md p-2 transition-colors ${view === 'map' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-              style={{ minWidth: 36, minHeight: 36 }}
-            >
-              <Map size={18} />
+              <Info size={18} />
             </button>
           </div>
         </div>
@@ -204,86 +196,63 @@ export default function App() {
           </div>
         )}
 
-        {view === 'schedule' && (
-          <>
-            {/* Day tabs + Now — only shown for multi-day events */}
-            {multiDay && (
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
-                  {activeEvent.days.map(day => (
-                    <button
-                      key={day.id}
-                      onClick={() => setActiveDayId(day.id)}
-                      className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
-                        activeDay.id === day.id
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
+        {/* Day tabs + Now — only shown for multi-day events */}
+        {multiDay && (
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
+              {activeEvent.days.map(day => (
                 <button
-                  onClick={() => todayDay && setActiveDayId(todayDay.id)}
-                  disabled={isToday || !todayDay}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
-                    isToday || !todayDay
-                      ? 'border-gray-100 bg-white text-gray-300 cursor-default'
-                      : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
+                  key={day.id}
+                  onClick={() => setActiveDayId(day.id)}
+                  className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
+                    activeDay.id === day.id
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
-                  Now
+                  {day.label}
                 </button>
-              </div>
-            )}
-
-            {/* Filters */}
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <RunGroupFilter
-                groups={activeEvent.runGroups}
-                selected={selectedGroups}
-                onChange={setSelectedGroups}
-              />
-              {hasPastActivities && (
-                <Toggle
-                  checked={hidePast}
-                  onChange={() => setHidePast(h => !h)}
-                  label="Hide past activities"
-                />
-              )}
+              ))}
             </div>
+            <button
+              onClick={() => todayDay && setActiveDayId(todayDay.id)}
+              disabled={isToday || !todayDay}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
+                isToday || !todayDay
+                  ? 'border-gray-100 bg-white text-gray-300 cursor-default'
+                  : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
+              }`}
+            >
+              Now
+            </button>
+          </div>
+        )}
 
-            <Timeline
-              activities={activeDay.activities}
-              runGroups={activeEvent.runGroups}
-              isToday={isToday}
-              selectedGroups={selectedGroups}
-              hidePast={hidePast}
+        {/* Filters */}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <RunGroupFilter
+            groups={activeEvent.runGroups}
+            selected={selectedGroups}
+            onChange={setSelectedGroups}
+          />
+          {hasPastActivities && (
+            <Toggle
+              checked={hidePast}
+              onChange={() => setHidePast(h => !h)}
+              label="Hide past activities"
             />
+          )}
+        </div>
 
-            <Legend groups={activeEvent.runGroups} />
-          </>
-        )}
+        <Timeline
+          activities={activeDay.activities}
+          runGroups={activeEvent.runGroups}
+          isToday={isToday}
+          selectedGroups={selectedGroups}
+          hidePast={hidePast}
+        />
 
-        {view === 'map' && (
-          activeEvent.mapImage ? (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <img
-                src={activeEvent.mapImage}
-                alt={`${activeEvent.name} track map`}
-                className="block w-full h-auto"
-              />
-            </div>
-          ) : (
-            <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-400 shadow-sm">
-              <div className="text-center">
-                <Map size={40} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Track map coming soon</p>
-              </div>
-            </div>
-          )
-        )}
+        <Legend groups={activeEvent.runGroups} />
 
       </div>
       <div className="mt-6 pb-8 text-center text-xs">
