@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calendar, Map } from 'lucide-react'
+import { Calendar, Home, Map } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
@@ -9,7 +9,9 @@ import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
 import { EventDetailsDrawer } from './components/EventDetailsDrawer'
+import { LandingPage } from './components/LandingPage'
 import { EVENTS, ALL_EVENTS } from './data'
+import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
 import type { EventConfig, DaySchedule, View } from './types'
 
@@ -55,6 +57,7 @@ function useHashRoute() {
 }
 
 const EVENT_HASH_PREFIX = '#/event/'
+const LANDING_HASH = '#/'
 
 function eventHash(eventId: string): string {
   return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
@@ -63,6 +66,10 @@ function eventHash(eventId: string): string {
 function eventIdFromHash(hash: string): string | null {
   if (!hash.startsWith(EVENT_HASH_PREFIX)) return null
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
+}
+
+function isEmptyHash(hash: string): boolean {
+  return hash === '' || hash === '#'
 }
 
 export default function App() {
@@ -101,10 +108,15 @@ export default function App() {
     setHash(eventHash(event.id))
   }
 
+  function goHome() {
+    setHash(LANDING_HASH)
+  }
+
   // Keep the URL in sync with the active event: a direct link to
   // `#/event/<id>` selects that event, and picking an event from the
   // dropdown (via switchEvent) publishes its URL so the schedule is
-  // shareable and bookmarkable.
+  // shareable and bookmarkable. An empty hash on cold boot lands on the
+  // live event when there is one; otherwise on the landing page.
   useEffect(() => {
     const hashEventId = eventIdFromHash(hash)
     if (hashEventId) {
@@ -112,8 +124,9 @@ export default function App() {
       if (matched && matched.id !== activeEventId) switchEvent(matched)
       return
     }
-    if (hash === '' || hash === '#') {
-      setHash(eventHash(activeEventId))
+    if (isEmptyHash(hash)) {
+      const { live } = partitionEvents(EVENTS)
+      setHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
     }
   }, [hash])
 
@@ -125,6 +138,10 @@ export default function App() {
     return <SharePage />
   }
 
+  if (hash === LANDING_HASH) {
+    return <LandingPage onOpenEvent={switchEvent} />
+  }
+
   return (
     <>
     <PullToRefresh disabled={detailsOpen}>
@@ -133,12 +150,22 @@ export default function App() {
 
         {/* Header */}
         <div className="mb-4 flex items-start justify-between gap-3">
-          <EventPicker
-            events={EVENTS}
-            active={activeEvent}
-            onChange={switchEvent}
-            onOpenDetails={() => setDetailsOpen(true)}
-          />
+          <div className="flex min-w-0 items-start gap-1">
+            <button
+              onClick={goHome}
+              aria-label="Home"
+              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Home size={18} />
+            </button>
+            <EventPicker
+              events={EVENTS}
+              active={activeEvent}
+              onChange={switchEvent}
+              onOpenDetails={() => setDetailsOpen(true)}
+              onGoHome={goHome}
+            />
+          </div>
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('schedule')}
