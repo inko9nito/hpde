@@ -106,14 +106,20 @@ function weekdayLabel(iso) {
   return WEEKDAY_NAMES[new Date(y, m - 1, d).getDay()]
 }
 
-function rewriteFixtures(manifest, mode, upcomingDays) {
+function rewriteFixtures(manifest, mode, upcomingDays, upcomingCount) {
   if (!manifest || !Array.isArray(manifest.events)) return manifest
   for (const event of manifest.events) {
     if (!event || !FIXTURE_EVENT_IDS.has(event.id)) continue
     const days = (event.days || []).filter(day => day && typeof day === "object")
     if (mode === "upcoming") {
       const base = upcomingDays || TEST_UPCOMING_DEFAULT_DAYS
+      // Default to using every fixture day; `test-upcoming-count-<N>`
+      // clamps that down (to as low as 0) so fewer of them get pushed
+      // into the future — the rest stay on their inert placeholder
+      // dates and never count as "upcoming" at all.
+      const count = upcomingCount == null ? days.length : Math.max(0, Math.min(upcomingCount, days.length))
       days.forEach((day, i) => {
+        if (i >= count) return
         const iso = futureIso(base + i * TEST_UPCOMING_SPREAD_DAYS)
         day.date = iso
         // The fixture's first day is authored as "## Today | 2000-01-01",
@@ -249,6 +255,12 @@ const RESERVED_FLAG_TOKENS = new Set(["test"])
 // exercising the no-event-today countdown card. Regex-matched (not in
 // RESERVED_FLAG_TOKENS) since it takes an optional numeric suffix.
 const TEST_UPCOMING_RE = /^test-upcoming(?:-(\d+))?$/i
+// `test-upcoming-count-<N>` caps how many of the fixture's days get
+// rewritten into the future (see rewriteFixtures) — lets you test the
+// countdown card with exactly 0, 1, 2, or "more than the widget can
+// show" upcoming events, independent of which day offset
+// `test-upcoming[-N]` uses. Only takes effect alongside `test-upcoming`.
+const TEST_UPCOMING_COUNT_RE = /^test-upcoming-count-(\d+)$/i
 
 // Parse the widget's optional user parameter into a filter list plus a lead
 // time for notifications and a debug-flag set. Format is `<groups>|<Nm>`;
@@ -271,10 +283,13 @@ function parseWidgetParameter(raw) {
         if (!tok) continue
         const m = tok.match(/^(\d+)\s*m$/i)
         const upcomingMatch = tok.match(TEST_UPCOMING_RE)
+        const upcomingCountMatch = tok.match(TEST_UPCOMING_COUNT_RE)
         if (m) {
           const n = parseInt(m[1], 10)
           if (n >= 0 && n <= 24 * 60) leadMinutes = n
           else invalidLead.push(tok)
+        } else if (upcomingCountMatch) {
+          flags.testUpcomingCount = parseInt(upcomingCountMatch[1], 10)
         } else if (upcomingMatch) {
           flags["test-upcoming"] = true
           if (upcomingMatch[1]) flags.testUpcomingDays = parseInt(upcomingMatch[1], 10)
@@ -1896,7 +1911,7 @@ try {
   // no-event-today countdown card). Real users' widgets are never
   // haunted by the Test Event this way.
   if (parsedRaw.flags && parsedRaw.flags["test-upcoming"]) {
-    rewriteFixtures(data.manifest, "upcoming", parsedRaw.flags.testUpcomingDays)
+    rewriteFixtures(data.manifest, "upcoming", parsedRaw.flags.testUpcomingDays, parsedRaw.flags.testUpcomingCount)
   } else if (parsedRaw.flags && parsedRaw.flags.test) {
     rewriteFixtures(data.manifest, "today")
   }
