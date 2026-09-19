@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T01:08:06.723Z",
+  "generatedAt": "2026-09-19T01:13:13.546Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -1541,6 +1541,11 @@
       "id": "test-live",
       "name": "Test Event",
       "subtitle": "Test data, not a real event",
+      "organizer": "Test Organizer",
+      "track": "Test Raceway",
+      "city": "Testville, TX",
+      "configuration": "2.0",
+      "direction": "Clockwise",
       "runGroups": [
         {
           "id": "red",
