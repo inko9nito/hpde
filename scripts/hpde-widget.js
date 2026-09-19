@@ -439,7 +439,7 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
     const family = config.widgetFamily || "medium"
     const isLarge = family === "large" || family === "extraLarge"
     const upcoming = pickUpcoming(manifest, isLarge ? 2 : 1)
-    renderNoEvents(w, p, stale, upcoming)
+    renderNoEvents(w, p, stale, upcoming, parsed, notifStatus)
     drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
     return w
@@ -584,7 +584,10 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   return w
 }
 
-function drawStatusFooter(w, p, stale, parsed, notifStatus) {
+// Shared with the countdown card's height math (see renderCountdownState)
+// so it can reserve space for this footer only when it's actually
+// going to render something, instead of always leaving a blank gap.
+function statusFooterBits(stale, parsed, notifStatus) {
   const bits = []
   if (notifStatus && notifStatus.denied) {
     bits.push({ text: "🔕 Notifications off", warn: true })
@@ -595,6 +598,11 @@ function drawStatusFooter(w, p, stale, parsed, notifStatus) {
     const label = invalid.length === 1 ? "Invalid parameter" : "Invalid parameters"
     bits.push({ text: `⚠ ${label}: ${invalid.join(", ")}`, warn: true })
   }
+  return bits
+}
+
+function drawStatusFooter(w, p, stale, parsed, notifStatus) {
+  const bits = statusFooterBits(stale, parsed, notifStatus)
   if (bits.length === 0) return
   w.addSpacer(2)
   const row = w.addStack()
@@ -1330,12 +1338,12 @@ function shortDate(iso) {
   return `${months[m - 1]} ${d}`
 }
 
-function renderNoEvents(w, p, stale, upcoming) {
+function renderNoEvents(w, p, stale, upcoming, parsed, notifStatus) {
   if (!upcoming || upcoming.items.length === 0) {
     renderZeroState(w, p, stale)
     return
   }
-  renderCountdownState(w, p, stale, upcoming)
+  renderCountdownState(w, p, stale, upcoming, parsed, notifStatus)
 }
 
 // True zero state — nothing scheduled today AND no future event either.
@@ -1345,13 +1353,15 @@ function renderNoEvents(w, p, stale, upcoming) {
 // against, rather than the vertically-centered "floating in a blank
 // box" look from #116.
 function renderZeroState(w, p, stale) {
-  // Same LEFT_GUTTER_WIDTH inset renderHeader uses, so this text lines
-  // up with the populated header instead of sitting flush against the
-  // widget's own (much smaller) base padding.
+  // Flex spacers on both sides center the whole header+message column
+  // horizontally in the widget — there's no populated header to line
+  // up with here, so there's no reason for the LEFT_GUTTER_WIDTH
+  // asymmetric inset that column uses elsewhere.
   const outer = w.addStack()
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  outer.addSpacer()
   const col = outer.addStack()
   col.layoutVertically()
+  col.centerAlignContent()
 
   const title = col.addText("HPDE")
   title.font = rBoldFont(18)
@@ -1372,6 +1382,8 @@ function renderZeroState(w, p, stale) {
   msg.font = rFont(14)
   msg.textColor = p.muted
   col.addSpacer()
+
+  outer.addSpacer()
 }
 
 // "Clockwise" -> "CW (clockwise)", "Counter-clockwise" -> "CCW
@@ -1417,9 +1429,10 @@ function countdownParts(days) {
 // organizer, location, track config) on the left, same field order as
 // the event-details drawer; the countdown "well" on the right.
 // Reserved below the card for drawStatusFooter (stale/notification/
-// invalid-token bits) — it's only ~16pt when present, but the card's
-// explicit height (below) has to leave room for it whether or not it
-// actually renders.
+// invalid-token bits), ~16pt — but only when it's actually going to
+// render something (see statusFooterBits in renderCountdownState);
+// otherwise the card gets that space instead of leaving a dead gap
+// at the bottom of the widget.
 const COUNTDOWN_FOOTER_RESERVE = 18
 const MORE_UPCOMING_FOOTER_RESERVE = 18
 const COUNTDOWN_CARD_GAP = 10
@@ -1434,7 +1447,7 @@ const COUNTDOWN_CARD_MARGIN = 8
 // One or two countdown cards (Medium always gets one; Large can stack
 // two), plus a "N more upcoming" footer for whatever didn't fit —
 // same convention as drawMoreActivitiesFooter for a day's activities.
-function renderCountdownState(w, p, stale, upcoming) {
+function renderCountdownState(w, p, stale, upcoming, parsed, notifStatus) {
   const { items, total } = upcoming
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
@@ -1446,7 +1459,13 @@ function renderCountdownState(w, p, stale, upcoming) {
   // vertical budget.
   const rich = isLarge && items.length === 1
 
-  const reserve = COUNTDOWN_FOOTER_RESERVE + (remaining > 0 ? MORE_UPCOMING_FOOTER_RESERVE : 0)
+  // Only reserve room for drawStatusFooter (called separately, right
+  // after this returns) when it's actually going to render something —
+  // otherwise the reserve is dead space with nothing sitting in it,
+  // pushing the card (and the "more upcoming" footer under it) further
+  // from the bottom edge than they need to be.
+  const hasStatusFooter = statusFooterBits(stale, parsed, notifStatus).length > 0
+  const reserve = (hasStatusFooter ? COUNTDOWN_FOOTER_RESERVE : 0) + (remaining > 0 ? MORE_UPCOMING_FOOTER_RESERVE : 0)
   const availableH = widgetInteriorHeight() - reserve
   const cardHeight = (availableH - COUNTDOWN_CARD_GAP * (items.length - 1)) / items.length
 
@@ -1459,8 +1478,6 @@ function renderCountdownState(w, p, stale, upcoming) {
     w.addSpacer(6)
     drawMoreUpcomingFooter(w, p, remaining)
   }
-
-  w.addSpacer()
 }
 
 function drawCountdownCard(w, p, next, rich, cardHeight) {
