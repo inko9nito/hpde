@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Calendar, ChevronLeft, ExternalLink, Image as ImageIcon, Link2, MapPin, Route, Users, X } from 'lucide-react'
+import { Calendar, ChevronLeft, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximize2, Route, Users, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import type { EventConfig } from '../types'
@@ -69,13 +69,18 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
   const [dragX, setDragX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [isSettling, setIsSettling] = useState(false)
+  const [mapExpanded, setMapExpanded] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (mapExpanded) setMapExpanded(false)
+      else onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, mapExpanded])
 
   // Reset drag state whenever the drawer opens or closes by any means
   // (button, backdrop, Escape, or the swipe itself), so the next open
@@ -84,6 +89,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     setDragX(0)
     setIsDragging(false)
     setIsSettling(false)
+    setMapExpanded(false)
   }, [open])
 
   // Swipe-right-to-dismiss, mimicking iOS's interactive pop gesture.
@@ -214,7 +220,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
   const trackConfiguration = formatTrackConfiguration(event.configuration, event.direction)
   const hasScans = !!event.scheduleScans?.length
   const hasAny = dates || event.organizer || event.track
-    || trackConfiguration || event.link || hasScans
+    || trackConfiguration || event.link || hasScans || event.mapImage
 
   return (
     <>
@@ -291,6 +297,30 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
                 )}
               </div>
 
+              {event.mapImage && (
+                <div className="mt-6 pl-1">
+                  <h3 className="mb-2 flex items-center gap-3 text-[13px] font-medium text-gray-500">
+                    <Map size={14} className="shrink-0 text-gray-400" />
+                    Track map
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setMapExpanded(true)}
+                    aria-label="Expand track map"
+                    className="group relative block w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                  >
+                    <img
+                      src={event.mapImage}
+                      alt={`${event.name} track map`}
+                      className="block w-full h-auto"
+                    />
+                    <span className="absolute right-2 top-2 inline-grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors group-hover:bg-black/70">
+                      <Maximize2 size={16} />
+                    </span>
+                  </button>
+                </div>
+              )}
+
               {hasScans && (
                 <div className="mt-6 pl-1">
                   <h3 className="mb-2 flex items-center gap-3 text-[13px] font-medium text-gray-500">
@@ -316,6 +346,28 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
           )}
         </div>
       </div>
+      {mapExpanded && event.mapImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${event.name} track map`}
+          onClick={() => setMapExpanded(false)}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+        >
+          <button
+            onClick={() => setMapExpanded(false)}
+            aria-label="Close map"
+            className="absolute right-4 top-4 inline-grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={event.mapImage}
+            alt={`${event.name} track map`}
+            className="max-h-full max-w-full rounded-lg object-contain"
+          />
+        </div>
+      )}
     </>
   )
 }

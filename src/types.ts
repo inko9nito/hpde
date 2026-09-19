@@ -60,5 +60,3 @@ export interface EventConfig {
   runGroups: RunGroupConfig[]
   days: DaySchedule[]
 }
-
-export type View = 'schedule' | 'map'
