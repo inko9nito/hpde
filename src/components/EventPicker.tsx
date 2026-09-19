@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Check, Info } from 'lucide-react'
+import { ChevronDown, Check } from 'lucide-react'
 import { todayLocalISO, eventSubtitle } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -7,7 +7,6 @@ interface Props {
   events: EventConfig[]
   active: EventConfig
   onChange: (event: EventConfig) => void
-  onOpenDetails: () => void
 }
 
 function isEventLive(event: EventConfig): boolean {
@@ -24,7 +23,7 @@ function LiveBadge() {
   )
 }
 
-export function EventPicker({ events, active, onChange, onOpenDetails }: Props) {
+export function EventPicker({ events, active, onChange }: Props) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -37,16 +36,7 @@ export function EventPicker({ events, active, onChange, onOpenDetails }: Props) 
         {isEventLive(active) && <LiveBadge />}
         <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
       </button>
-      <div className="flex items-center gap-0.5">
-        <p className="text-sm text-gray-500">{eventSubtitle(active)}</p>
-        <button
-          onClick={onOpenDetails}
-          aria-label="Event details"
-          className="inline-grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900"
-        >
-          <Info size={14} />
-        </button>
-      </div>
+      <p className="text-sm text-gray-500">{eventSubtitle(active)}</p>
 
       {open && (
         <>

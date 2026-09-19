@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Info } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
@@ -135,8 +136,17 @@ export default function App() {
             events={EVENTS}
             active={activeEvent}
             onChange={switchEvent}
-            onOpenDetails={() => setDetailsOpen(true)}
           />
+          <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
+            <button
+              onClick={() => setDetailsOpen(true)}
+              aria-label="Event details"
+              className="rounded-md p-2 text-gray-400 transition-colors hover:text-gray-600"
+              style={{ minWidth: 36, minHeight: 36 }}
+            >
+              <Info size={18} />
+            </button>
+          </div>
         </div>
 
         {isPastEvent && (
