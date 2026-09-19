@@ -1,10 +1,15 @@
 {
-  "generatedAt": "2026-09-19T00:51:06.397Z",
+  "generatedAt": "2026-09-19T01:08:06.723Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
       "name": "SCCA at MSRC 1.7 CW",
       "link": "https://www.motorsportreg.com/events/txr-scca-time-trial-track-day-hpde-7-motorsport-ranch-cresson-texas-556724",
+      "organizer": "Texas Region SCCA",
+      "track": "Motorsport Ranch - Cresson",
+      "city": "Cresson, TX",
+      "configuration": "1.7",
+      "direction": "Clockwise",
       "runGroups": [
         {
           "id": "red",
@@ -276,6 +281,11 @@
     {
       "id": "2026-09-11_msrc-1-7",
       "name": "TDE at MSRC 1.7CW",
+      "organizer": "The Drivers Edge",
+      "track": "Motorsport Ranch - Cresson",
+      "city": "Cresson, TX",
+      "configuration": "1.7 mile",
+      "direction": "Clockwise",
       "runGroups": [
         {
           "id": "instructors",
@@ -561,6 +571,9 @@
       "id": "2026-06-06_msrc-1-7",
       "name": "TDE at MSRC 1.7 Fast Track",
       "link": "https://www.motorsportreg.com/events/drivers-edge-motorsport-ranch-cresson-hpde-509072",
+      "track": "Motorsport Ranch - Cresson",
+      "city": "Cresson, TX",
+      "configuration": "1.7 mile",
       "runGroups": [
         {
           "id": "instructors",
@@ -752,6 +765,10 @@
     {
       "id": "2026-05-30_ecr-2-7",
       "name": "TDE at ECR 2.7",
+      "organizer": "The Drivers Edge",
+      "track": "Eagles Canyon Raceway",
+      "city": "Decatur, TX",
+      "configuration": "2.7 mile",
       "runGroups": [
         {
           "id": "instructors",
@@ -1020,6 +1037,10 @@
     {
       "id": "2025-11-07_msrc-3-1",
       "name": "TDE at MSRC 3.1",
+      "organizer": "The Drivers Edge",
+      "track": "Motorsport Ranch - Cresson",
+      "city": "Cresson, TX",
+      "configuration": "3.1 mile",
       "runGroups": [
         {
           "id": "instructors",
