@@ -27,10 +27,11 @@
 //   break | <label>
 ```
 
-- organizer:
-- track:
-- configuration:
-- direction:
+- organizer: Test Organizer
+- track: Test Raceway
+- city: Testville, TX
+- configuration: 2.0
+- direction: Clockwise
 - link:
 - subtitle: Test data, not a real event
 

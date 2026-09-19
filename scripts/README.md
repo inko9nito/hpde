@@ -45,11 +45,12 @@ The `Parameter` field on the widget (long-press → Edit Widget → Parameter)
 takes a small comma-separated string. Three kinds of token, split by `,` and
 optionally `|` for readability:
 
-| Token           | Effect                                                                 |
-| --------------- | ---------------------------------------------------------------------- |
-| `<group id>`    | Include this run group in the filter (schedule rows + notifications).  |
-| `<N>m`          | Notification lead time in minutes (default `10m`).                     |
-| `test`          | Debug flag — see [Testing notifications](#testing-notifications).      |
+| Token             | Effect                                                                 |
+| ----------------- | ---------------------------------------------------------------------- |
+| `<group id>`      | Include this run group in the filter (schedule rows + notifications).  |
+| `<N>m`            | Notification lead time in minutes (default `10m`).                     |
+| `test`            | Debug flag — see [Testing notifications](#testing-notifications).      |
+| `test-upcoming`   | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
 
 Examples:
 
@@ -96,6 +97,26 @@ The site's `events.json` always ships the fixture at its natural date
 (`2000-01-01`) so widgets without the `test` flag can't see it as active.
 The rewrite lives entirely on the widget side; there's no server or CI
 knob to change.
+
+### Testing the countdown card
+
+When there's no event today, the widget shows a countdown to the next
+one instead — but that's only reachable on a day with no real HPDE
+event AND a real future one already scheduled. `test-upcoming` gives
+you that on demand, the same way `test` does for the populated view:
+
+- Set the Parameter to `test-upcoming` → the widget rewrites the Test
+  Event to 10 days out and renders the countdown card against it
+  (event name, date, organizer, location — all from the Test Event's
+  fixture data). 10 days exercises the week:day split (`1 WEEK : 3
+  DAYS`); anything ≤ 6 days shows the single day-count instead.
+- `test-upcoming-<N>` picks a different day count, e.g.
+  `test-upcoming-3` for the single-day-count layout, or
+  `test-upcoming-14` for a bigger week:day split.
+- `test` and `test-upcoming` are mutually exclusive (today vs. the
+  future) — set one or the other, not both.
+- Set the Parameter back to whatever you normally use (or blank) to
+  return to real data.
 
 ## Refresh cadence
 

@@ -15,6 +15,11 @@
 //                            can be verified even without a real HPDE
 //                            today. Combine with anything else, e.g.
 //                            `test,orange|10m`.
+//     test-upcoming        — debug flag: show the Test Event as a FUTURE
+//                            event instead, to exercise the no-event-
+//                            today countdown card. Defaults to 10 days
+//                            out (past the single-day/week:day split);
+//                            `test-upcoming-3` picks a different count.
 //   Run-group filtering also drives notifications: sessions in the filtered
 //   groups are alerted N minutes before start; all-drivers events (anything
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.
@@ -80,13 +85,18 @@ async function loadManifest() {
 
 // Standing fixture events (test-live) ship in the manifest at their
 // natural date (Jan 1 2000) so real users never see them as today's
-// event. Rewriting them to "today" is opt-in via the `test` flag on
-// the widget parameter — the widget calls this only when the user
-// asks for it.
+// event. Rewriting them to "today" (or to a future date, for testing
+// the no-event-today countdown card) is opt-in via the `test` /
+// `test-upcoming` flags on the widget parameter — the widget calls
+// this only when the user asks for it.
 const FIXTURE_EVENT_IDS = new Set(["test-live"])
-function rewriteFixtures(manifest) {
+// Past 6 days out the countdown card switches from a single day count
+// to a week:day split, so the default here exercises that split
+// without the user having to pick a number.
+const TEST_UPCOMING_DEFAULT_DAYS = 10
+function rewriteFixtures(manifest, mode, upcomingDays) {
   if (!manifest || !Array.isArray(manifest.events)) return manifest
-  const iso = todayIso()
+  const iso = mode === "upcoming" ? futureIso(upcomingDays || TEST_UPCOMING_DEFAULT_DAYS) : todayIso()
   for (const event of manifest.events) {
     if (!event || !FIXTURE_EVENT_IDS.has(event.id)) continue
     for (const day of event.days || []) {
@@ -99,7 +109,16 @@ function rewriteFixtures(manifest) {
 // ---------- date + time helpers ----------
 
 function todayIso() {
+  return isoFor(new Date())
+}
+
+function futureIso(daysAhead) {
   const d = new Date()
+  d.setDate(d.getDate() + daysAhead)
+  return isoFor(d)
+}
+
+function isoFor(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
@@ -192,15 +211,20 @@ function pickNextFuture(manifest) {
 // switches instead. Keep this small — every keyword here excludes a
 // potential future run-group id.
 const RESERVED_FLAG_TOKENS = new Set(["test"])
+// `test-upcoming` (optionally `test-upcoming-<days>`) rewrites the Test
+// Event to a FUTURE date instead of today, for exercising the
+// no-event-today countdown card. Regex-matched (not in
+// RESERVED_FLAG_TOKENS) since it takes an optional numeric suffix.
+const TEST_UPCOMING_RE = /^test-upcoming(?:-(\d+))?$/i
 
 // Parse the widget's optional user parameter into a filter list plus a lead
 // time for notifications and a debug-flag set. Format is `<groups>|<Nm>`;
 // either half is optional. Any comma-separated token matching `\d+m`
 // (case-insensitive) is treated as the lead time even if the user forgot
 // the pipe (`10m` alone or `orange,10m` both work). A reserved flag token
-// (e.g. `test`) is recorded in `flags` and skips the group list. Anything
-// else is a group id — unknown group ids get sifted into `invalid` later,
-// once we have a manifest to check against.
+// (e.g. `test`, `test-upcoming`) is recorded in `flags` and skips the
+// group list. Anything else is a group id — unknown group ids get sifted
+// into `invalid` later, once we have a manifest to check against.
 function parseWidgetParameter(raw) {
   const source = String(raw == null ? "" : raw).trim()
   const groups = []
@@ -213,10 +237,14 @@ function parseWidgetParameter(raw) {
         const tok = t.trim()
         if (!tok) continue
         const m = tok.match(/^(\d+)\s*m$/i)
+        const upcomingMatch = tok.match(TEST_UPCOMING_RE)
         if (m) {
           const n = parseInt(m[1], 10)
           if (n >= 0 && n <= 24 * 60) leadMinutes = n
           else invalidLead.push(tok)
+        } else if (upcomingMatch) {
+          flags["test-upcoming"] = true
+          if (upcomingMatch[1]) flags.testUpcomingDays = parseInt(upcomingMatch[1], 10)
         } else if (RESERVED_FLAG_TOKENS.has(tok.toLowerCase())) {
           flags[tok.toLowerCase()] = true
         } else {
@@ -1749,10 +1777,16 @@ try {
   const data = await loadManifest()
   const parsedRaw = readWidgetParameter()
   // Fixture events (test-live) ship in the manifest at their natural
-  // date and are only rewritten to "today" when the user opts in via
-  // the `test` flag. Real users' widgets are never haunted by the
-  // Test Event this way.
-  if (parsedRaw.flags && parsedRaw.flags.test) rewriteFixtures(data.manifest)
+  // date and are only rewritten when the user opts in: `test` moves it
+  // to today (for testing the populated view / notifications),
+  // `test-upcoming` moves it into the future instead (for testing the
+  // no-event-today countdown card). Real users' widgets are never
+  // haunted by the Test Event this way.
+  if (parsedRaw.flags && parsedRaw.flags["test-upcoming"]) {
+    rewriteFixtures(data.manifest, "upcoming", parsedRaw.flags.testUpcomingDays)
+  } else if (parsedRaw.flags && parsedRaw.flags.test) {
+    rewriteFixtures(data.manifest, "today")
+  }
   const parsed = validateWidgetParameter(parsedRaw, data.manifest)
   let notifStatus = { scheduled: 0, denied: false }
   try {
