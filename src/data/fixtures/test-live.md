@@ -97,3 +97,11 @@
 - 22:30 session 6 | track: orange | class: green | note: Last group of the day
 - 23:00 session 7 | track: red | class: green | note: Cool-down laps, 60 mph max
 - 23:45 session 8 | track: orange | class: purple | note: Final laps before gates close
+
+// Days 2-3 exist only so `test-upcoming` has multiple future days to
+// spread across, for testing the countdown card's 2-card stack and
+// "N more upcoming" footer — see rewriteFixtures in hpde-widget.js.
+
+## Day 2 | 2000-01-02
+
+## Day 3 | 2000-01-03

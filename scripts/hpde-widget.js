@@ -94,6 +94,12 @@ const FIXTURE_EVENT_IDS = new Set(["test-live"])
 // to a week:day split, so the default here exercises that split
 // without the user having to pick a number.
 const TEST_UPCOMING_DEFAULT_DAYS = 10
+// The fixture ships 3 days (see test-live.md) purely so `test-upcoming`
+// has more than one future day to work with — spreading them a week
+// apart lets one `test-upcoming[-N]` flag exercise the countdown
+// card's 2-card stack on Large AND the "N more upcoming" footer,
+// without a separate flag for each.
+const TEST_UPCOMING_SPREAD_DAYS = 7
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 function weekdayLabel(iso) {
   const [y, m, d] = iso.split("-").map(Number)
@@ -102,18 +108,26 @@ function weekdayLabel(iso) {
 
 function rewriteFixtures(manifest, mode, upcomingDays) {
   if (!manifest || !Array.isArray(manifest.events)) return manifest
-  const iso = mode === "upcoming" ? futureIso(upcomingDays || TEST_UPCOMING_DEFAULT_DAYS) : todayIso()
-  // The fixture's day is authored as "## Today | 2000-01-01", so its
-  // label is the literal string "Today" — accurate for the `test`
-  // flag (rewritten to today) but confusing for `test-upcoming`
-  // (rewritten to a future date, where "Today" reads as a contradiction).
-  // Real events always label a day by its weekday name, never "Today",
-  // so rewrite the label to match regardless of which flag fired.
-  const label = weekdayLabel(iso)
   for (const event of manifest.events) {
     if (!event || !FIXTURE_EVENT_IDS.has(event.id)) continue
-    for (const day of event.days || []) {
-      if (day && typeof day === "object") {
+    const days = (event.days || []).filter(day => day && typeof day === "object")
+    if (mode === "upcoming") {
+      const base = upcomingDays || TEST_UPCOMING_DEFAULT_DAYS
+      days.forEach((day, i) => {
+        const iso = futureIso(base + i * TEST_UPCOMING_SPREAD_DAYS)
+        day.date = iso
+        // The fixture's first day is authored as "## Today | 2000-01-01",
+        // so its label is the literal string "Today" — accurate for the
+        // `test` flag (rewritten to today) but confusing here, where
+        // "Today" would read as a contradiction on a future-dated card.
+        // Real events always label a day by its weekday name, never
+        // "Today", so rewrite the label to match on every fixture day.
+        day.label = weekdayLabel(iso)
+      })
+    } else {
+      const iso = todayIso()
+      const label = weekdayLabel(iso)
+      for (const day of days) {
         day.date = iso
         day.label = label
       }

@@ -113,6 +113,12 @@ you that on demand, the same way `test` does for the populated view:
 - `test-upcoming-<N>` picks a different day count, e.g.
   `test-upcoming-3` for the single-day-count layout, or
   `test-upcoming-14` for a bigger week:day split.
+- The Test Event fixture ships 3 days, spread a week apart starting
+  at whatever day count you asked for — so the same flag also lets
+  you see a **Large** widget's 2-card stack (its 2nd card lands a
+  week after the 1st) and the "N more upcoming events" footer (the
+  3rd day that didn't fit). On **Medium**, which only ever shows 1
+  card, you'll see "2 more upcoming events" in the footer instead.
 - `test` and `test-upcoming` are mutually exclusive (today vs. the
   future) — set one or the other, not both.
 - Set the Parameter back to whatever you normally use (or blank) to
