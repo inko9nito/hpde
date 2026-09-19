@@ -12,9 +12,13 @@ const MONTHS = [
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 // HPDE events run Fri–Sun, so those columns are wider than Mon–Thu.
-// Tuned so weekend cells are ~60% wider than weekday cells while
-// staying phone-friendly at max-w-lg.
-const COLUMN_TEMPLATE = '1fr 1fr 1fr 1fr 1.6fr 1.6fr 1.6fr'
+// Weekend cells are ~60% wider than weekday cells. `minmax(0, …fr)` is
+// load-bearing: without the 0 floor, a long event name inside a cell
+// would push its column past its proportional share and misalign every
+// row below it — the columns must stay identical across rows regardless
+// of what any single row's content is.
+const COLUMN_TEMPLATE =
+  'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1.6fr)'
 const WEEKEND_START_COL = 4
 
 interface Props {
