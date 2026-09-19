@@ -51,6 +51,7 @@ optionally `|` for readability:
 | `<N>m`            | Notification lead time in minutes (default `10m`).                     |
 | `test`            | Debug flag — see [Testing notifications](#testing-notifications).      |
 | `test-upcoming`   | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
+| `test-upcoming-count-<N>` | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
 
 Examples:
 
@@ -114,11 +115,30 @@ you that on demand, the same way `test` does for the populated view:
   `test-upcoming-3` for the single-day-count layout, or
   `test-upcoming-14` for a bigger week:day split.
 - The Test Event fixture ships 3 days, spread a week apart starting
-  at whatever day count you asked for — so the same flag also lets
-  you see a **Large** widget's 2-card stack (its 2nd card lands a
-  week after the 1st) and the "N more upcoming events" footer (the
-  3rd day that didn't fit). On **Medium**, which only ever shows 1
-  card, you'll see "2 more upcoming events" in the footer instead.
+  at whatever day count you asked for — so `test-upcoming` alone
+  already lets you see a **Large** widget's 2-card stack (its 2nd
+  card lands a week after the 1st) and the "N more upcoming events"
+  footer (the 3rd day that didn't fit). On **Medium**, which only
+  ever shows 1 card, you'll see "2 more upcoming events" in the
+  footer instead.
+- `test-upcoming-count-<N>` (combine with `test-upcoming` or
+  `test-upcoming-<N>`, e.g. `test-upcoming,test-upcoming-count-1`)
+  controls exactly how many upcoming events exist, so you can test
+  every scenario on purpose instead of relying on the default 3:
+  - `test-upcoming-count-0` — no upcoming events at all (the true
+    zero state — see caveat below).
+  - `test-upcoming-count-1` — exactly one upcoming event (no "more"
+    footer on either size).
+  - `test-upcoming-count-2` — exactly two (Large shows both with no
+    footer; Medium shows one + "1 more upcoming event").
+  - `test-upcoming-count-3` (or omit — same as the default) — more
+    than Large can show at once, so the footer always appears.
+  - N above 3 clamps to 3, since that's how many days the fixture
+    ships.
+  - Caveat: this only controls the *fixture's* contribution. If your
+    schedule data already has real future events, they still count
+    toward the total — so `test-upcoming-count-0` only shows the
+    true zero state when there are no real upcoming events either.
 - `test` and `test-upcoming` are mutually exclusive (today vs. the
   future) — set one or the other, not both.
 - Set the Parameter back to whatever you normally use (or blank) to
