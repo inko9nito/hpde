@@ -195,6 +195,30 @@ const FUTURE_MANIFEST = {
   }],
 }
 
+// Three future days a week+ apart, across two events, so the
+// upcoming/countdown path can be exercised with: the week:day-split
+// count, a 2-card stack on Large, a full-width well on Small, and a
+// "more upcoming" footer for whatever doesn't fit.
+const UPCOMING_MULTI_MANIFEST = {
+  events: [
+    {
+      id: 'upcoming-a', name: 'Upcoming A', organizer: 'Org A', track: 'Track A',
+      runGroups: [],
+      days: [{ date: isoDate(10), label: 'Monday', activities: [] }],
+    },
+    {
+      id: 'upcoming-b', name: 'Upcoming B', organizer: 'Org B', track: 'Track B',
+      runGroups: [],
+      days: [{ date: isoDate(17), label: 'Monday', activities: [] }],
+    },
+    {
+      id: 'upcoming-c', name: 'Upcoming C', organizer: 'Org C', track: 'Track C',
+      runGroups: [],
+      days: [{ date: isoDate(24), label: 'Monday', activities: [] }],
+    },
+  ],
+}
+
 describe('scriptable widget loads and renders', () => {
   it('module loads without a TDZ / reference error', async () => {
     await expect(runWidget('medium', RICH_MANIFEST)).resolves.toBeUndefined()
@@ -210,6 +234,26 @@ describe('scriptable widget loads and renders', () => {
 
   it('renders the no-events-today path', async () => {
     await expect(runWidget('medium', NO_EVENTS_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('renders the upcoming-events countdown header + card on Medium', async () => {
+    await expect(runWidget('medium', FUTURE_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('renders the upcoming-events countdown header + card on Small', async () => {
+    await expect(runWidget('small', FUTURE_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('renders a single upcoming event as a rich card on Large', async () => {
+    await expect(runWidget('large', FUTURE_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('renders a 2-card upcoming stack plus a "more upcoming" footer on Large', async () => {
+    await expect(runWidget('large', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('renders a single upcoming card plus a "more upcoming" footer on Medium', async () => {
+    await expect(runWidget('medium', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
   })
 })
 
