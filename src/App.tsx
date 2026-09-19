@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Calendar, Home, Map } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
@@ -10,6 +10,7 @@ import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
 import { EventDetailsDrawer } from './components/EventDetailsDrawer'
 import { LandingPage } from './components/LandingPage'
+import { PushPage } from './components/PushPage'
 import { EVENTS, ALL_EVENTS } from './data'
 import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
@@ -80,6 +81,16 @@ export default function App() {
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const pushScrollRef = useRef<HTMLDivElement>(null)
+
+  const isOnEventRoute = eventIdFromHash(hash) !== null
+  // Keep the pushed page mounted through its slide-out animation. Starts
+  // mounted whenever the current hash is an event (including cold-boot);
+  // becomes false again only after PushPage's onExited fires.
+  const [pushMounted, setPushMounted] = useState(isOnEventRoute)
+  useEffect(() => {
+    if (isOnEventRoute) setPushMounted(true)
+  }, [isOnEventRoute])
 
   const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
   const activeDay = activeEvent.days.find(d => d.id === activeDayId) ?? defaultDay(activeEvent)
@@ -138,13 +149,16 @@ export default function App() {
     return <SharePage />
   }
 
-  if (hash === LANDING_HASH) {
-    return <LandingPage onOpenEvent={switchEvent} />
-  }
-
   return (
     <>
-    <PullToRefresh disabled={detailsOpen}>
+    <LandingPage onOpenEvent={switchEvent} />
+    {pushMounted && (
+    <PushPage
+      open={isOnEventRoute}
+      onExited={() => setPushMounted(false)}
+      scrollRef={pushScrollRef}
+    >
+    <PullToRefresh disabled={detailsOpen || !isOnEventRoute} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
@@ -293,6 +307,8 @@ export default function App() {
       open={detailsOpen}
       onClose={() => setDetailsOpen(false)}
     />
+    </PushPage>
+    )}
     </>
   )
 }
