@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { RefreshCw } from 'lucide-react'
 
 const THRESHOLD = 72
 const MAX_PULL = 110
 
-export function PullToRefresh({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
+interface Props {
+  children: React.ReactNode
+  disabled?: boolean
+  /**
+   * When set, pull-to-refresh gates on this element's `scrollTop`
+   * instead of `window.scrollY`. Needed when the scrolling area is
+   * itself a `fixed inset-0` overlay (e.g. the pushed schedule page)
+   * whose scroll doesn't move the document.
+   */
+  scrollContainerRef?: RefObject<HTMLElement | null>
+}
+
+export function PullToRefresh({ children, disabled, scrollContainerRef }: Props) {
   const [pullY, setPullY] = useState(0)
   const [phase, setPhase] = useState<'idle' | 'pulling' | 'releasing' | 'refreshing'>('idle')
   const startY = useRef<number | null>(null)
@@ -13,8 +26,13 @@ export function PullToRefresh({ children, disabled }: { children: React.ReactNod
   useEffect(() => {
     if (disabled) return
 
+    const getScrollTop = () => {
+      const node = scrollContainerRef?.current
+      return node ? node.scrollTop : window.scrollY
+    }
+
     const onTouchStart = (e: TouchEvent) => {
-      if (window.scrollY !== 0) return
+      if (getScrollTop() !== 0) return
       startY.current = e.touches[0].clientY
     }
 
@@ -58,7 +76,7 @@ export function PullToRefresh({ children, disabled }: { children: React.ReactNod
       document.removeEventListener('touchend', onTouchEnd)
       document.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [disabled])
+  }, [disabled, scrollContainerRef])
 
   const animate = phase === 'releasing' || phase === 'refreshing'
   const progress = Math.min(pullY / THRESHOLD, 1)
