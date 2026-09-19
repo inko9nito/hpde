@@ -127,7 +127,7 @@ export default function App() {
 
   return (
     <>
-    <PullToRefresh>
+    <PullToRefresh disabled={detailsOpen}>
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
