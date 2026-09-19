@@ -4,13 +4,15 @@ import { RefreshCw } from 'lucide-react'
 const THRESHOLD = 72
 const MAX_PULL = 110
 
-export function PullToRefresh({ children }: { children: React.ReactNode }) {
+export function PullToRefresh({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
   const [pullY, setPullY] = useState(0)
   const [phase, setPhase] = useState<'idle' | 'pulling' | 'releasing' | 'refreshing'>('idle')
   const startY = useRef<number | null>(null)
   const pullRef = useRef(0)
 
   useEffect(() => {
+    if (disabled) return
+
     const onTouchStart = (e: TouchEvent) => {
       if (window.scrollY !== 0) return
       startY.current = e.touches[0].clientY
@@ -56,7 +58,7 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
       document.removeEventListener('touchend', onTouchEnd)
       document.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [])
+  }, [disabled])
 
   const animate = phase === 'releasing' || phase === 'refreshing'
   const progress = Math.min(pullY / THRESHOLD, 1)
