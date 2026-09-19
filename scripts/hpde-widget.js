@@ -211,7 +211,10 @@ function pickToday(manifest) {
   return matches[0]
 }
 
-function pickNextFuture(manifest) {
+// Every future day across every event, soonest first, plus how many
+// there are in total — `limit` only trims how many come back in
+// `items`, so the caller can still show "N more upcoming" for the rest.
+function pickUpcoming(manifest, limit) {
   const iso = todayIso()
   const future = []
   for (const event of manifest.events) {
@@ -220,7 +223,7 @@ function pickNextFuture(manifest) {
     }
   }
   future.sort((a, b) => a.day.date.localeCompare(b.day.date))
-  return future[0] || null
+  return { items: future.slice(0, limit), total: future.length }
 }
 
 // Reserved parameter tokens that aren't run-group ids: they flip debug
@@ -400,7 +403,11 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
 
   const picked = pickToday(manifest)
   if (!picked) {
-    renderNoEvents(w, p, stale, pickNextFuture(manifest))
+    // Medium only has room for one countdown card; Large can stack two.
+    const family = config.widgetFamily || "medium"
+    const isLarge = family === "large" || family === "extraLarge"
+    const upcoming = pickUpcoming(manifest, isLarge ? 2 : 1)
+    renderNoEvents(w, p, stale, upcoming)
     drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
     return w
@@ -579,6 +586,18 @@ function drawMoreActivitiesFooter(w, p, count) {
   row.centerAlignContent()
   row.addSpacer()
   const text = row.addText(`${count} more activit${count === 1 ? "y" : "ies"}`)
+  text.font = rFont(11)
+  text.textColor = p.muted
+  row.addSpacer()
+}
+
+// Same "N more ___" convention as drawMoreActivitiesFooter, for
+// upcoming events that didn't fit in the countdown card(s).
+function drawMoreUpcomingFooter(w, p, count) {
+  const row = w.addStack()
+  row.centerAlignContent()
+  row.addSpacer()
+  const text = row.addText(`${count} more upcoming event${count === 1 ? "" : "s"}`)
   text.font = rFont(11)
   text.textColor = p.muted
   row.addSpacer()
@@ -1279,12 +1298,12 @@ function shortDate(iso) {
   return `${months[m - 1]} ${d}`
 }
 
-function renderNoEvents(w, p, stale, next) {
-  if (!next) {
+function renderNoEvents(w, p, stale, upcoming) {
+  if (!upcoming || upcoming.items.length === 0) {
     renderZeroState(w, p, stale)
     return
   }
-  renderCountdownState(w, p, stale, next)
+  renderCountdownState(w, p, stale, upcoming)
 }
 
 // True zero state — nothing scheduled today AND no future event either.
@@ -1342,7 +1361,7 @@ function pluralize(n, word) {
 }
 
 // Whole days between today and the given ISO date (always positive
-// here — pickNextFuture only returns days strictly after today).
+// here — pickUpcoming only returns days strictly after today).
 function daysUntil(iso) {
   const [y, m, d] = iso.split("-").map(Number)
   const target = new Date(y, m - 1, d)
@@ -1370,6 +1389,8 @@ function countdownParts(days) {
 // explicit height (below) has to leave room for it whether or not it
 // actually renders.
 const COUNTDOWN_FOOTER_RESERVE = 18
+const MORE_UPCOMING_FOOTER_RESERVE = 18
+const COUNTDOWN_CARD_GAP = 10
 // Symmetric left/right margin for the countdown card. Deliberately NOT
 // LEFT_GUTTER_WIDTH (that's sized for the marker-dot column in the
 // populated schedule view, which doesn't exist here) — using it left
@@ -1378,34 +1399,63 @@ const COUNTDOWN_FOOTER_RESERVE = 18
 // fill the widget's actual width.
 const COUNTDOWN_CARD_MARGIN = 8
 
-function renderCountdownState(w, p, stale, next) {
+// One or two countdown cards (Medium always gets one; Large can stack
+// two), plus a "N more upcoming" footer for whatever didn't fit —
+// same convention as drawMoreActivitiesFooter for a day's activities.
+function renderCountdownState(w, p, stale, upcoming) {
+  const { items, total } = upcoming
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
+  const remaining = total - items.length
 
+  // A single upcoming event still gets the full rich card (all four
+  // info rows) even on Large — only stacking a second card forces both
+  // into the denser (Medium-style, two-row) layout to fit the halved
+  // vertical budget.
+  const rich = isLarge && items.length === 1
+
+  const reserve = COUNTDOWN_FOOTER_RESERVE + (remaining > 0 ? MORE_UPCOMING_FOOTER_RESERVE : 0)
+  const availableH = widgetInteriorHeight() - reserve
+  const cardHeight = (availableH - COUNTDOWN_CARD_GAP * (items.length - 1)) / items.length
+
+  for (let i = 0; i < items.length; i++) {
+    if (i > 0) w.addSpacer(COUNTDOWN_CARD_GAP)
+    drawCountdownCard(w, p, items[i], rich, cardHeight)
+  }
+
+  if (remaining > 0) {
+    w.addSpacer(6)
+    drawMoreUpcomingFooter(w, p, remaining)
+  }
+
+  w.addSpacer()
+}
+
+function drawCountdownCard(w, p, next, rich, cardHeight) {
   const outer = w.addStack()
   outer.addSpacer(COUNTDOWN_CARD_MARGIN)
 
   const card = outer.addStack()
   card.centerAlignContent()
   // Explicit height instead of letting the card wrap its own (short)
-  // content — widgetInteriorHeight() is already net of the widget's
-  // own top/bottom padding, so this fills essentially the whole
-  // widget instead of leaving the dead white space below a
-  // content-sized card.
-  card.size = new Size(0, widgetInteriorHeight() - COUNTDOWN_FOOTER_RESERVE)
+  // content — cardHeight already accounts for the widget's own
+  // top/bottom padding and however many cards + footers are sharing
+  // the interior, so this fills its share instead of leaving dead
+  // white space below a content-sized card.
+  card.size = new Size(0, cardHeight)
   card.backgroundColor = p.cardBg
   card.cornerRadius = 20
-  card.setPadding(isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8)
+  card.setPadding(rich ? 14 : 8, rich ? 14 : 8, rich ? 14 : 8, rich ? 14 : 8)
 
   const infoCol = card.addStack()
   infoCol.layoutVertically()
 
   const title = infoCol.addText(next.event.name)
-  title.font = rBoldFont(isLarge ? 18 : 15)
+  title.font = rBoldFont(rich ? 18 : 15)
   title.textColor = p.fg
   title.lineLimit = 1
 
-  infoCol.addSpacer(isLarge ? 10 : 6)
+  infoCol.addSpacer(rich ? 10 : 6)
 
   // SF Symbol per row picked to match the web app's lucide icon for the
   // same field (EventDetailsDrawer: Calendar / Users / MapPin / Route) —
@@ -1421,16 +1471,16 @@ function renderCountdownState(w, p, stale, next) {
     })
   }
   const trackConfig = formatTrackConfig(next.event.configuration, next.event.direction)
-  // Medium's ~135pt budget only fits two rows before the card starts
-  // fighting the well for space, so the least essential row (track
-  // config) drops there — Large has the room for all four.
-  if (isLarge && trackConfig) {
+  // The denser layout's budget only fits two rows before the card
+  // starts fighting the well for space, so the least essential row
+  // (track config) drops there — the rich layout has room for all four.
+  if (rich && trackConfig) {
     rows.push({ icon: "point.topleft.down.curvedto.point.bottomright.up", text: trackConfig })
   }
 
   for (let i = 0; i < rows.length; i++) {
-    if (i > 0) infoCol.addSpacer(isLarge ? 8 : 5)
-    addInfoRow(infoCol, rows[i], p, isLarge)
+    if (i > 0) infoCol.addSpacer(rich ? 8 : 5)
+    addInfoRow(infoCol, rows[i], p, rich)
   }
 
   // Fixed minimum gap, then a flex spacer. The flex is what stretches
@@ -1440,7 +1490,7 @@ function renderCountdownState(w, p, stale, next) {
   // (the same trick drawActivityRow uses — see "Trailing flex spacer
   // stretches the CARDCONTAINER" there) — here it pins the well to the
   // card's right edge instead of leaving blank space after it.
-  card.addSpacer(isLarge ? 20 : 12)
+  card.addSpacer(rich ? 20 : 12)
   card.addSpacer()
 
   const well = card.addStack()
@@ -1448,18 +1498,18 @@ function renderCountdownState(w, p, stale, next) {
   well.cornerRadius = 16
   well.layoutVertically()
   well.centerAlignContent()
-  well.setPadding(8, isLarge ? 16 : 10, 8, isLarge ? 16 : 10)
+  well.setPadding(8, rich ? 16 : 10, 8, rich ? 16 : 10)
 
   const parts = countdownParts(daysUntil(next.day.date))
   if (parts.split) {
     const row = well.addStack()
     row.bottomAlignContent()
-    row.spacing = isLarge ? 6 : 4
-    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, isLarge)
-    addCountColon(row, p, isLarge)
-    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, isLarge)
+    row.spacing = rich ? 6 : 4
+    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, rich)
+    addCountColon(row, p, rich)
+    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, rich)
   } else {
-    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, isLarge)
+    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, rich)
   }
 
   // Matches the leading COUNTDOWN_CARD_MARGIN spacer above, so the
@@ -1468,8 +1518,6 @@ function renderCountdownState(w, p, stale, next) {
   // makeWidget) already surfaces stale/notification/invalid-token
   // state uniformly, so it isn't repeated here.
   outer.addSpacer(COUNTDOWN_CARD_MARGIN)
-
-  w.addSpacer()
 }
 
 function addInfoRow(col, row, p, isLarge) {
