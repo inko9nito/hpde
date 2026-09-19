@@ -36,10 +36,66 @@ whenever it changes.
    **Medium** or **Large** → Add. The same script handles both sizes;
    Large fits ~10 rows around the "now" line, Medium fits ~3.
 4. Tap the widget → **Edit Widget** → **Script** = "HPDE".
-5. Optional: set **Parameter** to a comma-separated list of run group ids to
-   filter session rows — e.g. `orange` or `orange,blue`. Leave blank to show
-   everything. The ids are the ones used in the schedule Markdown files (see
-   `../src/data/schedules/*.md`).
+5. Optional: set **Parameter** to configure filtering and notifications —
+   see [Widget parameter](#widget-parameter) below.
+
+## Widget parameter
+
+The `Parameter` field on the widget (long-press → Edit Widget → Parameter)
+takes a small comma-separated string. Three kinds of token, split by `,` and
+optionally `|` for readability:
+
+| Token           | Effect                                                                 |
+| --------------- | ---------------------------------------------------------------------- |
+| `<group id>`    | Include this run group in the filter (schedule rows + notifications).  |
+| `<N>m`          | Notification lead time in minutes (default `10m`).                     |
+| `test`          | Debug flag — see [Testing notifications](#testing-notifications).      |
+
+Examples:
+
+- `orange` — filter to orange, default 10-min lead.
+- `orange,blue|15m` — filter to orange + blue, 15-min lead.
+- `15m` — no filter, 15-min lead.
+- (blank) — no filter, 10-min lead.
+
+Run-group ids are the ones used in the schedule Markdown files (see
+`../src/data/schedules/*.md`). Unknown tokens surface as a `⚠ invalid: …`
+footer on the widget so you can see typos at a glance.
+
+### Notifications
+
+The widget schedules an iOS notification a few minutes before every session
+your filter matches, plus every all-drivers activity on the day
+(meetings, lunch, etc.) regardless of filter. First run triggers the iOS
+permissions prompt. Delivery happens even when the widget itself hasn't
+refreshed at the moment of the alert — the widget only writes the schedule;
+iOS handles delivery from there.
+
+Notifications show up under Scriptable's app icon, not HPDE's. That's a
+Scriptable/iOS limitation — the icon is tied to the app that scheduled the
+notification, and there is no Scriptable API to override it. The only way
+to get a different icon is a native app (or a third-party push service like
+Web Live Activities from #160). We stay in Scriptable, so we live with the
+Scriptable braces icon.
+
+### Testing notifications
+
+Because iOS won't schedule past-dated notifications, you can't test the
+notification pipeline on a day with no real HPDE event unless we give the
+widget a fake "today" to work from. That's what the standing test-live
+fixture is for.
+
+- Set the widget's Parameter to `test` (or combine, e.g.
+  `test,orange|10m`) → the widget rewrites the Test Event's day date to
+  today client-side, schedules notifications for its remaining sessions,
+  and renders it like a real event.
+- Set the Parameter back to whatever you normally use (or blank) → the
+  Test Event goes silent immediately on the next widget refresh.
+
+The site's `events.json` always ships the fixture at its natural date
+(`2000-01-01`) so widgets without the `test` flag can't see it as active.
+The rewrite lives entirely on the widget side; there's no server or CI
+knob to change.
 
 ## Refresh cadence
 
