@@ -227,11 +227,12 @@ function pickNextFuture(manifest) {
 // switches instead. Keep this small — every keyword here excludes a
 // potential future run-group id.
 const RESERVED_FLAG_TOKENS = new Set(["test"])
-// `test-upcoming` (optionally `test-upcoming-<days>`) rewrites the Test
-// Event to a FUTURE date instead of today, for exercising the
-// no-event-today countdown card. Regex-matched (not in
-// RESERVED_FLAG_TOKENS) since it takes an optional numeric suffix.
-const TEST_UPCOMING_RE = /^test-upcoming(?:-(\d+))?$/i
+// `test-upcoming` (optionally `test-upcoming-<days>` or `test-upcoming<days>`
+// — the hyphen before the number is optional, same leniency as the `Nm`
+// lead-time token) rewrites the Test Event to a FUTURE date instead of
+// today, for exercising the no-event-today countdown card. Regex-matched
+// (not in RESERVED_FLAG_TOKENS) since it takes an optional numeric suffix.
+const TEST_UPCOMING_RE = /^test-upcoming-?(\d+)?$/i
 
 // Parse the widget's optional user parameter into a filter list plus a lead
 // time for notifications and a debug-flag set. Format is `<groups>|<Nm>`;
