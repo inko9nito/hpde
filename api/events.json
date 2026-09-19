@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T01:47:35.571Z",
+  "generatedAt": "2026-09-19T02:07:19.960Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -1947,6 +1947,18 @@
               "note": "Final laps before gates close"
             }
           ]
+        },
+        {
+          "id": "day-2",
+          "label": "Day 2",
+          "date": "2000-01-02",
+          "activities": []
+        },
+        {
+          "id": "day-3",
+          "label": "Day 3",
+          "date": "2000-01-03",
+          "activities": []
         }
       ]
     }
