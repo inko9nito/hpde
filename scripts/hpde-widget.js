@@ -548,12 +548,13 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
 function drawStatusFooter(w, p, stale, parsed, notifStatus) {
   const bits = []
   if (notifStatus && notifStatus.denied) {
-    bits.push({ text: "🔕 notifications off", warn: true })
+    bits.push({ text: "🔕 Notifications off", warn: true })
   }
-  if (stale) bits.push({ text: "cached schedule", warn: false })
+  if (stale) bits.push({ text: "Cached schedule", warn: false })
   const invalid = (parsed && parsed.invalid) || []
   if (invalid.length > 0) {
-    bits.push({ text: `⚠ invalid: ${invalid.join(", ")}`, warn: true })
+    const label = invalid.length === 1 ? "Invalid parameter" : "Invalid parameters"
+    bits.push({ text: `⚠ ${label}: ${invalid.join(", ")}`, warn: true })
   }
   if (bits.length === 0) return
   w.addSpacer(2)
@@ -1406,12 +1407,16 @@ function renderCountdownState(w, p, stale, next) {
 
   infoCol.addSpacer(isLarge ? 10 : 6)
 
+  // SF Symbol per row picked to match the web app's lucide icon for the
+  // same field (EventDetailsDrawer: Calendar / Users / MapPin / Route) —
+  // the two apps should read as one system, not diverge on iconography
+  // just because one draws with SF Symbols and the other with lucide.
   const rows = []
   rows.push({ icon: "calendar", text: `${next.day.label}, ${shortDate(next.day.date)}` })
   if (next.event.organizer) rows.push({ icon: "person.2", text: next.event.organizer })
   if (next.event.track) {
     rows.push({
-      icon: "mappin.and.ellipse",
+      icon: "mappin",
       text: next.event.city ? `${next.event.track}, ${next.event.city}` : next.event.track,
     })
   }
@@ -1419,7 +1424,9 @@ function renderCountdownState(w, p, stale, next) {
   // Medium's ~135pt budget only fits two rows before the card starts
   // fighting the well for space, so the least essential row (track
   // config) drops there — Large has the room for all four.
-  if (isLarge && trackConfig) rows.push({ icon: "flag.checkered", text: trackConfig })
+  if (isLarge && trackConfig) {
+    rows.push({ icon: "point.topleft.down.curvedto.point.bottomright.up", text: trackConfig })
+  }
 
   for (let i = 0; i < rows.length; i++) {
     if (i > 0) infoCol.addSpacer(isLarge ? 8 : 5)
