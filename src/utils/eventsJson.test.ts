@@ -27,6 +27,11 @@ describe('serializeEvents', () => {
   const fixture = `# Test Event
 subtitle: Sample
 link: https://example.com
+organizer: SCCA
+track: Motorsport Ranch Cresson
+city: Cresson, TX
+configuration: 1.7
+direction: Clockwise
 
 ## groups
 red   | Red   | bg-red-500   | text-white | Time Trial
@@ -51,6 +56,11 @@ green | Green | bg-green-500 | text-white
     expect(event.name).toBe('Test Event')
     expect(event.subtitle).toBe('Sample')
     expect(event.link).toBe('https://example.com')
+    expect(event.organizer).toBe('SCCA')
+    expect(event.track).toBe('Motorsport Ranch Cresson')
+    expect(event.city).toBe('Cresson, TX')
+    expect(event.configuration).toBe('1.7')
+    expect(event.direction).toBe('Clockwise')
 
     expect(event.runGroups).toEqual([
       { id: 'red',   label: 'Red',   color: '#ef4444', description: 'Time Trial' },

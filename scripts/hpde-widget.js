@@ -1235,24 +1235,152 @@ function shortDate(iso) {
 }
 
 function renderNoEvents(w, p, stale, next) {
-  const title = w.addText("HPDE")
+  if (!next) {
+    renderZeroState(w, p, stale)
+    return
+  }
+  renderCountdownState(w, p, stale, next)
+}
+
+// True zero state — nothing scheduled today AND no future event either.
+// Keeps the plain "HPDE" header (there's no info card to make it
+// redundant here), with the message centered in the space below it —
+// matching the AA/Podcasts/Umami-style empty states this was designed
+// against, rather than the vertically-centered "floating in a blank
+// box" look from #116.
+function renderZeroState(w, p, stale) {
+  // Same LEFT_GUTTER_WIDTH inset renderHeader uses, so this text lines
+  // up with the populated header instead of sitting flush against the
+  // widget's own (much smaller) base padding.
+  const outer = w.addStack()
+  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  const col = outer.addStack()
+  col.layoutVertically()
+
+  const title = col.addText("HPDE")
   title.font = rBoldFont(18)
   title.textColor = p.fg
-  w.addSpacer(6)
 
-  const msg = w.addText("No event today.")
-  msg.font = rFont(12)
+  if (stale) {
+    col.addSpacer(6)
+    const s = col.addText("(cached)")
+    s.font = rFont(9)
+    s.textColor = p.muted
+  }
+
+  // Flex spacers on both sides center the message in whatever space
+  // is left under the header, instead of it sitting immediately below
+  // (too cramped) or dead-centered in the whole widget (the #116 bug).
+  col.addSpacer()
+  const msg = col.addText("No upcoming events")
+  msg.font = rFont(14)
   msg.textColor = p.muted
+  col.addSpacer()
+}
 
-  if (next) {
-    w.addSpacer(10)
-    const nx = w.addText(`Next: ${next.event.name}`)
-    nx.font = rMediumFont(11)
-    nx.textColor = p.fg
-    nx.lineLimit = 1
-    const when = w.addText(`${next.day.label}, ${shortDate(next.day.date)}`)
-    when.font = rFont(10)
-    when.textColor = p.muted
+// "Clockwise" -> "CW (clockwise)", "Counter-clockwise" -> "CCW
+// (counter-clockwise)" — mirrors the web app's abbreviateDirection so
+// the widget and the event-details drawer read the same way.
+function abbreviateDirection(direction) {
+  const normalized = direction.trim().toLowerCase()
+  if (normalized === "clockwise") return "CW (clockwise)"
+  if (normalized === "counter-clockwise" || normalized === "counterclockwise") return "CCW (counter-clockwise)"
+  return direction
+}
+
+function formatTrackConfig(configuration, direction) {
+  return [configuration, direction ? abbreviateDirection(direction) : null].filter(Boolean).join(" ")
+}
+
+function pluralize(n, word) {
+  return n === 1 ? word : `${word}s`
+}
+
+// Whole days between today and the given ISO date (always positive
+// here — pickNextFuture only returns days strictly after today).
+function daysUntil(iso) {
+  const [y, m, d] = iso.split("-").map(Number)
+  const target = new Date(y, m - 1, d)
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.round((target - todayStart) / (24 * 60 * 60 * 1000))
+}
+
+// Weeks+days once the gap is more than a week — a bare "9 days away"
+// stops being an intuitive read past that point, closer to "a week
+// and change" than a day count.
+function countdownParts(days) {
+  if (days > 6) {
+    return { split: true, weeks: Math.floor(days / 7), days: days % 7 }
+  }
+  return { split: false, days }
+}
+
+// There's no event today, but a future one is scheduled — show a
+// countdown instead of a plain "Next: <name>" line. Info (name, date,
+// organizer, location, track config) on the left, same field order as
+// the event-details drawer; the countdown "well" on the right.
+function renderCountdownState(w, p, stale, next) {
+  const family = config.widgetFamily || "medium"
+  const isLarge = family === "large" || family === "extraLarge"
+
+  const outer = w.addStack()
+  outer.addSpacer(LEFT_GUTTER_WIDTH)
+
+  const card = outer.addStack()
+  card.backgroundColor = p.cardBg
+  card.cornerRadius = 20
+  card.setPadding(isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8)
+
+  const infoCol = card.addStack()
+  infoCol.layoutVertically()
+
+  const title = infoCol.addText(next.event.name)
+  title.font = rBoldFont(isLarge ? 18 : 15)
+  title.textColor = p.fg
+  title.lineLimit = 1
+
+  infoCol.addSpacer(isLarge ? 10 : 6)
+
+  const rows = []
+  rows.push({ icon: "calendar", text: `${next.day.label}, ${shortDate(next.day.date)}` })
+  if (next.event.organizer) rows.push({ icon: "person.2", text: next.event.organizer })
+  if (next.event.track) {
+    rows.push({
+      icon: "mappin.and.ellipse",
+      text: next.event.city ? `${next.event.track}, ${next.event.city}` : next.event.track,
+    })
+  }
+  const trackConfig = formatTrackConfig(next.event.configuration, next.event.direction)
+  // Medium's ~135pt budget only fits two rows before the card starts
+  // fighting the well for space, so the least essential row (track
+  // config) drops there — Large has the room for all four.
+  if (isLarge && trackConfig) rows.push({ icon: "flag.checkered", text: trackConfig })
+
+  for (let i = 0; i < rows.length; i++) {
+    if (i > 0) infoCol.addSpacer(isLarge ? 8 : 5)
+    addInfoRow(infoCol, rows[i], p, isLarge)
+  }
+
+  card.addSpacer(isLarge ? 20 : 12)
+
+  const well = card.addStack()
+  well.backgroundColor = p.currentCardBg
+  well.cornerRadius = 16
+  well.layoutVertically()
+  well.centerAlignContent()
+  well.setPadding(8, isLarge ? 16 : 10, 8, isLarge ? 16 : 10)
+
+  const parts = countdownParts(daysUntil(next.day.date))
+  if (parts.split) {
+    const row = well.addStack()
+    row.bottomAlignContent()
+    row.spacing = isLarge ? 6 : 4
+    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, isLarge)
+    addCountColon(row, p, isLarge)
+    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, isLarge)
+  } else {
+    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, isLarge)
   }
 
   if (stale) {
@@ -1262,11 +1390,52 @@ function renderNoEvents(w, p, stale, next) {
     s.textColor = p.muted
   }
 
-  // Flex spacer forces the widget's content stack to top-align, same
-  // as makeWidget's populated path — without it Scriptable's
-  // ListWidget centers this short content vertically, which is what
-  // produced the huge empty gutters above and below in #116.
   w.addSpacer()
+}
+
+function addInfoRow(col, row, p, isLarge) {
+  const stack = col.addStack()
+  stack.centerAlignContent()
+  stack.spacing = isLarge ? 8 : 6
+  if (typeof SFSymbol !== "undefined") {
+    const sym = SFSymbol.named(row.icon)
+    if (sym) {
+      const img = stack.addImage(sym.image)
+      img.imageSize = new Size(isLarge ? 14 : 12, isLarge ? 14 : 12)
+      img.tintColor = p.muted
+    }
+  }
+  const text = stack.addText(row.text)
+  text.font = rFont(isLarge ? 13 : 11)
+  text.textColor = p.mutedStrong
+  text.lineLimit = 1
+}
+
+// One "12 / DAYS"-style stacked digit+label block inside the well.
+function addCountUnit(container, n, label, p, isLarge) {
+  const col = container.addStack()
+  col.layoutVertically()
+  const num = col.addText(String(n))
+  num.font = rBoldFont(isLarge ? 40 : 26)
+  num.textColor = p.accent
+  const lbl = col.addText(label.toUpperCase())
+  lbl.font = rSemiboldFont(isLarge ? 10 : 8)
+  lbl.textColor = p.mutedStrong
+}
+
+// Colon between the week and day units, given the same two-row
+// (glyph + label-height spacer) shape as addCountUnit so
+// row.bottomAlignContent() lines all three blocks up on the digit,
+// not the label.
+function addCountColon(row, p, isLarge) {
+  const col = row.addStack()
+  col.layoutVertically()
+  const colon = col.addText(":")
+  colon.font = rBoldFont(isLarge ? 28 : 18)
+  colon.textColor = p.divider
+  const spacer = col.addText(".")
+  spacer.font = rSemiboldFont(isLarge ? 10 : 8)
+  spacer.textOpacity = 0
 }
 
 function renderError(err) {
