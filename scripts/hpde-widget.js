@@ -250,17 +250,22 @@ function pickUpcoming(manifest, limit) {
 // switches instead. Keep this small — every keyword here excludes a
 // potential future run-group id.
 const RESERVED_FLAG_TOKENS = new Set(["test"])
-// `test-upcoming` (optionally `test-upcoming-<days>`, hyphen required)
-// rewrites the Test Event to a FUTURE date instead of today, for
-// exercising the no-event-today countdown card. Regex-matched (not in
-// RESERVED_FLAG_TOKENS) since it takes an optional numeric suffix.
-const TEST_UPCOMING_RE = /^test-upcoming(?:-(\d+))?$/i
-// `test-upcoming-count-<N>` caps how many of the fixture's days get
-// rewritten into the future (see rewriteFixtures) — lets you test the
-// countdown card with exactly 0, 1, 2, or "more than the widget can
-// show" upcoming events, independent of which day offset
-// `test-upcoming[-N]` uses. Only takes effect alongside `test-upcoming`.
-const TEST_UPCOMING_COUNT_RE = /^test-upcoming-count-(\d+)$/i
+// `test-upcoming` rewrites the Test Event to FUTURE date(s) instead of
+// today, for exercising the no-event-today countdown card. Two
+// optional numeric parts, hyphen required before each:
+//   test-upcoming            → default count (every fixture day) and
+//                               default day offset (10 days out)
+//   test-upcoming-<count>    → how many upcoming events to have (0-3;
+//                               see FIXTURE_EVENT_IDS' day count)
+//   test-upcoming-<days>d    → which day offset the first one lands on
+//   test-upcoming-<count>-<days>d → both, e.g. test-upcoming-3-2d is
+//                               "3 upcoming events, the first one 2
+//                               days out"
+// The trailing `d` is what disambiguates a day offset from a count —
+// without it (or without the leading hyphen), the token doesn't match
+// and falls through to the invalid-parameter footer instead of being
+// silently misread.
+const TEST_UPCOMING_RE = /^test-upcoming(?:-(\d+))?(?:-(\d+)d)?$/i
 
 // Parse the widget's optional user parameter into a filter list plus a lead
 // time for notifications and a debug-flag set. Format is `<groups>|<Nm>`;
@@ -283,16 +288,14 @@ function parseWidgetParameter(raw) {
         if (!tok) continue
         const m = tok.match(/^(\d+)\s*m$/i)
         const upcomingMatch = tok.match(TEST_UPCOMING_RE)
-        const upcomingCountMatch = tok.match(TEST_UPCOMING_COUNT_RE)
         if (m) {
           const n = parseInt(m[1], 10)
           if (n >= 0 && n <= 24 * 60) leadMinutes = n
           else invalidLead.push(tok)
-        } else if (upcomingCountMatch) {
-          flags.testUpcomingCount = parseInt(upcomingCountMatch[1], 10)
         } else if (upcomingMatch) {
           flags["test-upcoming"] = true
-          if (upcomingMatch[1]) flags.testUpcomingDays = parseInt(upcomingMatch[1], 10)
+          if (upcomingMatch[1]) flags.testUpcomingCount = parseInt(upcomingMatch[1], 10)
+          if (upcomingMatch[2]) flags.testUpcomingDays = parseInt(upcomingMatch[2], 10)
         } else if (RESERVED_FLAG_TOKENS.has(tok.toLowerCase())) {
           flags[tok.toLowerCase()] = true
         } else {

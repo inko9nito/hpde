@@ -50,8 +50,7 @@ optionally `|` for readability:
 | `<group id>`      | Include this run group in the filter (schedule rows + notifications).  |
 | `<N>m`            | Notification lead time in minutes (default `10m`).                     |
 | `test`            | Debug flag — see [Testing notifications](#testing-notifications).      |
-| `test-upcoming`   | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
-| `test-upcoming-count-<N>` | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
+| `test-upcoming[-<count>][-<days>d]` | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
 
 Examples:
 
@@ -111,33 +110,33 @@ you that on demand, the same way `test` does for the populated view:
   (event name, date, organizer, location — all from the Test Event's
   fixture data). 10 days exercises the week:day split (`1 WEEK : 3
   DAYS`); anything ≤ 6 days shows the single day-count instead.
-- `test-upcoming-<N>` picks a different day count, e.g.
-  `test-upcoming-3` for the single-day-count layout, or
-  `test-upcoming-14` for a bigger week:day split.
-- The Test Event fixture ships 3 days, spread a week apart starting
-  at whatever day count you asked for — so `test-upcoming` alone
-  already lets you see a **Large** widget's 2-card stack (its 2nd
-  card lands a week after the 1st) and the "N more upcoming events"
-  footer (the 3rd day that didn't fit). On **Medium**, which only
-  ever shows 1 card, you'll see "2 more upcoming events" in the
-  footer instead.
-- `test-upcoming-count-<N>` (combine with `test-upcoming` or
-  `test-upcoming-<N>`, e.g. `test-upcoming,test-upcoming-count-1`)
-  controls exactly how many upcoming events exist, so you can test
-  every scenario on purpose instead of relying on the default 3:
-  - `test-upcoming-count-0` — no upcoming events at all (the true
-    zero state — see caveat below).
-  - `test-upcoming-count-1` — exactly one upcoming event (no "more"
-    footer on either size).
-  - `test-upcoming-count-2` — exactly two (Large shows both with no
+- `test-upcoming` optionally takes a **count** and/or a **day
+  offset**, hyphen-separated, day offset suffixed with `d`:
+  - `test-upcoming-<count>` — how many upcoming events to have (0-3).
+  - `test-upcoming-<days>d` — which day offset the first one lands
+    on, e.g. `test-upcoming-3d` for the single-day-count layout or
+    `test-upcoming-14d` for a bigger week:day split.
+  - `test-upcoming-<count>-<days>d` — both together, e.g.
+    `test-upcoming-3-2d` means "3 upcoming events, the first one 2
+    days out". The `d` suffix is what tells the two numbers apart —
+    without it the token doesn't match and surfaces as an invalid
+    parameter instead of being misread.
+- The count controls exactly how many upcoming events exist, so you
+  can test every scenario on purpose:
+  - `test-upcoming-0` — no upcoming events at all (the true zero
+    state — see caveat below).
+  - `test-upcoming-1` — exactly one upcoming event (no "more" footer
+    on either size).
+  - `test-upcoming-2` — exactly two (Large shows both with no
     footer; Medium shows one + "1 more upcoming event").
-  - `test-upcoming-count-3` (or omit — same as the default) — more
-    than Large can show at once, so the footer always appears.
-  - N above 3 clamps to 3, since that's how many days the fixture
-    ships.
-  - Caveat: this only controls the *fixture's* contribution. If your
-    schedule data already has real future events, they still count
-    toward the total — so `test-upcoming-count-0` only shows the
+  - `test-upcoming` alone (or `test-upcoming-3`) — the default 3,
+    more than Large can show at once, so the footer always appears.
+  - A count above 3 clamps to 3, since that's how many days the Test
+    Event fixture ships (spread a week apart starting at the day
+    offset you asked for).
+  - Caveat: the count only controls the *fixture's* contribution. If
+    your schedule data already has real future events, they still
+    count toward the total — so `test-upcoming-0` only shows the
     true zero state when there are no real upcoming events either.
 - `test` and `test-upcoming` are mutually exclusive (today vs. the
   future) — set one or the other, not both.
