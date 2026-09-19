@@ -1348,14 +1348,34 @@ function countdownParts(days) {
 // countdown instead of a plain "Next: <name>" line. Info (name, date,
 // organizer, location, track config) on the left, same field order as
 // the event-details drawer; the countdown "well" on the right.
+// Reserved below the card for drawStatusFooter (stale/notification/
+// invalid-token bits) — it's only ~16pt when present, but the card's
+// explicit height (below) has to leave room for it whether or not it
+// actually renders.
+const COUNTDOWN_FOOTER_RESERVE = 18
+// Symmetric left/right margin for the countdown card. Deliberately NOT
+// LEFT_GUTTER_WIDTH (that's sized for the marker-dot column in the
+// populated schedule view, which doesn't exist here) — using it left
+// the card's background hugging the left edge while sitting flush
+// against the right, an asymmetric card that also never stretched to
+// fill the widget's actual width.
+const COUNTDOWN_CARD_MARGIN = 8
+
 function renderCountdownState(w, p, stale, next) {
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
 
   const outer = w.addStack()
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
 
   const card = outer.addStack()
+  card.centerAlignContent()
+  // Explicit height instead of letting the card wrap its own (short)
+  // content — widgetInteriorHeight() is already net of the widget's
+  // own top/bottom padding, so this fills essentially the whole
+  // widget instead of leaving the dead white space below a
+  // content-sized card.
+  card.size = new Size(0, widgetInteriorHeight() - COUNTDOWN_FOOTER_RESERVE)
   card.backgroundColor = p.cardBg
   card.cornerRadius = 20
   card.setPadding(isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8, isLarge ? 14 : 8)
@@ -1390,7 +1410,15 @@ function renderCountdownState(w, p, stale, next) {
     addInfoRow(infoCol, rows[i], p, isLarge)
   }
 
+  // Fixed minimum gap, then a flex spacer. The flex is what stretches
+  // CARD to the widget's full width: a stack sizes to fit its content,
+  // but a flex spacer's "as large as possible" ideal size cascades out
+  // through every ancestor stack that isn't otherwise constrained
+  // (the same trick drawActivityRow uses — see "Trailing flex spacer
+  // stretches the CARDCONTAINER" there) — here it pins the well to the
+  // card's right edge instead of leaving blank space after it.
   card.addSpacer(isLarge ? 20 : 12)
+  card.addSpacer()
 
   const well = card.addStack()
   well.backgroundColor = p.currentCardBg
@@ -1411,12 +1439,12 @@ function renderCountdownState(w, p, stale, next) {
     addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, isLarge)
   }
 
-  if (stale) {
-    w.addSpacer(4)
-    const s = w.addText("(cached)")
-    s.font = rFont(9)
-    s.textColor = p.muted
-  }
+  // Matches the leading COUNTDOWN_CARD_MARGIN spacer above, so the
+  // card sits with equal margin on both sides instead of flush
+  // against the widget's right edge — drawStatusFooter (back in
+  // makeWidget) already surfaces stale/notification/invalid-token
+  // state uniformly, so it isn't repeated here.
+  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
 
   w.addSpacer()
 }
