@@ -11,6 +11,12 @@ const MONTHS = [
 // Monday-first column labels.
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+// HPDE events run Fri–Sun, so those columns are wider than Mon–Thu.
+// Tuned so weekend cells are ~60% wider than weekday cells while
+// staying phone-friendly at max-w-lg.
+const COLUMN_TEMPLATE = '1fr 1fr 1fr 1fr 1.6fr 1.6fr 1.6fr'
+const WEEKEND_START_COL = 4
+
 interface Props {
   events: EventConfig[]
   onOpenEvent: (event: EventConfig) => void
@@ -55,6 +61,9 @@ export function EventCalendar({ events, onOpenEvent }: Props) {
       inMonth: d.getMonth() === cursor.month,
     })
   }
+
+  const rows: (typeof cells)[] = []
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
 
   function prevMonth() {
     setCursor(c => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }))
@@ -103,45 +112,59 @@ export function EventCalendar({ events, onOpenEvent }: Props) {
         </button>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
-        <div className="mb-1 grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-          {DAY_LABELS.map(l => (
-            <div key={l} className="py-1">{l}</div>
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div
+          className="grid border-b border-gray-200 text-center text-[10px] font-semibold uppercase tracking-wide"
+          style={{ gridTemplateColumns: COLUMN_TEMPLATE }}
+        >
+          {DAY_LABELS.map((l, i) => (
+            <div
+              key={l}
+              className={`py-1.5 ${i >= WEEKEND_START_COL ? 'text-gray-600' : 'text-gray-400'}`}
+            >
+              {l}
+            </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((cell, i) => {
-            const dayEvents = byDate.get(cell.iso) ?? []
-            const isToday = cell.iso === todayISO
-            return (
-              <div
-                key={i}
-                className={`min-h-[76px] rounded-lg border p-1 ${
-                  cell.inMonth ? 'border-gray-100 bg-white' : 'border-transparent bg-gray-50/60'
-                }`}
-              >
-                <div
-                  className={`mb-1 text-right text-[10px] font-medium ${
-                    !cell.inMonth ? 'text-gray-300' : isToday ? 'text-blue-600' : 'text-gray-500'
-                  }`}
-                >
-                  {cell.date.getDate()}
-                </div>
-                <div className="space-y-0.5">
-                  {dayEvents.map((event, idx) => (
-                    <button
-                      key={`${event.id}-${idx}`}
-                      onClick={() => onOpenEvent(event)}
-                      className="block w-full truncate rounded bg-blue-50 px-1 py-0.5 text-left text-[10px] font-medium text-blue-700 transition-colors hover:bg-blue-100"
-                      title={event.name}
+        <div className="divide-y divide-gray-200">
+          {rows.map((row, ri) => (
+            <div
+              key={ri}
+              className="grid divide-x divide-gray-200"
+              style={{ gridTemplateColumns: COLUMN_TEMPLATE }}
+            >
+              {row.map((cell, ci) => {
+                const dayEvents = byDate.get(cell.iso) ?? []
+                const isToday = cell.iso === todayISO
+                return (
+                  <div
+                    key={ci}
+                    className={`min-h-[80px] p-1 ${cell.inMonth ? 'bg-white' : 'bg-gray-50/60'}`}
+                  >
+                    <div
+                      className={`mb-1 text-right text-[10px] font-medium ${
+                        !cell.inMonth ? 'text-gray-300' : isToday ? 'text-blue-600' : 'text-gray-500'
+                      }`}
                     >
-                      {event.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+                      {cell.date.getDate()}
+                    </div>
+                    <div className="space-y-0.5">
+                      {dayEvents.map((event, idx) => (
+                        <button
+                          key={`${event.id}-${idx}`}
+                          onClick={() => onOpenEvent(event)}
+                          className="block w-full truncate rounded bg-blue-50 px-1 py-0.5 text-left text-[10px] font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                          title={event.name}
+                        >
+                          {event.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
