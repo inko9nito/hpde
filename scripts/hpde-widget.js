@@ -1415,6 +1415,26 @@ function groupLabel(event, groupId) {
   return (g && g.label) || groupId
 }
 
+// Colored circle emoji per known run-group id, so a notification's title
+// reads as "🟠 Orange · in 10m" at glance instead of a generic Scriptable
+// braces alert. Ids not in this map (e.g. some future "Aqua" group) get
+// no prefix — safer than picking a wrong color.
+const GROUP_EMOJI = {
+  red: "🔴",
+  orange: "🟠",
+  yellow: "🟡",
+  green: "🟢",
+  blue: "🔵",
+  purple: "🟣",
+  black: "⚫",
+  white: "⚪",
+  brown: "🟤",
+}
+
+function groupEmoji(groupId) {
+  return GROUP_EMOJI[String(groupId || "").toLowerCase()] || ""
+}
+
 function formatTimeWithAmPm(hhmm) {
   return `${formatTime12(hhmm)} ${formatAmPm(hhmm)}`
 }
@@ -1426,9 +1446,11 @@ function buildNotifContent(target, leadMinutes) {
     const body = target.activity.subtitle
       ? `${timeStr} · ${target.activity.subtitle}`
       : timeStr
-    return { title: `${label} · ${leadMinutes}m`, body }
+    return { title: `${label} · in ${leadMinutes}m`, body }
   }
   const g = groupLabel(target.event, target.groupId)
+  const emoji = groupEmoji(target.groupId)
+  const titlePrefix = emoji ? `${emoji} ${g}` : g
   const verb = target.kind === "onTrack" ? "On track at" : "Classroom at"
   let body = `${verb} ${timeStr}`
   const follow = findFollowUp(target)
@@ -1437,7 +1459,7 @@ function buildNotifContent(target, leadMinutes) {
     const fLabel = follow.kind === "onTrack" ? "On track" : "Classroom"
     body += ` · ${fLabel} follows at ${fTime}.`
   }
-  return { title: `${g} · ${leadMinutes}m`, body }
+  return { title: `${titlePrefix} · in ${leadMinutes}m`, body }
 }
 
 function computeMergedSpecs(manifest, state, now) {

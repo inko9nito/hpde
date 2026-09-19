@@ -107,12 +107,19 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
         throw new Error('missing setTriggerDate — would fire immediately')
       }
       g.__scheduled = (g.__scheduled || 0) + 1
+      g.__notifs.push({
+        identifier: this.identifier,
+        title: this.title,
+        body: this.body,
+        nextTriggerDate: this.nextTriggerDate,
+      })
     }
   }
   ;(NotificationStub as any).allPending = async () => []
   ;(NotificationStub as any).removePending = async (_: string[]) => {}
   g.Notification = NotificationStub
   g.__scheduled = 0
+  g.__notifs = []
 }
 
 async function runWidget(widgetFamily: string, manifest: unknown, widgetParameter: string | null = null) {
@@ -262,5 +269,24 @@ describe('test-live fixture gating', () => {
   it('rewrites the test-live fixture to today when the `test` flag is set', async () => {
     await runWidget('medium', FIXTURE_MANIFEST, 'test')
     expect((globalThis as any).__scheduled).toBe(1)
+  })
+})
+
+describe('notification content', () => {
+  it('titles run-group alerts with a matching colored circle and "in Nm"', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'orange|15m')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string; body: string }>
+    const orange = notifs.find(n => n.title.includes('Orange'))
+    expect(orange).toBeDefined()
+    expect(orange!.title).toBe('🟠 Orange · in 15m')
+    expect(orange!.body).toBe('On track at 8:50 AM')
+  })
+
+  it('leaves all-drivers events without a group emoji but still says "in Nm"', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, '|20m')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string }>
+    const meeting = notifs.find(n => n.title.startsWith('Drivers meeting'))
+    expect(meeting).toBeDefined()
+    expect(meeting!.title).toBe('Drivers meeting · in 20m')
   })
 })
