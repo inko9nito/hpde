@@ -67,17 +67,32 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     if (!open) return
     // Lock background scroll: without this, wheel/touch input over the
     // drawer bubbles past its (often non-scrolling) content and scrolls
-    // the page behind it instead. `body` has no explicit height, so it's
-    // `html` (left at its default `overflow: visible`) that actually
-    // produces the viewport scrollbar — both need locking.
+    // the page behind it instead. Toggling plain `overflow: hidden` on
+    // `html`/`body` and back is enough on desktop, but on iOS Safari the
+    // page doesn't reliably "wake up" once it's restored — scrolling stays
+    // stuck for several touches. Pinning `body` with `position: fixed` at
+    // its current scroll offset while locked, then restoring the exact
+    // offset via `scrollTo` on unlock, avoids that.
     const html = document.documentElement
+    const body = document.body
+    const scrollY = window.scrollY
     const previousHtmlOverflow = html.style.overflow
-    const previousBodyOverflow = document.body.style.overflow
+    const previousBodyOverflow = body.style.overflow
+    const previousBodyPosition = body.style.position
+    const previousBodyTop = body.style.top
+    const previousBodyWidth = body.style.width
     html.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.width = '100%'
     return () => {
       html.style.overflow = previousHtmlOverflow
-      document.body.style.overflow = previousBodyOverflow
+      body.style.overflow = previousBodyOverflow
+      body.style.position = previousBodyPosition
+      body.style.top = previousBodyTop
+      body.style.width = previousBodyWidth
+      window.scrollTo(0, scrollY)
     }
   }, [open])
 
