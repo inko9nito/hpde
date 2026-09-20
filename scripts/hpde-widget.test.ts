@@ -55,11 +55,20 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     timeoutInterval = 0
     async loadJSON() { throw new Error('simulate offline → fall back to cache') }
   }
-  const textStub = () => ({ font: null, textColor: null, lineLimit: 0, textOpacity: 1 })
+  // Records every addText() call's string so tests can assert on what
+  // actually got rendered (which family shows which copy, whether a
+  // field got truncated to something implausible, etc.) — the mock
+  // used to just return a blank stub, so a test could confirm the
+  // render didn't throw but never what it actually said.
+  g.__texts = [] as string[]
+  const textStub = (text: string) => {
+    g.__texts.push(text)
+    return { font: null, textColor: null, lineLimit: 0, textOpacity: 1 }
+  }
   const imageStub = () => ({ imageSize: null, tintColor: null, imageOpacity: 1 })
   class StackStub {
     addStack() { return new StackStub() }
-    addText() { return textStub() }
+    addText(text: string) { return textStub(text) }
     addImage() { return imageStub() }
     addSpacer(_n?: number) {}
     setPadding() {}
@@ -78,7 +87,7 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.WidgetStack = StackStub
   g.ListWidget = class {
     addStack() { return new StackStub() }
-    addText() { return textStub() }
+    addText(text: string) { return textStub(text) }
     addSpacer(_n?: number) {}
     setPadding() {}
     set backgroundColor(_v) {}
@@ -202,7 +211,7 @@ const FUTURE_MANIFEST = {
 const UPCOMING_MULTI_MANIFEST = {
   events: [
     {
-      id: 'upcoming-a', name: 'Upcoming A', organizer: 'Org A', track: 'Track A',
+      id: 'upcoming-a', name: 'Upcoming A', organizer: 'Org A', track: 'Track A', city: 'City A',
       runGroups: [],
       days: [{ date: isoDate(10), label: 'Monday', activities: [] }],
     },
@@ -246,6 +255,31 @@ describe('scriptable widget loads and renders', () => {
 
   it('renders a single upcoming event as a rich card on Large', async () => {
     await expect(runWidget('large', FUTURE_MANIFEST)).resolves.toBeUndefined()
+  })
+
+  it('drops the city from the location row on Small so it never truncates the track name', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('Track A')
+    expect(texts).not.toContain('Track A, City A')
+  })
+
+  it('keeps the city in the location row on Medium/Large, where there is room for it', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('Track A, City A')
+  })
+
+  it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
+  })
+
+  it('still shows the "more upcoming" footer on Medium/Large', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(true)
   })
 
   it('renders a 2-card upcoming stack plus a "more upcoming" footer on Large', async () => {
