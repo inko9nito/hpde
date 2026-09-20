@@ -253,6 +253,30 @@ describe('scriptable widget loads and renders', () => {
     await expect(runWidget('medium', NO_EVENTS_MANIFEST)).resolves.toBeUndefined()
   })
 
+  it('zero state reuses the countdown-view header, not a plain "HPDE" title', async () => {
+    // Regression guard: renderZeroState used to render its own bespoke
+    // "HPDE" title, which meant Small/Medium/Large empty states didn't
+    // read as part of the same view as the populated countdown. Every
+    // family's zero state should now show the SAME title copy as its
+    // countdown-populated counterpart: "Next HPDE" on Small,
+    // "Upcoming HPDE events" on Medium/Large. If someone rewires
+    // renderZeroState back to a hand-crafted title, this fails.
+    for (const [family, expected] of [
+      ['small', 'Next HPDE'],
+      ['medium', 'Upcoming HPDE events'],
+      ['large', 'Upcoming HPDE events'],
+    ] as const) {
+      await runWidget(family, NO_EVENTS_MANIFEST)
+      const texts = (globalThis as any).__texts as string[]
+      expect(texts).toContain(expected)
+      expect(texts).toContain('No upcoming events')
+      // The old bespoke title was just "HPDE" on its own; make sure
+      // nobody re-adds it as a separate text alongside the shared
+      // header (which would double up).
+      expect(texts.filter(t => t === 'HPDE')).toHaveLength(0)
+    }
+  })
+
   it('renders the upcoming-events countdown header + card on Medium', async () => {
     await expect(runWidget('medium', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })

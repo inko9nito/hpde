@@ -492,11 +492,20 @@ const UPCOMING_ONE = {
   ],
 }
 
+// True zero state: nothing scheduled at all, no upcoming events.
+// The countdown-view header still renders (per-family, same as the
+// populated countdown) with "No upcoming events" centered in the
+// interior below it — that's the empty-state design.
+const NO_EVENTS = { events: [] }
+
 // Every combination that has actually been buggy so far, plus the
 // populated-today view for future-proofing this tool beyond the
 // countdown view. Add a scenario here any time a new layout gets built
 // — that's the whole point of keeping this checked into the repo.
 const SCENARIOS = [
+  { family: 'small', manifest: NO_EVENTS, label: 'Small — zero state' },
+  { family: 'medium', manifest: NO_EVENTS, label: 'Medium — zero state' },
+  { family: 'large', manifest: NO_EVENTS, label: 'Large — zero state' },
   { family: 'small', manifest: UPCOMING_ONE, label: 'Small — countdown (1 upcoming)' },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
