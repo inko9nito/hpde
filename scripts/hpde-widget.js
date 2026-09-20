@@ -1905,12 +1905,18 @@ function drawCountdownWell(container, next, p, t, fullWidth) {
   // when content overflows.
   if (!fullWidth && t.wellFixedW > 0) well.size = new Size(t.wellFixedW, 0)
 
-  if (fullWidth) well.addSpacer()
-
+  // Leading + trailing flex spacers around the count unit — the well
+  // is a row (HStack) with centerAlignContent for vertical centering,
+  // which does NOT horizontally center a single child. Without these
+  // spacers the count block hugs the well's left edge, with visible
+  // empty tint to its right. `fullWidth` (Small) additionally uses
+  // these to cascade the well itself to full card width; on
+  // non-fullWidth the well has an explicit width via wellFixedW and
+  // the spacers just do the main-axis centering.
+  well.addSpacer()
   const parts = countdownParts(daysUntil(next.day.date))
   addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
-
-  if (fullWidth) well.addSpacer()
+  well.addSpacer()
 }
 
 function addInfoRow(col, row, p, t) {
