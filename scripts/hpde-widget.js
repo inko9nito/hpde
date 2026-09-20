@@ -1530,8 +1530,12 @@ const COUNTDOWN_TOKENS = {
   // sizing, however tight the gaps get, so `preWellGap` and the well's
   // own digit size are shrunk specifically here too.
   small: {
+    // Small's well runs full-width below the info block (see
+    // drawCountdownCard's isSmall branch), so wellFixedW is unused
+    // here — the fullWidth path in drawCountdownWell cascades to
+    // full width via its own leading + trailing flex spacers.
     titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
-    wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2,
+    wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2, wellFixedW: 0,
   },
   regular: {
     // wellPadV: 14 (was 8) — same "well should match info col height"
@@ -1541,7 +1545,7 @@ const COUNTDOWN_TOKENS = {
     // reads as a balanced two-column layout instead of a floating
     // well with tinted margin below it.
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 14, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4,
+    wellPadV: 14, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4, wellFixedW: 108,
   },
   rich: {
     // cardPad: 18 (was 14) — on-device the rich card's title/rows sat
@@ -1570,7 +1574,18 @@ const COUNTDOWN_TOKENS = {
     // showed. Regular tier's shorter rowFont keeps its 12pt gap
     // clear at typical string lengths.
     cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 24, wellPadH: 18, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 32, preWellGap: 4,
+    // wellFixedW: 128 — Large 1-upcoming rich card is 364pt wide,
+    // minus 2*COUNTDOWN_MARGIN (16) minus 2*cardPad (36) = 312pt
+    // card interior. Reserving 128pt for the well plus 32pt for the
+    // wellGap leaves the info column with 152pt — just enough for
+    // the full "Test Raceway, Testville, TX" location row (about
+    // 22pt icon + gap + 138pt text @ 13pt) to sit without
+    // truncation AND with a guaranteed 32pt gap to the well's
+    // tinted edge. Without wellFixedW, the well was
+    // flex-shrinkable and let the info-column text grow right up
+    // to it. 128pt still comfortably fits the "1 | 3" digits at
+    // unitFont 40 with wellPadH 18 (16*2 + 46*2 + 6 = 130 — close).
+    wellPadV: 24, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 32, preWellGap: 4, wellFixedW: 128,
   },
 }
 
@@ -1909,6 +1924,17 @@ function drawCountdownWell(container, next, p, t, fullWidth) {
   well.cornerRadius = COUNTDOWN_WELL_RADIUS
   well.centerAlignContent()
   well.setPadding(t.wellPadV, t.wellPadH, t.wellPadV, t.wellPadH)
+  // Explicit width for the side-by-side well (non-fullWidth: the
+  // Medium/Large card layouts). Without it, the well takes its
+  // natural content width AND is flex-shrinkable, so on Large the
+  // info column's location row ("Test Raceway, Testville, TX")
+  // grew right up to the well's left edge — visible on-device as
+  // "TX running into the tinted container." Fixing the well's
+  // width means the info column has a deterministic max-width to
+  // truncate against, and the wellGap between them is truly
+  // reserved space instead of a fixed spacer that gets absorbed
+  // when content overflows.
+  if (!fullWidth && t.wellFixedW > 0) well.size = new Size(t.wellFixedW, 0)
 
   if (fullWidth) well.addSpacer()
 

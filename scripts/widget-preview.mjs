@@ -385,9 +385,35 @@ class StackMock {
     // the script explicitly fixes its size.
     this.node.style['min-width'] = '0'
     this.node.style['min-height'] = '0'
+    // Scriptable's WidgetStack `.size = new Size(w, h)` is border-box:
+    // the OUTER width/height is w/h, including any setPadding. CSS
+    // defaults to content-box, which makes setPadding add to a
+    // declared width — so a `well.size = new Size(140, 0)` with
+    // 18pt horizontal padding rendered as a 176pt-wide box, not 140,
+    // shifting every downstream sibling by 36pt and causing the
+    // side-by-side card layout to miscompute. Border-box on every
+    // stack keeps our width math match the widget script's intent.
+    this.node.style['box-sizing'] = 'border-box'
   }
   addStack() { const s = new StackMock('row'); this.node.children.push(s.node); return s }
-  layoutVertically() { this.node.orientation = 'column'; this.node.style['flex-direction'] = 'column' }
+  layoutVertically() {
+    this.node.orientation = 'column'
+    this.node.style['flex-direction'] = 'column'
+    // Scriptable's VStack in a size-constrained parent (a fixed-size
+    // HStack sibling, an explicit .size, etc.) makes its children
+    // fit within its cross-axis width — text with lineLimit=1
+    // ellipsizes rather than overflowing. CSS's default with our
+    // align-items: center/flex-start (set by centerAlignContent /
+    // topAlignContent) instead lets children keep their natural
+    // width and overflow, which produced the "info column text
+    // running into the well" bug the on-device photo showed. Adding
+    // `overflow: hidden` clips the visible overflow so the render
+    // matches Scriptable's actual behavior: content truncates
+    // instead of leaking into the well's area. The individual text
+    // element still gets `text-overflow: ellipsis` from lineLimit=1
+    // (see TextWrapper.set lineLimit).
+    this.node.style.overflow = 'hidden'
+  }
   addText(text) {
     const n = makeNode('text'); n.text = text
     n.style['font-size'] = '15px'
