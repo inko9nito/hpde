@@ -94,7 +94,10 @@ function escapeHtml(s) {
 function renderNode(node) {
   const styleStr = Object.entries(node.style).map(([k, v]) => `${k}:${v}`).join(';')
   const styleAttr = styleStr ? ` style="${styleStr}"` : ''
-  if (node.kind === 'text' || node.kind === 'image') {
+  if (node.kind === 'image') {
+    return `<div${styleAttr}>${node.text ?? ''}</div>` // raw SVG markup, not escaped
+  }
+  if (node.kind === 'text') {
     return `<div${styleAttr}>${escapeHtml(node.text ?? '')}</div>`
   }
   return `<div${styleAttr}>${node.children.map(renderNode).join('')}</div>`
@@ -130,15 +133,27 @@ const Font = {
   heavyRoundedSystemFont: s => fontMock(s, '800'),
 }
 
-const ICON_GLYPHS = {
-  'flag.checkered': '\u{1F3C1}',
-  calendar: '\u{1F4C5}',
-  'person.2': '\u{1F465}',
-  mappin: '\u{1F4CD}',
-  car: '\u{1F697}',
-  graduationcap: '\u{1F393}',
-  'fork.knife': '\u{1F374}',
-  'point.topleft.down.curvedto.point.bottomright.up': '↗',
+// Flat, single-color line-icon paths (Lucide-style, 24x24 viewBox) —
+// stood in for real SF Symbol artwork, which isn't available outside
+// iOS. A colored emoji glyph was the original stand-in here, but real
+// SF Symbols render as flat, monochrome, tint-colored icons, and an
+// emoji's own built-in color scheme made every render look nothing
+// like the device (this file's own comments already note these were
+// picked to mirror the web app's lucide icon for the same field, so
+// approximating the actual lucide shape is the more honest stand-in).
+const ICON_SVG_PATHS = {
+  'flag.checkered': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  car: '<path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>',
+  graduationcap: '<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M22 10v6"/><path d="M6 12v5c0 1 3 3 6 3s6-2 6-3v-5"/>',
+  'fork.knife': '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+  'point.topleft.down.curvedto.point.bottomright.up': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+}
+function iconSvg(name) {
+  const inner = ICON_SVG_PATHS[name] || '<circle cx="12" cy="12" r="8"/>'
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">${inner}</svg>`
 }
 
 // ---------- Stack / text / image mocks ----------
@@ -205,7 +220,7 @@ class StackMock {
   }
   addImage(sentinel) {
     const n = makeNode('image')
-    n.text = ICON_GLYPHS[sentinel && sentinel.name] || '▪'
+    n.text = iconSvg(sentinel && sentinel.name)
     this.node.children.push(n)
     return new ImageWrapper(n)
   }
