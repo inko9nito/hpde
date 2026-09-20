@@ -1462,14 +1462,15 @@ function daysUntil(iso) {
   return Math.round((target - todayStart) / (24 * 60 * 60 * 1000))
 }
 
-// Weeks+days once the gap is more than a week — a bare "9 days away"
-// stops being an intuitive read past that point, closer to "a week
-// and change" than a day count.
+// Days-only countdown — a single big number reads as one clean unit
+// on-device instead of "1 WEEK · 3 DAYS" where the eye has to do the
+// arithmetic. We kept the split for a while because "10 days" is
+// arguably less intuitive than "1 week 3 days," but the two-column
+// display was crowding the well and the well kept encroaching on the
+// info column; a single number frees up horizontal space and reads
+// as one glance.
 function countdownParts(days) {
-  if (days > 6) {
-    return { split: true, weeks: Math.floor(days / 7), days: days % 7 }
-  }
-  return { split: false, days }
+  return { days }
 }
 
 // There's no event today, but a future one is scheduled — show a
@@ -1522,70 +1523,38 @@ const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 // isSmall in drawCountdownCard) — but it still gets a real value
 // instead of being left undefined, so this table stays the one place
 // every countdown-view number lives, with no exceptions carved out.
+// `wellFixedW` on non-Small tiers is the reserved width for the
+// side-by-side well (see drawCountdownWell), which makes the info
+// column's max width deterministic — long location strings ellipsize
+// cleanly instead of pushing right up against the well.
 const COUNTDOWN_TOKENS = {
   // Small has no `cardPad` — it has no card container at all (see
-  // drawCountdownCard), so there's no outer padding to look up. Its
-  // other numbers still run smaller than regular/rich: the title +
-  // rows + well don't fit Small's real interior height at regular-tier
-  // sizing, however tight the gaps get, so `preWellGap` and the well's
-  // own digit size are shrunk specifically here too.
+  // drawCountdownCard). Its `wellFixedW` is 0 because Small's well
+  // runs full-width below the info block via drawCountdownWell's
+  // fullWidth path; no explicit width needed.
   small: {
-    // Small's well runs full-width below the info block (see
-    // drawCountdownCard's isSmall branch), so wellFixedW is unused
-    // here — the fullWidth path in drawCountdownWell cascades to
-    // full width via its own leading + trailing flex spacers.
     titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
-    wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2, wellFixedW: 0,
+    wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 6, wellGap: 12, preWellGap: 2, wellFixedW: 0,
   },
   regular: {
-    // wellPadV: 14 (was 8) — same "well should match info col height"
-    // rationale as the rich tier's bump (see below). Regular's info
-    // col at 3 rows is ~73pt; well at wellPadV 8 was ~56pt, so ~8pt
-    // extra on each end brings the well close enough that the card
-    // reads as a balanced two-column layout instead of a floating
-    // well with tinted margin below it.
+    // wellPadV: 14 brings the well's rendered height close to the
+    // info column's (2-3 rows at rowFont 11), so both fill the card
+    // top-to-bottom instead of the well floating with tinted margin
+    // below it.
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 14, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4, wellFixedW: 108,
+    wellPadV: 14, wellPadH: 10, unitFont: 26, unitLabelFont: 8, wellGap: 12, preWellGap: 4, wellFixedW: 92,
   },
   rich: {
-    // cardPad: 18 (was 14) — on-device the rich card's title/rows sat
-    // visibly too close to the tinted card's own edges; a couple extra
-    // points buys the "generous frame" feel of a Large widget.
-    // wellPadV: 24 (was 10) — Scriptable/SwiftUI has no
-    // .frame(maxHeight: .infinity) equivalent, so a sibling in an
-    // HStack can't stretch to match a taller sibling. The rich card's
-    // info column (title + 3 rows) is a good bit taller than the
-    // well's natural (numbers + labels) height, so with
-    // centerAlignContent() the well floated with visible empty tinted
-    // space above and below it inside the card. Padding the well
-    // vertically brings its total rendered height close to the info
-    // column's (~22 + 10 + 3*16 + 2*8 = ~96pt vs ~24 + 40 + 2 + 10 +
-    // 24 = ~100pt), so both fill the card top-to-bottom and the
-    // side-by-side layout reads as one balanced unit.
-    // wellGap: 32 (was 20) — the info column's widest row on rich is
-    // usually "Test Raceway, Testville, TX" (~230pt at rowFont 13),
-    // which combined with the well's ~130pt on a ~328pt card
-    // interior leaves the trailing flex spacer at zero and butts the
-    // location row's last glyph up against the well's left edge —
-    // no visible breathing room, so the "TX" reads as running into
-    // the tinted container. Bumping the fixed gap forces truncation
-    // to happen a few points sooner instead of letting text glyphs
-    // touch the well, which is the on-device bug the last screenshot
-    // showed. Regular tier's shorter rowFont keeps its 12pt gap
-    // clear at typical string lengths.
+    // cardPad: 18 gives Large's tinted card the generous internal
+    // frame it needs; wellPadV: 24 pads the well vertically to
+    // match the info column's ~96pt height, so the two sides of the
+    // side-by-side card read as one balanced unit.
+    // wellFixedW: 108 — Large card interior is 312pt (364 - 16 -
+    // 36). Reserving 108 for the well plus 32 for wellGap leaves
+    // 172pt for the info column, comfortably fitting the full
+    // "Test Raceway, Testville, TX" location row.
     cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    // wellFixedW: 128 — Large 1-upcoming rich card is 364pt wide,
-    // minus 2*COUNTDOWN_MARGIN (16) minus 2*cardPad (36) = 312pt
-    // card interior. Reserving 128pt for the well plus 32pt for the
-    // wellGap leaves the info column with 152pt — just enough for
-    // the full "Test Raceway, Testville, TX" location row (about
-    // 22pt icon + gap + 138pt text @ 13pt) to sit without
-    // truncation AND with a guaranteed 32pt gap to the well's
-    // tinted edge. Without wellFixedW, the well was
-    // flex-shrinkable and let the info-column text grow right up
-    // to it. 128pt still comfortably fits the "1 | 3" digits at
-    // unitFont 40 with wellPadH 18 (16*2 + 46*2 + 6 = 130 — close).
-    wellPadV: 24, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 32, preWellGap: 4, wellFixedW: 128,
+    wellPadV: 24, wellPadH: 16, unitFont: 40, unitLabelFont: 10, wellGap: 32, preWellGap: 4, wellFixedW: 108,
   },
 }
 
@@ -1939,16 +1908,7 @@ function drawCountdownWell(container, next, p, t, fullWidth) {
   if (fullWidth) well.addSpacer()
 
   const parts = countdownParts(daysUntil(next.day.date))
-  if (parts.split) {
-    const row = well.addStack()
-    row.bottomAlignContent()
-    row.spacing = t.unitGap
-    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, t)
-    addCountDivider(row, p, t)
-    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, t)
-  } else {
-    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
-  }
+  addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
 
   if (fullWidth) well.addSpacer()
 }
@@ -1971,41 +1931,19 @@ function addInfoRow(col, row, p, t) {
   text.lineLimit = 1
 }
 
-// One "12 / DAYS"-style stacked digit+label block inside the well.
-//
-// Fixed, centered width instead of sizing to the digit's own natural
-// glyph width — a lone "1" is visibly narrower than "23", so without
-// this the divider between two units shifts left/right depending on
-// which digits happen to render, occasionally overlapping the second
-// unit's numeral instead of sitting cleanly between the two.
+// One "10 / DAYS AWAY"-style stacked digit+label block inside the
+// well. Sizes to its own content — no fixed width needed now that
+// the well only ever shows one unit (no divider to align across).
 function addCountUnit(container, n, label, p, t) {
   const col = container.addStack()
   col.layoutVertically()
   col.centerAlignContent()
-  col.size = new Size(Math.round(t.unitFont * 1.15), 0)
   const num = col.addText(String(n))
   num.font = rBoldFont(t.unitFont)
   num.textColor = p.accent
   const lbl = col.addText(label.toUpperCase())
   lbl.font = rSemiboldFont(t.unitLabelFont)
   lbl.textColor = p.mutedStrong
-}
-
-// Thin vertical rule between the week and day units — same two-row
-// (glyph + label-height spacer) shape as addCountUnit so
-// row.bottomAlignContent() lines all three blocks up on the digit,
-// not the label. A plain line reads as a divider; the colon glyph
-// this replaced looked like part of a clock/time value instead.
-function addCountDivider(row, p, t) {
-  const col = row.addStack()
-  col.layoutVertically()
-  col.centerAlignContent()
-  const line = col.addStack()
-  line.backgroundColor = p.divider
-  line.size = new Size(1, t.dividerH)
-  const spacer = col.addText(".")
-  spacer.font = rSemiboldFont(t.unitLabelFont)
-  spacer.textOpacity = 0
 }
 
 function renderError(err) {

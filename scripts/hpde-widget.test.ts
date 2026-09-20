@@ -213,7 +213,7 @@ const FUTURE_MANIFEST = {
 }
 
 // Three future days a week+ apart, across two events, so the
-// upcoming/countdown path can be exercised with: the week:day-split
+// upcoming/countdown path can be exercised with: a big days-only
 // count, a 2-card stack on Large, a full-width well on Small, and a
 // "more upcoming" footer for whatever doesn't fit.
 const UPCOMING_MULTI_MANIFEST = {
