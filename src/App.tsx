@@ -11,9 +11,10 @@ import { SharePage } from './components/SharePage'
 import { EventDetailsDrawer } from './components/EventDetailsDrawer'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
+import { Footer } from './components/Footer'
 import { EVENTS, ALL_EVENTS } from './data'
 import { partitionEvents } from './utils/eventClass'
-import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
+import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
@@ -81,6 +82,15 @@ export default function App() {
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const pushScrollRef = useRef<HTMLDivElement>(null)
+  // True until the first real navigation into an event (switchEvent).
+  // Landing directly on an event route — a fresh load, a reload, or the
+  // empty-hash-redirects-to-today's-live-event effect below — should show
+  // the schedule immediately, not replay the "push in from the right"
+  // transition meant for an actual in-app navigation. Read at render time
+  // (before effects run), so it's still true for the very first mount even
+  // when an effect calls switchEvent afterward — only a switchEvent call
+  // that happens BEFORE that mount (i.e. a real click) flips it.
+  const skipPushEnterAnimationRef = useRef(true)
 
   const isOnEventRoute = eventIdFromHash(hash) !== null
   // Keep the pushed page mounted through its slide-out animation. Starts
@@ -112,6 +122,7 @@ export default function App() {
     && activeDay.activities.some(a => a.type !== 'break' && parseMinutes(a.time) < nowMinutes())
 
   function switchEvent(event: EventConfig) {
+    skipPushEnterAnimationRef.current = false
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
@@ -150,12 +161,15 @@ export default function App() {
 
   return (
     <>
-    <LandingPage onOpenEvent={switchEvent} />
+    <PullToRefresh disabled={pushMounted}>
+      <LandingPage onOpenEvent={switchEvent} />
+    </PullToRefresh>
     {pushMounted && (
     <PushPage
       open={isOnEventRoute}
       onExited={() => setPushMounted(false)}
       scrollRef={pushScrollRef}
+      skipEnterAnimation={skipPushEnterAnimationRef.current}
     >
     <PullToRefresh disabled={detailsOpen || !isOnEventRoute} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50">
@@ -255,20 +269,7 @@ export default function App() {
         <Legend groups={activeEvent.runGroups} />
 
       </div>
-      <div className="mt-6 pb-8 text-center text-xs">
-        <div>
-          <a href="#/widget-script" className="text-gray-600 underline hover:text-gray-800">
-            iOS widget
-          </a>
-          {' · '}
-          <a href="#/share" className="text-gray-600 underline hover:text-gray-800">
-            Share
-          </a>
-        </div>
-        <div className="mt-4 font-mono text-[10px] text-gray-300">
-          build {formatBuildTime(__BUILD_TIME__)}
-        </div>
-      </div>
+      <Footer />
     </div>
     </PullToRefresh>
     <EventDetailsDrawer
