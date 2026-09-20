@@ -1558,8 +1558,19 @@ const COUNTDOWN_TOKENS = {
     // column's (~22 + 10 + 3*16 + 2*8 = ~96pt vs ~24 + 40 + 2 + 10 +
     // 24 = ~100pt), so both fill the card top-to-bottom and the
     // side-by-side layout reads as one balanced unit.
+    // wellGap: 32 (was 20) — the info column's widest row on rich is
+    // usually "Test Raceway, Testville, TX" (~230pt at rowFont 13),
+    // which combined with the well's ~130pt on a ~328pt card
+    // interior leaves the trailing flex spacer at zero and butts the
+    // location row's last glyph up against the well's left edge —
+    // no visible breathing room, so the "TX" reads as running into
+    // the tinted container. Bumping the fixed gap forces truncation
+    // to happen a few points sooner instead of letting text glyphs
+    // touch the well, which is the on-device bug the last screenshot
+    // showed. Regular tier's shorter rowFont keeps its 12pt gap
+    // clear at typical string lengths.
     cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 24, wellPadH: 18, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20, preWellGap: 4,
+    wellPadV: 24, wellPadH: 18, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 32, preWellGap: 4,
   },
 }
 
