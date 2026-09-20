@@ -142,17 +142,20 @@ const Font = {
 // picked to mirror the web app's lucide icon for the same field, so
 // approximating the actual lucide shape is the more honest stand-in).
 const ICON_SVG_PATHS = {
-  // Checkered pattern, not a plain flag silhouette — confirmed against
-  // an actual on-device screenshot (the real flag.checkered SF Symbol
-  // is a checkerboard-on-a-pole, not a solid banner). The earlier
-  // "revert to plain flag" was a misread of feedback that was actually
-  // about badge centering, not the icon shape.
+  // A real flag shape — pole + a bordered rectangular banner — with a
+  // checkerboard pattern filled inside it. The previous version was 4
+  // disconnected squares with no flag outline at all, so it read as
+  // scattered dots, not a flag; the outline rect is what actually
+  // makes this legible as a flag shape rather than a checkerboard
+  // floating in space.
   'flag.checkered':
-    '<line x1="4" y1="2" x2="4" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-    + '<rect x="6" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="13" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="9.5" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="17" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>',
+    '<line x1="4" y1="3" x2="4" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+    + '<rect x="4" y="3" width="15" height="9" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>'
+    + '<rect x="4" y="3" width="5" height="3" fill="currentColor" stroke="none"/>'
+    + '<rect x="14" y="3" width="5" height="3" fill="currentColor" stroke="none"/>'
+    + '<rect x="9" y="6" width="5" height="3" fill="currentColor" stroke="none"/>'
+    + '<rect x="4" y="9" width="5" height="3" fill="currentColor" stroke="none"/>'
+    + '<rect x="14" y="9" width="5" height="3" fill="currentColor" stroke="none"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
