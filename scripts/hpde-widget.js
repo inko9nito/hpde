@@ -1621,8 +1621,17 @@ function renderUpcomingHeader(w, p, family) {
     badge.size = new Size(COUNTDOWN_BADGE_SIZE, COUNTDOWN_BADGE_SIZE)
     badge.backgroundColor = p.currentCardBg
     badge.cornerRadius = COUNTDOWN_BADGE_RADIUS
+    // centerAlignContent() only sets the CROSS-axis alignment (matches
+    // SwiftUI's HStack `alignment:` parameter, which is cross-axis
+    // only) — it centers the icon vertically, but leaves it packed at
+    // the leading edge on the main (horizontal) axis, same as any
+    // other lone child with no spacers. Wrapping it in a leading +
+    // trailing flex spacer is the same "well" pattern used elsewhere
+    // in this file to center content inside a fixed box on both axes.
     badge.centerAlignContent()
+    badge.addSpacer()
     addUpcomingHeaderIcon(badge, p, UPCOMING_HEADER_BADGE_ICON_SIZE)
+    badge.addSpacer()
 
     const col = row.addStack()
     col.layoutVertically()

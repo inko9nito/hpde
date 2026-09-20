@@ -142,21 +142,13 @@ const Font = {
 // picked to mirror the web app's lucide icon for the same field, so
 // approximating the actual lucide shape is the more honest stand-in).
 const ICON_SVG_PATHS = {
-  // A plain "flag on a pole" silhouette (Lucide's actual Flag icon) is
-  // inherently left-heavy in its own 24x24 box — the pole sits at the
-  // left edge and the flag billows right, filling maybe 2/3 of the
-  // width. That's a real visual mismatch for flag.checkered specifically:
-  // a checkered flag reads as a small, roughly square checkerboard, not
-  // a lopsided pole+banner shape, so unlike a mis-transcribed icon this
-  // was the wrong SHAPE for this glyph. A checkerboard is naturally
-  // symmetric, and its bounding box (pole x=4, checker area x=6-20,
-  // y=2-22) is centered exactly on the 24x24 viewBox's own center.
-  'flag.checkered':
-    '<line x1="4" y1="2" x2="4" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-    + '<rect x="6" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="13" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="9.5" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>'
-    + '<rect x="17" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>',
+  // Reverted to the plain flag shape — the icon itself was never the
+  // problem (its ink bounding box, measured via a real browser's
+  // getBBox(), is x:4-20/y:2-22, exactly centered on a 24x24 viewBox
+  // already). The actual bug was in how the surrounding badge stack
+  // positioned this icon — see the badge.addSpacer() fix in
+  // renderUpcomingHeader (hpde-widget.js).
+  'flag.checkered': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
