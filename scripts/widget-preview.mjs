@@ -29,6 +29,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright'
+import { faFlagCheckered } from '@fortawesome/free-solid-svg-icons'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const widgetSrc = readFileSync(join(__dirname, 'hpde-widget.js'), 'utf8')
@@ -141,21 +142,23 @@ const Font = {
 // like the device (this file's own comments already note these were
 // picked to mirror the web app's lucide icon for the same field, so
 // approximating the actual lucide shape is the more honest stand-in).
+// Two hand-drawn attempts at flag.checkered (scattered squares, then a
+// squared-off flag-with-checkerboard) both got called out as visibly
+// wrong — reasonably so, since neither was actually icon artwork, just
+// a guess at a shape from memory. Real, professionally-drawn path data
+// from an established icon set is the right source, not another
+// freehand attempt. Font Awesome Free's flag-checkered is that: a real
+// checkered-flag glyph, MIT/CC-BY licensed, used here in a private
+// local dev tool (not redistributed).
+const REAL_ICON_PATHS = {
+  'flag.checkered': { viewBox: `0 0 ${faFlagCheckered.icon[0]} ${faFlagCheckered.icon[1]}`, path: faFlagCheckered.icon[4] },
+}
+
+// The rest are still hand-approximated Lucide-style line icons (24x24,
+// stroke-based) — lower-stakes glyphs (calendar/person/pin/etc.) that
+// haven't drawn the same complaint, so left as-is rather than pulled
+// from a library preemptively.
 const ICON_SVG_PATHS = {
-  // A real flag shape — pole + a bordered rectangular banner — with a
-  // checkerboard pattern filled inside it. The previous version was 4
-  // disconnected squares with no flag outline at all, so it read as
-  // scattered dots, not a flag; the outline rect is what actually
-  // makes this legible as a flag shape rather than a checkerboard
-  // floating in space.
-  'flag.checkered':
-    '<line x1="4" y1="3" x2="4" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-    + '<rect x="4" y="3" width="15" height="9" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>'
-    + '<rect x="4" y="3" width="5" height="3" fill="currentColor" stroke="none"/>'
-    + '<rect x="14" y="3" width="5" height="3" fill="currentColor" stroke="none"/>'
-    + '<rect x="9" y="6" width="5" height="3" fill="currentColor" stroke="none"/>'
-    + '<rect x="4" y="9" width="5" height="3" fill="currentColor" stroke="none"/>'
-    + '<rect x="14" y="9" width="5" height="3" fill="currentColor" stroke="none"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
@@ -165,6 +168,10 @@ const ICON_SVG_PATHS = {
   'point.topleft.down.curvedto.point.bottomright.up': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
 }
 function iconSvg(name) {
+  const real = REAL_ICON_PATHS[name]
+  if (real) {
+    return `<svg viewBox="${real.viewBox}" width="100%" height="100%"><path fill="currentColor" d="${real.path}"/></svg>`
+  }
   const inner = ICON_SVG_PATHS[name] || '<circle cx="12" cy="12" r="8"/>'
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">${inner}</svg>`
 }
