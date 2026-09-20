@@ -490,4 +490,28 @@ describe('design guardrails (static source checks)', () => {
     const offenders = ternaryLines.filter(l => !l.includes('countdownTier('))
     expect(offenders).toEqual([])
   })
+
+  it('gives every vertical stack an explicit cross-axis alignment', () => {
+    // A VStack's REAL default cross-axis alignment is center, not
+    // leading — this is what actually caused the header title/subtitle
+    // and info-row misalignment bugs (a user visually caught the
+    // header one; this file had three more of the same latent bug).
+    // It only looked "left-aligned by default" wherever children
+    // happened to render the same width. Every `.layoutVertically()`
+    // call must be paired with an explicit `.topAlignContent()` /
+    // `.centerAlignContent()` / `.bottomAlignContent()` call on the
+    // same stack, so this can't silently regress by someone adding a
+    // new vertical stack and assuming CSS-like default left alignment.
+    const lines = widgetSrc.split('\n')
+    const offenders: string[] = []
+    lines.forEach((line, i) => {
+      const m = line.match(/^\s*(\w+)\.layoutVertically\(\)/)
+      if (!m) return
+      const varName = m[1]
+      const window = lines.slice(i, i + 8).join('\n')
+      const re = new RegExp(`${varName}\\.(topAlignContent|centerAlignContent|bottomAlignContent)\\(\\)`)
+      if (!re.test(window)) offenders.push(`line ${i + 1}: ${varName}.layoutVertically()`)
+    })
+    expect(offenders).toEqual([])
+  })
 })

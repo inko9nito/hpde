@@ -863,12 +863,14 @@ function drawActivityRow(w, ev, groupById, selected, p, past, current) {
 
   const leftGutter = outerRow.addStack()
   leftGutter.layoutVertically()
+  leftGutter.topAlignContent()
   leftGutter.size = new Size(LEFT_GUTTER_WIDTH, 0)
 
   const cardContainer = outerRow.addStack()
 
   const rightGutter = outerRow.addStack()
   rightGutter.layoutVertically()
+  rightGutter.topAlignContent()
   rightGutter.size = new Size(RIGHT_GUTTER_WIDTH, 0)
 
   if (current) {
@@ -911,6 +913,7 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
   const markerAtTop = position === "above"
 
   cardContainer.layoutVertically()
+  cardContainer.topAlignContent()
   cardContainer.backgroundColor = p.currentCardBg
   cardContainer.cornerRadius = CURRENT_CARD_CORNER_RADIUS
 
@@ -1046,6 +1049,7 @@ function buildCardContent(container, ev, groupById, selected, p, past, current) 
 
   if (note) {
     container.layoutVertically()
+    container.topAlignContent()
     const mainRow = container.addStack()
     if (stacked) mainRow.topAlignContent()
     else mainRow.centerAlignContent()
@@ -1083,6 +1087,12 @@ function buildMainContent(mainRow, ev, groupById, selected, p, past, current) {
     if (stacked) {
       const infoBlock = mainRow.addStack()
       infoBlock.layoutVertically()
+      // A VStack's real default cross-axis alignment is CENTER, not
+      // leading — the "On track" and "In class" rows only look
+      // left-aligned by coincidence when they happen to render the
+      // same width (same pill count/label length); an explicit call
+      // is required, not a comment claiming a default that isn't real.
+      infoBlock.topAlignContent()
 
       addSectionRow(infoBlock, "On track", "car", onTrack, selected, p, past, current)
       infoBlock.addSpacer(current ? 6 : 8)
@@ -1184,6 +1194,7 @@ function addTimeColumn(row, hhmm, p, past, current, topAlign) {
   // not part of the time itself.
   const ampmBox = timeRow.addStack()
   ampmBox.layoutVertically()
+  ampmBox.topAlignContent()
   const ampm = ampmBox.addText(formatAmPm(hhmm))
   ampm.font = rFont(9)
   ampm.textColor = p.mutedStrong
@@ -1214,8 +1225,10 @@ function addSectionRow(parent, labelText, iconName, groups, selected, p, past, c
   // the extra horizontal space equally — which starved the section
   // row of the pt or two it needed for the pill to be its natural
   // width, and the pill's label truncated ("Oran…"). The row now
-  // grows only to its natural width (label col + pills), and the
-  // section row is left-aligned in its container by default.
+  // grows only to its natural width (label col + pills); the caller's
+  // infoBlock.topAlignContent() (buildMainContent) is what actually
+  // keeps this row left-aligned against its sibling — a VStack's real
+  // default cross-axis alignment is center, not leading.
 }
 
 // Label column with a small SF Symbol glyph to the left of the
@@ -1613,6 +1626,11 @@ function renderUpcomingHeader(w, p, family) {
 
     const col = row.addStack()
     col.layoutVertically()
+    // A VStack's real default cross-axis alignment is center, not
+    // leading — without this, "Track days ahead" (narrower) rendered
+    // centered under "Upcoming HPDE events" (wider) instead of flush
+    // with its left edge.
+    col.topAlignContent()
     const title = col.addText("Upcoming HPDE events")
     title.font = rBoldFont(20)
     title.textColor = p.fg
@@ -1707,6 +1725,11 @@ function drawCountdownCard(w, p, next, rich, family) {
     // keeps its own tint — that's the deliberate focal element, not
     // the removed wrapper.
     card.layoutVertically()
+    // A VStack's real default cross-axis alignment is center — without
+    // this, infoCol (title + rows, narrower than the full-width well
+    // below it) would render horizontally centered instead of flush
+    // left with the well's own left edge.
+    card.topAlignContent()
   } else {
     card.centerAlignContent()
     card.backgroundColor = p.cardBg
@@ -1716,6 +1739,10 @@ function drawCountdownCard(w, p, next, rich, family) {
 
   const infoCol = card.addStack()
   infoCol.layoutVertically()
+  // A VStack's real default cross-axis alignment is center — without
+  // this, the title and each info row (usually different widths) would
+  // center relative to each other instead of sharing a left edge.
+  infoCol.topAlignContent()
 
   const title = infoCol.addText(next.event.name)
   title.font = rBoldFont(t.titleFont)
@@ -1869,6 +1896,7 @@ function addCountUnit(container, n, label, p, t) {
 function addCountDivider(row, p, t) {
   const col = row.addStack()
   col.layoutVertically()
+  col.centerAlignContent()
   const line = col.addStack()
   line.backgroundColor = p.divider
   line.size = new Size(1, t.dividerH)
