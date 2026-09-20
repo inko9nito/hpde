@@ -385,9 +385,35 @@ class StackMock {
     // the script explicitly fixes its size.
     this.node.style['min-width'] = '0'
     this.node.style['min-height'] = '0'
+    // Scriptable's WidgetStack `.size = new Size(w, h)` is border-box:
+    // the OUTER width/height is w/h, including any setPadding. CSS
+    // defaults to content-box, which makes setPadding add to a
+    // declared width — so a `well.size = new Size(140, 0)` with
+    // 18pt horizontal padding rendered as a 176pt-wide box, not 140,
+    // shifting every downstream sibling by 36pt and causing the
+    // side-by-side card layout to miscompute. Border-box on every
+    // stack keeps our width math match the widget script's intent.
+    this.node.style['box-sizing'] = 'border-box'
   }
   addStack() { const s = new StackMock('row'); this.node.children.push(s.node); return s }
-  layoutVertically() { this.node.orientation = 'column'; this.node.style['flex-direction'] = 'column' }
+  layoutVertically() {
+    this.node.orientation = 'column'
+    this.node.style['flex-direction'] = 'column'
+    // Scriptable's VStack in a size-constrained parent (a fixed-size
+    // HStack sibling, an explicit .size, etc.) makes its children
+    // fit within its cross-axis width — text with lineLimit=1
+    // ellipsizes rather than overflowing. CSS's default with our
+    // align-items: center/flex-start (set by centerAlignContent /
+    // topAlignContent) instead lets children keep their natural
+    // width and overflow, which produced the "info column text
+    // running into the well" bug the on-device photo showed. Adding
+    // `overflow: hidden` clips the visible overflow so the render
+    // matches Scriptable's actual behavior: content truncates
+    // instead of leaking into the well's area. The individual text
+    // element still gets `text-overflow: ellipsis` from lineLimit=1
+    // (see TextWrapper.set lineLimit).
+    this.node.style.overflow = 'hidden'
+  }
   addText(text) {
     const n = makeNode('text'); n.text = text
     n.style['font-size'] = '15px'
@@ -415,9 +441,37 @@ class StackMock {
     this.node.children.push(sp)
   }
   setPadding(t, l, b, r) { this.node.style.padding = `${t}px ${r}px ${b}px ${l}px` }
+  // topAlignContent / centerAlignContent / bottomAlignContent set the
+  // stack's CROSS-axis alignment.
+  //
+  // On a ROW (HStack) cross-axis is vertical — flex-start=top,
+  // center=vertical center, flex-end=bottom. Straightforward.
+  //
+  // On a COLUMN (VStack) cross-axis is horizontal — but here Scriptable
+  // and CSS diverge in a way that broke text truncation. Scriptable's
+  // VStack with a leading-aligned cross-axis STILL constrains its
+  // children to the column's cross-axis width, so a child text with
+  // `lineLimit = 1` sees a bounded width and ellipsizes. CSS's
+  // `align-items: flex-start` on a column lets each child keep its
+  // NATURAL cross-axis width and overflow the column — text with
+  // `text-overflow: ellipsis` never triggers because its parent row is
+  // as wide as the text itself, so there is no overflow to clip.
+  // Using `align-items: stretch` (CSS default) instead matches
+  // Scriptable's actual behavior: the child row fills the column's
+  // width, the text inside can then shrink and ellipsize cleanly, and
+  // visual left-alignment is preserved because a stretched row still
+  // packs its own children at flex-start (leading edge). For
+  // centerAlignContent on a column we do want the actual "children
+  // horizontally centered inside a fixed-width column" behavior (used
+  // in the well's countdown-unit columns), so that one keeps
+  // `align-items: center`.
   centerAlignContent() { this.node.style['align-items'] = 'center' }
-  topAlignContent() { this.node.style['align-items'] = 'flex-start' }
-  bottomAlignContent() { this.node.style['align-items'] = 'flex-end' }
+  topAlignContent() {
+    this.node.style['align-items'] = this.node.orientation === 'column' ? 'stretch' : 'flex-start'
+  }
+  bottomAlignContent() {
+    this.node.style['align-items'] = this.node.orientation === 'column' ? 'stretch' : 'flex-end'
+  }
   set backgroundColor(c) { this.node.style['background-color'] = colorCss(c) }
   set cornerRadius(v) { this.node.style['border-radius'] = v + 'px' }
   set size(s) {
@@ -492,11 +546,20 @@ const UPCOMING_ONE = {
   ],
 }
 
+// True zero state: nothing scheduled at all, no upcoming events.
+// The countdown-view header still renders (per-family, same as the
+// populated countdown) with "No upcoming events" centered in the
+// interior below it — that's the empty-state design.
+const NO_EVENTS = { events: [] }
+
 // Every combination that has actually been buggy so far, plus the
 // populated-today view for future-proofing this tool beyond the
 // countdown view. Add a scenario here any time a new layout gets built
 // — that's the whole point of keeping this checked into the repo.
 const SCENARIOS = [
+  { family: 'small', manifest: NO_EVENTS, label: 'Small — zero state' },
+  { family: 'medium', manifest: NO_EVENTS, label: 'Medium — zero state' },
+  { family: 'large', manifest: NO_EVENTS, label: 'Large — zero state' },
   { family: 'small', manifest: UPCOMING_ONE, label: 'Small — countdown (1 upcoming)' },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },

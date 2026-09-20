@@ -1401,50 +1401,37 @@ function shortDate(iso) {
 
 function renderNoEvents(w, p, stale, upcoming) {
   if (!upcoming || upcoming.items.length === 0) {
-    renderZeroState(w, p, stale)
+    renderZeroState(w, p)
     return
   }
   renderCountdownState(w, p, upcoming)
 }
 
 // True zero state — nothing scheduled today AND no future event either.
-// Keeps the plain "HPDE" header (there's no info card to make it
-// redundant here), with the message centered in the space below it —
+// Uses the SAME countdown-view header (`renderUpcomingHeader`) as the
+// populated countdown, so this state reads as part of the same view
+// instead of a separate "HPDE" screen — Small says "Next HPDE",
+// Medium says "Upcoming HPDE events", Large gets the badge + subtitle.
+// Message centers in whatever height is left below the header,
 // matching the AA/Podcasts/Umami-style empty states this was designed
-// against, rather than the vertically-centered "floating in a blank
-// box" look from #116.
-function renderZeroState(w, p, stale) {
-  // Flex spacers on both sides center the whole header+message column
-  // horizontally in the widget — there's no populated header to line
-  // up with here, so there's no reason for the LEFT_GUTTER_WIDTH
-  // asymmetric inset that column uses elsewhere.
-  const outer = w.addStack()
-  outer.addSpacer()
-  const col = outer.addStack()
-  col.layoutVertically()
-  col.centerAlignContent()
+// against.
+function renderZeroState(w, p) {
+  const family = config.widgetFamily || "medium"
+  renderUpcomingHeader(w, p, family)
 
-  const title = col.addText("HPDE")
-  title.font = rBoldFont(18)
-  title.textColor = p.fg
-
-  if (stale) {
-    col.addSpacer(6)
-    const s = col.addText("(cached)")
-    s.font = rFont(9)
-    s.textColor = p.muted
-  }
-
-  // Flex spacers on both sides center the message in whatever space
-  // is left under the header, instead of it sitting immediately below
-  // (too cramped) or dead-centered in the whole widget (the #116 bug).
-  col.addSpacer()
-  const msg = col.addText("No upcoming events")
-  msg.font = rFont(14)
+  // Center the message vertically in the interior below the header:
+  // one flex spacer above, one flex spacer below, message in the
+  // middle. Horizontally centered inside its own row via left+right
+  // flex spacers, since there's no card underneath to line it up with.
+  w.addSpacer()
+  const row = w.addStack()
+  row.addSpacer()
+  const msg = row.addText("No upcoming events")
+  msg.font = rFont(family === "small" ? 12 : 14)
   msg.textColor = p.muted
-  col.addSpacer()
-
-  outer.addSpacer()
+  msg.lineLimit = 1
+  row.addSpacer()
+  w.addSpacer()
 }
 
 // "Clockwise" -> "CW (clockwise)", "Counter-clockwise" -> "CCW
@@ -1475,14 +1462,15 @@ function daysUntil(iso) {
   return Math.round((target - todayStart) / (24 * 60 * 60 * 1000))
 }
 
-// Weeks+days once the gap is more than a week — a bare "9 days away"
-// stops being an intuitive read past that point, closer to "a week
-// and change" than a day count.
+// Days-only countdown — a single big number reads as one clean unit
+// on-device instead of "1 WEEK · 3 DAYS" where the eye has to do the
+// arithmetic. We kept the split for a while because "10 days" is
+// arguably less intuitive than "1 week 3 days," but the two-column
+// display was crowding the well and the well kept encroaching on the
+// info column; a single number frees up horizontal space and reads
+// as one glance.
 function countdownParts(days) {
-  if (days > 6) {
-    return { split: true, weeks: Math.floor(days / 7), days: days % 7 }
-  }
-  return { split: false, days }
+  return { days }
 }
 
 // There's no event today, but a future one is scheduled — show a
@@ -1535,24 +1523,38 @@ const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 // isSmall in drawCountdownCard) — but it still gets a real value
 // instead of being left undefined, so this table stays the one place
 // every countdown-view number lives, with no exceptions carved out.
+// `wellFixedW` on non-Small tiers is the reserved width for the
+// side-by-side well (see drawCountdownWell), which makes the info
+// column's max width deterministic — long location strings ellipsize
+// cleanly instead of pushing right up against the well.
 const COUNTDOWN_TOKENS = {
   // Small has no `cardPad` — it has no card container at all (see
-  // drawCountdownCard), so there's no outer padding to look up. Its
-  // other numbers still run smaller than regular/rich: the title +
-  // rows + well don't fit Small's real interior height at regular-tier
-  // sizing, however tight the gaps get, so `preWellGap` and the well's
-  // own digit size are shrunk specifically here too.
+  // drawCountdownCard). Its `wellFixedW` is 0 because Small's well
+  // runs full-width below the info block via drawCountdownWell's
+  // fullWidth path; no explicit width needed.
   small: {
     titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
-    wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2,
+    wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 6, wellGap: 12, preWellGap: 2, wellFixedW: 0,
   },
   regular: {
+    // wellPadV: 14 brings the well's rendered height close to the
+    // info column's (2-3 rows at rowFont 11), so both fill the card
+    // top-to-bottom instead of the well floating with tinted margin
+    // below it.
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4,
+    wellPadV: 14, wellPadH: 10, unitFont: 26, unitLabelFont: 8, wellGap: 12, preWellGap: 4, wellFixedW: 92,
   },
   rich: {
-    cardPad: 14, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 8, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20, preWellGap: 4,
+    // cardPad: 18 gives Large's tinted card the generous internal
+    // frame it needs; wellPadV: 24 pads the well vertically to
+    // match the info column's ~96pt height, so the two sides of the
+    // side-by-side card read as one balanced unit.
+    // wellFixedW: 108 — Large card interior is 312pt (364 - 16 -
+    // 36). Reserving 108 for the well plus 32 for wellGap leaves
+    // 172pt for the info column, comfortably fitting the full
+    // "Test Raceway, Testville, TX" location row.
+    cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
+    wellPadV: 24, wellPadH: 16, unitFont: 40, unitLabelFont: 10, wellGap: 32, preWellGap: 4, wellFixedW: 108,
   },
 }
 
@@ -1577,10 +1579,21 @@ const UPCOMING_HEADER_COMPACT_ICON_SIZE = 16
 // then, among compact, whether it's Small — which gets a noticeably
 // tighter gap below it, since Small's card (see COUNTDOWN_TOKENS.small
 // below) has the least vertical budget to spare of any tier.
+// Header sizing per family. `topPad` is a small extra top clearance
+// ADDED to the widget's own root 10pt setPadding — the countdown
+// view's title ("Upcoming HPDE events" on Medium/Large, "Next HPDE"
+// on Small) sat visibly too close to the widget's top edge at just
+// 10pt on-device, especially on Large where the 18pt bold title
+// crowds the rounded top corner. This adds a per-family top pad
+// spacer BEFORE the header, so header→card spacing (still `gap`)
+// isn't affected — only the gap ABOVE the header grows.
+// `gap` is the trailing gap between the header and whatever renders
+// below it (the first card, or the "No upcoming events" message
+// in the zero state).
 const UPCOMING_HEADER_TOKENS = {
-  large: { gap: 16 },
-  medium: { gap: 10 },
-  small: { gap: 6 },
+  large: { topPad: 6, gap: 16 },
+  medium: { topPad: 4, gap: 10 },
+  small: { topPad: 2, gap: 6 },
 }
 
 function upcomingHeaderTier(family) {
@@ -1609,6 +1622,7 @@ function addUpcomingHeaderIcon(row, p, size) {
 function renderUpcomingHeader(w, p, family) {
   const isLarge = family === "large" || family === "extraLarge"
   const h = UPCOMING_HEADER_TOKENS[upcomingHeaderTier(family)]
+  if (h.topPad > 0) w.addSpacer(h.topPad)
   const outer = w.addStack()
   outer.addSpacer(COUNTDOWN_MARGIN)
   const row = outer.addStack()
@@ -1717,7 +1731,14 @@ function renderCountdownState(w, p, upcoming) {
     w.addSpacer(6)
     drawMoreUpcomingFooter(w, p, remaining)
   }
-  w.addSpacer()
+  // Small's own drawCountdownCard already put a widget-level flex
+  // spacer between its info block and its well (that's how the well
+  // pins to the bottom of the widget); adding a SECOND flex spacer
+  // here would split the remaining height between the two and let
+  // the well drift up to the middle instead. Only Medium/Large need
+  // this trailing spacer, to collect any real leftover height at the
+  // very bottom instead of stretching the card up top.
+  if (!isSmall) w.addSpacer()
 }
 
 function drawCountdownCard(w, p, next, rich, family) {
@@ -1727,31 +1748,34 @@ function drawCountdownCard(w, p, next, rich, family) {
   const isSmall = family === "small"
   const t = COUNTDOWN_TOKENS[countdownTier(rich, isSmall)]
 
+  // Small doesn't wrap in a card container at all. The info-rows
+  // block and the well render as separate widget-level rows with the
+  // same COUNTDOWN_MARGIN inset, with a WIDGET-LEVEL flex spacer
+  // between them so the well pins to the bottom of the widget's
+  // remaining vertical space instead of piling up right under the
+  // rows and leaving a big empty pocket below (which is what the
+  // on-device Small screenshot showed). A flex spacer INSIDE the
+  // outer-row wrapper wouldn't cascade — a row's spacer distributes
+  // horizontally, not vertically — so this needs two sibling
+  // widget-level rows, not one.
+  if (isSmall) {
+    drawSmallInfoBlock(w, p, next, t)
+    w.addSpacer()
+    const wellOuter = w.addStack()
+    wellOuter.addSpacer(COUNTDOWN_MARGIN)
+    drawCountdownWell(wellOuter, next, p, t, true)
+    wellOuter.addSpacer(COUNTDOWN_MARGIN)
+    return
+  }
+
   const outer = w.addStack()
   outer.addSpacer(COUNTDOWN_MARGIN)
 
   const card = outer.addStack()
-  if (isSmall) {
-    // No card container at all on Small — the tinted background +
-    // cornerRadius + its own padding were unnecessary weight in a
-    // space already too tight to fit the info rows without dropping a
-    // field (see COUNTDOWN_TOKENS.small). Info rows + well sit
-    // directly on the widget's own background, with just the shared
-    // COUNTDOWN_MARGIN inset the header already uses. The well below
-    // keeps its own tint — that's the deliberate focal element, not
-    // the removed wrapper.
-    card.layoutVertically()
-    // A VStack's real default cross-axis alignment is center — without
-    // this, infoCol (title + rows, narrower than the full-width well
-    // below it) would render horizontally centered instead of flush
-    // left with the well's own left edge.
-    card.topAlignContent()
-  } else {
-    card.centerAlignContent()
-    card.backgroundColor = p.cardBg
-    card.cornerRadius = COUNTDOWN_CARD_RADIUS
-    card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
-  }
+  card.centerAlignContent()
+  card.backgroundColor = p.cardBg
+  card.cornerRadius = COUNTDOWN_CARD_RADIUS
+  card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
 
   const infoCol = card.addStack()
   infoCol.layoutVertically()
@@ -1802,34 +1826,55 @@ function drawCountdownCard(w, p, next, rich, family) {
     addInfoRow(infoCol, rows[i], p, t)
   }
 
-  if (isSmall) {
-    // Vertical card: a fixed gap, then the well drops below the rows
-    // instead of beside them (see drawCountdownWell's fullWidth case).
-    // Small's total content (title + 2 rows + well) is taller than
-    // Medium/Large's (rows sit beside the well there, not above it),
-    // so every bit of vertical slack here — this gap included — is
-    // trimmed tighter than the non-Small equivalent.
-    card.addSpacer(t.preWellGap)
-    drawCountdownWell(card, next, p, t, true)
-  } else {
-    // Fixed minimum gap, then a flex spacer. The flex is what
-    // stretches CARD to the widget's full width: a stack sizes to fit
-    // its content, but a flex spacer's "as large as possible" ideal
-    // size cascades out through every ancestor stack that isn't
-    // otherwise constrained (the same trick drawActivityRow uses —
-    // see "Trailing flex spacer stretches the CARDCONTAINER" there)
-    // — here it pins the well to the card's right edge instead of
-    // leaving blank space after it.
-    card.addSpacer(t.wellGap)
-    card.addSpacer()
-    drawCountdownWell(card, next, p, t, false)
-  }
+  // Fixed minimum gap, then a flex spacer. The flex is what stretches
+  // CARD to the widget's full width: a stack sizes to fit its content,
+  // but a flex spacer's "as large as possible" ideal size cascades out
+  // through every ancestor stack that isn't otherwise constrained (the
+  // same trick drawActivityRow uses — see "Trailing flex spacer
+  // stretches the CARDCONTAINER" there) — here it pins the well to the
+  // card's right edge instead of leaving blank space after it.
+  card.addSpacer(t.wellGap)
+  card.addSpacer()
+  drawCountdownWell(card, next, p, t, false)
 
   // Matches the leading COUNTDOWN_MARGIN spacer above, so the card
   // sits with equal margin on both sides instead of flush against the
   // widget's right edge — drawStatusFooter (back in makeWidget)
   // already surfaces stale/notification/invalid-token state uniformly,
   // so it isn't repeated here.
+  outer.addSpacer(COUNTDOWN_MARGIN)
+}
+
+// Small-only: the title + info-rows block, as a widget-level row with
+// COUNTDOWN_MARGIN left/right insets. Kept separate from the well
+// (see drawCountdownCard's isSmall early return) so a widget-level
+// flex spacer can sit between them, pinning the well to the bottom
+// of the widget's remaining vertical space.
+function drawSmallInfoBlock(w, p, next, t) {
+  const outer = w.addStack()
+  outer.addSpacer(COUNTDOWN_MARGIN)
+
+  const infoCol = outer.addStack()
+  infoCol.layoutVertically()
+  infoCol.topAlignContent()
+
+  const title = infoCol.addText(next.event.name)
+  title.font = rBoldFont(t.titleFont)
+  title.textColor = p.fg
+  title.lineLimit = 1
+
+  infoCol.addSpacer(t.rowGap)
+
+  const rows = []
+  rows.push({ icon: "calendar", text: `${next.day.label}, ${shortDate(next.day.date)}` })
+  if (next.event.track) {
+    rows.push({ icon: "mappin", text: next.event.track })
+  }
+  for (let i = 0; i < rows.length; i++) {
+    if (i > 0) infoCol.addSpacer(t.rowSpacing)
+    addInfoRow(infoCol, rows[i], p, t)
+  }
+
   outer.addSpacer(COUNTDOWN_MARGIN)
 }
 
@@ -1848,22 +1893,30 @@ function drawCountdownWell(container, next, p, t, fullWidth) {
   well.cornerRadius = COUNTDOWN_WELL_RADIUS
   well.centerAlignContent()
   well.setPadding(t.wellPadV, t.wellPadH, t.wellPadV, t.wellPadH)
+  // Explicit width for the side-by-side well (non-fullWidth: the
+  // Medium/Large card layouts). Without it, the well takes its
+  // natural content width AND is flex-shrinkable, so on Large the
+  // info column's location row ("Test Raceway, Testville, TX")
+  // grew right up to the well's left edge — visible on-device as
+  // "TX running into the tinted container." Fixing the well's
+  // width means the info column has a deterministic max-width to
+  // truncate against, and the wellGap between them is truly
+  // reserved space instead of a fixed spacer that gets absorbed
+  // when content overflows.
+  if (!fullWidth && t.wellFixedW > 0) well.size = new Size(t.wellFixedW, 0)
 
-  if (fullWidth) well.addSpacer()
-
+  // Leading + trailing flex spacers around the count unit — the well
+  // is a row (HStack) with centerAlignContent for vertical centering,
+  // which does NOT horizontally center a single child. Without these
+  // spacers the count block hugs the well's left edge, with visible
+  // empty tint to its right. `fullWidth` (Small) additionally uses
+  // these to cascade the well itself to full card width; on
+  // non-fullWidth the well has an explicit width via wellFixedW and
+  // the spacers just do the main-axis centering.
+  well.addSpacer()
   const parts = countdownParts(daysUntil(next.day.date))
-  if (parts.split) {
-    const row = well.addStack()
-    row.bottomAlignContent()
-    row.spacing = t.unitGap
-    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, t)
-    addCountDivider(row, p, t)
-    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, t)
-  } else {
-    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
-  }
-
-  if (fullWidth) well.addSpacer()
+  addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
+  well.addSpacer()
 }
 
 function addInfoRow(col, row, p, t) {
@@ -1884,41 +1937,19 @@ function addInfoRow(col, row, p, t) {
   text.lineLimit = 1
 }
 
-// One "12 / DAYS"-style stacked digit+label block inside the well.
-//
-// Fixed, centered width instead of sizing to the digit's own natural
-// glyph width — a lone "1" is visibly narrower than "23", so without
-// this the divider between two units shifts left/right depending on
-// which digits happen to render, occasionally overlapping the second
-// unit's numeral instead of sitting cleanly between the two.
+// One "10 / DAYS AWAY"-style stacked digit+label block inside the
+// well. Sizes to its own content — no fixed width needed now that
+// the well only ever shows one unit (no divider to align across).
 function addCountUnit(container, n, label, p, t) {
   const col = container.addStack()
   col.layoutVertically()
   col.centerAlignContent()
-  col.size = new Size(Math.round(t.unitFont * 1.15), 0)
   const num = col.addText(String(n))
   num.font = rBoldFont(t.unitFont)
   num.textColor = p.accent
   const lbl = col.addText(label.toUpperCase())
   lbl.font = rSemiboldFont(t.unitLabelFont)
   lbl.textColor = p.mutedStrong
-}
-
-// Thin vertical rule between the week and day units — same two-row
-// (glyph + label-height spacer) shape as addCountUnit so
-// row.bottomAlignContent() lines all three blocks up on the digit,
-// not the label. A plain line reads as a divider; the colon glyph
-// this replaced looked like part of a clock/time value instead.
-function addCountDivider(row, p, t) {
-  const col = row.addStack()
-  col.layoutVertically()
-  col.centerAlignContent()
-  const line = col.addStack()
-  line.backgroundColor = p.divider
-  line.size = new Size(1, t.dividerH)
-  const spacer = col.addText(".")
-  spacer.font = rSemiboldFont(t.unitLabelFont)
-  spacer.textOpacity = 0
 }
 
 function renderError(err) {
