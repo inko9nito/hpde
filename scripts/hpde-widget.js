@@ -1514,17 +1514,26 @@ const COUNTDOWN_WELL_RADIUS = 16
 const COUNTDOWN_BADGE_RADIUS = 12
 const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 
+// `rowSpacing` (between one info row and the next) and `rowIconGap`
+// (between a row's own icon and its text) look like they should be
+// the same number and aren't — they happen to converge at the rich
+// tier (8/8) but diverge at small (4 vs 5) and regular (5 vs 6). They
+// were kept as separate keys deliberately after a first pass at this
+// table collapsed them into one and silently widened the between-row
+// gap by 1pt on small/regular — exactly the kind of drift this table
+// exists to prevent, caught only by re-diffing against the pre-
+// refactor ternaries rather than by any test.
 const COUNTDOWN_TOKENS = {
   small: {
-    cardPad: 8, titleFont: 14, rowGap: 4, rowSpacing: 5, rowFont: 10, rowIconSize: 11,
+    cardPad: 8, titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
     wellPadV: 6, wellPadH: 8, unitGap: 3, unitFont: 22, unitLabelFont: 7, dividerH: 16,
   },
   regular: {
-    cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 6, rowFont: 11, rowIconSize: 12,
+    cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
     wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18,
   },
   rich: {
-    cardPad: 14, titleFont: 18, rowGap: 10, rowSpacing: 8, rowFont: 13, rowIconSize: 14,
+    cardPad: 14, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
     wellPadV: 8, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28,
   },
 }
@@ -1786,7 +1795,7 @@ function drawCountdownWell(container, next, p, t, fullWidth) {
 function addInfoRow(col, row, p, t) {
   const stack = col.addStack()
   stack.centerAlignContent()
-  stack.spacing = t.rowSpacing
+  stack.spacing = t.rowIconGap
   if (typeof SFSymbol !== "undefined") {
     const sym = SFSymbol.named(row.icon)
     if (sym) {
