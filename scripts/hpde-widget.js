@@ -471,7 +471,7 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
     const family = config.widgetFamily || "medium"
     const isLarge = family === "large" || family === "extraLarge"
     const upcoming = pickUpcoming(manifest, isLarge ? 2 : 1)
-    renderNoEvents(w, p, stale, upcoming, parsed, notifStatus)
+    renderNoEvents(w, p, stale, upcoming)
     drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
     return w
@@ -1386,12 +1386,12 @@ function shortDate(iso) {
   return `${months[m - 1]} ${d}`
 }
 
-function renderNoEvents(w, p, stale, upcoming, parsed, notifStatus) {
+function renderNoEvents(w, p, stale, upcoming) {
   if (!upcoming || upcoming.items.length === 0) {
     renderZeroState(w, p, stale)
     return
   }
-  renderCountdownState(w, p, stale, upcoming, parsed, notifStatus)
+  renderCountdownState(w, p, upcoming)
 }
 
 // True zero state — nothing scheduled today AND no future event either.
@@ -1476,13 +1476,6 @@ function countdownParts(days) {
 // countdown instead of a plain "Next: <name>" line. Info (name, date,
 // organizer, location, track config) on the left, same field order as
 // the event-details drawer; the countdown "well" on the right.
-// Reserved below the card for drawStatusFooter (stale/notification/
-// invalid-token bits), ~16pt — but only when it's actually going to
-// render something (see statusFooterBits in renderCountdownState);
-// otherwise the card gets that space instead of leaving a dead gap
-// at the bottom of the widget.
-const COUNTDOWN_FOOTER_RESERVE = 18
-const MORE_UPCOMING_FOOTER_RESERVE = 18
 const COUNTDOWN_CARD_GAP = 10
 
 // ----- countdown/upcoming-events design tokens -----
@@ -1530,16 +1523,14 @@ const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 // instead of being left undefined, so this table stays the one place
 // every countdown-view number lives, with no exceptions carved out.
 const COUNTDOWN_TOKENS = {
-  // Small's numbers run smaller across the board (cardPad, wellPadV,
-  // unitFont/unitLabelFont, preWellGap) beyond what regular/rich use —
-  // see the "on-device overflow" note above drawCountdownCard: the
-  // title + rows + well simply don't fit Small's real interior height
-  // at regular-tier sizing, however tight the between-element gaps
-  // get. `preWellGap` (the fixed gap before the well) and the well's
-  // own digit size are the two biggest remaining levers once a row's
-  // been dropped, so both shrink here specifically.
+  // Small has no `cardPad` — it has no card container at all (see
+  // drawCountdownCard), so there's no outer padding to look up. Its
+  // other numbers still run smaller than regular/rich: the title +
+  // rows + well don't fit Small's real interior height at regular-tier
+  // sizing, however tight the gaps get, so `preWellGap` and the well's
+  // own digit size are shrunk specifically here too.
   small: {
-    cardPad: 6, titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
+    titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
     wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2,
   },
   regular: {
@@ -1570,16 +1561,13 @@ const UPCOMING_HEADER_COMPACT_ICON_SIZE = 16
 // Header sizing per family — a THIRD tiering, separate from
 // COUNTDOWN_TOKENS' small/regular/rich: the header only cares whether
 // it's Large (badge + subtitle style) or compact (single row), and
-// then, among compact, whether it's Small — which needs a noticeably
+// then, among compact, whether it's Small — which gets a noticeably
 // tighter gap below it, since Small's card (see COUNTDOWN_TOKENS.small
-// below) has the least vertical budget to spare of any tier. `reserve`
-// is kept in sync with the header's own actual rendered height + gap
-// so renderCountdownState's card-height math reserves the right
-// amount instead of guessing.
+// below) has the least vertical budget to spare of any tier.
 const UPCOMING_HEADER_TOKENS = {
-  large: { gap: 16, reserve: COUNTDOWN_BADGE_SIZE + 16 },
-  medium: { gap: 10, reserve: 30 },
-  small: { gap: 6, reserve: 24 },
+  large: { gap: 16 },
+  medium: { gap: 10 },
+  small: { gap: 6 },
 }
 
 function upcomingHeaderTier(family) {
@@ -1652,7 +1640,7 @@ function renderUpcomingHeader(w, p, family) {
 // One or two countdown cards (Medium always gets one; Large can stack
 // two), plus a "N more upcoming" footer for whatever didn't fit —
 // same convention as drawMoreActivitiesFooter for a day's activities.
-function renderCountdownState(w, p, stale, upcoming, parsed, notifStatus) {
+function renderCountdownState(w, p, upcoming) {
   const { items, total } = upcoming
   const family = config.widgetFamily || "medium"
   const isLarge = family === "large" || family === "extraLarge"
@@ -1673,31 +1661,32 @@ function renderCountdownState(w, p, stale, upcoming, parsed, notifStatus) {
   // vertical budget.
   const rich = isLarge && items.length === 1
 
-  // Only reserve room for drawStatusFooter (called separately, right
-  // after this returns) when it's actually going to render something —
-  // otherwise the reserve is dead space with nothing sitting in it,
-  // pushing the card (and the "more upcoming" footer under it) further
-  // from the bottom edge than they need to be.
-  const hasStatusFooter = statusFooterBits(stale, parsed, notifStatus).length > 0
-  const headerReserve = UPCOMING_HEADER_TOKENS[upcomingHeaderTier(family)].reserve
-  const reserve = headerReserve
-    + (hasStatusFooter ? COUNTDOWN_FOOTER_RESERVE : 0)
-    + (showMoreFooter ? MORE_UPCOMING_FOOTER_RESERVE : 0)
-  const availableH = widgetInteriorHeight() - reserve
-  const cardHeight = (availableH - COUNTDOWN_CARD_GAP * (items.length - 1)) / items.length
-
+  // Cards used to be forced to an explicit computed height (dividing
+  // whatever was left of the interior budget evenly between them), on
+  // the theory that a content-sized card would leave "dead white space"
+  // below it. In practice that was backwards: a card's own content is
+  // shorter than that computed height on Medium and especially on
+  // Large's rich (single-event) layout, and centerAlignContent()
+  // centered the short content INSIDE the oversized fixed-height box —
+  // which is exactly the "inconsistent, wonky padding" bug (uneven gaps
+  // above/below the rows, looking different from the header-to-card gap
+  // right above it, for no visible reason). Letting each card size to
+  // its own content + cardPad, with any real leftover space collecting
+  // as a single flex spacer at the very end instead, fixes this at the
+  // root instead of tuning the numbers that produced it.
   for (let i = 0; i < items.length; i++) {
     if (i > 0) w.addSpacer(COUNTDOWN_CARD_GAP)
-    drawCountdownCard(w, p, items[i], rich, cardHeight, family)
+    drawCountdownCard(w, p, items[i], rich, family)
   }
 
   if (showMoreFooter) {
     w.addSpacer(6)
     drawMoreUpcomingFooter(w, p, remaining)
   }
+  w.addSpacer()
 }
 
-function drawCountdownCard(w, p, next, rich, cardHeight, family) {
+function drawCountdownCard(w, p, next, rich, family) {
   // Small has no room to put the well beside the info column (see
   // Next-HPDE mockup: even 2 info rows already fill the card's width) —
   // the well drops below the rows instead and stretches full-width.
@@ -1708,17 +1697,22 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
   outer.addSpacer(COUNTDOWN_MARGIN)
 
   const card = outer.addStack()
-  if (isSmall) card.layoutVertically()
-  else card.centerAlignContent()
-  // Explicit height instead of letting the card wrap its own (short)
-  // content — cardHeight already accounts for the widget's own
-  // top/bottom padding and however many cards + footers are sharing
-  // the interior, so this fills its share instead of leaving dead
-  // white space below a content-sized card.
-  card.size = new Size(0, cardHeight)
-  card.backgroundColor = p.cardBg
-  card.cornerRadius = COUNTDOWN_CARD_RADIUS
-  card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
+  if (isSmall) {
+    // No card container at all on Small — the tinted background +
+    // cornerRadius + its own padding were unnecessary weight in a
+    // space already too tight to fit the info rows without dropping a
+    // field (see COUNTDOWN_TOKENS.small). Info rows + well sit
+    // directly on the widget's own background, with just the shared
+    // COUNTDOWN_MARGIN inset the header already uses. The well below
+    // keeps its own tint — that's the deliberate focal element, not
+    // the removed wrapper.
+    card.layoutVertically()
+  } else {
+    card.centerAlignContent()
+    card.backgroundColor = p.cardBg
+    card.cornerRadius = COUNTDOWN_CARD_RADIUS
+    card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
+  }
 
   const infoCol = card.addStack()
   infoCol.layoutVertically()
@@ -1848,9 +1842,17 @@ function addInfoRow(col, row, p, t) {
 }
 
 // One "12 / DAYS"-style stacked digit+label block inside the well.
+//
+// Fixed, centered width instead of sizing to the digit's own natural
+// glyph width — a lone "1" is visibly narrower than "23", so without
+// this the divider between two units shifts left/right depending on
+// which digits happen to render, occasionally overlapping the second
+// unit's numeral instead of sitting cleanly between the two.
 function addCountUnit(container, n, label, p, t) {
   const col = container.addStack()
   col.layoutVertically()
+  col.centerAlignContent()
+  col.size = new Size(Math.round(t.unitFont * 1.15), 0)
   const num = col.addText(String(n))
   num.font = rBoldFont(t.unitFont)
   num.textColor = p.accent

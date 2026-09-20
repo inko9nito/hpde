@@ -66,6 +66,14 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     return { font: null, textColor: null, lineLimit: 0, textOpacity: 1 }
   }
   const imageStub = () => ({ imageSize: null, tintColor: null, imageOpacity: 1 })
+  // Records every cornerRadius/height a stack is given, so tests can
+  // assert on structural claims the text-content checks can't reach —
+  // e.g. "Small has no card container" (no stack gets the card's corner
+  // radius) or "cards aren't forced to a fixed height" (no stack gets a
+  // non-zero Size height). Both were real bugs a visual render caught
+  // that these assertions previously couldn't have.
+  g.__cornerRadii = [] as number[]
+  g.__sizeHeights = [] as number[]
   class StackStub {
     addStack() { return new StackStub() }
     addText(text: string) { return textStub(text) }
@@ -79,8 +87,8 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     set backgroundColor(_v) {}
     set borderColor(_v) {}
     set borderWidth(_v) {}
-    set cornerRadius(_v) {}
-    set size(_v) {}
+    set cornerRadius(v: number) { g.__cornerRadii.push(v) }
+    set size(v: { width: number; height: number }) { g.__sizeHeights.push(v.height) }
     set spacing(_v) {}
     set url(_v) {}
   }
@@ -280,6 +288,40 @@ describe('scriptable widget loads and renders', () => {
     await runWidget('medium', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
     expect(texts).toContain('Org A')
+  })
+
+  it('draws no card container around a countdown event on Small', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const radii = (globalThis as any).__cornerRadii as number[]
+    // COUNTDOWN_CARD_RADIUS (20) is only ever applied by drawCountdownCard's
+    // container — COUNTDOWN_WELL_RADIUS (16) and COUNTDOWN_BADGE_RADIUS (12)
+    // still legitimately appear (the well and the header badge are real,
+    // deliberate visual elements, not the removed wrapper).
+    expect(radii).not.toContain(20)
+  })
+
+  it('keeps the card container around a countdown event on Medium/Large', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const radii = (globalThis as any).__cornerRadii as number[]
+    expect(radii).toContain(20)
+  })
+
+  it('never forces a countdown card to a large explicit height', async () => {
+    // A visual render caught the real bug this guards: forcing
+    // card.size = new Size(0, cardHeight) made centerAlignContent()
+    // center short content inside an oversized box, producing uneven
+    // padding above/below the rows. Cards should size to their own
+    // content now. Small, fixed decorative heights legitimately remain
+    // (the week/day divider line tops out at 28; the Large header's
+    // square icon badge is COUNTDOWN_BADGE_SIZE, 40) — a forced card
+    // height would be far larger (the old code divided most of a
+    // ~130-345pt interior across 1-2 cards), so a ceiling just above
+    // the badge still catches the regression without flagging those.
+    for (const family of ['small', 'medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const heights = (globalThis as any).__sizeHeights as number[]
+      expect(heights.every(h => h <= 40)).toBe(true)
+    }
   })
 
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
