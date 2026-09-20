@@ -70,6 +70,56 @@ re-paste anything. Practically:
 Do the "loader will pick it up on merge, here's how to preview
 early if you want" post without being asked.
 
+## Widget layout work — always run the simulator, never hand-compute
+
+`scripts/hpde-widget.js` is a Scriptable widget with no local
+renderer of its own. Every time this file has been changed by
+hand-computing font metrics, padding, or "where the divider would
+land," the same class of bug (overlap, inconsistent padding, wrong
+truncation, mis-centered icons) has come back. So the rule for any
+task that touches this file:
+
+1. **Run `npm run widget:preview` before making a claim about
+   layout, and again after every layout edit.** The simulator writes
+   PNGs into `scripts/.widget-preview/s0.png`...`s11.png`; Read one
+   with the Read tool to see it. If Chromium's default binary isn't
+   available, pass `PLAYWRIGHT_EXECUTABLE_PATH=/opt/pw-browsers/chromium`.
+   Do NOT report a layout as fixed on the strength of arithmetic
+   or "the code looks right" — read the render.
+2. **Trust the simulator's grounded numbers, not memory.** Widget
+   point sizes, outer corner radius, dark-mode background and DPR
+   all live in `WIDGET_ENV_CONSTANTS` at the top of
+   `scripts/widget-preview.mjs`, each with a citation to its Apple
+   source. Do not edit a value there without moving its citation
+   with it. `scripts/hpde-widget.test.ts` pins these values — if
+   the pinning test fails, the fix is to reconcile the citation,
+   not to bump the assertion.
+3. **Icons come from a set, never a hand-drawn SVG string.** The
+   simulator resolves SF Symbol names to Lucide (already an app
+   dep — the web app renders the same set at the same field
+   positions) via `SF_SYMBOL_TO_LUCIDE`, reading path data at load
+   time from `node_modules/lucide-react/**`. `flag.checkered` is the
+   only exception (Lucide has no checkered flag) and uses Font
+   Awesome's real icon data. If a new SF Symbol appears in
+   `hpde-widget.js`, either add it to `SF_SYMBOL_TO_LUCIDE` or the
+   simulator renders a magenta X placeholder — do NOT paste a
+   freehand SVG path in as a stand-in.
+4. **The static guardrail tests are load-bearing.** The
+   `describe('design guardrails (static source checks)')` block in
+   `scripts/hpde-widget.test.ts` catches known regression classes:
+   VStack cross-axis alignment left implicit, inline `new Color(...)`
+   instead of the palette, duplicate margin constants,
+   hand-drawn-SVG lookup tables reintroduced in the simulator. If
+   one of these fails, the answer is to fix the underlying issue,
+   not to relax the assertion.
+
+The simulator is a real browser laying out real HTML — it catches
+overlap, misalignment, truncation and overflow well. It is NOT a
+pixel-exact WidgetKit renderer (SF Pro Rounded and the real SF
+Symbol glyphs aren't in this repo); a live on-device screenshot is
+still the final check on tiny glyph details. But no layout claim
+should ever ship from here without running the simulator first.
+
 ## Don't auto-watch CI or PRs
 
 Checking on CI/review status burns tokens, so never do it

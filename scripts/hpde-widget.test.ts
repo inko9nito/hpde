@@ -66,6 +66,14 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     return { font: null, textColor: null, lineLimit: 0, textOpacity: 1 }
   }
   const imageStub = () => ({ imageSize: null, tintColor: null, imageOpacity: 1 })
+  // Records every cornerRadius/height a stack is given, so tests can
+  // assert on structural claims the text-content checks can't reach —
+  // e.g. "Small has no card container" (no stack gets the card's corner
+  // radius) or "cards aren't forced to a fixed height" (no stack gets a
+  // non-zero Size height). Both were real bugs a visual render caught
+  // that these assertions previously couldn't have.
+  g.__cornerRadii = [] as number[]
+  g.__sizeHeights = [] as number[]
   class StackStub {
     addStack() { return new StackStub() }
     addText(text: string) { return textStub(text) }
@@ -79,8 +87,8 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     set backgroundColor(_v) {}
     set borderColor(_v) {}
     set borderWidth(_v) {}
-    set cornerRadius(_v) {}
-    set size(_v) {}
+    set cornerRadius(v: number) { g.__cornerRadii.push(v) }
+    set size(v: { width: number; height: number }) { g.__sizeHeights.push(v.height) }
     set spacing(_v) {}
     set url(_v) {}
   }
@@ -282,6 +290,40 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).toContain('Org A')
   })
 
+  it('draws no card container around a countdown event on Small', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const radii = (globalThis as any).__cornerRadii as number[]
+    // COUNTDOWN_CARD_RADIUS (20) is only ever applied by drawCountdownCard's
+    // container — COUNTDOWN_WELL_RADIUS (16) and COUNTDOWN_BADGE_RADIUS (12)
+    // still legitimately appear (the well and the header badge are real,
+    // deliberate visual elements, not the removed wrapper).
+    expect(radii).not.toContain(20)
+  })
+
+  it('keeps the card container around a countdown event on Medium/Large', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const radii = (globalThis as any).__cornerRadii as number[]
+    expect(radii).toContain(20)
+  })
+
+  it('never forces a countdown card to a large explicit height', async () => {
+    // A visual render caught the real bug this guards: forcing
+    // card.size = new Size(0, cardHeight) made centerAlignContent()
+    // center short content inside an oversized box, producing uneven
+    // padding above/below the rows. Cards should size to their own
+    // content now. Small, fixed decorative heights legitimately remain
+    // (the week/day divider line tops out at 28; the Large header's
+    // square icon badge is COUNTDOWN_BADGE_SIZE, 40) — a forced card
+    // height would be far larger (the old code divided most of a
+    // ~130-345pt interior across 1-2 cards), so a ceiling just above
+    // the badge still catches the regression without flagging those.
+    for (const family of ['small', 'medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const heights = (globalThis as any).__sizeHeights as number[]
+      expect(heights.every(h => h <= 40)).toBe(true)
+    }
+  })
+
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
@@ -446,6 +488,83 @@ describe('design guardrails (static source checks)', () => {
     const section = widgetSrc.slice(start, end)
     const ternaryLines = section.split('\n').filter(l => /rich\s*\?|isSmall\s*\?/.test(l))
     const offenders = ternaryLines.filter(l => !l.includes('countdownTier('))
+    expect(offenders).toEqual([])
+  })
+
+  it('keeps the widget-preview simulator icon system pinned to real icon-set data, not hand-drawn strings', () => {
+    // The simulator's icon-drift saga (see the branch history around
+    // fc21cb1 / 3d1b467) always followed the same pattern: someone
+    // — usually me — pastes a stand-in SVG path string as a literal
+    // in a lookup table (ICON_SVG_PATHS, REAL_ICON_PATHS, etc.),
+    // guessing the shape from memory. Every time, the guess was
+    // visibly wrong on device. The fix is to load path data FROM AN
+    // INSTALLED ICON PACKAGE (Lucide via node_modules, Font Awesome
+    // via its npm export) and NEVER type an SVG `d="..."` literal
+    // into the simulator. This test enforces that structurally.
+    const sim = readFileSync(join(__dirname, 'widget-preview.mjs'), 'utf8')
+    // A `d="..."` attribute inside an object/array literal in the
+    // source is the exact shape of a hand-drawn icon lookup. The
+    // simulator does render `d="${real.path}"` and similar into
+    // strings at runtime — but that's a template interpolation of
+    // package-sourced data, not a literal path. Detect the literal
+    // form: `d: "..."` or `d="M..."` where M/L/C/Z etc. appear
+    // (SVG path commands). Interpolations use `${...}` and don't match.
+    const literalPathAttr = /d\s*[:=]\s*"[MmLlCcQqAaZzHhVvSsTt][^"$]*"/
+    expect(sim).not.toMatch(literalPathAttr)
+    // The simulator must import from an installed icon package.
+    expect(sim).toMatch(/@fortawesome\/free-solid-svg-icons|lucide-react/)
+  })
+
+  it('keeps the widget-preview simulator constants pinned to cited iOS values', async () => {
+    // The simulator's reference numbers (widget point sizes, outer
+    // corner radius, dark background, DPR) are what let it render
+    // relative fit accurately without me guessing them each session.
+    // Every field checked here has a citation in widget-preview.mjs's
+    // WIDGET_ENV_CONSTANTS block — if a value changes, update the
+    // citation there and this test in the same commit. A silent drift
+    // (e.g. someone rounding 170 → 175 to "match a screenshot") would
+    // make the simulator lie again.
+    const mod = await import('./widget-preview.mjs')
+    const c = mod.WIDGET_ENV_CONSTANTS as {
+      widgetSizes: Record<string, { w: number; h: number }>
+      outerCornerRadius: number
+      background: { light: string; dark: string }
+      dpr: number
+    }
+    // iPhone 15/16 Pro (Apple HIG Widgets page):
+    expect(c.widgetSizes.small).toEqual({ w: 170, h: 170 })
+    expect(c.widgetSizes.medium).toEqual({ w: 364, h: 170 })
+    expect(c.widgetSizes.large).toEqual({ w: 364, h: 382 })
+    // iOS ContainerRelativeShape on iPhone Pro/standard (WidgetKit sample):
+    expect(c.outerCornerRadius).toBe(22)
+    // UIColor.systemBackground light/dark (UIKit reference):
+    expect(c.background.light.toUpperCase()).toBe('#FFFFFF')
+    expect(c.background.dark.toUpperCase()).toBe('#1C1C1E')
+    // @3x reference iPhone:
+    expect(c.dpr).toBe(3)
+  })
+
+  it('gives every vertical stack an explicit cross-axis alignment', () => {
+    // A VStack's REAL default cross-axis alignment is center, not
+    // leading — this is what actually caused the header title/subtitle
+    // and info-row misalignment bugs (a user visually caught the
+    // header one; this file had three more of the same latent bug).
+    // It only looked "left-aligned by default" wherever children
+    // happened to render the same width. Every `.layoutVertically()`
+    // call must be paired with an explicit `.topAlignContent()` /
+    // `.centerAlignContent()` / `.bottomAlignContent()` call on the
+    // same stack, so this can't silently regress by someone adding a
+    // new vertical stack and assuming CSS-like default left alignment.
+    const lines = widgetSrc.split('\n')
+    const offenders: string[] = []
+    lines.forEach((line, i) => {
+      const m = line.match(/^\s*(\w+)\.layoutVertically\(\)/)
+      if (!m) return
+      const varName = m[1]
+      const window = lines.slice(i, i + 8).join('\n')
+      const re = new RegExp(`${varName}\\.(topAlignContent|centerAlignContent|bottomAlignContent)\\(\\)`)
+      if (!re.test(window)) offenders.push(`line ${i + 1}: ${varName}.layoutVertically()`)
+    })
     expect(offenders).toEqual([])
   })
 })
