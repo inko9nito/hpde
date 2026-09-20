@@ -1632,7 +1632,14 @@ function renderUpcomingHeader(w, p, family) {
     // with its left edge.
     col.topAlignContent()
     const title = col.addText("Upcoming HPDE events")
-    title.font = rBoldFont(20)
+    // 18, not 20 — at 20pt bold this specific string leaves almost no
+    // right-edge clearance after the badge (the trailing flex spacer
+    // is present and correctly plumbed, there's just very little space
+    // left for it to consume once the text itself is that wide), while
+    // every other margin in this view is a comfortable, consistent
+    // COUNTDOWN_MARGIN. A couple points buys real breathing room here
+    // instead of leaving it dependent on this exact string's length.
+    title.font = rBoldFont(18)
     title.textColor = p.fg
     title.lineLimit = 1
     col.addSpacer(2)
