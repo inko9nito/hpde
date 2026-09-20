@@ -142,13 +142,17 @@ const Font = {
 // picked to mirror the web app's lucide icon for the same field, so
 // approximating the actual lucide shape is the more honest stand-in).
 const ICON_SVG_PATHS = {
-  // Reverted to the plain flag shape — the icon itself was never the
-  // problem (its ink bounding box, measured via a real browser's
-  // getBBox(), is x:4-20/y:2-22, exactly centered on a 24x24 viewBox
-  // already). The actual bug was in how the surrounding badge stack
-  // positioned this icon — see the badge.addSpacer() fix in
-  // renderUpcomingHeader (hpde-widget.js).
-  'flag.checkered': '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  // Checkered pattern, not a plain flag silhouette — confirmed against
+  // an actual on-device screenshot (the real flag.checkered SF Symbol
+  // is a checkerboard-on-a-pole, not a solid banner). The earlier
+  // "revert to plain flag" was a misread of feedback that was actually
+  // about badge centering, not the icon shape.
+  'flag.checkered':
+    '<line x1="4" y1="2" x2="4" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+    + '<rect x="6" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
+    + '<rect x="13" y="3" width="3.5" height="5" fill="currentColor" stroke="none"/>'
+    + '<rect x="9.5" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>'
+    + '<rect x="17" y="8" width="3.5" height="5" fill="currentColor" stroke="none"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
@@ -174,6 +178,24 @@ class TextWrapper {
       this.node.style.overflow = 'hidden'
       this.node.style['text-overflow'] = 'ellipsis'
       this.node.style['min-width'] = '0'
+      // KNOWN ISSUE, not fixed: some lineLimit=1 text (seen so far on
+      // "…, TX" location strings) occasionally renders its last glyph
+      // wrong — e.g. a capital X reading as a stray mark — only in the
+      // full multi-scenario page, never in an isolated reproduction of
+      // the exact same element/styles/font. Ruled out by direct
+      // testing, each still reproducing the artifact: the local-font
+      // data-URI not loading (it loads — document.fonts confirms
+      // status "loaded"), a text box sized with zero pixel tolerance
+      // for its content (DOM measurement shows no overflow), the
+      // variable font's runtime weight interpolation (a static-weight
+      // instance does the same thing), and text-overflow:ellipsis's
+      // own width calculation (removing it entirely changes nothing).
+      // The `padding-right` below is cheap insurance against the
+      // "zero tolerance" case even though it didn't resolve the one
+      // reproduction found so far — treat any garbled trailing glyph
+      // in a render as a simulator artifact to verify by eye against
+      // the source text, not a signal about the real widget.
+      this.node.style['padding-right'] = '2px'
     }
   }
   set textOpacity(v) { this.node.style.opacity = v }
@@ -402,10 +424,20 @@ async function main() {
   // working offline instead of depending on network access at render
   // time. Variable weight axis covers every weight the widget uses
   // (400 regular through 800 heavy) from one file.
+  //
+  // Inlined as a base64 data: URI rather than referenced by file://
+  // path — Chromium refuses to load a LOCAL file from within a page
+  // that is itself loaded via file://, even with a correct absolute
+  // path ("Not allowed to load local resource"), so the font silently
+  // never applied and every render up to now was still the plain
+  // Linux fallback despite believing otherwise. A data: URI has no
+  // such restriction and keeps this fully offline (~39KB font, ~52KB
+  // base64 — trivial for a local dev-tool page).
   const fontPath = join(__dirname, '..', 'node_modules', '@fontsource-variable', 'nunito', 'files', 'nunito-latin-wght-normal.woff2')
+  const fontBase64 = readFileSync(fontPath).toString('base64')
   const fontFace = `@font-face {
     font-family: 'WidgetPreviewFont';
-    src: url('file://${fontPath}') format('woff2-variations');
+    src: url('data:font/woff2;base64,${fontBase64}') format('woff2-variations');
     font-weight: 200 900;
   }`
 
@@ -434,6 +466,15 @@ ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined })
   const page1 = await browser.newPage({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 3 })
   await page1.goto('file://' + htmlPath)
+  // Without this, a screenshot can be taken before the local Nunito
+  // @font-face finishes loading — text lays out (and lineLimit's
+  // overflow:hidden/ellipsis clips) against the fallback font's
+  // metrics, then the font swaps in after the pixels are already
+  // captured, leaving a glyph clipped mid-character (e.g. "TX"
+  // rendering as a stray mark) instead of a clean truncation or no
+  // truncation at all. document.fonts.ready resolves once every
+  // requested face has actually loaded and the page has reflowed.
+  await page1.evaluate(() => document.fonts.ready)
   await page1.screenshot({ path: join(outDir, 'all.png'), fullPage: true })
   for (const s of sections) {
     const el = await page1.$(`#${s.id}`)
