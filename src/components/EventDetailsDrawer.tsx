@@ -63,6 +63,7 @@ function Row({ icon: Icon, label, subtitle, children }: RowProps) {
 
 export function EventDetailsDrawer({ event, open, onClose }: Props) {
   const drawerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   // Horizontal offset (px, right = positive) the panel is dragged by,
   // rendered on top of the open/closed transform while a swipe is live
   // or its release animation is still playing.
@@ -92,6 +93,13 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     setMapExpanded(false)
   }, [open])
 
+  // The drawer stays mounted between opens, so its scroll position
+  // would otherwise persist — reopening after scrolling down to the
+  // track map would land straight back there instead of at the top.
+  useEffect(() => {
+    if (open && contentRef.current) contentRef.current.scrollTop = 0
+  }, [open])
+
   // Swipe-right-to-dismiss, mimicking iOS's interactive pop gesture.
   // Listeners are attached directly to the panel element (not
   // `document`) so this never competes with PullToRefresh's global
@@ -113,6 +121,16 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
     } | null = null
 
     const onTouchStart = (e: TouchEvent) => {
+      // A second finger touching down (e.g. a resting thumb) while the
+      // first is already mid-swipe fires its own touchstart. Overwriting
+      // `gesture` here would discard the in-progress drag's `active`
+      // flag, and when the ORIGINAL finger then lifts, the resulting
+      // touchend would see this fresh (inactive) gesture and bail out
+      // without ever resetting dragX/isDragging — leaving the drawer
+      // permanently stuck mid-drag, showing the page underneath through
+      // the gap. Ignore any touchstart while a gesture is already being
+      // tracked so the original one runs to completion.
+      if (gesture) return
       const touch = e.touches[0]
       gesture = {
         startX: touch.clientX,
@@ -247,7 +265,7 @@ export function EventDetailsDrawer({ event, open, onClose }: Props) {
           willChange: 'transform',
         }}
       >
-        <div className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto md:mx-0 md:max-w-none">
+        <div ref={contentRef} className="mx-auto w-full max-w-lg px-3 py-4 sm:px-4 sm:py-6 overflow-y-auto md:mx-0 md:max-w-none">
           <div className="mb-5 flex items-start gap-2 md:justify-between md:gap-4">
             <button
               onClick={onClose}
