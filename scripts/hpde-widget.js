@@ -1523,38 +1523,46 @@ const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 // isSmall in drawCountdownCard) — but it still gets a real value
 // instead of being left undefined, so this table stays the one place
 // every countdown-view number lives, with no exceptions carved out.
-// `wellFixedW` on non-Small tiers is the reserved width for the
-// side-by-side well (see drawCountdownWell), which makes the info
-// column's max width deterministic — long location strings ellipsize
-// cleanly instead of pushing right up against the well.
+// `infoColW` on non-Small tiers is an explicit width applied to the
+// INFO COLUMN (title + rows), not the well — see infoCol.size's
+// comment in drawCountdownCard for why it's on this side. It's
+// computed as: card interior width - wellGap - a reserved budget for
+// the well's own natural width (padding + "DAYS AWAY", the widest
+// realistic well content). Card interior = family width -
+// 2*COUNTDOWN_MARGIN - 2*cardPad.
 const COUNTDOWN_TOKENS = {
   // Small has no `cardPad` — it has no card container at all (see
-  // drawCountdownCard). Its `wellFixedW` is 0 because Small's well
-  // runs full-width below the info block via drawCountdownWell's
-  // fullWidth path; no explicit width needed.
+  // drawCountdownCard). Its `infoColW` is 0/unused — Small uses
+  // drawSmallInfoBlock, a separate widget-level row with no side-by-
+  // side well to budget around.
   small: {
     titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
-    wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 6, wellGap: 12, preWellGap: 2, wellFixedW: 0,
+    wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 6, wellGap: 12, preWellGap: 2, infoColW: 0,
   },
   regular: {
     // wellPadV: 14 brings the well's rendered height close to the
     // info column's (2-3 rows at rowFont 11), so both fill the card
     // top-to-bottom instead of the well floating with tinted margin
     // below it.
+    // infoColW: 228 — Medium/Large-stacked card interior is 332pt
+    // (364 - 16 - 16). Reserving ~92pt for the well (padding +
+    // "DAYS AWAY" at unitLabelFont 8) plus 12pt wellGap leaves 228pt
+    // for the info column.
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 14, wellPadH: 10, unitFont: 26, unitLabelFont: 8, wellGap: 12, preWellGap: 4, wellFixedW: 92,
+    wellPadV: 14, wellPadH: 10, unitFont: 26, unitLabelFont: 8, wellGap: 12, preWellGap: 4, infoColW: 228,
   },
   rich: {
     // cardPad: 18 gives Large's tinted card the generous internal
     // frame it needs; wellPadV: 24 pads the well vertically to
     // match the info column's ~96pt height, so the two sides of the
     // side-by-side card read as one balanced unit.
-    // wellFixedW: 108 — Large card interior is 312pt (364 - 16 -
-    // 36). Reserving 108 for the well plus 32 for wellGap leaves
-    // 172pt for the info column, comfortably fitting the full
-    // "Test Raceway, Testville, TX" location row.
+    // infoColW: 172 — Large rich card interior is 312pt (364 - 16 -
+    // 36). Reserving ~108pt for the well (padding + "DAYS AWAY" at
+    // unitLabelFont 10) plus 32pt wellGap leaves 172pt for the info
+    // column, comfortably fitting the full "Test Raceway, Testville,
+    // TX" location row.
     cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 24, wellPadH: 16, unitFont: 40, unitLabelFont: 10, wellGap: 32, preWellGap: 4, wellFixedW: 108,
+    wellPadV: 24, wellPadH: 16, unitFont: 40, unitLabelFont: 10, wellGap: 32, preWellGap: 4, infoColW: 172,
   },
 }
 
@@ -1783,6 +1791,25 @@ function drawCountdownCard(w, p, next, rich, family) {
   // this, the title and each info row (usually different widths) would
   // center relative to each other instead of sharing a left edge.
   infoCol.topAlignContent()
+  // Explicit width, computed as the card interior minus the well's
+  // reserved budget (see t.infoColW comment at COUNTDOWN_TOKENS).
+  // Gives every row's lineLimit=1 text a deterministic max-width to
+  // truncate against, so a long location string ellipsizes instead of
+  // growing right up to the well. This constrains infoCol — NOT the
+  // well — deliberately: an earlier attempt gave WELL an explicit
+  // width plus leading/trailing addSpacer() to center its content,
+  // which looked centered in this repo's CSS-flexbox simulator but
+  // on-device left the count text hugging the well's left edge
+  // instead of centered (Spacer()-based main-axis centering inside an
+  // explicitly-sized row is untested territory here; addSpacer()-
+  // stretching a stack to fill its OWN parent, as used everywhere
+  // else in this file, is proven; centering a lone child WITHIN a
+  // fixed-size stack via spacers apparently isn't equivalent on real
+  // SwiftUI). Constraining infoCol avoids the well needing any
+  // explicit size or spacers at all — it goes back to auto-sizing
+  // tightly around its own content, so there's no extra space inside
+  // it to mis-center in the first place.
+  if (t.infoColW > 0) infoCol.size = new Size(t.infoColW, 0)
 
   const title = infoCol.addText(next.event.name)
   title.font = rBoldFont(t.titleFont)
@@ -1879,44 +1906,31 @@ function drawSmallInfoBlock(w, p, next, t) {
 }
 
 // The countdown "well" — a light-blue rounded box with the big
-// week/day (or day-only) count. `fullWidth` (Small) wraps the count
-// in a leading + trailing flex spacer instead of leaving the well's
-// horizontal stack sized to its natural (content) width; those two
-// flex spacers' "as large as possible" ideal width cascades up through
-// `well` itself, stretching it to fill the card's remaining width and
-// centering the count inside it — the same cascade-through-flex-
-// spacer trick used everywhere else in this file, just applied on
-// both sides instead of one.
+// day count. No explicit size, no spacers, on the side-by-side
+// (non-fullWidth) path: it sizes tightly to its own content
+// (padding + "DAYS AWAY"), so there's no extra internal space to
+// mis-center in the first place — it's pinned to the card's right
+// edge by the flex spacer drawCountdownCard adds just before calling
+// this. `fullWidth` (Small) is different: it wraps the count in a
+// leading + trailing flex spacer so those spacers' "as large as
+// possible" ideal width cascades up through `well` itself,
+// stretching it to fill the card's remaining width and centering the
+// count inside it — the same cascade-through-flex-spacer trick used
+// everywhere else in this file, just applied on both sides instead
+// of one. (Giving WELL an explicit width plus these same spacers for
+// the non-fullWidth case was tried and reverted — see infoCol.size's
+// comment in drawCountdownCard for why.)
 function drawCountdownWell(container, next, p, t, fullWidth) {
   const well = container.addStack()
   well.backgroundColor = p.currentCardBg
   well.cornerRadius = COUNTDOWN_WELL_RADIUS
   well.centerAlignContent()
   well.setPadding(t.wellPadV, t.wellPadH, t.wellPadV, t.wellPadH)
-  // Explicit width for the side-by-side well (non-fullWidth: the
-  // Medium/Large card layouts). Without it, the well takes its
-  // natural content width AND is flex-shrinkable, so on Large the
-  // info column's location row ("Test Raceway, Testville, TX")
-  // grew right up to the well's left edge — visible on-device as
-  // "TX running into the tinted container." Fixing the well's
-  // width means the info column has a deterministic max-width to
-  // truncate against, and the wellGap between them is truly
-  // reserved space instead of a fixed spacer that gets absorbed
-  // when content overflows.
-  if (!fullWidth && t.wellFixedW > 0) well.size = new Size(t.wellFixedW, 0)
 
-  // Leading + trailing flex spacers around the count unit — the well
-  // is a row (HStack) with centerAlignContent for vertical centering,
-  // which does NOT horizontally center a single child. Without these
-  // spacers the count block hugs the well's left edge, with visible
-  // empty tint to its right. `fullWidth` (Small) additionally uses
-  // these to cascade the well itself to full card width; on
-  // non-fullWidth the well has an explicit width via wellFixedW and
-  // the spacers just do the main-axis centering.
-  well.addSpacer()
+  if (fullWidth) well.addSpacer()
   const parts = countdownParts(daysUntil(next.day.date))
   addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
-  well.addSpacer()
+  if (fullWidth) well.addSpacer()
 }
 
 function addInfoRow(col, row, p, t) {

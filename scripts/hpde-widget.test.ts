@@ -74,7 +74,15 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   // that these assertions previously couldn't have.
   g.__cornerRadii = [] as number[]
   g.__sizeHeights = [] as number[]
+  // Records {cornerRadius, width, height} together per stack instance
+  // (not just flat arrays) so a test can ask "did the stack with THIS
+  // cornerRadius ever get an explicit width" — e.g. "the well
+  // (cornerRadius 16) never gets a fixed width," which the separate
+  // __cornerRadii/__sizeHeights arrays can't express since they don't
+  // say which stack a given size belongs to.
+  g.__stackSizes = [] as Array<{ cornerRadius: number | null; width: number; height: number }>
   class StackStub {
+    _cornerRadius: number | null = null
     addStack() { return new StackStub() }
     addText(text: string) { return textStub(text) }
     addImage() { return imageStub() }
@@ -87,8 +95,11 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     set backgroundColor(_v) {}
     set borderColor(_v) {}
     set borderWidth(_v) {}
-    set cornerRadius(v: number) { g.__cornerRadii.push(v) }
-    set size(v: { width: number; height: number }) { g.__sizeHeights.push(v.height) }
+    set cornerRadius(v: number) { this._cornerRadius = v; g.__cornerRadii.push(v) }
+    set size(v: { width: number; height: number }) {
+      g.__sizeHeights.push(v.height)
+      g.__stackSizes.push({ cornerRadius: this._cornerRadius, width: v.width, height: v.height })
+    }
     set spacing(_v) {}
     set url(_v) {}
   }
@@ -345,6 +356,27 @@ describe('scriptable widget loads and renders', () => {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
       const heights = (globalThis as any).__sizeHeights as number[]
       expect(heights.every(h => h <= 40)).toBe(true)
+    }
+  })
+
+  it('never gives the countdown well an explicit width', async () => {
+    // Regression guard for a real on-device bug: an earlier attempt
+    // gave the well (cornerRadius COUNTDOWN_WELL_RADIUS === 16) an
+    // explicit .size width plus leading/trailing addSpacer() to
+    // center its content. That looked centered in this repo's CSS-
+    // flexbox simulator, but on real Scriptable/SwiftUI the count
+    // text hugged the well's left edge instead — Spacer()-based
+    // main-axis centering inside an explicitly-sized stack isn't
+    // proven reliable here, unlike stretching a stack to fill its
+    // own parent (used everywhere else in this file). The fix moved
+    // the explicit width to infoCol instead, letting the well size
+    // tightly to its own content with nothing left to mis-center.
+    // This must not silently regress back onto the well.
+    for (const family of ['medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const sizes = (globalThis as any).__stackSizes as Array<{ cornerRadius: number | null; width: number }>
+      const wellSizedWithWidth = sizes.some(s => s.cornerRadius === 16 && s.width > 0)
+      expect(wellSizedWithWidth).toBe(false)
     }
   })
 
