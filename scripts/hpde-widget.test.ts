@@ -491,6 +491,30 @@ describe('design guardrails (static source checks)', () => {
     expect(offenders).toEqual([])
   })
 
+  it('keeps the widget-preview simulator icon system pinned to real icon-set data, not hand-drawn strings', () => {
+    // The simulator's icon-drift saga (see the branch history around
+    // fc21cb1 / 3d1b467) always followed the same pattern: someone
+    // — usually me — pastes a stand-in SVG path string as a literal
+    // in a lookup table (ICON_SVG_PATHS, REAL_ICON_PATHS, etc.),
+    // guessing the shape from memory. Every time, the guess was
+    // visibly wrong on device. The fix is to load path data FROM AN
+    // INSTALLED ICON PACKAGE (Lucide via node_modules, Font Awesome
+    // via its npm export) and NEVER type an SVG `d="..."` literal
+    // into the simulator. This test enforces that structurally.
+    const sim = readFileSync(join(__dirname, 'widget-preview.mjs'), 'utf8')
+    // A `d="..."` attribute inside an object/array literal in the
+    // source is the exact shape of a hand-drawn icon lookup. The
+    // simulator does render `d="${real.path}"` and similar into
+    // strings at runtime — but that's a template interpolation of
+    // package-sourced data, not a literal path. Detect the literal
+    // form: `d: "..."` or `d="M..."` where M/L/C/Z etc. appear
+    // (SVG path commands). Interpolations use `${...}` and don't match.
+    const literalPathAttr = /d\s*[:=]\s*"[MmLlCcQqAaZzHhVvSsTt][^"$]*"/
+    expect(sim).not.toMatch(literalPathAttr)
+    // The simulator must import from an installed icon package.
+    expect(sim).toMatch(/@fortawesome\/free-solid-svg-icons|lucide-react/)
+  })
+
   it('keeps the widget-preview simulator constants pinned to cited iOS values', async () => {
     // The simulator's reference numbers (widget point sizes, outer
     // corner radius, dark background, DPR) are what let it render
