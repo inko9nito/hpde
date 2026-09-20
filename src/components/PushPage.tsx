@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 // iOS UINavigationController's default push transition. Same curve and
@@ -11,6 +11,14 @@ interface Props {
   onExited?: () => void
   scrollRef?: RefObject<HTMLDivElement | null>
   children: React.ReactNode
+  /**
+   * Skip the slide-in on this instance's first mount, rendering already
+   * in position instead — for a page that mounted open because it's
+   * showing whatever route the app loaded on (a fresh load, a reload,
+   * a redirect), not because of a real in-app push. Only ever applies
+   * once: a later close/reopen of the same instance still animates.
+   */
+  skipEnterAnimation?: boolean
 }
 
 /**
@@ -19,13 +27,21 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, scrollRef, children }: Props) {
+export function PushPage({ open, onExited, scrollRef, children, skipEnterAnimation }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
-  // frame never paints and the transition doesn't fire.
-  const [inPosition, setInPosition] = useState(false)
+  // frame never paints and the transition doesn't fire. The one
+  // exception is skipEnterAnimation, which renders already in position.
+  const [inPosition, setInPosition] = useState(() => open && !!skipEnterAnimation)
+  const isFirstRun = useRef(true)
 
   useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false
+      // inPosition already matches `open` from the state initializer
+      // above — nothing to animate for this first run.
+      if (skipEnterAnimation) return
+    }
     if (open) {
       const id = requestAnimationFrame(() => setInPosition(true))
       return () => cancelAnimationFrame(id)
