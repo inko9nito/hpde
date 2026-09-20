@@ -376,3 +376,64 @@ describe('notification content', () => {
     expect(lunch!.title).toBe('🥙 Lunch · in 20m')
   })
 })
+
+// Static checks on the source text itself rather than rendered output —
+// these enforce the "no borders, no shadows, colors come from the
+// palette" rules from the design-guardrails comment block, so a future
+// change can't silently reintroduce any of them the way the header-
+// margin drift did. Grepping the raw source is intentionally crude but
+// catches the actual mistake: someone reaching for a WidgetKit-tutorial
+// property (.borderWidth, .shadowColor) that Scriptable stacks don't
+// even meaningfully support for widgets, or a fresh new Color("#hex")
+// dropped into a layout function instead of reading the palette.
+describe('design guardrails (static source checks)', () => {
+  it('never sets a border on any stack', () => {
+    expect(widgetSrc).not.toMatch(/\.borderColor\s*=|\.borderWidth\s*=/)
+  })
+
+  it('never sets a shadow on any stack', () => {
+    expect(widgetSrc).not.toMatch(/\.shadowColor\s*=|\.shadowRadius\s*=|\.shadowOffset\s*=|\.shadowOpacity\s*=/)
+  })
+
+  it('keeps every countdown-view color read through the palette, not a fresh literal', () => {
+    // Everything between the countdown tokens section and the end of
+    // the well/info-row/count-unit helpers should only ever assign
+    // `p.<something>` (or COUNTDOWN_TOKENS-derived numbers) as a color
+    // — never `new Color(...)` inline. urgencyColor/WARN_COLOR and the
+    // palette() function itself are the only places allowed to
+    // construct a Color from a hex literal.
+    const start = widgetSrc.indexOf('function renderUpcomingHeader(')
+    const end = widgetSrc.indexOf('function renderError(')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const section = widgetSrc.slice(start, end)
+    expect(section).not.toMatch(/new Color\(/)
+  })
+
+  it('keeps the header and card margins as the same shared constant', () => {
+    // Regression guard for the exact #180 follow-up bug: the header
+    // row used to compute its own margin instead of reusing the
+    // card's, so it silently drifted out of alignment. Asserting there
+    // is only ONE margin constant for this view (COUNTDOWN_MARGIN) —
+    // not a second COUNTDOWN_CARD_MARGIN or similar — makes that
+    // specific drift structurally impossible to reintroduce.
+    expect(widgetSrc).toMatch(/const COUNTDOWN_MARGIN = 8/)
+    expect(widgetSrc).not.toMatch(/COUNTDOWN_CARD_MARGIN/)
+  })
+
+  it('never hand-writes a rich/isSmall ternary in the countdown view — only countdownTier() may', () => {
+    // The whole point of COUNTDOWN_TOKENS is that no layout function
+    // picks its own font/spacing/padding per tier inline — it looks up
+    // `t.<property>` from the table `countdownTier()` resolved once.
+    // A bare `rich ? … : isSmall ? … : …` reappearing here means a new
+    // property was added the old (bug-prone) way instead of being
+    // added to the table, so this fails loudly instead of shipping a
+    // number some sibling function doesn't share.
+    const start = widgetSrc.indexOf('function renderUpcomingHeader(')
+    const end = widgetSrc.indexOf('function renderError(')
+    const section = widgetSrc.slice(start, end)
+    const ternaryLines = section.split('\n').filter(l => /rich\s*\?|isSmall\s*\?/.test(l))
+    const offenders = ternaryLines.filter(l => !l.includes('countdownTier('))
+    expect(offenders).toEqual([])
+  })
+})

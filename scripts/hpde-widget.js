@@ -358,8 +358,40 @@ function palette(dark) {
         accent: new Color("#3b82f6"), pastOpacity: 0.6 }
 }
 
+// ---------- design guardrails ----------
+//
+// This widget hand-rolls what WidgetKit gives native widgets for free
+// (auto content margins, container-relative corner radius, Dynamic
+// Type). Nothing here enforces these automatically, so they're written
+// down as rules instead — and where possible, as a single shared
+// constant/table so a layout function structurally CAN'T drift from
+// its siblings the way the header/card margin and Small-truncation
+// bugs did:
+//
+//   1. Color: every color a layout function uses comes from the `p`
+//      palette (or a shared semantic constant like WARN_COLOR below)
+//      — never a fresh `new Color("#hex")` inline. The palette is what
+//      makes light/dark mode and any future re-tint (Smart Stack,
+//      monochrome Home Screen) a one-place change instead of a hunt
+//      through every draw function. (Exceptions: urgencyColor's
+//      reds/oranges are genuinely data-driven, not a layout choice;
+//      pill text and run-group colors come from event data, not the
+//      palette.)
+//   2. No borders. A stroked edge around a card interrupts the
+//      now-marker line where it crosses a card, and the HIG's own
+//      guidance is that the system container already separates a
+//      widget from the wallpaper — cards distinguish themselves by
+//      background tint alone.
+//   3. No shadows. Widgets render flat next to system widgets; no
+//      drop shadow / elevation effect anywhere in this file.
+//   4. Size-dependent values (font, spacing, radius per small/medium/
+//      large tier) are looked up from one table per view, never
+//      hand-tuned per property in each function — see COUNTDOWN_TOKENS
+//      below for the pattern.
+const WARN_COLOR = new Color("#ef4444")
+
 function urgencyColor(min, p) {
-  if (min <= 5) return new Color("#ef4444")
+  if (min <= 5) return WARN_COLOR
   if (min <= 10) return new Color("#f97316")
   return p.muted
 }
@@ -616,7 +648,7 @@ function drawStatusFooter(w, p, stale, parsed, notifStatus) {
     }
     const el = row.addText(bits[i].text)
     el.font = rFont(9)
-    el.textColor = bits[i].warn ? new Color("#ef4444") : p.muted
+    el.textColor = bits[i].warn ? WARN_COLOR : p.muted
   }
   row.addSpacer()
 }
@@ -1452,13 +1484,69 @@ function countdownParts(days) {
 const COUNTDOWN_FOOTER_RESERVE = 18
 const MORE_UPCOMING_FOOTER_RESERVE = 18
 const COUNTDOWN_CARD_GAP = 10
-// Symmetric left/right margin for the countdown card. Deliberately NOT
-// LEFT_GUTTER_WIDTH (that's sized for the marker-dot column in the
-// populated schedule view, which doesn't exist here) — using it left
-// the card's background hugging the left edge while sitting flush
-// against the right, an asymmetric card that also never stretched to
-// fill the widget's actual width.
-const COUNTDOWN_CARD_MARGIN = 8
+
+// ----- countdown/upcoming-events design tokens -----
+//
+// Every element in this view (header, cards, wells, info rows, the
+// count units) shares ONE tier table instead of each function hand-
+// tuning its own font/spacing/margin per size. That's a structural
+// fix, not just a style preference: the #180 follow-up bugs (header
+// misaligned from the cards below it, Small's text truncating, Small
+// showing a footer it has no room for) were each one function using a
+// number its sibling functions didn't — a shared table makes that
+// class of bug impossible to reintroduce by construction, because
+// there's only one place to change a tier's spacing and everything
+// reading that tier picks it up.
+//
+// Tiers, in increasing available space:
+//   small   — the Small widget family. Card is vertical (well drops
+//             below the info rows instead of beside them), so it's
+//             the tightest tier by far.
+//   regular — Medium, and Large when it's stacking 2+ cards (halved
+//             vertical budget per card).
+//   rich    — Large showing exactly one card: full four-row detail,
+//             the tier with room to spare.
+//
+// Shared (non-tiered) geometry:
+const COUNTDOWN_MARGIN = 8       // outer left/right margin — header AND cards
+const COUNTDOWN_CARD_RADIUS = 20
+const COUNTDOWN_WELL_RADIUS = 16
+const COUNTDOWN_BADGE_RADIUS = 12
+const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
+
+// `rowSpacing` (between one info row and the next) and `rowIconGap`
+// (between a row's own icon and its text) look like they should be
+// the same number and aren't — they happen to converge at the rich
+// tier (8/8) but diverge at small (4 vs 5) and regular (5 vs 6). They
+// were kept as separate keys deliberately after a first pass at this
+// table collapsed them into one and silently widened the between-row
+// gap by 1pt on small/regular — exactly the kind of drift this table
+// exists to prevent, caught only by re-diffing against the pre-
+// refactor ternaries rather than by any test.
+// `wellGap` (the gap before the well in the side-by-side, non-Small
+// layout) is never actually read on the small tier — drawCountdownCard
+// takes a different branch there (well drops BELOW the rows, see
+// isSmall in drawCountdownCard) — but it still gets a real value
+// instead of being left undefined, so this table stays the one place
+// every countdown-view number lives, with no exceptions carved out.
+const COUNTDOWN_TOKENS = {
+  small: {
+    cardPad: 8, titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
+    wellPadV: 6, wellPadH: 8, unitGap: 3, unitFont: 22, unitLabelFont: 7, dividerH: 16, wellGap: 12,
+  },
+  regular: {
+    cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
+    wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12,
+  },
+  rich: {
+    cardPad: 14, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
+    wellPadV: 8, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20,
+  },
+}
+
+function countdownTier(rich, isSmall) {
+  return isSmall ? "small" : rich ? "rich" : "regular"
+}
 
 // ----- upcoming-events header -----
 //
@@ -1468,16 +1556,11 @@ const COUNTDOWN_CARD_MARGIN = 8
 // both), and a single compact title+icon row on Medium/Small where
 // there isn't room for a subtitle without crowding the card below it.
 const UPCOMING_HEADER_ICON = "flag.checkered"
-// Badge is a rounded square using the same light-blue tint as the
-// countdown well, so the header icon reads as part of the same
-// system as the well rather than a new color.
-const UPCOMING_HEADER_BADGE_SIZE = 40
-const UPCOMING_HEADER_BADGE_RADIUS = 12
 const UPCOMING_HEADER_BADGE_ICON_SIZE = 20
 const UPCOMING_HEADER_COMPACT_ICON_SIZE = 16
 // Kept in sync with renderUpcomingHeader's actual spacer heights so
 // renderCountdownState's card-height math reserves the right amount.
-const UPCOMING_HEADER_RESERVE_LARGE = UPCOMING_HEADER_BADGE_SIZE + 16
+const UPCOMING_HEADER_RESERVE_LARGE = COUNTDOWN_BADGE_SIZE + 16
 const UPCOMING_HEADER_RESERVE_COMPACT = 30
 
 function addUpcomingHeaderIcon(row, p, size) {
@@ -1490,16 +1573,17 @@ function addUpcomingHeaderIcon(row, p, size) {
 }
 
 // Wraps the header row in the same left/right margin the countdown
-// cards use (COUNTDOWN_CARD_MARGIN) so the header's text/icon lines up
-// with the card edges below it instead of sitting flush against the
-// widget's own (much thinner, right-0) padding — which is tuned for
-// the populated today view's marker gutters, not this state. Without
-// this the header icon had no clearance from the widget's right edge
-// at all and visibly overlapped the rounded corner.
+// cards use (COUNTDOWN_MARGIN — the SAME constant, not a copy) so the
+// header's text/icon structurally can't drift out of alignment with
+// the card edges below it, instead of sitting flush against the
+// widget's own (much thinner, right-0) padding tuned for the
+// populated today view's marker gutters. Without this the header icon
+// had no clearance from the widget's right edge and overlapped the
+// rounded corner.
 function renderUpcomingHeader(w, p, family) {
   const isLarge = family === "large" || family === "extraLarge"
   const outer = w.addStack()
-  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
+  outer.addSpacer(COUNTDOWN_MARGIN)
   const row = outer.addStack()
   row.centerAlignContent()
 
@@ -1507,9 +1591,9 @@ function renderUpcomingHeader(w, p, family) {
     row.spacing = 12
 
     const badge = row.addStack()
-    badge.size = new Size(UPCOMING_HEADER_BADGE_SIZE, UPCOMING_HEADER_BADGE_SIZE)
+    badge.size = new Size(COUNTDOWN_BADGE_SIZE, COUNTDOWN_BADGE_SIZE)
     badge.backgroundColor = p.currentCardBg
-    badge.cornerRadius = UPCOMING_HEADER_BADGE_RADIUS
+    badge.cornerRadius = COUNTDOWN_BADGE_RADIUS
     badge.centerAlignContent()
     addUpcomingHeaderIcon(badge, p, UPCOMING_HEADER_BADGE_ICON_SIZE)
 
@@ -1535,7 +1619,7 @@ function renderUpcomingHeader(w, p, family) {
     addUpcomingHeaderIcon(row, p, UPCOMING_HEADER_COMPACT_ICON_SIZE)
   }
 
-  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
+  outer.addSpacer(COUNTDOWN_MARGIN)
   w.addSpacer(isLarge ? 16 : 10)
 }
 
@@ -1592,9 +1676,10 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
   // Next-HPDE mockup: 3 info rows already fill the card's width) —
   // the well drops below the rows instead and stretches full-width.
   const isSmall = family === "small"
+  const t = COUNTDOWN_TOKENS[countdownTier(rich, isSmall)]
 
   const outer = w.addStack()
-  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
+  outer.addSpacer(COUNTDOWN_MARGIN)
 
   const card = outer.addStack()
   if (isSmall) card.layoutVertically()
@@ -1606,18 +1691,18 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
   // white space below a content-sized card.
   card.size = new Size(0, cardHeight)
   card.backgroundColor = p.cardBg
-  card.cornerRadius = 20
-  card.setPadding(rich ? 14 : 8, rich ? 14 : 8, rich ? 14 : 8, rich ? 14 : 8)
+  card.cornerRadius = COUNTDOWN_CARD_RADIUS
+  card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
 
   const infoCol = card.addStack()
   infoCol.layoutVertically()
 
   const title = infoCol.addText(next.event.name)
-  title.font = rBoldFont(rich ? 18 : isSmall ? 14 : 15)
+  title.font = rBoldFont(t.titleFont)
   title.textColor = p.fg
   title.lineLimit = 1
 
-  infoCol.addSpacer(rich ? 10 : isSmall ? 4 : 6)
+  infoCol.addSpacer(t.rowGap)
 
   // SF Symbol per row picked to match the web app's lucide icon for the
   // same field (EventDetailsDrawer: Calendar / Users / MapPin / Route) —
@@ -1645,8 +1730,8 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
   }
 
   for (let i = 0; i < rows.length; i++) {
-    if (i > 0) infoCol.addSpacer(rich ? 8 : isSmall ? 4 : 5)
-    addInfoRow(infoCol, rows[i], p, rich, isSmall)
+    if (i > 0) infoCol.addSpacer(t.rowSpacing)
+    addInfoRow(infoCol, rows[i], p, t)
   }
 
   if (isSmall) {
@@ -1657,7 +1742,7 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
     // so every bit of vertical slack here — this gap included — is
     // trimmed tighter than the non-Small equivalent.
     card.addSpacer(4)
-    drawCountdownWell(card, next, p, rich, true, isSmall)
+    drawCountdownWell(card, next, p, t, true)
   } else {
     // Fixed minimum gap, then a flex spacer. The flex is what
     // stretches CARD to the widget's full width: a stack sizes to fit
@@ -1667,17 +1752,17 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
     // see "Trailing flex spacer stretches the CARDCONTAINER" there)
     // — here it pins the well to the card's right edge instead of
     // leaving blank space after it.
-    card.addSpacer(rich ? 20 : 12)
+    card.addSpacer(t.wellGap)
     card.addSpacer()
-    drawCountdownWell(card, next, p, rich, false, false)
+    drawCountdownWell(card, next, p, t, false)
   }
 
-  // Matches the leading COUNTDOWN_CARD_MARGIN spacer above, so the
-  // card sits with equal margin on both sides instead of flush
-  // against the widget's right edge — drawStatusFooter (back in
-  // makeWidget) already surfaces stale/notification/invalid-token
-  // state uniformly, so it isn't repeated here.
-  outer.addSpacer(COUNTDOWN_CARD_MARGIN)
+  // Matches the leading COUNTDOWN_MARGIN spacer above, so the card
+  // sits with equal margin on both sides instead of flush against the
+  // widget's right edge — drawStatusFooter (back in makeWidget)
+  // already surfaces stale/notification/invalid-token state uniformly,
+  // so it isn't repeated here.
+  outer.addSpacer(COUNTDOWN_MARGIN)
 }
 
 // The countdown "well" — a light-blue rounded box with the big
@@ -1689,15 +1774,12 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
 // centering the count inside it — the same cascade-through-flex-
 // spacer trick used everywhere else in this file, just applied on
 // both sides instead of one.
-function drawCountdownWell(container, next, p, rich, fullWidth, isSmall) {
+function drawCountdownWell(container, next, p, t, fullWidth) {
   const well = container.addStack()
   well.backgroundColor = p.currentCardBg
-  well.cornerRadius = 16
+  well.cornerRadius = COUNTDOWN_WELL_RADIUS
   well.centerAlignContent()
-  well.setPadding(
-    isSmall ? 6 : 8, rich ? 16 : isSmall ? 8 : 10,
-    isSmall ? 6 : 8, rich ? 16 : isSmall ? 8 : 10,
-  )
+  well.setPadding(t.wellPadV, t.wellPadH, t.wellPadV, t.wellPadH)
 
   if (fullWidth) well.addSpacer()
 
@@ -1705,45 +1787,44 @@ function drawCountdownWell(container, next, p, rich, fullWidth, isSmall) {
   if (parts.split) {
     const row = well.addStack()
     row.bottomAlignContent()
-    row.spacing = rich ? 6 : isSmall ? 3 : 4
-    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, rich, isSmall)
-    addCountDivider(row, p, rich, isSmall)
-    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, rich, isSmall)
+    row.spacing = t.unitGap
+    addCountUnit(row, parts.weeks, pluralize(parts.weeks, "week"), p, t)
+    addCountDivider(row, p, t)
+    addCountUnit(row, parts.days, pluralize(parts.days, "day"), p, t)
   } else {
-    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, rich, isSmall)
+    addCountUnit(well, parts.days, `${pluralize(parts.days, "day")} away`, p, t)
   }
 
   if (fullWidth) well.addSpacer()
 }
 
-function addInfoRow(col, row, p, rich, isSmall) {
+function addInfoRow(col, row, p, t) {
   const stack = col.addStack()
   stack.centerAlignContent()
-  stack.spacing = rich ? 8 : isSmall ? 5 : 6
+  stack.spacing = t.rowIconGap
   if (typeof SFSymbol !== "undefined") {
     const sym = SFSymbol.named(row.icon)
     if (sym) {
       const img = stack.addImage(sym.image)
-      const size = rich ? 14 : isSmall ? 11 : 12
-      img.imageSize = new Size(size, size)
+      img.imageSize = new Size(t.rowIconSize, t.rowIconSize)
       img.tintColor = p.muted
     }
   }
   const text = stack.addText(row.text)
-  text.font = rFont(rich ? 13 : isSmall ? 10 : 11)
+  text.font = rFont(t.rowFont)
   text.textColor = p.mutedStrong
   text.lineLimit = 1
 }
 
 // One "12 / DAYS"-style stacked digit+label block inside the well.
-function addCountUnit(container, n, label, p, rich, isSmall) {
+function addCountUnit(container, n, label, p, t) {
   const col = container.addStack()
   col.layoutVertically()
   const num = col.addText(String(n))
-  num.font = rBoldFont(rich ? 40 : isSmall ? 22 : 26)
+  num.font = rBoldFont(t.unitFont)
   num.textColor = p.accent
   const lbl = col.addText(label.toUpperCase())
-  lbl.font = rSemiboldFont(rich ? 10 : isSmall ? 7 : 8)
+  lbl.font = rSemiboldFont(t.unitLabelFont)
   lbl.textColor = p.mutedStrong
 }
 
@@ -1752,14 +1833,14 @@ function addCountUnit(container, n, label, p, rich, isSmall) {
 // row.bottomAlignContent() lines all three blocks up on the digit,
 // not the label. A plain line reads as a divider; the colon glyph
 // this replaced looked like part of a clock/time value instead.
-function addCountDivider(row, p, rich, isSmall) {
+function addCountDivider(row, p, t) {
   const col = row.addStack()
   col.layoutVertically()
   const line = col.addStack()
   line.backgroundColor = p.divider
-  line.size = new Size(1, rich ? 28 : isSmall ? 16 : 18)
+  line.size = new Size(1, t.dividerH)
   const spacer = col.addText(".")
-  spacer.font = rSemiboldFont(rich ? 10 : isSmall ? 7 : 8)
+  spacer.font = rSemiboldFont(t.unitLabelFont)
   spacer.textOpacity = 0
 }
 
