@@ -491,6 +491,35 @@ describe('design guardrails (static source checks)', () => {
     expect(offenders).toEqual([])
   })
 
+  it('keeps the widget-preview simulator constants pinned to cited iOS values', async () => {
+    // The simulator's reference numbers (widget point sizes, outer
+    // corner radius, dark background, DPR) are what let it render
+    // relative fit accurately without me guessing them each session.
+    // Every field checked here has a citation in widget-preview.mjs's
+    // WIDGET_ENV_CONSTANTS block — if a value changes, update the
+    // citation there and this test in the same commit. A silent drift
+    // (e.g. someone rounding 170 → 175 to "match a screenshot") would
+    // make the simulator lie again.
+    const mod = await import('./widget-preview.mjs')
+    const c = mod.WIDGET_ENV_CONSTANTS as {
+      widgetSizes: Record<string, { w: number; h: number }>
+      outerCornerRadius: number
+      background: { light: string; dark: string }
+      dpr: number
+    }
+    // iPhone 15/16 Pro (Apple HIG Widgets page):
+    expect(c.widgetSizes.small).toEqual({ w: 170, h: 170 })
+    expect(c.widgetSizes.medium).toEqual({ w: 364, h: 170 })
+    expect(c.widgetSizes.large).toEqual({ w: 364, h: 382 })
+    // iOS ContainerRelativeShape on iPhone Pro/standard (WidgetKit sample):
+    expect(c.outerCornerRadius).toBe(22)
+    // UIColor.systemBackground light/dark (UIKit reference):
+    expect(c.background.light.toUpperCase()).toBe('#FFFFFF')
+    expect(c.background.dark.toUpperCase()).toBe('#1C1C1E')
+    // @3x reference iPhone:
+    expect(c.dpr).toBe(3)
+  })
+
   it('gives every vertical stack an explicit cross-axis alignment', () => {
     // A VStack's REAL default cross-axis alignment is center, not
     // leading — this is what actually caused the header title/subtitle

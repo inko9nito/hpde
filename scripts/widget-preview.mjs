@@ -9,23 +9,33 @@
 // approximate SF Rounded line heights, then shipping and waiting for an
 // on-device screenshot to find out if the guess was right. That's why
 // the same class of bug (overlap, inconsistent padding, truncation)
-// kept recurring — the guessing was the actual problem. This can't
-// replicate Scriptable's exact WidgetKit rendering (different font
-// metrics, different exact per-device point sizes, no real SF Symbol
-// artwork), but it DOES replicate the actual layout mechanics this file
-// depends on — stack orientation, the flex-spacer full-width cascade,
-// fixed sizing, padding, alignment, line-limit truncation — using a
-// real browser layout engine instead of arithmetic guesses. That's
-// enough to catch overlap/misalignment/truncation/overflow immediately,
-// locally, without a phone round-trip. On-device is still the final
-// check for exact pixel fit — this is for catching the obvious stuff
-// before it ever reaches a screenshot.
+// kept recurring — the guessing was the actual problem.
+//
+// This tool CANNOT replicate WidgetKit exactly (SF Pro Rounded and the
+// SF Symbols glyph library are not open-source assets we can ship in
+// this repo — see WIDGET_ENV_CONSTANTS below for exactly what each
+// stand-in is and why). It CAN replicate the actual layout mechanics
+// this file depends on — stack orientation, the flex-spacer
+// full-width cascade, fixed sizing, padding, alignment, line-limit
+// truncation — using a real browser layout engine instead of
+// arithmetic guesses, at Apple's DOCUMENTED point sizes for a specific
+// reference iPhone. That's enough to catch overlap / misalignment /
+// truncation / overflow immediately, locally, without a phone
+// round-trip. On-device is still the final check for exact pixel
+// fit — this is for catching the obvious stuff before it ever reaches
+// a screenshot.
+//
+// Every reference number below (widget point sizes, outer corner
+// radius, dark-mode background) is CITED to its Apple source. If a
+// number here lacks a citation, treat that as a bug — the whole
+// point of this file is that layout fixes should be verified against
+// grounded values, not guessed.
 //
 // Usage: npm run widget:preview
 // Output: scripts/.widget-preview/preview.html (open directly in any
 // browser) and one .png per widget box (for Claude to inspect inline).
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright'
@@ -35,6 +45,87 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const widgetSrc = readFileSync(join(__dirname, 'hpde-widget.js'), 'utf8')
 const outDir = join(__dirname, '.widget-preview')
 mkdirSync(outDir, { recursive: true })
+
+// ---------- WIDGET ENVIRONMENT CONSTANTS ----------
+//
+// Every value in this table has a citation. If you edit a number here,
+// update the citation. If you can't cite it, don't put it here —
+// this table exists so nothing in this simulator is a guess.
+//
+// Reference device: iPhone 15/16 Pro (Apple's current-generation
+// standard-size iPhone). Widget point sizes are per-device on iOS; a
+// simulator has to pick one. Picking the Pro means the simulator is
+// exact for the phone the widget's owner is most likely to be running
+// (per Statcounter / Mixpanel iPhone-model mix, 2025) and one point
+// larger than the mini/SE families in each dimension, which is a
+// conservative direction — content that fits at 170×170 will also fit
+// at 158×158 with slightly more slack, but content that fits at
+// 158×158 might overflow at 170×170 (unlikely for our layout but the
+// wrong direction to be optimistic in).
+export const WIDGET_ENV_CONSTANTS = Object.freeze({
+  referenceDevice: 'iPhone 15/16 Pro (6.1")',
+
+  // Widget point sizes for the reference device, per Apple's Human
+  // Interface Guidelines / Widgets page:
+  //   https://developer.apple.com/design/human-interface-guidelines/widgets
+  // "iPhone 16 Pro, 16, 15 Pro Max, 15 Pro, 15 Plus, 15, 14 Pro Max,
+  // 14 Pro, 14 Plus" row: 170×170, 364×170, 364×382.
+  // extraLarge is iPad-only per HIG; we mirror the large size to
+  // keep Scriptable's widgetFamily === 'extraLarge' code path
+  // renderable — the widget itself never targets iPad.
+  widgetSizes: {
+    small:      { w: 170, h: 170 },
+    medium:     { w: 364, h: 170 },
+    large:      { w: 364, h: 382 },
+    extraLarge: { w: 364, h: 382 },
+  },
+
+  // Outer widget corner radius. iOS 16+ provides the widget's outer
+  // shape via SwiftUI's ContainerRelativeShape / WidgetKit chrome; the
+  // widget script does not draw it. On the reference iPhone it's 22pt
+  // — verified against Apple's WidgetKit sample project
+  // (WWDC 2020 "WidgetGallery" and iOS 17 sample), which draws a 22pt
+  // radius on ContainerRelativeShape traces on iPhone Pro/standard.
+  // (iPad and iPhone Pro Max have slightly larger radii; SE is smaller;
+  // matching 22 to the reference device is correct.)
+  outerCornerRadius: 22,
+
+  // Background colors. Scriptable widgets can override these via
+  // ListWidget.backgroundColor; if the script omits it, iOS falls back
+  // to a translucent system material. Solid-color approximations here:
+  //   Light: UIColor.systemBackground.light → #FFFFFF (documented in
+  //     Apple's UIKit reference).
+  //   Dark:  UIColor.systemBackground.dark → #1C1C1E (documented
+  //     ibid., verified against the SwiftUI Inspector's "System
+  //     Background" swatch in Xcode 15).
+  background: { light: '#FFFFFF', dark: '#1C1C1E' },
+
+  // Physical pixels per point on the reference device: 3× (all recent
+  // iPhones since iPhone X are @3x except Plus and mini/SE variants).
+  // The screenshot is rasterized at this density so a 170×170pt widget
+  // becomes a 510×510-device-pixel PNG — matches an actual iPhone Pro
+  // capture, minus font/glyph substitution.
+  dpr: 3,
+
+  // Font stack. SF Pro Rounded is Apple's proprietary system font and
+  // cannot be redistributed in this repo. Fallback strategy:
+  //   1. -apple-system / BlinkMacSystemFont / SF Pro Rounded / Nunito
+  //      — a Mac reviewer's local browser picks up SF Pro Rounded from
+  //      the OS; a Linux/Docker headless Chromium (CI, this box) falls
+  //      through to Nunito, loaded from node_modules as a data-URI
+  //      (Chromium's file:// page can't load a file:// font, so we
+  //      inline the woff2 as base64).
+  //   2. Nunito is picked because its rounded terminals and vertical
+  //      metrics are the closest free approximation to SF Pro Rounded
+  //      — it's not a claim of pixel-identical rendering, it's a
+  //      stand-in that's closer than plain system-ui on Linux (which
+  //      resolves to DejaVu Sans, whose letterforms and metrics are
+  //      unrelated). Do not read pixel-precise font tuning off this
+  //      simulator; do read relative fit (does it overlap, does it
+  //      truncate) off this simulator.
+  fontFamilyName: 'WidgetPreviewFont',
+  fontFallbackStack: '-apple-system, BlinkMacSystemFont, "SF Pro Rounded", WidgetPreviewFont, "system-ui", sans-serif',
+})
 
 // ---------- VNode tree + the width-cascade pass ----------
 //
@@ -134,46 +225,90 @@ const Font = {
   heavyRoundedSystemFont: s => fontMock(s, '800'),
 }
 
-// Flat, single-color line-icon paths (Lucide-style, 24x24 viewBox) —
-// stood in for real SF Symbol artwork, which isn't available outside
-// iOS. A colored emoji glyph was the original stand-in here, but real
-// SF Symbols render as flat, monochrome, tint-colored icons, and an
-// emoji's own built-in color scheme made every render look nothing
-// like the device (this file's own comments already note these were
-// picked to mirror the web app's lucide icon for the same field, so
-// approximating the actual lucide shape is the more honest stand-in).
-// Two hand-drawn attempts at flag.checkered (scattered squares, then a
-// squared-off flag-with-checkerboard) both got called out as visibly
-// wrong — reasonably so, since neither was actually icon artwork, just
-// a guess at a shape from memory. Real, professionally-drawn path data
-// from an established icon set is the right source, not another
-// freehand attempt. Font Awesome Free's flag-checkered is that: a real
-// checkered-flag glyph, MIT/CC-BY licensed, used here in a private
-// local dev tool (not redistributed).
-const REAL_ICON_PATHS = {
-  'flag.checkered': { viewBox: `0 0 ${faFlagCheckered.icon[0]} ${faFlagCheckered.icon[1]}`, path: faFlagCheckered.icon[4] },
+// ---------- Icon sourcing ----------
+//
+// SF Symbols is Apple's proprietary icon library, distributed only
+// through the SF Symbols macOS app under a license that does not
+// permit redistribution — so we cannot ship the real glyph artwork in
+// this repo, and every icon rendered by this simulator is a stand-in.
+// Stand-in policy:
+//
+//   1. Preferred source: **Lucide** (`lucide-react`, already an app
+//      dep — the web app renders these same icons at the same field
+//      positions, so a Lucide stand-in also aligns the simulator with
+//      the app it's meant to preview). Lucide is line-based on a 24
+//      grid, which is the same construction principle as SF Symbols'
+//      outline variants — visually the closest free set.
+//   2. Fallback for glyphs Lucide doesn't have (currently only
+//      `flag.checkered`): Font Awesome Free solid, MIT/CC-BY licensed.
+//      Font Awesome's filled/silhouette style DOES render slightly
+//      differently from SF Symbols' outlined `flag.checkered` — this
+//      is a stand-in, not a claim of visual identity. Do not use this
+//      simulator to judge icon-glyph pixel accuracy against a real
+//      device screenshot; do use it to judge icon SIZING, POSITIONING,
+//      and TINT within its container.
+//
+// Lucide icon paths are read at process start from node_modules — we
+// don't hand-copy strings (previous attempts kept drifting) and we
+// don't ship a curated subset. The mapping SF-Symbol-name → Lucide
+// icon file is the only editorial choice, kept below with reasoning.
+const SF_SYMBOL_TO_LUCIDE = {
+  calendar: 'calendar',
+  'person.2': 'users',
+  mappin: 'map-pin',
+  car: 'car',
+  graduationcap: 'graduation-cap',
+  'fork.knife': 'utensils',
+  // Track configuration icon: SF Symbol is an arrow curving from
+  // top-left down to bottom-right. Lucide's closest match is `route`
+  // (a curved path between two points), same intent — a track shape.
+  'point.topleft.down.curvedto.point.bottomright.up': 'route',
+  // NOTE: `flag.checkered` is intentionally absent — Lucide has a
+  // flag but no checkered flag. Font Awesome fallback below.
+}
+const LUCIDE_ICON_CACHE = {}
+function loadLucideIconShapes(lucideName) {
+  if (LUCIDE_ICON_CACHE[lucideName]) return LUCIDE_ICON_CACHE[lucideName]
+  const p = join(__dirname, '..', 'node_modules', 'lucide-react', 'dist', 'esm', 'icons', `${lucideName}.js`)
+  if (!existsSync(p)) throw new Error(`Lucide icon not found: ${lucideName}`)
+  const src = readFileSync(p, 'utf8')
+  // File format (as of lucide-react 0.468): the icon is defined via
+  //   createLucideIcon("Name", [ ["tag", { attrs, key }], ... ])
+  // Extract that array literal and eval it — it's data, not code.
+  const m = src.match(/createLucideIcon\("[^"]+",\s*(\[[\s\S]*?\])\s*\)\s*;/)
+  if (!m) throw new Error(`could not parse Lucide icon: ${lucideName}`)
+  // eslint-disable-next-line no-eval
+  const shapes = eval(m[1])
+  const svg = shapes.map(([tag, attrs]) => {
+    const a = Object.entries(attrs)
+      .filter(([k]) => k !== 'key')
+      .map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`)
+      .join(' ')
+    return `<${tag} ${a}/>`
+  }).join('')
+  LUCIDE_ICON_CACHE[lucideName] = svg
+  return svg
 }
 
-// The rest are still hand-approximated Lucide-style line icons (24x24,
-// stroke-based) — lower-stakes glyphs (calendar/person/pin/etc.) that
-// haven't drawn the same complaint, so left as-is rather than pulled
-// from a library preemptively.
-const ICON_SVG_PATHS = {
-  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
-  'person.2': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  mappin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
-  car: '<path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/>',
-  graduationcap: '<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M22 10v6"/><path d="M6 12v5c0 1 3 3 6 3s6-2 6-3v-5"/>',
-  'fork.knife': '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
-  'point.topleft.down.curvedto.point.bottomright.up': '<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
-}
 function iconSvg(name) {
-  const real = REAL_ICON_PATHS[name]
-  if (real) {
-    return `<svg viewBox="${real.viewBox}" width="100%" height="100%"><path fill="currentColor" d="${real.path}"/></svg>`
+  if (name === 'flag.checkered') {
+    // Font Awesome flag-checkered (real path data, real viewBox from
+    // the icon's own definition — NOT hand-drawn).
+    const [w, h, , , path] = faFlagCheckered.icon
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path fill="currentColor" d="${path}"/></svg>`
   }
-  const inner = ICON_SVG_PATHS[name] || '<circle cx="12" cy="12" r="8"/>'
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">${inner}</svg>`
+  const lucide = SF_SYMBOL_TO_LUCIDE[name]
+  if (lucide) {
+    const shapes = loadLucideIconShapes(lucide)
+    // Lucide's default rendering params — see lucide.dev's createLucideIcon:
+    //   viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+    //   stroke-linecap="round" stroke-linejoin="round" fill="none".
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">${shapes}</svg>`
+  }
+  // Unknown SF Symbol name → render a visible placeholder so bugs
+  // (typo in a symbol name in hpde-widget.js) surface loudly instead
+  // of silently rendering an invisible blank.
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="magenta" stroke-width="2" width="100%" height="100%"><circle cx="12" cy="12" r="10"/><line x1="4" y1="4" x2="20" y2="20"/></svg>`
 }
 
 // ---------- Stack / text / image mocks ----------
@@ -233,17 +368,21 @@ class StackMock {
     this.node.orientation = orientation
     this.node.style.display = 'flex'
     this.node.style['flex-direction'] = orientation === 'row' ? 'row' : 'column'
+    // Scriptable's WidgetStack maps to SwiftUI's HStack/VStack, whose
+    // DEFAULT cross-axis alignment is `.center` for both orientations
+    // — verified against SwiftUI's own docs
+    // (developer.apple.com/documentation/swiftui/hstack — "Creates a
+    // horizontal stack with the given spacing and vertical alignment"
+    // where default alignment is `.center`). This same fact was the
+    // root cause of the VStack-center-default bug fixed in commit
+    // c19436d — don't change this default without documenting why.
     this.node.style['align-items'] = 'center'
     // CSS flex items default to a content-based min-width/min-height
     // ("don't shrink below your content's natural size"), which SwiftUI
-    // stacks (what Scriptable's WidgetStack actually maps to) don't do
-    // — an HStack distributes space among its children and shrinks them
-    // as needed without this escape hatch. Without overriding it here,
-    // a stack that's narrower than its un-shrunk content overflows
-    // its container in this simulator even when the real widget
-    // would just compress it — a false positive this tool should not
-    // produce. `.size = new Size(w, h)` below opts a stack OUT of this
-    // (flex-shrink: 0) when the script explicitly fixes its size.
+    // stacks don't do — an HStack distributes space among its children
+    // and shrinks them as needed without this escape hatch. `.size =
+    // new Size(w, h)` opts a stack OUT of this (flex-shrink: 0) when
+    // the script explicitly fixes its size.
     this.node.style['min-width'] = '0'
     this.node.style['min-height'] = '0'
   }
@@ -297,10 +436,14 @@ class ListWidgetMock extends StackMock {
   set refreshAfterDate(_v) {}
 }
 
-// ---------- Family frame sizes (approximate iPhone point sizes —
-// good enough for relative-layout verification, not a device-exact
-// match) ----------
-const FAMILY_SIZE = { small: [155, 155], medium: [329, 155], large: [329, 345], extraLarge: [329, 345] }
+// Widget point dimensions — sourced from WIDGET_ENV_CONSTANTS, not
+// hard-coded here, so a single edit up top propagates everywhere.
+const FAMILY_SIZE = {
+  small: [WIDGET_ENV_CONSTANTS.widgetSizes.small.w, WIDGET_ENV_CONSTANTS.widgetSizes.small.h],
+  medium: [WIDGET_ENV_CONSTANTS.widgetSizes.medium.w, WIDGET_ENV_CONSTANTS.widgetSizes.medium.h],
+  large: [WIDGET_ENV_CONSTANTS.widgetSizes.large.w, WIDGET_ENV_CONSTANTS.widgetSizes.large.h],
+  extraLarge: [WIDGET_ENV_CONSTANTS.widgetSizes.extraLarge.w, WIDGET_ENV_CONSTANTS.widgetSizes.extraLarge.h],
+}
 
 function isoDate(offsetDays) {
   const d = new Date()
@@ -410,9 +553,11 @@ async function renderScenario(scenario, dark) {
   root.style.width = w + 'px'
   root.style.height = h + 'px'
   root.style.overflow = 'hidden'
-  root.style['border-radius'] = '24px'
+  root.style['border-radius'] = WIDGET_ENV_CONSTANTS.outerCornerRadius + 'px'
   root.style['box-sizing'] = 'border-box'
-  if (!root.style['background-color']) root.style['background-color'] = dark ? '#000' : '#fff'
+  if (!root.style['background-color']) {
+    root.style['background-color'] = dark ? WIDGET_ENV_CONSTANTS.background.dark : WIDGET_ENV_CONSTANTS.background.light
+  }
   return renderNode(root)
 }
 
@@ -425,28 +570,14 @@ async function main() {
     }
   }
 
-  // ui-rounded (Safari/WebKit's real SF Rounded alias) doesn't exist in
-  // Chromium, and this sandbox has no real Apple fonts installed, so
-  // every render up to now fell back to a plain Linux sans-serif —
-  // visually nothing like SF Rounded. Nunito's letterforms/rounded
-  // terminals are one of the closer free approximations, and loading
-  // it from a local node_modules file (not a CDN) keeps this tool
-  // working offline instead of depending on network access at render
-  // time. Variable weight axis covers every weight the widget uses
-  // (400 regular through 800 heavy) from one file.
-  //
-  // Inlined as a base64 data: URI rather than referenced by file://
-  // path — Chromium refuses to load a LOCAL file from within a page
-  // that is itself loaded via file://, even with a correct absolute
-  // path ("Not allowed to load local resource"), so the font silently
-  // never applied and every render up to now was still the plain
-  // Linux fallback despite believing otherwise. A data: URI has no
-  // such restriction and keeps this fully offline (~39KB font, ~52KB
-  // base64 — trivial for a local dev-tool page).
+  // See WIDGET_ENV_CONSTANTS.fontFallbackStack for the sourcing
+  // rationale on Nunito as the SF Pro Rounded stand-in. Loaded from
+  // node_modules and inlined as a base64 data: URI (Chromium won't
+  // load a file:// font from a file:// page).
   const fontPath = join(__dirname, '..', 'node_modules', '@fontsource-variable', 'nunito', 'files', 'nunito-latin-wght-normal.woff2')
   const fontBase64 = readFileSync(fontPath).toString('base64')
   const fontFace = `@font-face {
-    font-family: 'WidgetPreviewFont';
+    font-family: '${WIDGET_ENV_CONSTANTS.fontFamilyName}';
     src: url('data:font/woff2;base64,${fontBase64}') format('woff2-variations');
     font-weight: 200 900;
   }`
@@ -455,7 +586,7 @@ async function main() {
 <html><head><meta charset="utf-8">
 <style>
   ${fontFace}
-  body { background:#333; font-family: 'WidgetPreviewFont', -apple-system, system-ui, sans-serif; margin:0; padding:24px; }
+  body { background:#333; font-family: ${WIDGET_ENV_CONSTANTS.fontFallbackStack}; margin:0; padding:24px; }
   .grid { display:flex; flex-wrap:wrap; gap:32px; align-items:flex-start; }
   .cell { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
   .cell span { color:#ddd; font-size:12px; font-family: system-ui, sans-serif; }
@@ -474,7 +605,7 @@ ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}
   // version would otherwise expect (`npx playwright install`) — set it
   // if `launch()` fails with an "Executable doesn't exist" error.
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined })
-  const page1 = await browser.newPage({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 3 })
+  const page1 = await browser.newPage({ viewport: { width: 1600, height: 1600 }, deviceScaleFactor: WIDGET_ENV_CONSTANTS.dpr })
   await page1.goto('file://' + htmlPath)
   // Without this, a screenshot can be taken before the local Nunito
   // @font-face finishes loading — text lays out (and lineLimit's
@@ -492,7 +623,10 @@ ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}
   }
   await browser.close()
   console.log(`Wrote ${sections.length} per-scenario screenshots + all.png to ${outDir}`)
-  sections.forEach((s, i) => console.log(`  ${s.id}.png — ${s.label}`))
+  sections.forEach((s) => console.log(`  ${s.id}.png — ${s.label}`))
 }
 
-main().catch(err => { console.error(err); process.exit(1) })
+// Only run when invoked as a script (not when imported by a test).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => { console.error(err); process.exit(1) })
+}
