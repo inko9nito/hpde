@@ -4,6 +4,7 @@ import { EVENTS } from '../data'
 import { partitionEvents } from '../utils/eventClass'
 import { eventSubtitle } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
+import { Footer } from './Footer'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -152,6 +153,7 @@ export function LandingPage({ onOpenEvent }: Props) {
           <EventCalendar events={EVENTS} onOpenEvent={onOpenEvent} />
         )}
       </div>
+      <Footer />
     </div>
   )
 }

@@ -11,9 +11,10 @@ import { SharePage } from './components/SharePage'
 import { EventDetailsDrawer } from './components/EventDetailsDrawer'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
+import { Footer } from './components/Footer'
 import { EVENTS, ALL_EVENTS } from './data'
 import { partitionEvents } from './utils/eventClass'
-import { todayLocalISO, nowMinutes, parseMinutes, formatBuildTime } from './utils/time'
+import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
 function useLocalStorage<T>(key: string, initial: T) {
@@ -150,7 +151,9 @@ export default function App() {
 
   return (
     <>
-    <LandingPage onOpenEvent={switchEvent} />
+    <PullToRefresh disabled={pushMounted}>
+      <LandingPage onOpenEvent={switchEvent} />
+    </PullToRefresh>
     {pushMounted && (
     <PushPage
       open={isOnEventRoute}
@@ -255,20 +258,7 @@ export default function App() {
         <Legend groups={activeEvent.runGroups} />
 
       </div>
-      <div className="mt-6 pb-8 text-center text-xs">
-        <div>
-          <a href="#/widget-script" className="text-gray-600 underline hover:text-gray-800">
-            iOS widget
-          </a>
-          {' · '}
-          <a href="#/share" className="text-gray-600 underline hover:text-gray-800">
-            Share
-          </a>
-        </div>
-        <div className="mt-4 font-mono text-[10px] text-gray-300">
-          build {formatBuildTime(__BUILD_TIME__)}
-        </div>
-      </div>
+      <Footer />
     </div>
     </PullToRefresh>
     <EventDetailsDrawer
