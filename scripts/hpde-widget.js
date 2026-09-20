@@ -1523,18 +1523,24 @@ const COUNTDOWN_BADGE_SIZE = 40  // Large header icon badge, square
 // gap by 1pt on small/regular — exactly the kind of drift this table
 // exists to prevent, caught only by re-diffing against the pre-
 // refactor ternaries rather than by any test.
+// `wellGap` (the gap before the well in the side-by-side, non-Small
+// layout) is never actually read on the small tier — drawCountdownCard
+// takes a different branch there (well drops BELOW the rows, see
+// isSmall in drawCountdownCard) — but it still gets a real value
+// instead of being left undefined, so this table stays the one place
+// every countdown-view number lives, with no exceptions carved out.
 const COUNTDOWN_TOKENS = {
   small: {
     cardPad: 8, titleFont: 14, rowGap: 4, rowSpacing: 4, rowIconGap: 5, rowFont: 10, rowIconSize: 11,
-    wellPadV: 6, wellPadH: 8, unitGap: 3, unitFont: 22, unitLabelFont: 7, dividerH: 16,
+    wellPadV: 6, wellPadH: 8, unitGap: 3, unitFont: 22, unitLabelFont: 7, dividerH: 16, wellGap: 12,
   },
   regular: {
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18,
+    wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12,
   },
   rich: {
     cardPad: 14, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 8, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28,
+    wellPadV: 8, wellPadH: 16, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20,
   },
 }
 
@@ -1746,7 +1752,7 @@ function drawCountdownCard(w, p, next, rich, cardHeight, family) {
     // see "Trailing flex spacer stretches the CARDCONTAINER" there)
     // — here it pins the well to the card's right edge instead of
     // leaving blank space after it.
-    card.addSpacer(rich ? 20 : 12)
+    card.addSpacer(t.wellGap)
     card.addSpacer()
     drawCountdownWell(card, next, p, t, false)
   }

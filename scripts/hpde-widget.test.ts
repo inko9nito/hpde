@@ -420,4 +420,20 @@ describe('design guardrails (static source checks)', () => {
     expect(widgetSrc).toMatch(/const COUNTDOWN_MARGIN = 8/)
     expect(widgetSrc).not.toMatch(/COUNTDOWN_CARD_MARGIN/)
   })
+
+  it('never hand-writes a rich/isSmall ternary in the countdown view — only countdownTier() may', () => {
+    // The whole point of COUNTDOWN_TOKENS is that no layout function
+    // picks its own font/spacing/padding per tier inline — it looks up
+    // `t.<property>` from the table `countdownTier()` resolved once.
+    // A bare `rich ? … : isSmall ? … : …` reappearing here means a new
+    // property was added the old (bug-prone) way instead of being
+    // added to the table, so this fails loudly instead of shipping a
+    // number some sibling function doesn't share.
+    const start = widgetSrc.indexOf('function renderUpcomingHeader(')
+    const end = widgetSrc.indexOf('function renderError(')
+    const section = widgetSrc.slice(start, end)
+    const ternaryLines = section.split('\n').filter(l => /rich\s*\?|isSmall\s*\?/.test(l))
+    const offenders = ternaryLines.filter(l => !l.includes('countdownTier('))
+    expect(offenders).toEqual([])
+  })
 })
