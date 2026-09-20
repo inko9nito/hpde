@@ -270,6 +270,18 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).toContain('Track A, City A')
   })
 
+  it('drops the organizer row on Small so title + rows + well fit the real interior height', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).not.toContain('Org A')
+  })
+
+  it('keeps the organizer row on Medium/Large, where there is room for it', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('Org A')
+  })
+
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
