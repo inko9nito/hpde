@@ -1534,15 +1534,32 @@ const COUNTDOWN_TOKENS = {
     wellPadV: 5, wellPadH: 8, unitGap: 3, unitFont: 18, unitLabelFont: 6, dividerH: 13, wellGap: 12, preWellGap: 2,
   },
   regular: {
+    // wellPadV: 14 (was 8) — same "well should match info col height"
+    // rationale as the rich tier's bump (see below). Regular's info
+    // col at 3 rows is ~73pt; well at wellPadV 8 was ~56pt, so ~8pt
+    // extra on each end brings the well close enough that the card
+    // reads as a balanced two-column layout instead of a floating
+    // well with tinted margin below it.
     cardPad: 8, titleFont: 15, rowGap: 6, rowSpacing: 5, rowIconGap: 6, rowFont: 11, rowIconSize: 12,
-    wellPadV: 8, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4,
+    wellPadV: 14, wellPadH: 10, unitGap: 4, unitFont: 26, unitLabelFont: 8, dividerH: 18, wellGap: 12, preWellGap: 4,
   },
   rich: {
     // cardPad: 18 (was 14) — on-device the rich card's title/rows sat
     // visibly too close to the tinted card's own edges; a couple extra
     // points buys the "generous frame" feel of a Large widget.
+    // wellPadV: 24 (was 10) — Scriptable/SwiftUI has no
+    // .frame(maxHeight: .infinity) equivalent, so a sibling in an
+    // HStack can't stretch to match a taller sibling. The rich card's
+    // info column (title + 3 rows) is a good bit taller than the
+    // well's natural (numbers + labels) height, so with
+    // centerAlignContent() the well floated with visible empty tinted
+    // space above and below it inside the card. Padding the well
+    // vertically brings its total rendered height close to the info
+    // column's (~22 + 10 + 3*16 + 2*8 = ~96pt vs ~24 + 40 + 2 + 10 +
+    // 24 = ~100pt), so both fill the card top-to-bottom and the
+    // side-by-side layout reads as one balanced unit.
     cardPad: 18, titleFont: 18, rowGap: 10, rowSpacing: 8, rowIconGap: 8, rowFont: 13, rowIconSize: 14,
-    wellPadV: 10, wellPadH: 18, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20, preWellGap: 4,
+    wellPadV: 24, wellPadH: 18, unitGap: 6, unitFont: 40, unitLabelFont: 10, dividerH: 28, wellGap: 20, preWellGap: 4,
   },
 }
 
