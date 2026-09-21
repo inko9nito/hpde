@@ -64,21 +64,21 @@ export function EventPicker({ events, active, onChange, onGoHome }: Props) {
   const activeIsLive = classifyEvent(active) === 'live'
 
   return (
-    <div className="relative min-w-0 pl-1">
+    <div className="relative flex min-w-0 flex-col items-center">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 text-left group min-w-0"
+        className="flex max-w-full items-center gap-1 group min-w-0"
       >
-        <h1 className="text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
+        <h1 className="truncate text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
         {activeIsLive && <LiveBadge />}
         <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
       </button>
-      <p className="text-sm text-gray-500">{eventSubtitle(active)}</p>
+      <p className="max-w-full truncate text-center text-sm text-gray-500">{eventSubtitle(active)}</p>
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-2 min-w-[240px] rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+          <div className="absolute left-1/2 top-full z-20 mt-2 min-w-[240px] -translate-x-1/2 rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
             <button
               onClick={() => { onGoHome(); setOpen(false) }}
               className="flex w-full items-center gap-2 rounded-lg px-4 py-2.5 text-left hover:bg-gray-50"

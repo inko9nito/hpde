@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { Home, Info } from 'lucide-react'
+import { Home } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
+import { EventTabs } from './components/EventTabs'
+import type { EventTabId } from './components/EventTabs'
+import { EventInfo } from './components/EventInfo'
 import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetScriptPage } from './components/WidgetScriptPage'
 import { SharePage } from './components/SharePage'
-import { EventDetailsDrawer } from './components/EventDetailsDrawer'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
@@ -80,7 +82,10 @@ export default function App() {
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  // Active tab on the event page. Starts on Schedule every time the app
+  // loads; persists across event switches within a session (natural
+  // useState behavior — the tab bar isn't remounted on event change).
+  const [activeTab, setActiveTab] = useState<EventTabId>('schedule')
   const pushScrollRef = useRef<HTMLDivElement>(null)
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
@@ -171,20 +176,20 @@ export default function App() {
       scrollRef={pushScrollRef}
       skipEnterAnimation={skipPushEnterAnimationRef.current}
     >
-    <PullToRefresh disabled={detailsOpen || !isOnEventRoute} scrollContainerRef={pushScrollRef}>
+    <PullToRefresh disabled={!isOnEventRoute} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
-        {/* Header */}
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-1">
-            <button
-              onClick={goHome}
-              aria-label="Home"
-              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
-            >
-              <Home size={18} />
-            </button>
+        {/* Header: Home | centered EventPicker | symmetric spacer */}
+        <div className="mb-4 flex items-start gap-3">
+          <button
+            onClick={goHome}
+            aria-label="Home"
+            className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+          >
+            <Home size={18} />
+          </button>
+          <div className="min-w-0 flex-1">
             <EventPicker
               events={EVENTS}
               active={activeEvent}
@@ -192,16 +197,9 @@ export default function App() {
               onGoHome={goHome}
             />
           </div>
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
-            <button
-              onClick={() => setDetailsOpen(true)}
-              aria-label="Event details"
-              className="rounded-md p-2 text-gray-400 transition-colors hover:text-gray-600"
-              style={{ minWidth: 36, minHeight: 36 }}
-            >
-              <Info size={18} />
-            </button>
-          </div>
+          {/* Symmetric spacer so the picker stays visually centered
+              between the home button and the right edge. */}
+          <div className="h-9 w-9 shrink-0" aria-hidden="true" />
         </div>
 
         {isPastEvent && (
@@ -210,82 +208,98 @@ export default function App() {
           </div>
         )}
 
-        {/* Day tabs + Now — only shown for multi-day events */}
-        {multiDay && (
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
-              {activeEvent.days.map(day => (
-                <button
-                  key={day.id}
-                  onClick={() => setActiveDayId(day.id)}
-                  className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
-                    activeDay.id === day.id
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {day.label}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => todayDay && setActiveDayId(todayDay.id)}
-              disabled={isToday || !todayDay}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
-                isToday || !todayDay
-                  ? 'border-gray-100 bg-white text-gray-300 cursor-default'
-                  : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
-              }`}
-            >
-              Now
-            </button>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <RunGroupFilter
-            groups={activeEvent.runGroups}
-            selected={selectedGroups}
-            onChange={setSelectedGroups}
-          />
-          {hasPastActivities && (
-            <Toggle
-              checked={hidePast}
-              onChange={() => setHidePast(h => !h)}
-              label="Hide past activities"
-            />
-          )}
+        {/* Top-level tab bar: Schedule | My notes | Info */}
+        <div className="mb-3">
+          <EventTabs active={activeTab} onChange={setActiveTab} />
         </div>
 
-        <Timeline
-          activities={activeDay.activities}
-          runGroups={activeEvent.runGroups}
-          isToday={isToday}
-          selectedGroups={selectedGroups}
-          hidePast={hidePast}
-        />
+        {/* Tab panel. Keyed on activeTab so a fresh element mounts on
+            change — CSS keyframe (see index.css) plays a ~10 ms fade,
+            matching iOS's near-instant tab switch. */}
+        <div
+          key={activeTab}
+          role="tabpanel"
+          id={`event-tabpanel-${activeTab}`}
+          aria-labelledby={`event-tab-${activeTab}`}
+          className="tab-fade"
+        >
+          {activeTab === 'schedule' && (
+            <>
+              {/* Day tabs + Now — only shown for multi-day events */}
+              {multiDay && (
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
+                    {activeEvent.days.map(day => (
+                      <button
+                        key={day.id}
+                        onClick={() => setActiveDayId(day.id)}
+                        className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
+                          activeDay.id === day.id
+                            ? 'bg-gray-900 text-white'
+                            : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => todayDay && setActiveDayId(todayDay.id)}
+                    disabled={isToday || !todayDay}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
+                      isToday || !todayDay
+                        ? 'border-gray-100 bg-white text-gray-300 cursor-default'
+                        : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
+                    }`}
+                  >
+                    Now
+                  </button>
+                </div>
+              )}
 
-        <Legend groups={activeEvent.runGroups} />
+              {/* Filters */}
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <RunGroupFilter
+                  groups={activeEvent.runGroups}
+                  selected={selectedGroups}
+                  onChange={setSelectedGroups}
+                />
+                {hasPastActivities && (
+                  <Toggle
+                    checked={hidePast}
+                    onChange={() => setHidePast(h => !h)}
+                    label="Hide past activities"
+                  />
+                )}
+              </div>
+
+              <Timeline
+                activities={activeDay.activities}
+                runGroups={activeEvent.runGroups}
+                isToday={isToday}
+                selectedGroups={selectedGroups}
+                hidePast={hidePast}
+              />
+
+              <Legend groups={activeEvent.runGroups} />
+            </>
+          )}
+
+          {activeTab === 'notes' && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-16 text-center">
+              <p className="text-sm font-medium text-gray-500">My notes</p>
+              <p className="mt-1 text-xs text-gray-400">Coming soon</p>
+            </div>
+          )}
+
+          {activeTab === 'info' && <EventInfo event={activeEvent} />}
+        </div>
 
       </div>
       <Footer />
     </div>
     </PullToRefresh>
     </PushPage>
-    )}
-    {/* Rendered as a top-level sibling — outside PushPage and PullToRefresh,
-        both of which apply a `transform`. A `transform` ancestor makes any
-        `position: fixed` descendant behave like `position: absolute`
-        relative to that ancestor, so the drawer would scroll with the
-        pushed page's contents and mis-size on window resize. Kept at the
-        root, it's fixed to the viewport itself. */}
-    {pushMounted && (
-      <EventDetailsDrawer
-        event={activeEvent}
-        open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
-      />
     )}
     </>
   )
