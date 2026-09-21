@@ -1954,6 +1954,20 @@ function addInfoRow(col, row, p, t) {
 // One "10 / DAYS AWAY"-style stacked digit+label block inside the
 // well. Sizes to its own content — no fixed width needed now that
 // the well only ever shows one unit (no divider to align across).
+//
+// lineLimit = 1 on BOTH texts is not optional here — every other
+// addText() call in this file sets it, and this was the one place
+// that didn't. Without it, Text is free to WRAP, and a wrappable
+// Text reports a much smaller "ideal width" to its layout (it can
+// always break onto more lines instead of needing a wider box) — so
+// once `well` lost its explicit .size (see drawCountdownWell's
+// comment), nothing stopped the layout engine from squeezing it down
+// to an unreadable sliver: "17" wrapped into "1" / "7" on separate
+// lines, and "DAYS AWAY" wrapped into "DAYS" / "AWAY", on a real
+// device. lineLimit = 1 forces each Text to demand its true
+// single-line width, which is what makes `well`'s own "size to
+// content" auto-sizing (still no explicit .size) actually produce a
+// sane, readable width instead of collapsing.
 function addCountUnit(container, n, label, p, t) {
   const col = container.addStack()
   col.layoutVertically()
@@ -1961,9 +1975,11 @@ function addCountUnit(container, n, label, p, t) {
   const num = col.addText(String(n))
   num.font = rBoldFont(t.unitFont)
   num.textColor = p.accent
+  num.lineLimit = 1
   const lbl = col.addText(label.toUpperCase())
   lbl.font = rSemiboldFont(t.unitLabelFont)
   lbl.textColor = p.mutedStrong
+  lbl.lineLimit = 1
 }
 
 function renderError(err) {

@@ -623,4 +623,30 @@ describe('design guardrails (static source checks)', () => {
     })
     expect(offenders).toEqual([])
   })
+
+  it('gives both countdown-well texts an explicit lineLimit', () => {
+    // Real on-device bug: addCountUnit's `num` and `lbl` texts never
+    // got `.lineLimit = 1` (every OTHER addText() call site in the
+    // file that needs single-line text sets it explicitly). Without
+    // it, Text is free to wrap — and a wrappable Text reports a much
+    // smaller "ideal width" to SwiftUI's layout engine than a
+    // single-line one, since it can always break onto more lines
+    // instead of demanding a wider box. Once drawCountdownWell's
+    // `well` stack lost its explicit .size (a separate, deliberate
+    // fix), nothing stopped the well from being squeezed down to an
+    // unreadable sliver: "17" wrapped into "1" / "7" on separate
+    // lines, "DAYS AWAY" wrapped into "DAYS" / "AWAY", on a real
+    // device — invisible in this repo's simulator because Chromium's
+    // flexbox sizing doesn't collapse the same way. Scoped narrowly
+    // to addCountUnit's body (not every addText() in the file) since
+    // some texts elsewhere legitimately want wrapping (e.g. the
+    // top-level error message) — this guards the one function where
+    // it caused a real, confirmed regression.
+    const start = widgetSrc.indexOf('function addCountUnit(')
+    expect(start).toBeGreaterThan(-1)
+    const end = widgetSrc.indexOf('\n}', start)
+    const body = widgetSrc.slice(start, end)
+    expect(body).toMatch(/num\.lineLimit\s*=\s*1/)
+    expect(body).toMatch(/lbl\.lineLimit\s*=\s*1/)
+  })
 })
