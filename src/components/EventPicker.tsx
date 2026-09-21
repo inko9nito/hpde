@@ -66,15 +66,19 @@ export function EventPicker({ events, active, onChange }: Props) {
 
   return (
     <div className="relative flex min-w-0 flex-col items-center">
+      {/* One button wraps both lines so tapping the subtitle also
+          opens the dropdown, not just the title. */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex max-w-full items-center gap-1 group min-w-0"
+        className="group flex min-w-0 max-w-full flex-col items-center"
       >
-        <h1 className="truncate text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
-        {activeIsLive && <LiveBadge />}
-        <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
+        <span className="flex max-w-full items-center gap-1 min-w-0">
+          <h1 className="truncate text-xl font-bold text-gray-900 leading-tight">{active.name}</h1>
+          {activeIsLive && <LiveBadge />}
+          <ChevronDown size={16} className="shrink-0 text-gray-400 group-hover:text-gray-600 transition-colors" />
+        </span>
+        <span className="max-w-full truncate text-center text-sm text-gray-500">{eventSubtitle(active)}</span>
       </button>
-      <p className="max-w-full truncate text-center text-sm text-gray-500">{eventSubtitle(active)}</p>
 
       {open && (
         <>
