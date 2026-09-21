@@ -194,7 +194,6 @@ export default function App() {
               events={EVENTS}
               active={activeEvent}
               onChange={switchEvent}
-              onGoHome={goHome}
             />
           </div>
           {/* Symmetric spacer so the picker stays visually centered

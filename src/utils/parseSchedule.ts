@@ -11,6 +11,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   let city: string | undefined
   let configuration: string | undefined
   let direction: string | undefined
+  let trackId: string | undefined
   const runGroups: RunGroupConfig[] = []
   const days: DaySchedule[] = []
   let currentDay: DaySchedule | null = null
@@ -62,6 +63,11 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
 
     if (line.startsWith('direction:')) {
       direction = line.slice('direction:'.length).trim() || undefined
+      continue
+    }
+
+    if (line.startsWith('trackId:')) {
+      trackId = line.slice('trackId:'.length).trim() || undefined
       continue
     }
 
@@ -124,6 +130,7 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     ...(city ? { city } : {}),
     ...(configuration ? { configuration } : {}),
     ...(direction ? { direction } : {}),
+    ...(trackId ? { trackId } : {}),
     runGroups, days,
   }
 }
