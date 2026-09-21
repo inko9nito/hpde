@@ -14,6 +14,8 @@ const TRACK_ICONS: Record<string, string> = {
   'ecr-2-7':  ecr27,
 }
 
+type TrackIconTone = 'default' | 'selected'
+
 interface Props {
   trackId?: string
   /** Rendered pixel size for the inner icon; the tinted container adds
@@ -24,6 +26,9 @@ interface Props {
    * the surrounding event card for past events.
    */
   muted?: boolean
+  /** Color scheme. 'selected' tints the container and the shape blue
+   *  so it reads as the active item in the picker dropdown. */
+  tone?: TrackIconTone
   className?: string
 }
 
@@ -33,10 +38,19 @@ interface Props {
  * Falls back to a neutral dashed loop for unknown / unset trackIds so
  * a brand-new event still slots into the layout while its real icon
  * is being added.
+ *
+ * The real SVGs ship with a fixed black fill, so the shape is
+ * recoloured with a CSS mask instead of an <img>: the `<span>` paints
+ * a solid `bg-current` block, then the SVG mask cuts it to the track
+ * outline. That lets the shape take its tone from the surrounding
+ * text color.
  */
-export function TrackIcon({ trackId, size = 28, muted = false, className }: Props) {
+export function TrackIcon({ trackId, size = 28, muted = false, tone = 'default', className }: Props) {
   const src = trackId ? TRACK_ICONS[trackId] : undefined
-  const containerCls = `inline-grid shrink-0 place-items-center rounded-lg bg-gray-100 ${
+  const toneCls = tone === 'selected'
+    ? 'bg-blue-100 text-blue-600'
+    : 'bg-gray-100 text-gray-700'
+  const containerCls = `inline-grid shrink-0 place-items-center rounded-lg ${toneCls} ${
     muted ? 'opacity-70' : ''
   } ${className ?? ''}`.trim()
   // Fixed 4px padding all around: container box is size + 8.
@@ -49,13 +63,29 @@ export function TrackIcon({ trackId, size = 28, muted = false, className }: Prop
       aria-hidden="true"
     >
       {src ? (
-        <img src={src} alt="" width={size} height={size} className="block" />
+        <span
+          className="block bg-current"
+          style={{
+            width: size,
+            height: size,
+            WebkitMaskImage: `url(${src})`,
+            maskImage: `url(${src})`,
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+          }}
+        />
       ) : (
+        // Placeholder loop uses its own lighter tone so it clearly
+        // reads as "not yet added" rather than as a real track.
         <svg
           viewBox="0 0 32 32"
           width={size}
           height={size}
-          className="block text-gray-300"
+          className={`block ${tone === 'selected' ? 'text-blue-300' : 'text-gray-300'}`}
           fill="none"
         >
           <path

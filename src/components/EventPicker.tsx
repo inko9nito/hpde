@@ -38,7 +38,7 @@ function EventRow({
         active ? 'bg-blue-50' : 'hover:bg-gray-50'
       }`}
     >
-      <TrackIcon trackId={event.trackId} size={28} />
+      <TrackIcon trackId={event.trackId} size={28} tone={active ? 'selected' : 'default'} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-semibold text-gray-900">{event.name}</span>
