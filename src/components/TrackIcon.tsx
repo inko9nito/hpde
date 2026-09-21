@@ -16,7 +16,8 @@ const TRACK_ICONS: Record<string, string> = {
 
 interface Props {
   trackId?: string
-  /** Rendered pixel size for the (square) icon. */
+  /** Rendered pixel size for the inner icon; the tinted container adds
+   *  4px of padding on each side. */
   size?: number
   /**
    * Whether to mute (fade) the icon — mirrors the muted state passed to
@@ -27,46 +28,45 @@ interface Props {
 }
 
 /**
- * Small square icon that shows an event's track. Falls back to a
- * neutral dashed loop for unknown / unset trackIds so a brand-new
- * event still slots into the layout while its real icon is being
- * added.
+ * Small square icon that shows an event's track, wrapped in a tinted
+ * rounded container so the shape doesn't hover in negative space.
+ * Falls back to a neutral dashed loop for unknown / unset trackIds so
+ * a brand-new event still slots into the layout while its real icon
+ * is being added.
  */
 export function TrackIcon({ trackId, size = 28, muted = false, className }: Props) {
   const src = trackId ? TRACK_ICONS[trackId] : undefined
-  const cls = `shrink-0 ${muted ? 'opacity-60' : ''} ${className ?? ''}`.trim()
+  const containerCls = `inline-grid shrink-0 place-items-center rounded-lg bg-gray-100 ${
+    muted ? 'opacity-70' : ''
+  } ${className ?? ''}`.trim()
+  // Fixed 4px padding all around: container box is size + 8.
+  const boxSize = size + 8
 
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt=""
-        aria-hidden="true"
-        width={size}
-        height={size}
-        className={cls}
-      />
-    )
-  }
-
-  // Placeholder: neutral dashed loop. Uses currentColor so it inherits
-  // the surrounding text color and mutes with it.
   return (
-    <svg
-      viewBox="0 0 32 32"
-      width={size}
-      height={size}
+    <span
+      className={containerCls}
+      style={{ width: boxSize, height: boxSize }}
       aria-hidden="true"
-      className={`${cls} text-gray-300`}
-      fill="none"
     >
-      <path
-        d="M6 16 C6 9 12 5 17 6 C24 7 27 12 27 17 C27 23 22 27 15 27 C9 27 6 22 6 16 Z"
-        stroke="currentColor"
-        strokeWidth={2.5}
-        strokeLinecap="round"
-        strokeDasharray="3 3"
-      />
-    </svg>
+      {src ? (
+        <img src={src} alt="" width={size} height={size} className="block" />
+      ) : (
+        <svg
+          viewBox="0 0 32 32"
+          width={size}
+          height={size}
+          className="block text-gray-300"
+          fill="none"
+        >
+          <path
+            d="M6 16 C6 9 12 5 17 6 C24 7 27 12 27 17 C27 23 22 27 15 27 C9 27 6 22 6 16 Z"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeDasharray="3 3"
+          />
+        </svg>
+      )}
+    </span>
   )
 }

@@ -112,6 +112,7 @@ export function EventPicker({ events, active, onChange }: Props) {
             )}
             {past.length > 0 && (
               <>
+                <div className="my-2 border-t border-gray-100" role="separator" />
                 <SectionHeader label="Past" />
                 {past.map(e => (
                   <EventRow
