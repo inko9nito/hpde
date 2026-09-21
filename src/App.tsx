@@ -272,12 +272,20 @@ export default function App() {
       <Footer />
     </div>
     </PullToRefresh>
-    <EventDetailsDrawer
-      event={activeEvent}
-      open={detailsOpen}
-      onClose={() => setDetailsOpen(false)}
-    />
     </PushPage>
+    )}
+    {/* Rendered as a top-level sibling — outside PushPage and PullToRefresh,
+        both of which apply a `transform`. A `transform` ancestor makes any
+        `position: fixed` descendant behave like `position: absolute`
+        relative to that ancestor, so the drawer would scroll with the
+        pushed page's contents and mis-size on window resize. Kept at the
+        root, it's fixed to the viewport itself. */}
+    {pushMounted && (
+      <EventDetailsDrawer
+        event={activeEvent}
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
     )}
     </>
   )
