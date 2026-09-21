@@ -53,6 +53,12 @@ export interface EventConfig {
   configuration?: string
   direction?: string
   /**
+   * ID that resolves to a stylized track-shape icon (see TrackIcon).
+   * Optional — an event without a trackId, or with an unknown one, is
+   * rendered with a placeholder icon.
+   */
+  trackId?: string
+  /**
    * The original schedule artifacts (photos, scans) this event's data was
    * transcribed from, shown in their own section in Event Details.
    */

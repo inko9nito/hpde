@@ -5,6 +5,7 @@ import { partitionEvents } from '../utils/eventClass'
 import { eventSubtitle } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
+import { TrackIcon } from './TrackIcon'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -51,19 +52,22 @@ function EventCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-xl border p-3 text-left transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
         muted
           ? 'border-gray-200 bg-white hover:border-gray-300'
           : 'border-gray-200 bg-white shadow-sm hover:border-gray-400'
       }`}
     >
-      <div className="flex items-center">
-        <span className={`text-sm font-semibold ${muted ? 'text-gray-700' : 'text-gray-900'}`}>
-          {event.name}
-        </span>
-        {live && <LiveBadge />}
+      <TrackIcon trackId={event.trackId} size={40} muted={muted} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center">
+          <span className={`truncate text-sm font-semibold ${muted ? 'text-gray-700' : 'text-gray-900'}`}>
+            {event.name}
+          </span>
+          {live && <LiveBadge />}
+        </div>
+        <div className="truncate text-xs text-gray-500">{eventSubtitle(event)}</div>
       </div>
-      <div className="text-xs text-gray-500">{eventSubtitle(event)}</div>
     </button>
   )
 }
