@@ -12,6 +12,9 @@ vi.mock('@netlify/blobs', () => ({
       store.set(key, value)
       return { modified: true }
     },
+    delete: async (key: string) => {
+      store.delete(key)
+    },
   }),
 }))
 
@@ -120,6 +123,20 @@ describe('created-events function', () => {
     ).event
     expect(first.id).toBe('2026-10-10_scca-at-msrc-1-7-cw')
     expect(second.id).toBe('2026-10-10_scca-at-msrc-1-7-cw-3')
+  })
+
+  it('lets only admins delete, and only events that exist', async () => {
+    const created = JSON.parse((await handler(post({ event: valid }), admin)).body).event
+    const del = (id?: string) => ({ httpMethod: 'DELETE', queryStringParameters: id ? { id } : {} })
+
+    expect((await handler(del(created.id), { clientContext: {} })).statusCode).toBe(401)
+    expect((await handler(del(created.id), driver)).statusCode).toBe(403)
+    expect(store.has(created.id)).toBe(true)
+
+    expect((await handler(del(), admin)).statusCode).toBe(400)
+    expect((await handler(del('2026-01-01_nope'), admin)).statusCode).toBe(404)
+    expect((await handler(del(created.id), admin)).statusCode).toBe(200)
+    expect(store.has(created.id)).toBe(false)
   })
 
   it('returns validation errors as 400', async () => {

@@ -17,6 +17,7 @@ import { Footer } from './components/Footer'
 import { AccountButton } from './components/AccountButton'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage } from './components/NewEventPage'
+import { DeleteEventButton } from './components/DeleteEventButton'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
@@ -324,7 +325,12 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'info' && <EventInfo event={activeEvent} />}
+          {activeTab === 'info' && (
+            <>
+              <EventInfo event={activeEvent} />
+              <DeleteEventButton event={activeEvent} onDeleted={goHome} />
+            </>
+          )}
         </div>
 
       </div>

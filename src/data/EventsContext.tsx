@@ -15,6 +15,10 @@ interface EventsValue {
   allEvents: EventConfig[]
   // Merge a just-created event in without waiting for a refetch.
   addEvent(event: EventConfig): void
+  // Drop a just-deleted event.
+  removeEvent(id: string): void
+  // Created in the app (deletable), as opposed to built into src/data.
+  isCreated(id: string): boolean
 }
 
 function isEventConfig(e: unknown): e is EventConfig {
@@ -59,15 +63,32 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     setCreated(prev => [...prev.filter(e => e.id !== event.id), event])
   }, [])
 
-  const value = useMemo<EventsValue>(
-    () => ({ events: merge(EVENTS, created), allEvents: merge(ALL_EVENTS, created), addEvent }),
-    [created, addEvent],
-  )
+  const removeEvent = useCallback((id: string) => {
+    setCreated(prev => prev.filter(e => e.id !== id))
+  }, [])
+
+  const value = useMemo<EventsValue>(() => {
+    const builtInIds = new Set(ALL_EVENTS.map(e => e.id))
+    const createdIds = new Set(created.map(e => e.id))
+    return {
+      events: merge(EVENTS, created),
+      allEvents: merge(ALL_EVENTS, created),
+      addEvent,
+      removeEvent,
+      isCreated: id => createdIds.has(id) && !builtInIds.has(id),
+    }
+  }, [created, addEvent, removeEvent])
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>
 }
 
-const STATIC_FALLBACK: EventsValue = { events: EVENTS, allEvents: ALL_EVENTS, addEvent: () => {} }
+const STATIC_FALLBACK: EventsValue = {
+  events: EVENTS,
+  allEvents: ALL_EVENTS,
+  addEvent: () => {},
+  removeEvent: () => {},
+  isCreated: () => false,
+}
 
 // Rendered without a provider (isolated tests) → just the built-in events.
 export function useEvents(): EventsValue {

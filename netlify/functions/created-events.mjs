@@ -4,7 +4,9 @@ import { buildEvent, isAdmin } from '../lib/newEvent.mjs'
 
 // Events created in the app (#229), kept in a Netlify Blobs store keyed by
 // event id. GET is public — the schedule is public — and lists them all;
-// POST creates one and is limited to users with the Identity "admin" role.
+// POST creates one and DELETE (?id=) removes one; both are limited to users
+// with the Identity "admin" role. Only created events can be deleted —
+// built-in ones live in src/data.
 // Built-in events live in src/data, so the client sends their ids along
 // and the new id never collides with one.
 const STORE = 'events'
@@ -23,11 +25,21 @@ export const handler = async (event, context) => {
     return json(200, { events: await listEvents(store) })
   }
 
-  if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed.' })
+  if (event.httpMethod !== 'POST' && event.httpMethod !== 'DELETE') {
+    return json(405, { error: 'Method not allowed.' })
+  }
 
   const user = requireUser(context)
   if (!user) return UNAUTHORIZED
-  if (!isAdmin(user)) return json(403, { error: 'Only admins can create events.' })
+  if (!isAdmin(user)) return json(403, { error: 'Only admins can change events.' })
+
+  if (event.httpMethod === 'DELETE') {
+    const id = event.queryStringParameters?.id
+    if (!id) return json(400, { error: 'Missing event id.' })
+    if (!(await store.get(id, { type: 'json' }))) return json(404, { error: 'That event doesn’t exist.' })
+    await store.delete(id)
+    return json(200, { deleted: id })
+  }
 
   let body
   try {

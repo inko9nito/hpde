@@ -57,9 +57,13 @@ title, start/end date, organizer, location, city, track configuration,
 direction and event page. A new event starts with no schedule — its
 Schedule tab says "Schedule not posted yet" until one is added.
 
+Admins can also delete an event created this way: *Info* tab → **Delete
+event** → confirm. Built-in events (the ones in `src/data`) can't be
+deleted from the app.
+
 Created events are stored in **Netlify Blobs** (store `events`) by the
 `created-events` function (`/api/created-events`: public `GET`, admin-only
-`POST`). No extra Netlify setup is needed for Blobs. They show up on the
+`POST` and `DELETE ?id=`). No extra Netlify setup is needed for Blobs. They show up on the
 Netlify site only — not on GitHub Pages or in the iOS widget yet.
 
 **Make yourself an admin (one time)**
