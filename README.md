@@ -72,7 +72,12 @@ Netlify site only — not on GitHub Pages or in the iOS widget yet.
    Identity*) → **Users** → click your user.
 3. Under *Roles*, **Edit settings** → type `admin` → **Save**.
 4. Back on the site, sign out and in again (or wait up to an hour for the
-   token to refresh) — the **+** appears on the home page.
+   token to refresh) — the **+ Add event** link appears next to *Upcoming*
+   on the home page, in list view (not calendar view).
+
+   If you signed in *before* adding the role, signing back in is required —
+   your browser is holding a token from before you were an admin, and
+   nothing server-side will refresh it for you.
 
 Repeat for anyone else who should be able to add events.
 
