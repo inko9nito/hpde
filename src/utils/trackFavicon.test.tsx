@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useTrackFavicon } from './trackFavicon'
+import { useTrackFavicon, useDocumentTitle } from './trackFavicon'
 import { trackIconSrc } from '../components/TrackIcon'
 
-function iconHref() {
-  return document.head.querySelector('link[rel~="icon"]')?.getAttribute('href') ?? null
+function iconHref(rel = 'icon') {
+  return document.head.querySelector(`link[rel~="${rel}"]`)?.getAttribute('href') ?? null
 }
 
 // jsdom has no canvas, so the hook falls back to the raw SVG URL — enough
@@ -12,7 +12,7 @@ function iconHref() {
 describe('useTrackFavicon (#233)', () => {
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    document.head.querySelectorAll('link[rel~="icon"]').forEach(l => l.remove())
+    document.head.querySelectorAll('link[rel~="icon"], link[rel~="apple-touch-icon"]').forEach(l => l.remove())
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -21,6 +21,13 @@ describe('useTrackFavicon (#233)', () => {
     await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')))
     unmount()
     expect(iconHref()).toBeNull()
+  })
+
+  it('also sets the iOS touch icon (Favorites / Home Screen)', async () => {
+    const { unmount } = renderHook(() => useTrackFavicon('msrc-3-1'))
+    await waitFor(() => expect(iconHref('apple-touch-icon')).toBe(trackIconSrc('msrc-3-1')))
+    unmount()
+    expect(iconHref('apple-touch-icon')).toBeNull()
   })
 
   it('follows the track when switching events', async () => {
@@ -50,5 +57,20 @@ describe('useTrackFavicon (#233)', () => {
     unmount()
     expect(iconHref()).toBe('/favicon.png')
     link.remove()
+  })
+})
+
+describe('useDocumentTitle (#233)', () => {
+  it('shows the title while set and restores the previous one', () => {
+    document.title = 'HPDE Schedule'
+    const { rerender, unmount } = renderHook(({ t }) => useDocumentTitle(t), {
+      initialProps: { t: 'TDE at MSRC 1.7CW' as string | undefined },
+    })
+    expect(document.title).toBe('TDE at MSRC 1.7CW')
+    rerender({ t: undefined })
+    expect(document.title).toBe('HPDE Schedule')
+    rerender({ t: 'Another event' })
+    unmount()
+    expect(document.title).toBe('HPDE Schedule')
   })
 })

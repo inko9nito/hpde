@@ -1,17 +1,28 @@
 import { useEffect } from 'react'
 import { trackIconSrc } from '../components/TrackIcon'
 
-// Tab icon for an event page (#233): the event's track shape on the same
-// tinted rounded tile TrackIcon draws in the app (gray-100 / gray-700), so
-// it stays legible on both light and dark tab bars. Drawn to a canvas and
-// handed over as a PNG because Safari ignores SVG favicons — and the raw
-// SVGs are plain black, which would vanish on a dark tab bar anyway.
-const SIZE = 64
-const PADDING = 7
-const RADIUS = 14
-// How far (in tile px) the shape is thickened; see the stamping loop.
-const BOLDEN = 1.5
-const TILE_COLOR = '#f3f4f6'
+// Page icons for an event page (#233): the event's track shape, drawn to a
+// canvas and handed over as PNGs. PNG because Safari ignores SVG favicons,
+// and because the raw SVGs are plain black, which would vanish on a dark
+// tab bar.
+//
+// - favicon: the rounded gray-100 / gray-700 tile TrackIcon draws in the
+//   app, so it reads on light and dark tab bars.
+// - apple-touch-icon: what iOS uses for Favorites and Add to Home Screen
+//   (it never reads the favicon). Square and opaque, because iOS rounds
+//   the corners itself and fills any transparency with black.
+interface IconStyle {
+  size: number
+  padding: number
+  /** Corner radius of the tile; 0 for a full-bleed square. */
+  radius: number
+  /** How far (in tile px) the shape is thickened; see the stamping loop. */
+  bolden: number
+  tileColor: string
+}
+const FAVICON: IconStyle = { size: 64, padding: 7, radius: 14, bolden: 1.5, tileColor: '#f3f4f6' }
+// White like other Favorites tiles: gray-100 vanishes on iOS's gray sheet.
+const TOUCH_ICON: IconStyle = { size: 180, padding: 30, radius: 0, bolden: 2, tileColor: '#ffffff' }
 const SHAPE_COLOR = '#374151'
 // Raster size for an SVG that reports no intrinsic size (ours are 437).
 const SOURCE_FALLBACK = 437
@@ -46,7 +57,8 @@ function opaqueBounds(ctx: CanvasRenderingContext2D, w: number, h: number) {
 
 /** PNG data URL of the track shape on its tile, or the raw SVG URL when
  *  canvas isn't available. */
-export async function renderTrackFavicon(src: string): Promise<string> {
+export async function renderTrackIcon(src: string, style: IconStyle = FAVICON): Promise<string> {
+  const { size: SIZE, padding: PADDING, radius: RADIUS, bolden: BOLDEN } = style
   const tile = document.createElement('canvas')
   tile.width = tile.height = SIZE
   const ctx = tile.getContext('2d')
@@ -69,10 +81,14 @@ export async function renderTrackFavicon(src: string): Promise<string> {
   shapeCtx.fillRect(0, 0, w, h)
   const box = opaqueBounds(shapeCtx, w, h)
 
-  ctx.fillStyle = TILE_COLOR
-  ctx.beginPath()
-  ctx.roundRect(0, 0, SIZE, SIZE, RADIUS)
-  ctx.fill()
+  ctx.fillStyle = style.tileColor
+  if (RADIUS > 0) {
+    ctx.beginPath()
+    ctx.roundRect(0, 0, SIZE, SIZE, RADIUS)
+    ctx.fill()
+  } else {
+    ctx.fillRect(0, 0, SIZE, SIZE)
+  }
   // Fit the cropped shape inside the padding, centered, aspect kept.
   const inner = SIZE - PADDING * 2
   const scale = inner / Math.max(box.w, box.h)
@@ -89,14 +105,29 @@ export async function renderTrackFavicon(src: string): Promise<string> {
   return tile.toDataURL('image/png')
 }
 
-function iconLink(): HTMLLinkElement | null {
-  return document.head.querySelector<HTMLLinkElement>('link[rel~="icon"]')
+/**
+ * Point the page's `<link rel={rel}>` at `href`, creating the link if
+ * there isn't one. Returns a function that puts back whatever was there
+ * before (or removes the link it added).
+ */
+function swapLink(rel: string, href: string): () => void {
+  const existing = document.head.querySelector<HTMLLinkElement>(`link[rel~="${rel}"]`)
+  const previousHref = existing?.getAttribute('href') ?? null
+  const link = existing ?? document.createElement('link')
+  link.rel = rel
+  link.setAttribute('href', href)
+  if (!existing) document.head.appendChild(link)
+  return () => {
+    if (!existing) link.remove()
+    else if (previousHref !== null) existing.setAttribute('href', previousHref)
+    else existing.removeAttribute('href')
+  }
 }
 
 /**
- * While `trackId` has a real icon, use it as the page's favicon; put
- * back whatever was there before (or nothing) when it changes or the
- * page goes away.
+ * While `trackId` has a real icon, use it as the page's favicon and iOS
+ * touch icon; put back whatever was there before (or nothing) when it
+ * changes or the page goes away.
  */
 export function useTrackFavicon(trackId: string | undefined) {
   useEffect(() => {
@@ -104,27 +135,32 @@ export function useTrackFavicon(trackId: string | undefined) {
     if (!src) return
 
     let cancelled = false
-    const existing = iconLink()
-    const previousHref = existing?.getAttribute('href') ?? null
-    const link = existing ?? document.createElement('link')
-    let applied = false
-
-    function apply(href: string) {
-      if (cancelled) return
-      link.rel = 'icon'
-      link.setAttribute('href', href)
-      if (!existing) document.head.appendChild(link)
-      applied = true
+    const restores: (() => void)[] = []
+    const icons: [rel: string, style: IconStyle][] = [
+      ['icon', FAVICON],
+      ['apple-touch-icon', TOUCH_ICON],
+    ]
+    for (const [rel, style] of icons) {
+      const apply = (href: string) => {
+        if (!cancelled) restores.push(swapLink(rel, href))
+      }
+      renderTrackIcon(src, style).then(apply, () => apply(src))
     }
-
-    renderTrackFavicon(src).then(apply, () => apply(src))
 
     return () => {
       cancelled = true
-      if (!applied) return
-      if (!existing) link.remove()
-      else if (previousHref !== null) existing.setAttribute('href', previousHref)
-      else existing.removeAttribute('href')
+      restores.forEach(restore => restore())
     }
   }, [trackId])
+}
+
+/** Use `title` as the document title while set; put the previous one
+ *  back when it changes or the page goes away. */
+export function useDocumentTitle(title: string | undefined) {
+  useEffect(() => {
+    if (!title) return
+    const previous = document.title
+    document.title = title
+    return () => { document.title = previous }
+  }, [title])
 }
