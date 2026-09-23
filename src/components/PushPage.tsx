@@ -52,8 +52,14 @@ export function PushPage({ open, onExited, scrollRef, children, skipEnterAnimati
   return (
     <div
       ref={scrollRef}
-      className="fixed inset-0 z-30 overflow-x-hidden overflow-y-auto bg-gray-50"
+      className="fixed inset-0 z-30 overflow-x-hidden overflow-y-auto bg-white"
       style={{
+        // White is what Safari 26 samples to tint the status bar — this
+        // fixed page is the element at the top edge — so it matches the
+        // white header (#245). The page's own content paints gray-50;
+        // this only shows when rubber-banding past either end, so keep
+        // it white above (header) and gray-50 below (page).
+        backgroundImage: 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)',
         transform: `translateX(${inPosition ? '0' : '100%'})`,
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         willChange: 'transform',
