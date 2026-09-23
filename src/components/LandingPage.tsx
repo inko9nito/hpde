@@ -32,10 +32,15 @@ function useLocalStorage<T>(key: string, initial: T) {
   return [value, setValue] as const
 }
 
-// Every row on the page — event card, loading skeleton, empty state —
-// shares this shell (p-3 + 48px tile + border = 74px), so swapping
-// between them never shifts the page.
-const CARD_SHELL = 'flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-3'
+// Soft, low shadow under every card (a touch of lift, not a float).
+const CARD_SHADOW = 'shadow-[0_1px_2px_rgba(17,24,39,0.04),0_4px_12px_rgba(17,24,39,0.05)]'
+// Inner padding of a card's date + title row.
+const CARD_PADDING = 'p-4'
+
+// Every compact row on the page — past event card, loading skeleton,
+// empty state — shares this shell (p-4 + 48px tile + border = 82px),
+// so swapping between them never shifts the page.
+const CARD_SHELL = `flex w-full items-center gap-4 rounded-xl border border-gray-200 bg-white ${CARD_PADDING} ${CARD_SHADOW}`
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -90,7 +95,7 @@ function EventCard({
     <button
       onClick={onClick}
       className={`${CARD_SHELL} text-left transition-colors ${
-        muted ? 'hover:border-gray-300' : 'shadow-sm hover:border-gray-400'
+        muted ? 'hover:border-gray-300' : 'hover:border-gray-400'
       }`}
     >
       <DateBlock event={event} muted={muted} />
@@ -116,14 +121,14 @@ function FeaturedEventCard({
   return (
     <button
       onClick={onClick}
-      className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-sm transition-colors hover:border-gray-400"
+      className={`block w-full overflow-hidden rounded-xl border border-gray-200 bg-white text-left transition-colors hover:border-gray-400 ${CARD_SHADOW}`}
     >
       {/* The SVGs are square with the shape in a wide band across the
           middle, so a box taller than the banner is cropped by it. */}
       <div className="flex h-28 items-center justify-center overflow-hidden bg-gray-900">
         <TrackIcon trackId={event.trackId} tone="dark" size={144} padding={0} radius="rounded-none" />
       </div>
-      <div className="flex items-center gap-3 p-3">
+      <div className={`flex items-center gap-4 ${CARD_PADDING}`}>
         <DateBlock event={event} muted={false} />
         <EventTitle event={event} live={live} />
       </div>
@@ -159,7 +164,7 @@ function EventCardSkeleton() {
 
 function EmptyRow({ children }: { children: string }) {
   return (
-    <div className={`${CARD_SHELL} h-[74px] justify-center text-sm text-gray-500`}>
+    <div className={`${CARD_SHELL} h-[82px] justify-center text-sm text-gray-500`}>
       {children}
     </div>
   )
