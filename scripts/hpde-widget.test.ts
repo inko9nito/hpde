@@ -422,6 +422,14 @@ describe('notifications', () => {
     expect((globalThis as any).__scheduled).toBe(4)
   })
 
+  it('takes groups and lead time separated by commas alone (the form the setup page shows)', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'blue,orange,15m')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string }>
+    // blue on-track + blue in-class + orange on-track + meeting + lunch = 5
+    expect(notifs).toHaveLength(5)
+    for (const n of notifs) expect(n.title).toMatch(/· in 15m$/)
+  })
+
   it('schedules nothing when there are no future activities', async () => {
     await runWidget('medium', NO_EVENTS_MANIFEST, '')
     expect((globalThis as any).__scheduled).toBe(0)

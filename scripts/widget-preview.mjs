@@ -267,7 +267,7 @@ const SF_SYMBOL_TO_LUCIDE = {
   // flag but no checkered flag. Font Awesome fallback below.
 }
 const LUCIDE_ICON_CACHE = {}
-function loadLucideIconShapes(lucideName) {
+export function loadLucideIconShapes(lucideName) {
   if (LUCIDE_ICON_CACHE[lucideName]) return LUCIDE_ICON_CACHE[lucideName]
   const p = join(__dirname, '..', 'node_modules', 'lucide-react', 'dist', 'esm', 'icons', `${lucideName}.js`)
   if (!existsSync(p)) throw new Error(`Lucide icon not found: ${lucideName}`)
@@ -568,7 +568,7 @@ const SCENARIOS = [
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
 ]
 
-function installMocks(g, manifest, widgetFamily) {
+function installMocks(g, manifest, widgetFamily, widgetParameter = null) {
   g.Color = ColorMock
   g.Size = SizeMock
   g.Font = Font
@@ -597,11 +597,14 @@ function installMocks(g, manifest, widgetFamily) {
   g.WidgetStack = StackMock
   g.ListWidget = ListWidgetMock
   g.Script = { setWidget: w => { g.__widget = w }, complete: () => {} }
-  g.args = { widgetParameter: null }
+  g.args = { widgetParameter }
   g.config = { widgetFamily, runsInWidget: true }
+  // Records what the widget schedules, so widget-showcase.mjs can render
+  // the real notification text.
+  g.__notifs = []
   class NotificationStub {
-    setTriggerDate() {}
-    async schedule() {}
+    setTriggerDate(d) { this.triggerDate = d }
+    async schedule() { g.__notifs.push({ title: this.title, body: this.body, at: this.triggerDate }) }
     static async allPending() { return [] }
     static async removePending() {}
   }
@@ -610,7 +613,7 @@ function installMocks(g, manifest, widgetFamily) {
 
 export async function renderScenario(scenario, dark) {
   const g = globalThis
-  installMocks(g, scenario.manifest, scenario.family)
+  installMocks(g, scenario.manifest, scenario.family, scenario.param ?? null)
   g.__dark = dark
   g.__online = !!scenario.online
   g.__widget = null
