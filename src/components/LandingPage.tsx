@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Calendar as CalendarIcon, List } from 'lucide-react'
-import { EVENTS } from '../data'
+import { Calendar as CalendarIcon, List, Plus } from 'lucide-react'
+import { useEvents } from '../data/EventsContext'
+import { useAuth } from '../auth/AuthContext'
+import { ADMIN_ROLE } from './NewEventPage'
 import { partitionEvents } from '../utils/eventClass'
 import { eventSubtitle } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
@@ -73,8 +75,49 @@ function EventCard({
   )
 }
 
+function AddEventLink() {
+  return (
+    <a
+      href="#/new-event"
+      className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+    >
+      <Plus size={14} aria-hidden="true" />
+      Add event
+    </a>
+  )
+}
+
+// Same shell as EventCard (p-3 + 48px icon tile + border = 74px), so
+// swapping between placeholder, empty state and real cards never shifts
+// the page.
+const CARD_SHELL = 'flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-3'
+
+/** Stand-in row while app-created events load (they may be upcoming). */
+function EventCardSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading events" className={CARD_SHELL}>
+      <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-gray-100" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-3.5 w-2/5 animate-pulse rounded bg-gray-100" />
+        <div className="h-3 w-1/4 animate-pulse rounded bg-gray-100" />
+      </div>
+    </div>
+  )
+}
+
+function EmptyRow({ children }: { children: string }) {
+  return (
+    <div className={`${CARD_SHELL} h-[74px] justify-center text-sm text-gray-500`}>
+      {children}
+    </div>
+  )
+}
+
 export function LandingPage({ onOpenEvent }: Props) {
   const [view, setView] = useLocalStorage<LandingView>('hpde:landingView', 'list')
+  const { events: EVENTS, loaded } = useEvents()
+  const { user } = useAuth()
+  const isAdmin = !!user?.roles.includes(ADMIN_ROLE)
   const { live, upcoming, past } = partitionEvents(EVENTS)
   const upcomingRows = [...live, ...upcoming]
 
@@ -113,13 +156,16 @@ export function LandingPage({ onOpenEvent }: Props) {
         {view === 'list' ? (
           <div className="space-y-6">
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Upcoming
-              </h2>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Upcoming
+                </h2>
+                {isAdmin && <AddEventLink />}
+              </div>
               {upcomingRows.length === 0 ? (
-                <div className="rounded-lg border border-gray-200 bg-white px-3 py-4 text-center text-sm text-gray-500">
-                  No upcoming events.
-                </div>
+                // Created events are fetched after load and are usually the
+                // upcoming ones — don't flash "No upcoming events" meanwhile.
+                loaded ? <EmptyRow>No upcoming events.</EmptyRow> : <EventCardSkeleton />
               ) : (
                 <div className="space-y-2">
                   {upcomingRows.map(e => (
@@ -139,9 +185,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                 Past
               </h2>
               {past.length === 0 ? (
-                <div className="rounded-lg border border-gray-200 bg-white px-3 py-4 text-center text-sm text-gray-500">
-                  No past events.
-                </div>
+                <EmptyRow>No past events.</EmptyRow>
               ) : (
                 <div className="space-y-2">
                   {past.map(e => (

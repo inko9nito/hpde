@@ -14,6 +14,9 @@ const TRACK_ICONS: Record<string, string> = {
   'ecr-2-7':  ecr27,
 }
 
+/** Every trackId that has a real icon (the New event form matches these). */
+export const TRACK_ICON_IDS = Object.keys(TRACK_ICONS)
+
 type TrackIconTone = 'default' | 'selected'
 
 interface Props {

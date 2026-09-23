@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Home } from 'lucide-react'
+import { Home, CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
@@ -16,8 +16,12 @@ import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
 import { AccountButton } from './components/AccountButton'
 import { SignInPrompt } from './components/SignInPrompt'
+import { NewEventPage } from './components/NewEventPage'
+import { DeleteEventButton } from './components/DeleteEventButton'
+import { Toast } from './components/Toast'
+import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
-import { EVENTS, ALL_EVENTS } from './data'
+import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
@@ -65,6 +69,7 @@ function useHashRoute() {
 
 const EVENT_HASH_PREFIX = '#/event/'
 const LANDING_HASH = '#/'
+const NEW_EVENT_HASH = '#/new-event'
 
 function eventHash(eventId: string): string {
   return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
@@ -75,6 +80,22 @@ function eventIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
 }
 
+function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => void }) {
+  if (loading) return <div className="h-40" aria-busy="true" aria-label="Loading event" />
+  return (
+    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+      <p className="text-sm font-medium text-gray-700">This event doesn’t exist</p>
+      <p className="mt-1 text-xs text-gray-400">It may have been deleted.</p>
+      <button
+        onClick={onHome}
+        className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+      >
+        See all events
+      </button>
+    </div>
+  )
+}
+
 function isEmptyHash(hash: string): boolean {
   return hash === '' || hash === '#'
 }
@@ -82,6 +103,7 @@ function isEmptyHash(hash: string): boolean {
 export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus } = useAuth()
+  const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded } = useEvents()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -93,6 +115,10 @@ export default function App() {
   const [storedTab, setActiveTab] = useLocalStorage<EventTabId>('hpde:activeTab', 'schedule')
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  function showToast(text: string) {
+    setToast({ id: Date.now(), text })
+  }
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
   // empty-hash-redirects-to-today's-live-event effect below — should show
@@ -103,7 +129,11 @@ export default function App() {
   // that happens BEFORE that mount (i.e. a real click) flips it.
   const skipPushEnterAnimationRef = useRef(true)
 
-  const isOnEventRoute = eventIdFromHash(hash) !== null
+  const routeEventId = eventIdFromHash(hash)
+  const isOnEventRoute = routeEventId !== null
+  // A link to an event we don't have (yet): an app-created one before the
+  // fetch lands, or one that was deleted. Don't show some other event.
+  const routeMissing = isOnEventRoute && !ALL_EVENTS.some(e => e.id === routeEventId)
   // Keep the pushed page mounted through its slide-out animation. Starts
   // mounted whenever the current hash is an event (including cold-boot);
   // becomes false again only after PushPage's onExited fires.
@@ -118,6 +148,9 @@ export default function App() {
   const todayDay = findTodayDay(activeEvent)
   const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
+  // Events created in the app start with no schedule (#229) — it's added
+  // separately, so until then the Schedule tab says so instead.
+  const hasSchedule = activeEvent.days.some(d => d.activities.length > 0)
 
   const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
   const isPastEvent = lastEventDate < todayLocalISO()
@@ -161,7 +194,9 @@ export default function App() {
       const { live } = partitionEvents(EVENTS)
       setHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
     }
-  }, [hash])
+    // ALL_EVENTS too: an event created in the app arrives after load, so a
+    // direct link to one only resolves once the fetch lands.
+  }, [hash, ALL_EVENTS])
 
   // '#/widget-script' is the old name for this page (pre-#213) — keep it
   // working in case anyone bookmarked or shared it.
@@ -171,6 +206,18 @@ export default function App() {
 
   if (hash === '#/share') {
     return <SharePage />
+  }
+
+  if (hash === NEW_EVENT_HASH) {
+    return (
+      <NewEventPage
+        onCreated={event => {
+          switchEvent(event)
+          // Reassurance that this is the new event, not an old one.
+          showToast(`“${event.name}” created`)
+        }}
+      />
+    )
   }
 
   return (
@@ -189,6 +236,9 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
+        {routeMissing ? (
+          <MissingEvent loading={!eventsLoaded} onHome={goHome} />
+        ) : (<>
         {/* Header: Home | centered EventPicker | symmetric spacer */}
         <div className="mb-4 flex items-start gap-3">
           <button
@@ -216,7 +266,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Top-level tab bar: Schedule | My notes | Info */}
+        {/* Top-level tab bar: Schedule | Info | My notes */}
         <div className="mb-3">
           <EventTabs active={activeTab} onChange={setActiveTab} />
         </div>
@@ -231,7 +281,15 @@ export default function App() {
           aria-labelledby={`event-tab-${activeTab}`}
           className="tab-fade"
         >
-          {activeTab === 'schedule' && (
+          {activeTab === 'schedule' && !hasSchedule && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+              <CalendarClock size={20} className="mx-auto text-gray-400" aria-hidden="true" />
+              <p className="mt-2 text-sm font-medium text-gray-700">Schedule coming soon</p>
+              <p className="mt-1 text-xs text-gray-400">It’ll be posted here once the organizer announces it.</p>
+            </div>
+          )}
+
+          {activeTab === 'schedule' && hasSchedule && (
             <>
               {/* Day tabs + Now — only shown for multi-day events */}
               {multiDay && (
@@ -304,8 +362,20 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'info' && <EventInfo event={activeEvent} />}
+          {activeTab === 'info' && (
+            <>
+              <EventInfo event={activeEvent} />
+              <DeleteEventButton
+                event={activeEvent}
+                onDeleted={() => {
+                  showToast(`“${activeEvent.name}” deleted`)
+                  goHome()
+                }}
+              />
+            </>
+          )}
         </div>
+        </>)}
 
       </div>
       <Footer />
@@ -313,6 +383,7 @@ export default function App() {
     </PullToRefresh>
     </PushPage>
     )}
+    <Toast toast={toast} onDone={() => setToast(null)} />
     </>
   )
 }
