@@ -53,7 +53,7 @@ function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
       >
         {MONTHS[m - 1]}
       </span>
-      <span className="mt-1 text-2xl font-semibold text-gray-900">{d}</span>
+      <span className="mt-1 text-2xl font-bold text-gray-900">{d}</span>
     </div>
   )
 }
@@ -79,7 +79,7 @@ function EventCard({
       <DateBlock event={event} muted={muted} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-rubik text-base font-medium leading-tight text-gray-900">
+          <span className="truncate font-rubik text-base font-bold leading-tight text-gray-900">
             {event.name}
           </span>
           {live && <StatusBadge status="live" size="sm" />}
@@ -88,7 +88,9 @@ function EventCard({
           {event.organizer ?? 'Organizer not set'}
         </div>
       </div>
-      <TrackIcon trackId={event.trackId} size={36} padding={6} radius="rounded-xl" muted={muted} />
+      {/* Same dark tile as the event page header; no padding, the SVGs
+          carry their own margin. */}
+      <TrackIcon trackId={event.trackId} tone="dark" size={48} padding={0} radius="rounded-xl" />
     </button>
   )
 }
@@ -139,7 +141,7 @@ export function LandingPage({ onOpenEvent }: Props) {
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <div className="mb-5 flex items-center justify-between gap-3">
-          <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">HPDE Schedule</h1>
+          <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">HPDE Events</h1>
           <div className="flex shrink-0 items-center gap-2">
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button

@@ -72,15 +72,15 @@ describe('useTrackFavicon (#233)', () => {
 
 describe('useDocumentTitle (#233)', () => {
   it('shows the title while set and restores the previous one', () => {
-    document.title = 'HPDE Schedule'
+    document.title = 'HPDE Events'
     const { rerender, unmount } = renderHook(({ t }) => useDocumentTitle(t), {
       initialProps: { t: 'TDE at MSRC 1.7CW' as string | undefined },
     })
     expect(document.title).toBe('TDE at MSRC 1.7CW')
     rerender({ t: undefined })
-    expect(document.title).toBe('HPDE Schedule')
+    expect(document.title).toBe('HPDE Events')
     rerender({ t: 'Another event' })
     unmount()
-    expect(document.title).toBe('HPDE Schedule')
+    expect(document.title).toBe('HPDE Events')
   })
 })
