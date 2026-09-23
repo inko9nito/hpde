@@ -47,13 +47,12 @@ function renderApp() {
   render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
 }
 
-async function openInfo(eventId: string) {
+function openEvent(eventId: string) {
   window.location.hash = `#/event/${eventId}`
   renderApp()
-  await userEvent.click(await screen.findByRole('tab', { name: 'Info' }))
 }
 
-describe('deleting a created event (#229)', () => {
+describe('deleting a created event from the header menu (#229, #216)', () => {
   beforeEach(() => {
     localStorage.clear()
     fetchMock.mockClear()
@@ -66,16 +65,19 @@ describe('deleting a created event (#229)', () => {
 
   it('asks for confirmation, then deletes and goes home', async () => {
     signInAs(['admin'])
-    await openInfo(created.id)
+    openEvent(created.id)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete event' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete event' }))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete “Test”?')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'DELETE' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Delete event' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete event' }))
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(window.location.hash).toBe('#/'))
@@ -85,24 +87,31 @@ describe('deleting a created event (#229)', () => {
     expect(new Headers(init!.headers).get('Authorization')).toBe('Bearer token')
   })
 
-  it('is hidden from non-admins', async () => {
+  it('hides the menu from non-admins', async () => {
     signInAs([])
-    const eventName = created.name
-    await openInfo(created.id)
-    // Signed in and the created event loaded — the button would be there by now.
+    openEvent(created.id)
+    // Signed in and the created event loaded — the menu would be there by now.
     await screen.findAllByRole('button', { name: 'Account: v@example.com' })
-    await screen.findAllByRole('heading', { name: new RegExp(eventName) })
-    expect(screen.queryByRole('button', { name: 'Delete event' })).not.toBeInTheDocument()
+    await screen.findAllByRole('heading', { name: new RegExp(created.name) })
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
   })
 
-  it('is hidden on built-in events, even for admins', async () => {
+  it('closes the menu on Escape', async () => {
     signInAs(['admin'])
-    const eventName = EVENTS[0].name
-    await openInfo(EVENTS[0].id)
-    // Signed in and the created event loaded — the button would be there by now.
-    await screen.findAllByRole('button', { name: 'Account: v@example.com' })
-    await screen.findAllByRole('heading', { name: new RegExp(eventName) })
-    expect(screen.queryByRole('button', { name: 'Delete event' })).not.toBeInTheDocument()
+    openEvent(created.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('shows Delete disabled on built-in events, even for admins', async () => {
+    signInAs(['admin'])
+    openEvent(EVENTS[0].id)
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    const item = screen.getByRole('menuitem', { name: /Delete event/ })
+    expect(item).toBeDisabled()
+    expect(item).toHaveTextContent('Only events created in the app can be deleted')
   })
 
   it('confirms a new event with a toast on its page', async () => {

@@ -1,27 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, cleanup, within, waitFor } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
-import { EVENTS } from './data'
+import { EVENTS, ALL_EVENTS } from './data'
 
 function gotoEvent(eventId: string) {
   window.location.hash = `#/event/${encodeURIComponent(eventId)}`
-}
-
-/** The pushed event page. Scoped off its tablist so queries don't reach
- *  the landing page, which stays mounted behind it. */
-function eventPage() {
-  return screen.getByRole('tablist', { name: 'Event section' }).closest('.max-w-lg') as HTMLElement
-}
-
-/** The event page's header picker button, and an event's row inside the
- *  dropdown it opens. */
-function pickerButton() {
-  return within(eventPage()).getByRole('heading', { level: 1 }).closest('button')!
-}
-
-function pickerRow(name: string) {
-  return within(eventPage()).getByRole('button', { name: new RegExp(name) })
 }
 
 function tab(name: string) {
@@ -42,9 +26,10 @@ describe('event page tab selection (#219)', () => {
     await userEvent.click(tab('My notes'))
     expect(tab('My notes')).toHaveAttribute('aria-selected', 'true')
 
-    // Open the event picker and pick a different event.
-    await userEvent.click(pickerButton())
-    await userEvent.click(pickerRow(second.name))
+    // Back to the event list, then open a different event.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/'))
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(second.name) }))
 
     await waitFor(() => {
       expect(tab('Schedule')).toHaveAttribute('aria-selected', 'true')
@@ -65,5 +50,49 @@ describe('event page tab selection (#219)', () => {
     render(<App />)
 
     expect(tab('My notes')).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('event page header (#216)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    window.location.hash = ''
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('goes back to the event list from the back chevron', async () => {
+    gotoEvent(EVENTS[0].id)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe('#/')
+  })
+
+  it('marks a past event with a PAST badge instead of a banner', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2100-01-01T12:00:00'))
+    gotoEvent(EVENTS[0].id)
+    render(<App />)
+    const heading = screen.getByRole('heading', { level: 1, name: EVENTS[0].name })
+    const titleBlock = heading.parentElement!
+    expect(titleBlock).toHaveTextContent(/Past$/)
+    expect(screen.queryByText('This event has passed.')).not.toBeInTheDocument()
+  })
+
+  it('shows a LIVE badge on the date line of a live event', () => {
+    // test-live's single day is always today.
+    gotoEvent('test-live')
+    render(<App />)
+    const heading = screen.getByRole('heading', { level: 1, name: ALL_EVENTS.find(e => e.id === 'test-live')!.name })
+    expect(heading).not.toHaveTextContent(/Live/)
+    expect(heading.nextElementSibling).toHaveTextContent(/Live$/)
+  })
+
+  it('labels the info tab "Details"', () => {
+    gotoEvent(EVENTS[0].id)
+    render(<App />)
+    expect(screen.getByRole('tab', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
   })
 })

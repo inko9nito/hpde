@@ -15,6 +15,9 @@ export default {
       },
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        // Display face from the Figma designs (#216) — event header title,
+        // tabs and status badges. Self-hosted via @fontsource (main.tsx).
+        rubik: ['"Rubik Variable"', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
       },
     },
   },

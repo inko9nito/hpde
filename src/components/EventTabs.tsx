@@ -4,7 +4,9 @@ interface Tab { id: EventTabId; label: string }
 
 const TABS: readonly Tab[] = [
   { id: 'schedule', label: 'Schedule' },
-  { id: 'info', label: 'Info' },
+  // Id stays 'info' so a tab saved in localStorage before the rename
+  // (#216) still resolves.
+  { id: 'info', label: 'Details' },
   { id: 'notes', label: 'My notes' },
 ]
 
@@ -23,17 +25,14 @@ interface Props {
 }
 
 /**
- * Segmented top-level tabs for the event page (Schedule / Info / My notes).
- * Visual language matches the multi-day day tabs: pill inside a white
- * rounded card, active segment is a dark-gray filled pill.
+ * Top-level tabs for the event page (Schedule / Details / My notes),
+ * sitting along the bottom edge of the event header (#216): three equal
+ * columns, the active one marked by a heavier label and a dark bar
+ * underneath.
  */
 export function EventTabs({ active, onChange }: Props) {
   return (
-    <div
-      role="tablist"
-      aria-label="Event section"
-      className="flex gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm"
-    >
+    <div role="tablist" aria-label="Event section" className="flex pl-2 pr-0.5 pt-4">
       {TABS.map(tab => {
         const isActive = tab.id === active
         return (
@@ -44,13 +43,15 @@ export function EventTabs({ active, onChange }: Props) {
             aria-controls={`event-tabpanel-${tab.id}`}
             id={`event-tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
-            className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-gray-900 text-white'
-                : 'text-gray-500 hover:text-gray-800'
+            className={`flex h-7 min-w-0 flex-1 flex-col items-center justify-between font-rubik text-sm text-gray-900 ${
+              isActive ? 'font-medium' : 'font-normal hover:text-gray-600'
             }`}
           >
-            {tab.label}
+            <span className="truncate px-4 leading-none">{tab.label}</span>
+            <span
+              aria-hidden="true"
+              className={`h-1 w-full rounded-t-sm ${isActive ? 'bg-gray-900' : ''}`}
+            />
           </button>
         )
       })}

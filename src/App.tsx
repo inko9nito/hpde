@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Home, CalendarClock } from 'lucide-react'
+import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
-import { EventPicker } from './components/EventPicker'
-import { EventTabs, isEventTabId } from './components/EventTabs'
+import { isEventTabId } from './components/EventTabs'
 import type { EventTabId } from './components/EventTabs'
 import { EventInfo } from './components/EventInfo'
 import { Toggle } from './components/Toggle'
@@ -14,15 +13,14 @@ import { SharePage } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
-import { AccountButton } from './components/AccountButton'
+import { EventHeader, BackButton } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage } from './components/NewEventPage'
-import { DeleteEventButton } from './components/DeleteEventButton'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
-import { partitionEvents } from './utils/eventClass'
+import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
@@ -81,41 +79,42 @@ function eventIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
 }
 
-function HomeButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label="Home"
-      className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
-    >
-      <Home size={18} />
-    </button>
-  )
-}
-
 // Same header and tab-bar footprint as the loaded page, so the event
 // fills in without the layout jumping — and the page never reads as
 // blank while a created event is still being fetched (#231).
-function EventSkeleton({ onHome }: { onHome: () => void }) {
+function EventSkeleton({ onBack }: { onBack: () => void }) {
   return (
     <div aria-busy="true" aria-label="Loading event">
-      <div className="mb-4 flex items-start gap-3">
-        <HomeButton onClick={onHome} />
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-2 pt-1">
-          <div className="h-5 w-2/5 animate-pulse rounded bg-gray-200" />
-          <div className="h-3 w-1/4 animate-pulse rounded bg-gray-100" />
+      <div className="bg-white">
+        <div className="mx-auto flex h-[52px] max-w-lg items-center px-4">
+          <BackButton onClick={onBack} />
         </div>
-        <AccountButton />
+        <div className="mx-auto flex max-w-lg items-center gap-3 px-6 py-2.5">
+          <div className="h-[58px] w-[58px] shrink-0 animate-pulse rounded-xl bg-gray-200" />
+          <div className="flex flex-1 flex-col gap-2">
+            <div className="h-5 w-3/5 animate-pulse rounded bg-gray-200" />
+            <div className="h-3 w-2/5 animate-pulse rounded bg-gray-100" />
+          </div>
+        </div>
+        <div className="h-[45px] border-b border-gray-500/20" />
       </div>
-      <div className="mb-3 h-[46px] animate-pulse rounded-xl border border-gray-200 bg-white" />
-      <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
+        <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+      </div>
     </div>
   )
 }
 
 function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => void }) {
-  if (loading) return <EventSkeleton onHome={onHome} />
+  if (loading) return <EventSkeleton onBack={onHome} />
   return (
+    <>
+    <div className="bg-white">
+      <div className="mx-auto flex h-[52px] max-w-lg items-center px-4">
+        <BackButton onClick={onHome} />
+      </div>
+    </div>
+    <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
     <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
       <p className="text-sm font-medium text-gray-700">This event doesn’t exist</p>
       <p className="mt-1 text-xs text-gray-400">It may have been deleted.</p>
@@ -126,6 +125,8 @@ function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => voi
         See all events
       </button>
     </div>
+    </div>
+    </>
   )
 }
 
@@ -191,8 +192,7 @@ export default function App() {
   useTrackFavicon(routeEvent?.trackId)
   useDocumentTitle(routeEvent?.name)
 
-  const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
-  const isPastEvent = lastEventDate < todayLocalISO()
+  const eventStatus = classifyEvent(activeEvent)
 
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -273,37 +273,23 @@ export default function App() {
     >
     <PullToRefresh disabled={!isOnEventRoute} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-
         {routeMissing ? (
           <MissingEvent loading={!eventsLoaded} onHome={goHome} />
         ) : (<>
-        {/* Header: Home | centered EventPicker | symmetric spacer */}
-        <div className="mb-4 flex items-start gap-3">
-          <HomeButton onClick={goHome} />
-          <div className="min-w-0 flex-1">
-            <EventPicker
-              events={EVENTS}
-              active={activeEvent}
-              onChange={switchEvent}
-            />
-          </div>
-          {/* Same 36px box as Home, so the picker stays visually
-              centered whether or not sign-in is shown. */}
-          <AccountButton />
-        </div>
+        <EventHeader
+          event={activeEvent}
+          status={eventStatus}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onBack={goHome}
+          onDeleted={() => {
+            showToast(`“${activeEvent.name}” deleted`)
+            goHome()
+          }}
+          scrollRef={pushScrollRef}
+        />
 
-        {isPastEvent && (
-          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-center text-sm text-gray-600">
-            This event has passed.
-          </div>
-        )}
-
-        {/* Top-level tab bar: Schedule | Info | My notes */}
-        <div className="mb-3">
-          <EventTabs active={activeTab} onChange={setActiveTab} />
-        </div>
-
+      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         {/* Tab panel. Keyed on activeTab so a fresh element mounts on
             change — CSS keyframe (see index.css) plays a ~10 ms fade,
             matching iOS's near-instant tab switch. */}
@@ -395,22 +381,10 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'info' && (
-            <>
-              <EventInfo event={activeEvent} />
-              <DeleteEventButton
-                event={activeEvent}
-                onDeleted={() => {
-                  showToast(`“${activeEvent.name}” deleted`)
-                  goHome()
-                }}
-              />
-            </>
-          )}
+          {activeTab === 'info' && <EventInfo event={activeEvent} />}
         </div>
-        </>)}
-
       </div>
+        </>)}
       <Footer />
     </div>
     </PullToRefresh>
