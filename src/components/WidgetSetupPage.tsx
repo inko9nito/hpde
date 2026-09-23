@@ -5,6 +5,7 @@ import widgetSmall from '../assets/widget-small.png'
 import widgetMedium from '../assets/widget-medium.png'
 import widgetLarge from '../assets/widget-large.png'
 import notificationsImg from '../assets/notifications.png'
+import editWidgetImg from '../assets/edit-widget.jpg'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/scriptable/id1405459188'
 
@@ -265,24 +266,29 @@ export function WidgetSetupPage() {
             <span className="text-xs text-gray-400">Optional</span>
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
-            The widget's parameter sets your run group and alert timing, for both the widget and
-            your alerts. Long-press the widget → <strong>Edit Widget</strong> →{' '}
-            <strong>Parameter</strong>.
+            Only want your run group, or alerts earlier or later? Tap and hold the widget, choose{' '}
+            <strong>Edit Widget</strong>, and type into the <strong>Parameter</strong> box.
           </p>
-          <ul className="mt-3 divide-y divide-gray-100">
+          <img
+            src={editWidgetImg}
+            alt="Scriptable's Edit Widget screen with Script, When Interacting and Parameter fields"
+            width={295}
+            className="mx-auto mt-3 h-auto max-w-full rounded-2xl"
+          />
+          <ul className="mt-4 divide-y divide-gray-100">
             <ParamOption
-              title="Run group"
-              description="Show only your group on the widget and in alerts. Leave blank for all groups."
+              title="Show just your run group"
+              description="Type your group's color. The widget and your alerts will show only that group. Leave the box empty to see everyone."
               examples={['blue', 'blue,orange']}
             />
             <ParamOption
-              title="Alert timing"
-              description="How many minutes before each activity the alert arrives. Default is 10."
+              title="Change when alerts arrive"
+              description="Type the minutes before each activity, followed by m. Without it, alerts come 10 minutes ahead."
               examples={['5m', '15m']}
             />
             <ParamOption
-              title="Run group and timing"
-              description="Separate everything with commas."
+              title="Do both"
+              description="Put commas between them."
               examples={['blue,15m', 'blue,orange,15m']}
             />
           </ul>
