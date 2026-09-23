@@ -583,7 +583,16 @@ function installMocks(g, manifest, widgetFamily) {
       writeString: () => {},
     }),
   }
-  g.Request = class { timeoutInterval = 0; async loadJSON() { throw new Error('offline → cache') } }
+  // Offline by default so the preview exercises the cached-manifest path;
+  // `scenario.online` (used by widget-showcase.mjs) serves the manifest as
+  // a successful fetch instead, so no "offline" / "Cached schedule" tags.
+  g.Request = class {
+    timeoutInterval = 0
+    async loadJSON() {
+      if (g.__online) return manifest
+      throw new Error('offline → cache')
+    }
+  }
   g.SFSymbol = { named: name => ({ image: { name } }) }
   g.WidgetStack = StackMock
   g.ListWidget = ListWidgetMock
@@ -599,10 +608,11 @@ function installMocks(g, manifest, widgetFamily) {
   g.Notification = NotificationStub
 }
 
-async function renderScenario(scenario, dark) {
+export async function renderScenario(scenario, dark) {
   const g = globalThis
   installMocks(g, scenario.manifest, scenario.family)
   g.__dark = dark
+  g.__online = !!scenario.online
   g.__widget = null
   const wrapped = `(async () => { ${widgetSrc} })()`
   // eslint-disable-next-line no-eval
@@ -624,6 +634,16 @@ async function renderScenario(scenario, dark) {
   return renderNode(root)
 }
 
+export function fontFaceCss() {
+  const fontPath = join(__dirname, '..', 'node_modules', '@fontsource-variable', 'nunito', 'files', 'nunito-latin-wght-normal.woff2')
+  const fontBase64 = readFileSync(fontPath).toString('base64')
+  return `@font-face {
+    font-family: '${WIDGET_ENV_CONSTANTS.fontFamilyName}';
+    src: url('data:font/woff2;base64,${fontBase64}') format('woff2-variations');
+    font-weight: 200 900;
+  }`
+}
+
 async function main() {
   const sections = []
   for (const scenario of SCENARIOS) {
@@ -637,13 +657,7 @@ async function main() {
   // rationale on Nunito as the SF Pro Rounded stand-in. Loaded from
   // node_modules and inlined as a base64 data: URI (Chromium won't
   // load a file:// font from a file:// page).
-  const fontPath = join(__dirname, '..', 'node_modules', '@fontsource-variable', 'nunito', 'files', 'nunito-latin-wght-normal.woff2')
-  const fontBase64 = readFileSync(fontPath).toString('base64')
-  const fontFace = `@font-face {
-    font-family: '${WIDGET_ENV_CONSTANTS.fontFamilyName}';
-    src: url('data:font/woff2;base64,${fontBase64}') format('woff2-variations');
-    font-weight: 200 900;
-  }`
+  const fontFace = fontFaceCss()
 
   const page = `<!doctype html>
 <html><head><meta charset="utf-8">
