@@ -206,7 +206,7 @@ export function LandingPage({ onOpenEvent }: Props) {
         </div>
 
         {view === 'list' ? (
-          <div className="space-y-8">
+          <div className="space-y-16">
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
