@@ -14,6 +14,9 @@ import { SharePage } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
+import { AccountButton } from './components/AccountButton'
+import { SignInPrompt } from './components/SignInPrompt'
+import { useAuth } from './auth/AuthContext'
 import { EVENTS, ALL_EVENTS } from './data'
 import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
@@ -78,6 +81,7 @@ function isEmptyHash(hash: string): boolean {
 
 export default function App() {
   const [hash, setHash] = useHashRoute()
+  const { status: authStatus } = useAuth()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -199,9 +203,9 @@ export default function App() {
               onChange={switchEvent}
             />
           </div>
-          {/* Symmetric spacer so the picker stays visually centered
-              between the home button and the right edge. */}
-          <div className="h-9 w-9 shrink-0" aria-hidden="true" />
+          {/* Same 36px box as Home, so the picker stays visually
+              centered whether or not sign-in is shown. */}
+          <AccountButton />
         </div>
 
         {isPastEvent && (
@@ -287,7 +291,11 @@ export default function App() {
             </>
           )}
 
-          {activeTab === 'notes' && (
+          {activeTab === 'notes' && authStatus !== 'signed-in' && (
+            <SignInPrompt reason="keep private notes for each event" />
+          )}
+
+          {activeTab === 'notes' && authStatus === 'signed-in' && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-16 text-center">
               <p className="text-sm font-medium text-gray-500">My notes</p>
               <p className="mt-1 text-xs text-gray-400">Coming soon</p>

@@ -6,6 +6,7 @@ import { eventSubtitle } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { TrackIcon } from './TrackIcon'
+import { AccountButton } from './AccountButton'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -82,6 +83,7 @@ export function LandingPage({ onOpenEvent }: Props) {
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <h1 className="text-xl font-bold text-gray-900 leading-tight">HPDE Schedule</h1>
+          <div className="flex shrink-0 items-center gap-2">
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('list')}
@@ -103,6 +105,8 @@ export function LandingPage({ onOpenEvent }: Props) {
             >
               <CalendarIcon size={18} />
             </button>
+          </div>
+          <AccountButton reserveSpace={false} />
           </div>
         </div>
 

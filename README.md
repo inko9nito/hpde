@@ -21,6 +21,38 @@ runs.
 
 ---
 
+## Sign-in (Netlify Identity + Google)
+
+The schedule is public — no account needed. Signing in is only for
+personal, private things (my notes, my garage). It's the same setup as the
+BEI app: **Netlify Identity** with **Google** as the login provider.
+
+Sign-in only works on the **Netlify** deploy. GitHub Pages (and the
+GitHub-hosted PR previews) keep working, with sign-in hidden — the iOS
+widget still reads `api/events.json` from GitHub Pages.
+
+**One-time Netlify setup**
+1. Netlify → *Add new site* → *Import from Git* → `inko9nito/hpde`. Build
+   settings come from `netlify.toml` (no need to fill them in).
+2. *Site configuration → Identity* → **Enable Identity**.
+3. *Identity → Registration* → **Open** (anyone can sign up — unlike BEI,
+   which is invite-only).
+4. *Identity → External providers* → add **Google** (default Netlify
+   credentials are fine to start).
+
+**How it fits together**
+- `src/auth/` loads the Identity widget only when `/.netlify/identity`
+  exists, and exposes `useAuth()` — `status`, `user`, `signIn()`,
+  `authedFetch()` (adds the user's token for function calls).
+- `netlify/functions/*` read the signed-in user via
+  `requireUser(context)` (`netlify/lib/auth.mjs`) and return 401 without
+  one. `/api/me` is the first example.
+- Roles (*Identity → Users → a user → Roles*) come through as
+  `user.roles`. Nothing checks them yet; they're how creating events will
+  be limited to organizers later.
+
+---
+
 ## iPhone Home Screen widget
 
 <img src="docs/screenshots/widget-medium.jpg" width="140" alt="Scriptable Home Screen widget" />
