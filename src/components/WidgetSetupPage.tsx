@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Check, Copy, X, Bell, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown } from 'lucide-react'
+import { Check, Copy, X, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 import widgetSmall from '../assets/widget-small.png'
 import widgetMedium from '../assets/widget-medium.png'
 import widgetLarge from '../assets/widget-large.png'
+import notificationsImg from '../assets/notifications.png'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/scriptable/id1405459188'
 
 // Rendered from the real widget script by `npm run widget:showcase`, at
-// WidgetKit point sizes (see scripts/widget-preview.mjs).
+// WidgetKit point sizes (see scripts/widget-preview.mjs). The same script
+// renders notifications.png from the alerts the widget actually schedules.
 const PREVIEWS = [
   { id: 'small', label: 'Small', src: widgetSmall, width: 170 },
   { id: 'medium', label: 'Medium', src: widgetMedium, width: 364 },
@@ -31,6 +33,24 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-400">
       {children}
     </h2>
+  )
+}
+
+function Feature({ icon, title, description, children }: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="mb-8">
+      <div className="mb-1 flex items-center gap-2 text-gray-900">
+        <span className="text-gray-400">{icon}</span>
+        <h2 className="text-base font-semibold">{title}</h2>
+      </div>
+      <p className="mb-3 text-sm text-gray-600">{description}</p>
+      <div className="rounded-3xl bg-gray-900 p-4">{children}</div>
+    </section>
   )
 }
 
@@ -123,13 +143,16 @@ export function WidgetSetupPage() {
           </a>
         </div>
 
-        <p className="mb-5 text-[15px] leading-relaxed text-gray-600">
-          See what's next on track without opening the app. Set up the free Scriptable widget in a
-          few minutes.
+        <p className="mb-6 text-[15px] leading-relaxed text-gray-600">
+          See what's next on track without opening the app, and get an alert before your sessions.
+          Both come from one free Scriptable setup that takes a few minutes.
         </p>
 
-        {/* Widget preview */}
-        <div className="mb-8 rounded-3xl bg-gray-900 p-4">
+        <Feature
+          icon={<LayoutGrid size={18} />}
+          title="Home Screen widget"
+          description="Today's schedule with a live “now” line, or a countdown to the next event."
+        >
           <div className="mb-4 flex gap-1 rounded-lg bg-white/10 p-1" role="tablist" aria-label="Widget size">
             {PREVIEWS.map(p => (
               <button
@@ -157,7 +180,25 @@ export function WidgetSetupPage() {
           <p className="mt-3 text-center text-[11px] text-gray-400">
             Example preview · your event appears after setup
           </p>
-        </div>
+        </Feature>
+
+        <Feature
+          icon={<Bell size={18} />}
+          title="Session alerts"
+          description="A notification before each of your sessions and every all-drivers activity, like meetings and lunch."
+        >
+          <div className="flex justify-center">
+            <img
+              src={notificationsImg}
+              alt="Example alerts: Orange classroom and on-track sessions, and track goes hot"
+              width={364}
+              className="h-auto max-w-full"
+            />
+          </div>
+          <p className="mt-3 text-center text-[11px] text-gray-400">
+            Example alerts for the Orange group · they appear under Scriptable's icon
+          </p>
+        </Feature>
 
         {/* Setup */}
         <section className="mb-6">
@@ -210,7 +251,8 @@ export function WidgetSetupPage() {
                 Long-press your Home Screen → <strong>Add Widget</strong> →{' '}
                 <strong>Scriptable</strong>. Choose <strong>Small</strong>, <strong>Medium</strong>{' '}
                 or <strong>Large</strong>, then tap the widget → <strong>Edit Widget</strong> → set{' '}
-                <strong>Script</strong> to <strong>HPDE</strong>.
+                <strong>Script</strong> to <strong>HPDE</strong>. When Scriptable asks, allow
+                notifications.
               </p>
             </Step>
           </ol>
@@ -223,18 +265,19 @@ export function WidgetSetupPage() {
             <span className="text-xs text-gray-400">Optional</span>
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
-            Long-press the widget → <strong>Edit Widget</strong> → <strong>Parameter</strong>. You
-            can change two things:
+            The widget's parameter sets your run group and alert timing, for both the widget and
+            your alerts. Long-press the widget → <strong>Edit Widget</strong> →{' '}
+            <strong>Parameter</strong>.
           </p>
           <ul className="mt-3 divide-y divide-gray-100">
             <ParamOption
               title="Run group"
-              description="Show only your group's sessions and alerts. Leave blank for all groups."
+              description="Show only your group on the widget and in alerts. Leave blank for all groups."
               examples={['blue', 'blue,orange']}
             />
             <ParamOption
               title="Alert timing"
-              description="How many minutes before each activity you're alerted. Default is 10."
+              description="How many minutes before each activity the alert arrives. Default is 10."
               examples={['5m', '15m']}
             />
             <ParamOption
@@ -247,10 +290,9 @@ export function WidgetSetupPage() {
 
         {/* More info */}
         <div className="rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
-          <Accordion icon={<Bell size={16} />} title="About notifications">
-            You'll get an alert before each of your sessions and every all-drivers activity
-            (meetings, lunch). Allow notifications when Scriptable asks. Alerts appear under
-            Scriptable's icon.
+          <Accordion icon={<BellOff size={16} />} title="Not getting alerts?">
+            Check Settings → Notifications → Scriptable and make sure notifications and sounds are
+            on.
           </Accordion>
           <Accordion icon={<RefreshCw size={16} />} title="Refresh and offline use">
             Updates every few minutes, not live — iOS decides exactly when. Works offline, showing
