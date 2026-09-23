@@ -51,7 +51,22 @@ const inputClass = `${fieldBase} h-11`
 // + line height make the content box exactly one line (44 = 9 + 24 + 9 +
 // 2 border), so the date sits centered; h-11 still caps it where Chromium
 // adds a couple of internal pixels.
-const dateInputClass = `${fieldBase} h-11 py-[9px] leading-6 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left`
+//
+// The desktop calendar icon is hidden so End date's clear (×) can sit at
+// the right edge; clicking the field opens the picker instead (see
+// openPicker). iOS has no icon and opens its picker on tap anyway.
+const dateInputClass = `${fieldBase} h-11 py-[9px] leading-6 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left [&::-webkit-calendar-picker-indicator]:hidden`
+
+// Desktop only (a fine pointer): with the calendar icon hidden, a click
+// is the way to open the picker. Touch browsers already open it on tap.
+function openPicker(e: React.MouseEvent<HTMLInputElement>) {
+  if (!window.matchMedia?.('(pointer: fine)').matches) return
+  try {
+    e.currentTarget.showPicker?.()
+  } catch {
+    // Not allowed here (e.g. cross-origin iframe) — typing still works.
+  }
+}
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -169,37 +184,41 @@ export function NewEventPage({ onCreated }: Props) {
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Start date">
-              <input required type="date" value={form.startDate} onChange={set('startDate')} className={dateInputClass} />
+              <input required type="date" value={form.startDate} onChange={set('startDate')} onClick={openPicker} className={dateInputClass} />
             </Field>
             <div className="min-w-0">
               <Field label="End date">
-                {/* Uncontrolled on purpose: React keeps a controlled input's
-                    value attribute in sync, and iOS's picker "Reset" restores
-                    that attribute — so it could never clear the field. With
-                    defaultValue="" Reset clears it; "Clear" below does too. */}
-                <input
-                  ref={endDateRef}
-                  type="date"
-                  defaultValue=""
-                  min={form.startDate || undefined}
-                  onChange={set('endDate')}
-                  aria-invalid={endBeforeStart}
-                  className={`${dateInputClass} ${endBeforeStart ? 'border-red-300' : ''}`}
-                />
+                <div className="relative">
+                  {/* Uncontrolled on purpose: React keeps a controlled input's
+                      value attribute in sync, and iOS's picker "Reset" restores
+                      that attribute — so it could never clear the field. With
+                      defaultValue="" Reset clears it; so does the × below. */}
+                  <input
+                    ref={endDateRef}
+                    type="date"
+                    defaultValue=""
+                    min={form.startDate || undefined}
+                    onChange={set('endDate')}
+                    onClick={openPicker}
+                    aria-invalid={endBeforeStart}
+                    className={`${dateInputClass} pr-9 ${endBeforeStart ? 'border-red-300' : ''}`}
+                  />
+                  {form.endDate && (
+                    <button
+                      type="button"
+                      onClick={clearEndDate}
+                      aria-label="Clear end date"
+                      className="absolute right-1 top-1/2 mt-0.5 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </Field>
               {endBeforeStart ? (
                 <span role="alert" className="mt-1 block text-xs text-red-600">Ends before it starts</span>
-              ) : form.endDate ? (
-                <button type="button" onClick={clearEndDate} className="mt-1 text-xs font-medium text-gray-500 hover:text-gray-900">
-                  Clear end date
-                </button>
               ) : (
                 <span className="mt-1 block text-xs text-gray-400">Leave blank for one day</span>
-              )}
-              {endBeforeStart && (
-                <button type="button" onClick={clearEndDate} className="text-xs font-medium text-gray-500 hover:text-gray-900">
-                  Clear end date
-                </button>
               )}
             </div>
           </div>

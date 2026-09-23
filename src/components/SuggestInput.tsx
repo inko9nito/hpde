@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Check, ChevronDown } from 'lucide-react'
 import { filterOptions, findExact, findSimilar } from '../utils/fieldOptions'
 
 interface Props {
@@ -11,29 +12,38 @@ interface Props {
 }
 
 /**
- * Text input that suggests values from past events (#229), so an organizer
+ * Typeahead that suggests values from past events (#229), so an organizer
  * or track is picked rather than retyped with a slightly different
  * spelling. On blur, a re-spelling of an existing value ("motorsport ranch
  * cresson") snaps to it; a near miss ("1.7" vs "1.7 mile") gets a
  * "Did you mean" nudge. Anything else is kept as a genuinely new value.
+ *
+ * Focusing the field lists every option (the current one checked), like a
+ * dropdown — filtering only starts once you type, so an already-chosen
+ * value doesn't hide the alternatives.
  */
 export function SuggestInput({ value, onChange, options, placeholder, className }: Props) {
   const listId = useId()
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
+  // True once the user types after focusing; until then show everything.
+  const [typing, setTyping] = useState(false)
 
-  const matches = filterOptions(value, options).filter(o => o !== value)
+  const matches = typing ? filterOptions(value, options) : options
+  const selected = findExact(value, options)
   const showList = open && matches.length > 0
   const similar = !open ? findSimilar(value, options) : null
 
   function choose(option: string) {
     onChange(option)
     setOpen(false)
+    setTyping(false)
     setHighlight(-1)
   }
 
   function handleBlur() {
     setOpen(false)
+    setTyping(false)
     setHighlight(-1)
     const exact = findExact(value, options)
     if (exact && exact !== value) onChange(exact)
@@ -68,13 +78,19 @@ export function SuggestInput({ value, onChange, options, placeholder, className 
         onChange={e => {
           onChange(e.target.value)
           setOpen(true)
+          setTyping(true)
           setHighlight(-1)
         }}
         onFocus={() => setOpen(true)}
+        // Tapping an already-focused field (after picking) reopens the list.
+        onClick={() => setOpen(true)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        className={className}
+        className={`${className} ${options.length > 0 ? 'pr-8' : ''}`}
       />
+      {options.length > 0 && (
+        <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-[26px] -translate-y-1/2 text-gray-400" />
+      )}
       {showList && (
         <ul
           id={listId}
@@ -91,11 +107,12 @@ export function SuggestInput({ value, onChange, options, placeholder, className 
                 e.preventDefault()
                 choose(option)
               }}
-              className={`cursor-pointer px-3 py-2 text-sm text-gray-900 ${
+              className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-gray-900 ${
                 i === highlight ? 'bg-gray-100' : 'hover:bg-gray-50'
               }`}
             >
-              {option}
+              <span className="min-w-0 truncate">{option}</span>
+              {option === selected && <Check size={14} aria-hidden="true" className="shrink-0 text-gray-500" />}
             </li>
           ))}
         </ul>
