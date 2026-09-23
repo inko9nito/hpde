@@ -5,8 +5,8 @@ import {
   loadIdentityWidget,
   startGoogleSignIn,
   isSignInReturn,
-  hasSavedSession,
-  reloadAfterSignIn,
+  restoreReturnTo,
+  showIdentityWidget,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
 
@@ -75,22 +75,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The widget initializes itself as soon as its script runs, so by now
       // its 'init' event (and, with a saved session, 'login') has already
       // fired. Don't call w.init() again: the v1 widget the site loads has
-      // no guard against that and re-initializes — mid token exchange on the
-      // way back from Google, which fired 'login' before the session was
-      // saved and reloaded into a signed-out page (#231). Kept for the
-      // unlikely case the script ran before the page finished parsing.
+      // no guard against that and re-initializes, which on the way back
+      // from Google crashed it mid-login and left the app stuck until a
+      // manual refresh (#231). 'init' is kept for the unlikely case the
+      // script ran before the page finished parsing.
       w.on('init', apply)
       // On the way back from Google, the widget reports 'login' once it has
       // traded the token for a user and saved the session.
       let finishingSignIn = isSignInReturn()
       w.on('login', u => {
         w.close()
-        if (finishingSignIn && hasSavedSession()) {
-          finishingSignIn = false
-          reloadAfterSignIn()
-          return
-        }
         apply(u)
+        if (finishingSignIn) {
+          finishingSignIn = false
+          restoreReturnTo()
+          showIdentityWidget()
+        }
+      })
+      // If the token exchange fails, the widget's modal has the error.
+      w.on('error', err => {
+        // Also fires with null when an error is cleared.
+        if (!err) return
+        showIdentityWidget()
+        if (finishingSignIn) {
+          finishingSignIn = false
+          apply(null)
+        }
       })
       w.on('logout', () => {
         w.close()
@@ -99,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setWidget(w)
       // Read the session the widget has already restored. Not on the way
       // back from Google: currentUser() is set as soon as the token exchange
-      // starts, before the session is saved — wait for 'login' instead.
+      // starts, before the user's details load — wait for 'login' instead.
       if (!finishingSignIn) apply(w.currentUser())
     })()
     return () => {

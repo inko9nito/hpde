@@ -44,37 +44,29 @@ export function isSignInReturn(): boolean {
   return signInReturn
 }
 
-// Where gotrue (inside the widget) keeps the signed-in session.
-const SESSION_KEY = 'gotrue.user'
+// While the widget trades the token for a user it opens its full-screen
+// modal for a moment — a white flash between the page and the signed-in
+// view (#231). This class hides it (see index.css) until the login lands;
+// visibility, because the widget sets display inline with !important.
+const HIDE_WIDGET_CLASS = 'finishing-sign-in'
+if (signInReturn) document.documentElement.classList.add(HIDE_WIDGET_CLASS)
 
-// Only reload once the session is really on disk — a reload before that
-// comes back signed out.
-export function hasSavedSession(): boolean {
-  try {
-    return localStorage.getItem(SESSION_KEY) !== null
-  } catch {
-    return false
-  }
+export function showIdentityWidget() {
+  document.documentElement.classList.remove(HIDE_WIDGET_CLASS)
 }
 
-// Finishes the Google round trip with a fresh page load at the spot the
-// user signed in from (RETURN_TO_KEY). Switching to the signed-in view in
-// place, on top of the redirect's #access_token page, left iOS Safari on a
-// blank page until a manual refresh (#231) — so do that refresh for them.
-// The session is already saved when the widget reports the login, so the
-// reload comes up signed in, exactly like that manual refresh did.
-export function reloadAfterSignIn() {
-  let hash = ''
+// Puts the user back where they tapped "Sign in" (RETURN_TO_KEY) once the
+// Google round trip completes. location.replace keeps the redirect's
+// #access_token entry out of history, and — being a same-document hash
+// navigation — fires hashchange for the app's router.
+export function restoreReturnTo() {
   try {
-    hash = sessionStorage.getItem(RETURN_TO_KEY) ?? ''
+    const hash = sessionStorage.getItem(RETURN_TO_KEY)
     sessionStorage.removeItem(RETURN_TO_KEY)
+    if (hash && hash !== window.location.hash) window.location.replace(hash)
   } catch {
-    // Storage blocked — reload onto the home page instead.
+    // Storage blocked — stay wherever the redirect landed.
   }
-  // replaceState, not location.hash: a hash-only change doesn't reload, and
-  // this also drops the #access_token entry from history.
-  window.history.replaceState(null, '', window.location.pathname + window.location.search + hash)
-  window.location.reload()
 }
 
 // Identity only exists on the Netlify deploy. GitHub Pages (and the

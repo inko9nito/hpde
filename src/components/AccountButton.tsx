@@ -4,10 +4,10 @@ import { useAuth } from '../auth/AuthContext'
 /**
  * Header account control. Signed out → "Sign in" (Google). Signed in → the
  * user's avatar/initial, which opens the Identity account panel (shows who's
- * signed in, with Log out). While loading, or where sign-in isn't available,
- * it renders an equally sized empty box so headers that rely on it for
- * symmetry (the event page's centered picker) don't shift — or nothing, when
- * `reserveSpace` is false.
+ * signed in, with Log out). While loading, a dimmed person icon holds the
+ * spot. Where sign-in isn't available it renders an equally sized empty box
+ * so headers that rely on it for symmetry (the event page's centered
+ * picker) don't shift — or nothing, when `reserveSpace` is false.
  */
 export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean }) {
   const { status, user, signIn, openAccount } = useAuth()
@@ -47,6 +47,18 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
       >
         <UserRound size={18} />
       </button>
+    )
+  }
+
+  // Still finding out (the widget loads after the page, and on the way back
+  // from Google the login takes a moment): show the same person icon the
+  // signed-out button uses, so the avatar replaces it in place instead of
+  // popping in and shoving the header over (#231).
+  if (status === 'loading') {
+    return (
+      <div aria-hidden="true" className={`${base} text-gray-300`}>
+        <UserRound size={18} />
+      </div>
     )
   }
 
