@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
-import { EventsProvider, withTrackMap } from './EventsContext'
+import { EventsProvider, withTrackMap, CREATED_EVENTS_CACHE_KEY } from './EventsContext'
 import { ALL_EVENTS } from './index'
 import type { EventConfig } from '../types'
 
@@ -50,6 +50,8 @@ describe('events created in the app (#229)', () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     expect(screen.getByLabelText('Loading event')).toBeInTheDocument()
+    // Not a blank page (#231): the header is there to get back out.
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument()
     expect(screen.queryByRole('tablist', { name: 'Event section' })).not.toBeInTheDocument()
 
     resolve(new Response(JSON.stringify({ events: [created] }), { headers: { 'Content-Type': 'application/json' } }))
@@ -87,5 +89,56 @@ describe('landing page while created events load', () => {
     resolve(new Response(JSON.stringify({ events: [] }), { headers: { 'Content-Type': 'application/json' } }))
     expect(await screen.findByText('No upcoming events.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Loading events')).not.toBeInTheDocument()
+  })
+})
+
+describe('created events cache (#231)', () => {
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('shows a cached created event right away on reload, before the fetch lands', () => {
+    localStorage.setItem(CREATED_EVENTS_CACHE_KEY, JSON.stringify([created]))
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    window.location.hash = `#/event/${created.id}`
+    render(<EventsProvider><App /></EventsProvider>)
+
+    expect(screen.getByText('Schedule coming soon')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Loading event')).not.toBeInTheDocument()
+  })
+
+  it('caches what the fetch returns, without the build-specific map URL', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ events: [{ ...created, trackId: 'ecr-2-7' }] })))
+    window.location.hash = '#/'
+    render(<EventsProvider><App /></EventsProvider>)
+
+    await screen.findByRole('button', { name: /New Track Day/ })
+    const cached = JSON.parse(localStorage.getItem(CREATED_EVENTS_CACHE_KEY)!)
+    expect(cached).toEqual([{ ...created, trackId: 'ecr-2-7' }])
+  })
+
+  it('drops a cached event the fetch no longer returns', async () => {
+    localStorage.setItem(CREATED_EVENTS_CACHE_KEY, JSON.stringify([created]))
+    vi.stubGlobal('fetch', vi.fn(async () => json({ events: [] })))
+    window.location.hash = `#/event/${created.id}`
+    render(<EventsProvider><App /></EventsProvider>)
+
+    expect(await screen.findByText('This event doesn’t exist')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem(CREATED_EVENTS_CACHE_KEY)!)).toEqual([])
+  })
+
+  it('keeps the cached events when the fetch fails', async () => {
+    localStorage.setItem(CREATED_EVENTS_CACHE_KEY, JSON.stringify([created]))
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    window.location.hash = `#/event/${created.id}`
+    render(<EventsProvider><App /></EventsProvider>)
+
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.getByText('Schedule coming soon')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem(CREATED_EVENTS_CACHE_KEY)!)).toEqual([created])
   })
 })

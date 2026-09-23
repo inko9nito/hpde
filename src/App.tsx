@@ -80,8 +80,40 @@ function eventIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
 }
 
+function HomeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Home"
+      className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+    >
+      <Home size={18} />
+    </button>
+  )
+}
+
+// Same header and tab-bar footprint as the loaded page, so the event
+// fills in without the layout jumping — and the page never reads as
+// blank while a created event is still being fetched (#231).
+function EventSkeleton({ onHome }: { onHome: () => void }) {
+  return (
+    <div aria-busy="true" aria-label="Loading event">
+      <div className="mb-4 flex items-start gap-3">
+        <HomeButton onClick={onHome} />
+        <div className="flex min-w-0 flex-1 flex-col items-center gap-2 pt-1">
+          <div className="h-5 w-2/5 animate-pulse rounded bg-gray-200" />
+          <div className="h-3 w-1/4 animate-pulse rounded bg-gray-100" />
+        </div>
+        <AccountButton />
+      </div>
+      <div className="mb-3 h-[46px] animate-pulse rounded-xl border border-gray-200 bg-white" />
+      <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" />
+    </div>
+  )
+}
+
 function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => void }) {
-  if (loading) return <div className="h-40" aria-busy="true" aria-label="Loading event" />
+  if (loading) return <EventSkeleton onHome={onHome} />
   return (
     <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
       <p className="text-sm font-medium text-gray-700">This event doesn’t exist</p>
@@ -241,13 +273,7 @@ export default function App() {
         ) : (<>
         {/* Header: Home | centered EventPicker | symmetric spacer */}
         <div className="mb-4 flex items-start gap-3">
-          <button
-            onClick={goHome}
-            aria-label="Home"
-            className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
-          >
-            <Home size={18} />
-          </button>
+          <HomeButton onClick={goHome} />
           <div className="min-w-0 flex-1">
             <EventPicker
               events={EVENTS}
