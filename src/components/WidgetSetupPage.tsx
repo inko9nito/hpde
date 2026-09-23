@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { Check, Copy, X, Bell, RefreshCw, WifiOff } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 
-const README_URL = 'https://github.com/inko9nito/hpde/blob/main/scripts/README.md'
-
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-gray-400">
@@ -17,17 +15,6 @@ function Card({ children }: { children: React.ReactNode }) {
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       {children}
     </div>
-  )
-}
-
-function ParamRow({ token, effect }: { token: string; effect: React.ReactNode }) {
-  return (
-    <li className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
-      <code className="w-fit rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-800">
-        {token}
-      </code>
-      <span className="text-sm text-gray-600">{effect}</span>
-    </li>
   )
 }
 
@@ -165,9 +152,7 @@ export function WidgetSetupPage() {
             </div>
             <Card>
               <p className="mb-2 text-xs text-gray-500">
-                This is what you paste into Scriptable in step 2. It's a small loader — it fetches
-                the real widget on every run, so future updates show up on their own with nothing
-                to re-paste. Shown here to read, or in case the copy button above misbehaves.
+                Shown here to read, or in case the copy button above misbehaves.
               </p>
               <pre className="max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-[11px] leading-relaxed text-gray-700">
                 <code>{loaderScript}</code>
@@ -180,43 +165,25 @@ export function WidgetSetupPage() {
             <Card>
               <p className="mb-2 text-sm text-gray-600">
                 Long-press the widget → <strong>Edit Widget</strong> →{' '}
-                <strong>Parameter</strong>. A small comma-separated string controls filtering and
-                alert lead time.
+                <strong>Parameter</strong>. A run group id filters the schedule and alerts to
+                just that group; add <code className="text-xs">|Nm</code> to change the alert
+                lead time from the default 10 minutes.
               </p>
               <ul className="divide-y divide-gray-100">
-                <ParamRow
-                  token="<run group id>"
-                  effect={
-                    <>
-                      Filter to this run group only — matches what's shown in the app's run-group
-                      filter for your event (e.g. <code className="text-xs">orange</code>).
-                    </>
-                  }
+                <ParamExample
+                  scenario="Filter to blue run group, with the default alert lead time"
+                  param="blue"
                 />
-                <ParamRow
-                  token="<N>m"
-                  effect="Alert lead time in minutes. Default 10m."
+                <ParamExample
+                  scenario="Filter to blue and orange groups, with an alert 15 minutes before each activity"
+                  param="blue,orange|15m"
+                />
+                <ParamExample
+                  scenario="No filter, alerts 5 minutes before each activity"
+                  param="5m"
                 />
               </ul>
             </Card>
-            <div className="mt-2">
-              <Card>
-                <ul className="divide-y divide-gray-100">
-                  <ParamExample
-                    scenario="Filter to blue run group, with the default alert lead time"
-                    param="blue"
-                  />
-                  <ParamExample
-                    scenario="Filter to blue and orange groups, with an alert 15 minutes before each activity"
-                    param="blue,orange|15m"
-                  />
-                  <ParamExample
-                    scenario="No filter, alerts 5 minutes before each activity"
-                    param="5m"
-                  />
-                </ul>
-              </Card>
-            </div>
           </section>
 
           <section>
@@ -264,14 +231,6 @@ export function WidgetSetupPage() {
               </ul>
             </Card>
           </section>
-
-          <p className="text-center text-xs text-gray-400">
-            Testing the fixtures or troubleshooting?{' '}
-            <a href={README_URL} className="underline" target="_blank" rel="noreferrer">
-              See the developer README
-            </a>
-            .
-          </p>
         </div>
       </div>
     </div>
