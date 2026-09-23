@@ -4,7 +4,8 @@ import {
   identityAvailable,
   loadIdentityWidget,
   startGoogleSignIn,
-  RETURN_TO_KEY,
+  isSignInReturn,
+  reloadAfterSignIn,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
 
@@ -46,16 +47,6 @@ function toAuthUser(u: IdentityUser): AuthUser {
   }
 }
 
-function restoreReturnTo() {
-  try {
-    const hash = sessionStorage.getItem(RETURN_TO_KEY)
-    sessionStorage.removeItem(RETURN_TO_KEY)
-    if (hash) window.location.hash = hash
-  } catch {
-    // Storage blocked — stay wherever the redirect landed.
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [identityUser, setIdentityUser] = useState<IdentityUser | null>(null)
@@ -81,10 +72,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus(u ? 'signed-in' : 'signed-out')
       }
       w.on('init', apply)
+      // The widget also reports 'login' on every load where a session
+      // already exists; only the one on the way back from Google reloads.
+      let finishingSignIn = isSignInReturn()
       w.on('login', u => {
         w.close()
+        if (finishingSignIn) {
+          finishingSignIn = false
+          reloadAfterSignIn()
+          return
+        }
         apply(u)
-        restoreReturnTo()
       })
       w.on('logout', () => {
         w.close()
@@ -92,6 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       setWidget(w)
       w.init()
+      // The widget initializes itself as soon as its script runs, so its
+      // 'init' event has usually fired before the handlers above existed —
+      // and this w.init() is then a no-op. Read the session directly
+      // instead of waiting for an event that already happened (#231).
+      // Not on the way back from Google, though: there currentUser() is set
+      // as soon as the token exchange starts, before the session is saved,
+      // so wait for the 'login' event (it needs a network round trip, so it
+      // can't have fired yet).
+      if (!finishingSignIn) apply(w.currentUser())
     })()
     return () => {
       cancelled = true

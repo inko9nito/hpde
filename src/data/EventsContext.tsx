@@ -49,34 +49,73 @@ function merge(base: EventConfig[], created: EventConfig[]): EventConfig[] {
   return [...base, ...created.filter(e => !ids.has(e.id))]
 }
 
-export async function fetchCreatedEvents(): Promise<EventConfig[]> {
+function parseEvents(events: unknown): EventConfig[] {
+  return Array.isArray(events) ? events.filter(isEventConfig).map(withTrackMap) : []
+}
+
+// null = the fetch failed (offline, no function here), as opposed to a
+// successful fetch that came back empty.
+export async function fetchCreatedEvents(): Promise<EventConfig[] | null> {
   try {
     const res = await fetch(CREATED_EVENTS_URL)
-    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return []
+    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null
     const body = await res.json()
-    return Array.isArray(body?.events) ? body.events.filter(isEventConfig).map(withTrackMap) : []
+    return parseEvents(body?.events)
+  } catch {
+    return null
+  }
+}
+
+// The last list the fetch returned. The function can take a second or two
+// (cold start + a strongly consistent Blobs read), and until it answers a
+// link to a created event has nothing to show — so a reload, or the return
+// from Google sign-in, sat on a blank page (#231). Starting from the cached
+// list shows that event right away; the fetch then corrects it.
+export const CREATED_EVENTS_CACHE_KEY = 'hpde:createdEvents'
+
+function readCache(): EventConfig[] {
+  try {
+    const saved = localStorage.getItem(CREATED_EVENTS_CACHE_KEY)
+    return saved ? parseEvents(JSON.parse(saved)) : []
   } catch {
     return []
+  }
+}
+
+function writeCache(events: EventConfig[]) {
+  try {
+    // Without the borrowed map: its hashed URL goes stale on the next deploy,
+    // and readCache borrows the current one again.
+    const stored = events.map(({ mapImage: _mapImage, ...e }) => e)
+    localStorage.setItem(CREATED_EVENTS_CACHE_KEY, JSON.stringify(stored))
+  } catch {
+    // Storage full or blocked — next load just waits for the fetch.
   }
 }
 
 const EventsContext = createContext<EventsValue | null>(null)
 
 export function EventsProvider({ children }: { children: ReactNode }) {
-  const [created, setCreated] = useState<EventConfig[]>([])
+  const [created, setCreated] = useState<EventConfig[]>(readCache)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     fetchCreatedEvents().then(events => {
       if (cancelled) return
-      setCreated(events)
+      // A failed fetch keeps whatever the cache had rather than dropping it.
+      if (events) setCreated(events)
       setLoaded(true)
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  // Only after the fetch: before that, `created` is just the cache.
+  useEffect(() => {
+    if (loaded) writeCache(created)
+  }, [loaded, created])
 
   const addEvent = useCallback((event: EventConfig) => {
     setCreated(prev => [...prev.filter(e => e.id !== event.id), withTrackMap(event)])

@@ -35,6 +35,35 @@ const IDENTITY_PATH = '/.netlify/identity'
 // lands them back on the same event/tab instead of the landing page.
 export const RETURN_TO_KEY = 'hpde:returnTo'
 
+// True when this page load is the redirect back from Google — the widget
+// reads the token out of the hash and clears it, so this is captured at
+// startup, before the widget loads.
+const signInReturn = /(^#\/?|&)access_token=/.test(window.location.hash)
+
+export function isSignInReturn(): boolean {
+  return signInReturn
+}
+
+// Finishes the Google round trip with a fresh page load at the spot the
+// user signed in from (RETURN_TO_KEY). Switching to the signed-in view in
+// place, on top of the redirect's #access_token page, left iOS Safari on a
+// blank page until a manual refresh (#231) — so do that refresh for them.
+// The session is already saved when the widget reports the login, so the
+// reload comes up signed in, exactly like that manual refresh did.
+export function reloadAfterSignIn() {
+  let hash = ''
+  try {
+    hash = sessionStorage.getItem(RETURN_TO_KEY) ?? ''
+    sessionStorage.removeItem(RETURN_TO_KEY)
+  } catch {
+    // Storage blocked — reload onto the home page instead.
+  }
+  // replaceState, not location.hash: a hash-only change doesn't reload, and
+  // this also drops the #access_token entry from history.
+  window.history.replaceState(null, '', window.location.pathname + window.location.search + hash)
+  window.location.reload()
+}
+
 // Identity only exists on the Netlify deploy. GitHub Pages (and the
 // GitHub-hosted PR previews) 404 here, and the Vite dev server answers
 // with index.html — neither is JSON, so sign-in stays hidden there.

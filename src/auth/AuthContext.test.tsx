@@ -16,12 +16,17 @@ function fakeWidget(initialUser: IdentityUser | null) {
     open: vi.fn(),
     close: vi.fn(),
     logout: vi.fn(() => handlers.logout?.forEach(h => h())),
+    // What the widget does once it has traded the redirect's token for a user.
+    completeLogin: (user: IdentityUser) => handlers.login?.forEach(h => h(user)),
     currentUser: () => initialUser,
     on: (event: string, cb: (arg?: unknown) => void) => {
       ;(handlers[event] ??= []).push(cb)
     },
   }
-  return widget as unknown as IdentityWidget & { open: ReturnType<typeof vi.fn> }
+  return widget as unknown as IdentityWidget & {
+    open: ReturnType<typeof vi.fn>
+    completeLogin: (user: IdentityUser) => void
+  }
 }
 
 const driver: IdentityUser = {
@@ -87,3 +92,60 @@ describe('sign-in (#223)', () => {
   })
 })
 
+
+describe('coming back from Google (#231)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+    vi.spyOn(identity, 'identityAvailable').mockResolvedValue(true)
+  })
+
+  it('reloads into the signed-in page once the login completes', async () => {
+    vi.spyOn(identity, 'isSignInReturn').mockReturnValue(true)
+    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
+    const widget = fakeWidget(null)
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    await screen.findByRole('button', { name: 'Sign in with Google' })
+
+    widget.completeLogin(driver)
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(widget.close).toHaveBeenCalled()
+  })
+
+  it("doesn't reload for the login the widget reports on an ordinary load", async () => {
+    vi.spyOn(identity, 'isSignInReturn').mockReturnValue(false)
+    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
+    const widget = fakeWidget(null)
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    await screen.findByRole('button', { name: 'Sign in with Google' })
+
+    widget.completeLogin(driver)
+    expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('picks up a session even when the widget initialized before we listened', async () => {
+    // The real widget inits itself when its script runs, so our handlers
+    // miss its 'init' event and our own init() call does nothing.
+    const widget = fakeWidget(driver)
+    widget.init = vi.fn()
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
+  })
+
+  it('reloads back to where sign-in started, without the token in the URL', () => {
+    const reload = vi.fn()
+    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, pathname: '/', search: '', reload })
+    const replace = vi.spyOn(window.history, 'replaceState')
+    sessionStorage.setItem(identity.RETURN_TO_KEY, '#/event/test')
+
+    identity.reloadAfterSignIn()
+
+    expect(replace).toHaveBeenCalledWith(null, '', '/#/event/test')
+    expect(reload).toHaveBeenCalled()
+    expect(sessionStorage.getItem(identity.RETURN_TO_KEY)).toBeNull()
+  })
+})
