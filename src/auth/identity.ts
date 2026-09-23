@@ -44,6 +44,19 @@ export function isSignInReturn(): boolean {
   return signInReturn
 }
 
+// Where gotrue (inside the widget) keeps the signed-in session.
+const SESSION_KEY = 'gotrue.user'
+
+// Only reload once the session is really on disk — a reload before that
+// comes back signed out.
+export function hasSavedSession(): boolean {
+  try {
+    return localStorage.getItem(SESSION_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
 // Finishes the Google round trip with a fresh page load at the spot the
 // user signed in from (RETURN_TO_KEY). Switching to the signed-in view in
 // place, on top of the redirect's #access_token page, left iOS Safari on a

@@ -5,6 +5,7 @@ import {
   loadIdentityWidget,
   startGoogleSignIn,
   isSignInReturn,
+  hasSavedSession,
   reloadAfterSignIn,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
@@ -71,13 +72,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIdentityUser(u)
         setStatus(u ? 'signed-in' : 'signed-out')
       }
+      // The widget initializes itself as soon as its script runs, so by now
+      // its 'init' event (and, with a saved session, 'login') has already
+      // fired. Don't call w.init() again: the v1 widget the site loads has
+      // no guard against that and re-initializes — mid token exchange on the
+      // way back from Google, which fired 'login' before the session was
+      // saved and reloaded into a signed-out page (#231). Kept for the
+      // unlikely case the script ran before the page finished parsing.
       w.on('init', apply)
-      // The widget also reports 'login' on every load where a session
-      // already exists; only the one on the way back from Google reloads.
+      // On the way back from Google, the widget reports 'login' once it has
+      // traded the token for a user and saved the session.
       let finishingSignIn = isSignInReturn()
       w.on('login', u => {
         w.close()
-        if (finishingSignIn) {
+        if (finishingSignIn && hasSavedSession()) {
           finishingSignIn = false
           reloadAfterSignIn()
           return
@@ -89,15 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apply(null)
       })
       setWidget(w)
-      w.init()
-      // The widget initializes itself as soon as its script runs, so its
-      // 'init' event has usually fired before the handlers above existed —
-      // and this w.init() is then a no-op. Read the session directly
-      // instead of waiting for an event that already happened (#231).
-      // Not on the way back from Google, though: there currentUser() is set
-      // as soon as the token exchange starts, before the session is saved,
-      // so wait for the 'login' event (it needs a network round trip, so it
-      // can't have fired yet).
+      // Read the session the widget has already restored. Not on the way
+      // back from Google: currentUser() is set as soon as the token exchange
+      // starts, before the session is saved — wait for 'login' instead.
       if (!finishingSignIn) apply(w.currentUser())
     })()
     return () => {
