@@ -8,6 +8,15 @@ const TABS: readonly Tab[] = [
   { id: 'info', label: 'Info' },
 ]
 
+/**
+ * Guard for tab ids read back from localStorage, where a value written by
+ * an older build (or hand-edited) could otherwise leave the event page
+ * with a selected tab that renders no panel at all.
+ */
+export function isEventTabId(value: unknown): value is EventTabId {
+  return TABS.some(tab => tab.id === value)
+}
+
 interface Props {
   active: EventTabId
   onChange: (id: EventTabId) => void
