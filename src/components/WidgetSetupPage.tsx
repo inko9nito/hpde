@@ -261,7 +261,7 @@ export function WidgetSetupPage() {
 
         {/* More info */}
         <div className="rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
-          <Accordion icon={<SlidersHorizontal size={16} />} title="Choose your run group and alert timing">
+          <Accordion icon={<SlidersHorizontal size={16} />} title="Set run group and alert timing">
             <p>
               Only want your run group, or alerts earlier or later? Tap and hold the widget, choose{' '}
               <strong>Edit Widget</strong>, and type into the <strong>Parameter</strong> box.
