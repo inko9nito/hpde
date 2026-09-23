@@ -23,6 +23,7 @@ import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
+import { useTrackFavicon } from './utils/trackFavicon'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -151,6 +152,9 @@ export default function App() {
   // Events created in the app start with no schedule (#229) — it's added
   // separately, so until then the Schedule tab says so instead.
   const hasSchedule = activeEvent.days.some(d => d.activities.length > 0)
+
+  // The event's track shape as the tab icon while its page is open (#233).
+  useTrackFavicon(ALL_EVENTS.find(e => e.id === routeEventId)?.trackId)
 
   const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
   const isPastEvent = lastEventDate < todayLocalISO()
