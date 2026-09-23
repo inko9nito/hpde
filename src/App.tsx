@@ -22,6 +22,7 @@ import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
+import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -191,6 +192,10 @@ export default function App() {
   const routeEvent = ALL_EVENTS.find(e => e.id === routeEventId)
   useTrackFavicon(routeEvent?.trackId)
   useDocumentTitle(routeEvent?.name)
+  // …and the status bar above it matches its white header (#245) — once
+  // the page has slid in, not while it's still on its way.
+  const [pushEntered, setPushEntered] = useState(false)
+  useChromeColor(isOnEventRoute && pushEntered ? HEADER_CHROME_COLOR : null)
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -268,6 +273,7 @@ export default function App() {
     <PushPage
       open={isOnEventRoute}
       onExited={() => setPushMounted(false)}
+      onEnteredChange={setPushEntered}
       scrollRef={pushScrollRef}
       skipEnterAnimation={skipPushEnterAnimationRef.current}
     >
