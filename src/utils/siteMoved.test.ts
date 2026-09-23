@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { isOldSite, newSiteUrl, SITE_URL } from './siteMoved'
 
 function loc(url: string) {
-  const { hostname, pathname, search } = new URL(url)
-  return { hostname, pathname, search }
+  const { hostname, search } = new URL(url)
+  return { hostname, search }
 }
 
 describe('isOldSite', () => {
@@ -12,16 +12,14 @@ describe('isOldSite', () => {
     expect(isOldSite(loc('https://inko9nito.github.io/hpde/#/event/abc'))).toBe(true)
   })
 
-  it('is false on Netlify, locally, and on GitHub Pages PR previews', () => {
+  it('is false on Netlify and locally', () => {
     expect(isOldSite(loc('https://myhpde.netlify.app/'))).toBe(false)
     expect(isOldSite(loc('https://deploy-preview-12--myhpde.netlify.app/'))).toBe(false)
-    expect(isOldSite(loc('http://localhost:5173/hpde/'))).toBe(false)
-    expect(isOldSite(loc('https://inko9nito.github.io/hpde/pr-preview/pr-12/'))).toBe(false)
+    expect(isOldSite(loc('http://localhost:5173/'))).toBe(false)
   })
 
   it('can be forced with ?moved for previewing', () => {
     expect(isOldSite(loc('https://myhpde.netlify.app/?moved'))).toBe(true)
-    expect(isOldSite(loc('https://inko9nito.github.io/hpde/pr-preview/pr-12/?moved'))).toBe(true)
   })
 })
 

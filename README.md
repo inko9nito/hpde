@@ -27,10 +27,9 @@ The schedule is public — no account needed. Signing in is only for
 personal, private things (my notes, my garage). It's the same setup as the
 BEI app: **Netlify Identity** with **Google** as the login provider.
 
-Sign-in only works on the **Netlify** site and its deploy previews. The
-GitHub-hosted PR previews keep working, with sign-in hidden. The old
-GitHub Pages address (`inko9nito.github.io/hpde/`) no longer deploys; it
-only points visitors at the Netlify site.
+The app, its PR previews and the iOS widget's data all live on
+**Netlify**. The old GitHub Pages address (`inko9nito.github.io/hpde/`) no
+longer deploys; it only points visitors at the Netlify site.
 
 **One-time Netlify setup**
 1. Netlify → *Add new site* → *Import from Git* → `inko9nito/hpde`. Build

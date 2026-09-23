@@ -37,23 +37,16 @@ So once there's a pushed commit for an issue, open a PR from that
 branch with `Closes #<n>` in the body, even before the work is
 finished or ready for review. Do this without being asked.
 
-## Post the PR preview links
+## Post the PR preview link
 
-Every PR gets two previews. Post both, without being asked. Lead with
-the Netlify one: it's the only one with sign-in and functions.
+Every PR gets a Netlify deploy preview at
+`https://deploy-preview-<n>--myhpde.netlify.app`. Post it without being
+asked. Netlify reports it as the `netlify/myhpde/deploy-preview` commit
+status on the PR head (`pull_request_read` with `method: get_status`);
+use that status's `target_url`, and mention it if the status is pending
+or failed. (GitHub Pages previews were retired in #227.)
 
-- **Netlify deploy preview** —
-  `https://deploy-preview-<n>--myhpde.netlify.app`. Netlify reports it
-  as the `netlify/myhpde/deploy-preview` commit status on the PR head
-  (`pull_request_read` with `method: get_status`); use that status's
-  `target_url`, and mention it if the status is pending or failed.
-- **GitHub Pages preview** — `.github/workflows/pr-preview.yml` deploys
-  to `https://inko9nito.github.io/hpde/pr-preview/pr-<n>/`. Check the
-  workflow ran (`actions_list` / `list_workflow_runs` with
-  `resource_id: pr-preview.yml`, filtered to the PR's head branch).
-  Sign-in and anything behind a Netlify function don't work here.
-
-Put the links in the PR body and in the issue status comment.
+Put the link in the PR body and in the issue status comment.
 
 ## Handing the widget script back to the user
 

@@ -8,9 +8,6 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # Netlify serves the site at the domain root; GitHub Pages previews need a
-  # /hpde/pr-preview/pr-<n>/ subpath (set in pr-preview.yml).
-  VITE_BASE_PATH = "/"
 
 [[redirects]]
   from = "/api/me"
