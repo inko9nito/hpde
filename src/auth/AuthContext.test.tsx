@@ -106,11 +106,34 @@ describe('coming back from Google (#231)', () => {
     const widget = fakeWidget(null)
     vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
     renderApp()
-    await screen.findByRole('button', { name: 'Sign in with Google' })
+    await new Promise(r => setTimeout(r, 0))
 
+    // gotrue saves the session, then the widget reports the login.
+    localStorage.setItem('gotrue.user', '{}')
     widget.completeLogin(driver)
     expect(reload).toHaveBeenCalledTimes(1)
     expect(widget.close).toHaveBeenCalled()
+  })
+
+  it("doesn't reload into a signed-out page when the session isn't saved yet", async () => {
+    vi.spyOn(identity, 'isSignInReturn').mockReturnValue(true)
+    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
+    const widget = fakeWidget(null)
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    await new Promise(r => setTimeout(r, 0))
+
+    widget.completeLogin(driver)
+    expect(reload).not.toHaveBeenCalled()
+    expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
+  })
+
+  it("never re-initializes the widget (v1 has no guard and restarts mid sign-in)", async () => {
+    const widget = fakeWidget(driver)
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    await screen.findAllByRole('button', { name: 'Account: driver@example.com' })
+    expect(widget.init).not.toHaveBeenCalled()
   })
 
   it("doesn't reload for the login the widget reports on an ordinary load", async () => {
@@ -128,9 +151,8 @@ describe('coming back from Google (#231)', () => {
 
   it('picks up a session even when the widget initialized before we listened', async () => {
     // The real widget inits itself when its script runs, so our handlers
-    // miss its 'init' event and our own init() call does nothing.
+    // miss its 'init' event.
     const widget = fakeWidget(driver)
-    widget.init = vi.fn()
     vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
     renderApp()
     expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
