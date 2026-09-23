@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, CREATED_EVENTS_URL } from '../data/EventsContext'
 import { SignInPrompt } from './SignInPrompt'
 import { SuggestInput } from './SuggestInput'
-import { collectOptions, findExact } from '../utils/fieldOptions'
+import { TrackIcon, TRACK_ICON_IDS } from './TrackIcon'
+import { collectOptions, findExact, resolveTrackId } from '../utils/fieldOptions'
 import type { SuggestField } from '../utils/fieldOptions'
 import type { EventConfig } from '../types'
 
@@ -40,12 +41,15 @@ const EMPTY: FormState = {
   link: '',
 }
 
+// Fixed height + appearance-none: iOS Safari otherwise gives date inputs
+// a wide intrinsic size (they overlap in a 2-column row) and selects a
+// shorter native height than the text inputs beside them.
 const inputClass =
-  'mt-1 block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm'
+  'mt-1 block h-11 w-full min-w-0 appearance-none rounded-lg border border-gray-200 bg-white px-3 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm [&::-webkit-date-and-time-value]:text-left'
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="text-[13px] font-medium text-gray-700">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-gray-400">{hint}</span>}
@@ -95,6 +99,9 @@ export function NewEventPage({ onCreated }: Props) {
     })
   }
 
+  // Icon from past events at this track/configuration (e.g. ECR 2.7).
+  const trackId = resolveTrackId(events, form.track, form.configuration, TRACK_ICON_IDS)
+
   // Final pass so a re-spelling of an existing value is never saved as new.
   function canonical(f: FormState): FormState {
     const out = { ...f }
@@ -112,7 +119,7 @@ export function NewEventPage({ onCreated }: Props) {
       const res = await authedFetch(CREATED_EVENTS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: canonical(form), takenIds: allEvents.map(ev => ev.id) }),
+        body: JSON.stringify({ event: { ...canonical(form), trackId }, takenIds: allEvents.map(ev => ev.id) }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok || !body.event) {
@@ -170,12 +177,23 @@ export function NewEventPage({ onCreated }: Props) {
               <SuggestInput value={form.configuration} onChange={suggest('configuration')} options={options.configuration} className={inputClass} placeholder="1.7 mile" />
             </Field>
             <Field label="Direction">
-              <select value={form.direction} onChange={set('direction')} className={inputClass}>
-                <option value="">—</option>
-                <option value="Clockwise">Clockwise</option>
-                <option value="Counter-clockwise">Counter-clockwise</option>
-              </select>
+              <div className="relative">
+                <select value={form.direction} onChange={set('direction')} className={`${inputClass} pr-8`}>
+                  <option value="">—</option>
+                  <option value="Clockwise">Clockwise</option>
+                  <option value="Counter-clockwise">Counter-clockwise</option>
+                </select>
+                <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 mt-0.5 -translate-y-1/2 text-gray-400" />
+              </div>
             </Field>
+          </div>
+          <div className="flex items-center gap-3" data-testid="track-icon-preview">
+            <TrackIcon trackId={trackId} size={32} />
+            <span className="text-xs text-gray-500">
+              {trackId
+                ? 'Track icon matched from past events'
+                : 'No track icon yet — pick a known location and configuration to match one'}
+            </span>
           </div>
         </div>
 

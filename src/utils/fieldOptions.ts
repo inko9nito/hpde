@@ -98,3 +98,42 @@ export function findSimilar(value: string, options: string[]): string | null {
   }
   return best?.option ?? null
 }
+
+function mostCommon(values: string[]): string | undefined {
+  const counts = new Map<string, number>()
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
+/**
+ * Track-shape icon for a new event, from past events at the same track:
+ *   1. an icon used there with the same configuration;
+ *   2. else the track's icon prefix + the configuration's number
+ *      ("msrc" + "1.3 mile" -> "msrc-1-3"), if that icon exists;
+ *   3. with no configuration, the track's icon when it has only one.
+ * `iconIds` are the ids that have a real icon (TRACK_ICON_IDS).
+ */
+export function resolveTrackId(
+  events: EventConfig[],
+  track: string,
+  configuration: string,
+  iconIds: string[],
+): string | undefined {
+  const known = findExact(track, collectOptions(events, 'track'))
+  if (!known) return undefined
+  const atTrack = events.filter(e => e.track && e.trackId && iconIds.includes(e.trackId)
+    && findExact(e.track, [known]))
+  const trackIds = [...new Set(atTrack.map(e => e.trackId!))]
+
+  if (!configuration.trim()) return trackIds.length === 1 ? trackIds[0] : undefined
+
+  const sameConfig = atTrack.filter(e => e.configuration && findExact(e.configuration, [configuration]))
+  const fromConfig = mostCommon(sameConfig.map(e => e.trackId!))
+  if (fromConfig) return fromConfig
+
+  const num = configuration.match(/(\d+)(?:\.(\d+))?/)
+  if (!num) return undefined
+  const suffix = num[2] ? `${num[1]}-${num[2]}` : num[1]
+  const prefixes = new Set(trackIds.map(id => id.replace(/-\d.*$/, '')))
+  return [...prefixes].map(p => `${p}-${suffix}`).find(id => iconIds.includes(id))
+}

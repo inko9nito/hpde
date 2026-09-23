@@ -6,6 +6,8 @@ export const ADMIN_ROLE = 'admin'
 export const MAX_EVENT_DAYS = 7
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+// Icon ids look like "msrc-1-7"; the client only sends ones it has an icon for.
+const TRACK_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 // Free-text fields, trimmed; an empty string means "not set".
@@ -68,6 +70,9 @@ export function buildEvent(input, takenIds = []) {
   for (const key of TEXT_FIELDS) {
     const v = typeof src[key] === 'string' ? src[key].trim() : ''
     if (v) fields[key] = v
+  }
+  if (typeof src.trackId === 'string' && TRACK_ID.test(src.trackId) && src.trackId.length <= 40) {
+    fields.trackId = src.trackId
   }
   if (fields.link) {
     let url

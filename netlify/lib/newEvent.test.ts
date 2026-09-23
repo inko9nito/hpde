@@ -67,6 +67,11 @@ describe('buildEvent', () => {
     expect(buildEvent(input).error).toMatch(message)
   })
 
+  it('keeps a well-formed trackId and drops anything else', () => {
+    expect(buildEvent({ ...valid, trackId: 'ecr-2-7' }).event?.trackId).toBe('ecr-2-7')
+    expect(buildEvent({ ...valid, trackId: '../x' }).event).not.toHaveProperty('trackId')
+  })
+
   it('never reuses a taken id', () => {
     const taken = ['2026-10-10_scca-at-msrc-1-7-cw', '2026-10-10_scca-at-msrc-1-7-cw-2']
     expect(buildEvent(valid, taken).event?.id).toBe('2026-10-10_scca-at-msrc-1-7-cw-3')

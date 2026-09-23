@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { collectOptions, filterOptions, findExact, findSimilar, normalizeKey } from './fieldOptions'
+import { collectOptions, filterOptions, findExact, findSimilar, normalizeKey, resolveTrackId } from './fieldOptions'
 import type { EventConfig } from '../types'
 
 const ev = (fields: Partial<EventConfig>): EventConfig =>
@@ -46,5 +46,32 @@ describe('fieldOptions', () => {
     expect(findSimilar('Drivers Edge', ['The Drivers Edge'])).toBe('The Drivers Edge')
     expect(findSimilar('Harris Hill Road', ['Eagles Canyon Raceway'])).toBeNull()
     expect(findSimilar('1.7 mile', configs)).toBeNull()
+  })
+})
+
+describe('resolveTrackId', () => {
+  const icons = ['msrc-1-7', 'msrc-3-1', 'msrc-1-3', 'ecr-2-7']
+  const past = [
+    ev({ track: 'Motorsport Ranch - Cresson', configuration: '1.7 mile', trackId: 'msrc-1-7' }),
+    ev({ track: 'Motorsport Ranch - Cresson', configuration: '3.1 mile', trackId: 'msrc-3-1' }),
+    ev({ track: 'Eagles Canyon Raceway', configuration: '2.7 mile', trackId: 'ecr-2-7' }),
+  ]
+
+  it('uses the icon of a past event with the same track and configuration', () => {
+    expect(resolveTrackId(past, 'motorsport ranch cresson', '3.1 Mile', icons)).toBe('msrc-3-1')
+  })
+
+  it('uses a track with a single icon even without a configuration', () => {
+    expect(resolveTrackId(past, 'Eagles Canyon Raceway', '', icons)).toBe('ecr-2-7')
+    expect(resolveTrackId(past, 'Motorsport Ranch - Cresson', '', icons)).toBeUndefined()
+  })
+
+  it('matches an icon by track prefix + configuration number', () => {
+    expect(resolveTrackId(past, 'Motorsport Ranch - Cresson', '1.3', icons)).toBe('msrc-1-3')
+    expect(resolveTrackId(past, 'Motorsport Ranch - Cresson', '2.0', icons)).toBeUndefined()
+  })
+
+  it('has nothing for an unknown track', () => {
+    expect(resolveTrackId(past, 'Harris Hill Road', '1.8', icons)).toBeUndefined()
   })
 })
