@@ -23,21 +23,26 @@ export function trackIconSrc(trackId?: string): string | undefined {
   return trackId ? TRACK_ICONS[trackId] : undefined
 }
 
-type TrackIconTone = 'default' | 'selected'
+type TrackIconTone = 'default' | 'selected' | 'dark'
 
 interface Props {
   trackId?: string
   /** Rendered pixel size for the inner icon; the tinted container adds
-   *  4px of padding on each side. */
+   *  `padding` on each side. */
   size?: number
+  /** Container padding on each side, in px. */
+  padding?: number
   /**
    * Whether to mute (fade) the icon — mirrors the muted state passed to
    * the surrounding event card for past events.
    */
   muted?: boolean
   /** Color scheme. 'selected' tints the container and the shape blue
-   *  so it reads as the active item in the picker dropdown. */
+   *  so it reads as the active item in a list; 'dark' is the white-on-
+   *  near-black tile in the event page header (#216). */
   tone?: TrackIconTone
+  /** Container corner radius class. */
+  radius?: string
   className?: string
 }
 
@@ -54,16 +59,27 @@ interface Props {
  * outline. That lets the shape take its tone from the surrounding
  * text color.
  */
-export function TrackIcon({ trackId, size = 28, muted = false, tone = 'default', className }: Props) {
+const TONE_CLASSES: Record<TrackIconTone, { container: string; placeholder: string }> = {
+  default:  { container: 'bg-gray-100 text-gray-700', placeholder: 'text-gray-300' },
+  selected: { container: 'bg-blue-100 text-blue-600', placeholder: 'text-blue-300' },
+  dark:     { container: 'bg-gray-900 text-white',    placeholder: 'text-gray-500' },
+}
+
+export function TrackIcon({
+  trackId,
+  size = 28,
+  padding = 4,
+  muted = false,
+  tone = 'default',
+  radius = 'rounded-lg',
+  className,
+}: Props) {
   const src = trackIconSrc(trackId)
-  const toneCls = tone === 'selected'
-    ? 'bg-blue-100 text-blue-600'
-    : 'bg-gray-100 text-gray-700'
-  const containerCls = `inline-grid shrink-0 place-items-center rounded-lg ${toneCls} ${
+  const toneCls = TONE_CLASSES[tone]
+  const containerCls = `inline-grid shrink-0 place-items-center ${radius} ${toneCls.container} ${
     muted ? 'opacity-70' : ''
   } ${className ?? ''}`.trim()
-  // Fixed 4px padding all around: container box is size + 8.
-  const boxSize = size + 8
+  const boxSize = size + padding * 2
 
   return (
     <span
@@ -94,7 +110,7 @@ export function TrackIcon({ trackId, size = 28, muted = false, tone = 'default',
           viewBox="0 0 32 32"
           width={size}
           height={size}
-          className={`block ${tone === 'selected' ? 'text-blue-300' : 'text-gray-300'}`}
+          className={`block ${toneCls.placeholder}`}
           fill="none"
         >
           <path

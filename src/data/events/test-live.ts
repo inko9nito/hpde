@@ -8,7 +8,7 @@ import src from '../fixtures/test-live.md?raw'
 // (including pre-dawn and after-hours sessions) so there's always
 // something "current" to look at; the day's date is overridden to
 // today (whatever today is) so it's a standing fixture for testing
-// today/live-only UI — the live badge, the past-event banner, the
+// today/live-only UI — the LIVE badge, the
 // now-line — without waiting for a real event day.
 const parsed = parseScheduleMD('test-live', src)
 

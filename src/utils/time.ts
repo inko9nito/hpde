@@ -20,20 +20,24 @@ export function formatDateRange(days: DaySchedule[]): string {
 /**
  * Same as `formatDateRange` but with the day(s) of the week appended in
  * parens, e.g. "Sep 13, 2026 (Sunday)" or "Sep 12–13, 2026 (Saturday–Sunday)".
- * Used for the "Dates" row in Event Details — the date line under the
- * event name stays plain via `formatDateRange`/`eventSubtitle`.
+ * Used for the "Dates" row in Event Details. `weekday: 'short'` gives
+ * "Sep 12–13, 2026 (Sat–Sun)" for the event page header (#216).
  */
-export function formatDateRangeWithWeekday(days: DaySchedule[]): string {
+export function formatDateRangeWithWeekday(
+  days: DaySchedule[],
+  { weekday = 'long' }: { weekday?: 'long' | 'short' } = {},
+): string {
   if (days.length === 0) return ''
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date))
   const first = sorted[0].date
   const last = sorted[sorted.length - 1].date
   const [fy, fm, fd] = first.split('-').map(Number)
   const [ly, lm, ld] = last.split('-').map(Number)
-  const firstWeekday = WEEKDAYS[new Date(fy, fm - 1, fd).getDay()]
+  const name = (i: number) => (weekday === 'short' ? WEEKDAYS[i].slice(0, 3) : WEEKDAYS[i])
+  const firstWeekday = name(new Date(fy, fm - 1, fd).getDay())
   const range = formatDateRange(days)
   if (first === last) return `${range} (${firstWeekday})`
-  const lastWeekday = WEEKDAYS[new Date(ly, lm - 1, ld).getDay()]
+  const lastWeekday = name(new Date(ly, lm - 1, ld).getDay())
   return `${range} (${firstWeekday}–${lastWeekday})`
 }
 

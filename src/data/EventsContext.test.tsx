@@ -51,7 +51,7 @@ describe('events created in the app (#229)', () => {
 
     expect(screen.getByLabelText('Loading event')).toBeInTheDocument()
     // Not a blank page (#231): the header is there to get back out.
-    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
     expect(screen.queryByRole('tablist', { name: 'Event section' })).not.toBeInTheDocument()
 
     resolve(new Response(JSON.stringify({ events: [created] }), { headers: { 'Content-Type': 'application/json' } }))

@@ -108,6 +108,13 @@ describe('formatDateRangeWithWeekday', () => {
     expect(formatDateRangeWithWeekday([day('2026-09-13'), day('2026-09-12')]))
       .toBe('Sep 12–13, 2026 (Saturday–Sunday)')
   })
+
+  it('abbreviates weekdays when asked (event header)', () => {
+    expect(formatDateRangeWithWeekday([day('2026-09-11'), day('2026-09-13')], { weekday: 'short' }))
+      .toBe('Sep 11–13, 2026 (Fri–Sun)')
+    expect(formatDateRangeWithWeekday([day('2026-09-13')], { weekday: 'short' }))
+      .toBe('Sep 13, 2026 (Sun)')
+  })
 })
 
 describe('eventSubtitle', () => {
