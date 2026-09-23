@@ -30,6 +30,10 @@ const CACHE_FILENAME = "hpde-events.json"
 const NOTIF_STATE_FILENAME = "hpde-notif-state.json"
 const NOTIF_ID_PREFIX = "hpde:"
 const NOTIF_THREAD_ID = "hpde"
+// Scriptable's Notification.sound defaults to null, which delivers
+// silently even with sound enabled in iOS settings (#218). "event" is
+// one of Scriptable's built-in sound names.
+const NOTIF_SOUND = "event"
 const DEFAULT_LEAD_MIN = 10
 // Instance entries in the shared state file age out after this many days
 // without a widget refresh, so a widget instance that was removed stops
@@ -2241,6 +2245,7 @@ async function scheduleSpecs(specs) {
       n.title = s.title
       n.body = s.body
       n.threadIdentifier = NOTIF_THREAD_ID
+      n.sound = NOTIF_SOUND
       n.openURL = SITE_URL
       // Scriptable's `deliveryDate` is READ-ONLY (it reports when the
       // notification actually fired). To schedule for a future moment

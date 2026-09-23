@@ -123,6 +123,7 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     title = ''
     body = ''
     threadIdentifier = ''
+    sound: string | null = null
     openURL = ''
     deliveryDate: Date | null = null
     nextTriggerDate: Date | null = null
@@ -139,6 +140,7 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
         identifier: this.identifier,
         title: this.title,
         body: this.body,
+        sound: this.sound,
         nextTriggerDate: this.nextTriggerDate,
       })
     }
@@ -461,6 +463,13 @@ describe('test-live fixture gating', () => {
 })
 
 describe('notification content', () => {
+  it('plays the "event" sound (Scriptable defaults to silent)', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'orange|15m')
+    const notifs = (globalThis as any).__notifs as Array<{ sound: string | null }>
+    expect(notifs.length).toBeGreaterThan(0)
+    for (const n of notifs) expect(n.sound).toBe('event')
+  })
+
   it('titles run-group alerts with a matching colored circle and "in Nm"', async () => {
     await runWidget('medium', FUTURE_MANIFEST, 'orange|15m')
     const notifs = (globalThis as any).__notifs as Array<{ title: string; body: string }>
