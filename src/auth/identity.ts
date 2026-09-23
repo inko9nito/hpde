@@ -69,9 +69,8 @@ export function restoreReturnTo() {
   }
 }
 
-// Identity only exists on the Netlify deploy. GitHub Pages (and the
-// GitHub-hosted PR previews) 404 here, and the Vite dev server answers
-// with index.html — neither is JSON, so sign-in stays hidden there.
+// Identity only exists on Netlify. The Vite dev server answers with
+// index.html, which isn't JSON, so sign-in stays hidden there.
 export async function identityAvailable(): Promise<boolean> {
   try {
     const res = await fetch(`${IDENTITY_PATH}/settings`)

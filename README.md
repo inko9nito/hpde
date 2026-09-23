@@ -27,9 +27,9 @@ The schedule is public — no account needed. Signing in is only for
 personal, private things (my notes, my garage). It's the same setup as the
 BEI app: **Netlify Identity** with **Google** as the login provider.
 
-Sign-in only works on the **Netlify** deploy. GitHub Pages (and the
-GitHub-hosted PR previews) keep working, with sign-in hidden — the iOS
-widget still reads `api/events.json` from GitHub Pages.
+The app, its PR previews and the iOS widget's data all live on
+**Netlify**. The old GitHub Pages address (`inko9nito.github.io/hpde/`) no
+longer deploys; it only points visitors at the Netlify site.
 
 **One-time Netlify setup**
 1. Netlify → *Add new site* → *Import from Git* → `inko9nito/hpde`. Build
@@ -63,8 +63,8 @@ deleted from the app.
 
 Created events are stored in **Netlify Blobs** (store `events`) by the
 `created-events` function (`/api/created-events`: public `GET`, admin-only
-`POST` and `DELETE ?id=`). No extra Netlify setup is needed for Blobs. They show up on the
-Netlify site only — not on GitHub Pages or in the iOS widget yet.
+`POST` and `DELETE ?id=`). No extra Netlify setup is needed for Blobs. They show up in the
+app but not in the iOS widget yet (#232).
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.

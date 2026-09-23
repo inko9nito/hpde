@@ -1,6 +1,6 @@
 # Netlify hosts the app so Netlify Identity (Google sign-in) and the
-# signed-in-only functions can live on the same origin (#223). GitHub Pages
-# keeps deploying too — the iOS widget reads api/events.json from there.
+# signed-in-only functions can live on the same origin (#223). The iOS widget
+# reads api/events.json from here too (#227).
 [build]
   command = "npm run build"
   publish = "dist"
@@ -8,8 +8,6 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  # Netlify serves the site at the domain root; GitHub Pages needs /hpde/.
-  VITE_BASE_PATH = "/"
 
 [[redirects]]
   from = "/api/me"

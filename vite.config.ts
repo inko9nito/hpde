@@ -17,9 +17,6 @@ function buildTime(): string {
 }
 
 export default defineConfig({
-  // Overridden by CI to build PR previews under a /pr-preview/pr-<n>/
-  // subpath on the same gh-pages branch the main site deploys to.
-  base: process.env.VITE_BASE_PATH || '/hpde/',
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime()),
   },

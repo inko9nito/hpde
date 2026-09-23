@@ -52,7 +52,7 @@ describe('sign-in (#223)', () => {
     vi.restoreAllMocks()
   })
 
-  it('hides sign-in where Identity is not available (GitHub Pages)', async () => {
+  it('hides sign-in where Identity is not available (local dev)', async () => {
     vi.spyOn(identity, 'identityAvailable').mockResolvedValue(false)
     renderApp()
     expect(await screen.findByText(/isn't available on this version/)).toBeInTheDocument()
