@@ -43,7 +43,7 @@ export function EventTabs({ active, onChange }: Props) {
             aria-controls={`event-tabpanel-${tab.id}`}
             id={`event-tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
-            className={`flex h-7 min-w-0 flex-1 flex-col items-center justify-between text-sm text-gray-900 ${
+            className={`flex h-7 min-w-0 flex-1 flex-col items-center justify-between font-rubik text-sm text-gray-900 ${
               isActive ? 'font-medium' : 'font-normal hover:text-gray-600'
             }`}
           >
