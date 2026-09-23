@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check, Copy, X, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid } from 'lucide-react'
+import { Check, Copy, X, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 import widgetSmall from '../assets/widget-small.png'
 import widgetMedium from '../assets/widget-medium.png'
@@ -259,43 +259,37 @@ export function WidgetSetupPage() {
           </ol>
         </section>
 
-        {/* Customize */}
-        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-base font-semibold text-gray-900">Customize</h2>
-            <span className="text-xs text-gray-400">Optional</span>
-          </div>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Only want your run group, or alerts earlier or later? Tap and hold the widget, choose{' '}
-            <strong>Edit Widget</strong>, and type into the <strong>Parameter</strong> box.
-          </p>
-          <img
-            src={editWidgetImg}
-            alt="Scriptable's Edit Widget screen with Script, When Interacting and Parameter fields"
-            width={295}
-            className="mx-auto mt-3 h-auto max-w-full rounded-2xl"
-          />
-          <ul className="mt-4 divide-y divide-gray-100">
-            <ParamOption
-              title="Show just your run group"
-              description="Type your group's color. The widget and your alerts will show only that group. Leave the box empty to see everyone."
-              examples={['blue', 'blue,orange']}
-            />
-            <ParamOption
-              title="Change when alerts arrive"
-              description="Type the minutes before each activity, followed by m. Without it, alerts come 10 minutes ahead."
-              examples={['5m', '15m']}
-            />
-            <ParamOption
-              title="Do both"
-              description="Put commas between them."
-              examples={['blue,15m', 'blue,orange,15m']}
-            />
-          </ul>
-        </section>
-
         {/* More info */}
         <div className="rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
+          <Accordion icon={<SlidersHorizontal size={16} />} title="Choose your run group and alert timing">
+            <p>
+              Only want your run group, or alerts earlier or later? Tap and hold the widget, choose{' '}
+              <strong>Edit Widget</strong>, and type into the <strong>Parameter</strong> box.
+            </p>
+            <img
+              src={editWidgetImg}
+              alt="Scriptable's Edit Widget screen with Script, When Interacting and Parameter fields"
+              width={295}
+              className="mx-auto mt-3 h-auto max-w-full rounded-2xl"
+            />
+            <ul className="mt-4 divide-y divide-gray-100">
+              <ParamOption
+                title="Show just your run group"
+                description="Type your group's color. The widget and your alerts will show only that group. Leave the box empty to see everyone."
+                examples={['blue', 'blue,orange']}
+              />
+              <ParamOption
+                title="Change when alerts arrive"
+                description="Type the minutes before each activity, followed by m. Without it, alerts come 10 minutes ahead."
+                examples={['5m', '15m']}
+              />
+              <ParamOption
+                title="Do both"
+                description="Put commas between them."
+                examples={['blue,15m', 'blue,orange,15m']}
+              />
+            </ul>
+          </Accordion>
           <Accordion icon={<BellOff size={16} />} title="Not getting alerts?">
             Check Settings → Notifications → Scriptable and make sure notifications and sounds are
             on.
