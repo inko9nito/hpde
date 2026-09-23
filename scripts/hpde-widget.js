@@ -25,7 +25,7 @@
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.
 
 const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
-const SITE_URL = "https://inko9nito.github.io/hpde/"
+const SITE_URL = "https://myhpde.netlify.app/"
 const CACHE_FILENAME = "hpde-events.json"
 const NOTIF_STATE_FILENAME = "hpde-notif-state.json"
 const NOTIF_ID_PREFIX = "hpde:"

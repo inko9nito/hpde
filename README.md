@@ -4,7 +4,7 @@ See the day's HPDE track schedule at a glance — what's happening now, what's
 next, and which sessions are yours. Built for checking on your phone between
 runs.
 
-**Live site:** https://inko9nito.github.io/hpde/
+**Live site:** https://myhpde.netlify.app/
 
 ## Features
 
