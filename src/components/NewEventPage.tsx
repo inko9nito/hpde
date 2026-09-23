@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, CREATED_EVENTS_URL } from '../data/EventsContext'
@@ -20,10 +20,8 @@ interface Props {
 interface FormState {
   name: string
   startDate: string
-  // "1".."7" — a Days picker instead of an End date input: iOS can't clear
-  // a date input ("Reset" restores it) and fills in today when opened, which
-  // made end-before-start easy. A count can't be out of order.
-  dayCount: string
+  // Optional; blank means a one-day event.
+  endDate: string
   organizer: string
   track: string
   city: string
@@ -35,7 +33,7 @@ interface FormState {
 const EMPTY: FormState = {
   name: '',
   startDate: '',
-  dayCount: '1',
+  endDate: '',
   organizer: '',
   track: '',
   city: '',
@@ -43,8 +41,6 @@ const EMPTY: FormState = {
   direction: '',
   link: '',
 }
-
-const MAX_DAYS = 7
 
 // Fixed height + appearance-none: iOS Safari otherwise gives selects a
 // shorter native height than the text inputs beside them.
@@ -56,19 +52,6 @@ const inputClass = `${fieldBase} h-11`
 // 2 border), so the date sits centered; h-11 still caps it where Chromium
 // adds a couple of internal pixels.
 const dateInputClass = `${fieldBase} h-11 py-[9px] leading-6 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left`
-
-/** "2026-10-03" + 2 → "2026-10-05" (calendar math in UTC, no DST drift). */
-function addDays(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-
-function formatShortDate(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
-  })
-}
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -90,6 +73,7 @@ export function NewEventPage({ onCreated }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const endDateRef = useRef<HTMLInputElement>(null)
 
   function set<K extends keyof FormState>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -125,8 +109,12 @@ export function NewEventPage({ onCreated }: Props) {
   // Icon from past events at this track/configuration (e.g. ECR 2.7).
   const trackId = resolveTrackId(events, form.track, form.configuration, TRACK_ICON_IDS)
 
-  const days = Number(form.dayCount) || 1
-  const endDate = form.startDate ? addDays(form.startDate, days - 1) : ''
+  const endBeforeStart = !!form.startDate && !!form.endDate && form.endDate < form.startDate
+
+  function clearEndDate() {
+    if (endDateRef.current) endDateRef.current.value = ''
+    setForm(f => ({ ...f, endDate: '' }))
+  }
 
   // Final pass so a re-spelling of an existing value is never saved as new.
   function canonical(f: FormState): FormState {
@@ -139,13 +127,14 @@ export function NewEventPage({ onCreated }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (endBeforeStart) return
     setError(null)
     setSaving(true)
     try {
       const res = await authedFetch(CREATED_EVENTS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: { ...canonical(form), endDate, trackId }, takenIds: allEvents.map(ev => ev.id) }),
+        body: JSON.stringify({ event: { ...canonical(form), trackId }, takenIds: allEvents.map(ev => ev.id) }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok || !body.event) {
@@ -182,19 +171,37 @@ export function NewEventPage({ onCreated }: Props) {
             <Field label="Start date">
               <input required type="date" value={form.startDate} onChange={set('startDate')} className={dateInputClass} />
             </Field>
-            <Field
-              label="Days"
-              hint={days > 1 && endDate ? `Ends ${formatShortDate(endDate)}` : undefined}
-            >
-              <div className="relative">
-                <select value={form.dayCount} onChange={set('dayCount')} className={`${inputClass} pr-8`}>
-                  {Array.from({ length: MAX_DAYS }, (_, i) => i + 1).map(n => (
-                    <option key={n} value={n}>{n === 1 ? '1 day' : `${n} days`}</option>
-                  ))}
-                </select>
-                <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 mt-0.5 -translate-y-1/2 text-gray-400" />
-              </div>
-            </Field>
+            <div className="min-w-0">
+              <Field label="End date">
+                {/* Uncontrolled on purpose: React keeps a controlled input's
+                    value attribute in sync, and iOS's picker "Reset" restores
+                    that attribute — so it could never clear the field. With
+                    defaultValue="" Reset clears it; "Clear" below does too. */}
+                <input
+                  ref={endDateRef}
+                  type="date"
+                  defaultValue=""
+                  min={form.startDate || undefined}
+                  onChange={set('endDate')}
+                  aria-invalid={endBeforeStart}
+                  className={`${dateInputClass} ${endBeforeStart ? 'border-red-300' : ''}`}
+                />
+              </Field>
+              {endBeforeStart ? (
+                <span role="alert" className="mt-1 block text-xs text-red-600">Ends before it starts</span>
+              ) : form.endDate ? (
+                <button type="button" onClick={clearEndDate} className="mt-1 text-xs font-medium text-gray-500 hover:text-gray-900">
+                  Clear end date
+                </button>
+              ) : (
+                <span className="mt-1 block text-xs text-gray-400">Leave blank for one day</span>
+              )}
+              {endBeforeStart && (
+                <button type="button" onClick={clearEndDate} className="text-xs font-medium text-gray-500 hover:text-gray-900">
+                  Clear end date
+                </button>
+              )}
+            </div>
           </div>
           <Field label="Organizer">
             <SuggestInput value={form.organizer} onChange={suggest('organizer')} options={options.organizer} className={inputClass} placeholder="Texas Region SCCA" />

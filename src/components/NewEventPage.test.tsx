@@ -12,7 +12,7 @@ const user = { id: 'u', email: 'v@example.com', app_metadata: { roles: ['admin']
 describe('NewEventPage', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('sends an end date computed from start date + Days', async () => {
+  function setup() {
     window.netlifyIdentity = {
       init: () => handlers.init?.(user),
       on: (e: string, cb: (u: unknown) => void) => { handlers[e] = cb },
@@ -25,18 +25,39 @@ describe('NewEventPage', () => {
       return json({ events: [] })
     })
     vi.stubGlobal('fetch', fetchMock)
-
     render(<AuthProvider><EventsProvider><NewEventPage onCreated={() => {}} /></EventsProvider></AuthProvider>)
+    const posted = async () => {
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' })))
+      const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')!
+      return JSON.parse(init!.body as string).event
+    }
+    return { fetchMock, posted }
+  }
 
+  it('sends the end date, and "Clear end date" empties it', async () => {
+    const { posted } = setup()
     await userEvent.type(await screen.findByLabelText('Title'), 'Fall Track Day')
     fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-30' } })
-    await userEvent.selectOptions(screen.getByLabelText(/Days/), '3')
-    expect(screen.getByText('Ends Sun, Nov 1')).toBeInTheDocument()
+    const end = screen.getByLabelText('End date') as HTMLInputElement
+    fireEvent.change(end, { target: { value: '2026-11-01' } })
 
+    await userEvent.click(screen.getByRole('button', { name: 'Clear end date' }))
+    expect(end.value).toBe('')
+    expect(screen.getByText('Leave blank for one day')).toBeInTheDocument()
+
+    fireEvent.change(end, { target: { value: '2026-11-01' } })
     await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' })))
-    const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')!
-    const { event } = JSON.parse(init!.body as string)
-    expect(event).toMatchObject({ startDate: '2026-10-30', endDate: '2026-11-01' })
+    expect(await posted()).toMatchObject({ startDate: '2026-10-30', endDate: '2026-11-01' })
+  })
+
+  it('blocks an end date before the start date', async () => {
+    const { fetchMock } = setup()
+    await userEvent.type(await screen.findByLabelText('Title'), 'Fall Track Day')
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-30' } })
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2026-09-23' } })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Ends before it starts')
+    await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }))
   })
 })

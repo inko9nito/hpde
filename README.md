@@ -55,7 +55,7 @@ widget still reads `api/events.json` from GitHub Pages.
 Admins get a **+** button on the home page that opens a *New event* form:
 title, start/end date, organizer, location, city, track configuration,
 direction and event page. A new event starts with no schedule — its
-Schedule tab says "Schedule not posted yet" until one is added.
+Schedule tab says "Schedule coming soon" until one is added.
 
 Admins can also delete an event created this way: *Info* tab → **Delete
 event** → confirm. Built-in events (the ones in `src/data`) can't be

@@ -27,20 +27,20 @@ describe('events created in the app (#229)', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('lists a created event and shows "Schedule not posted yet" for it', async () => {
+  it('lists a created event and shows "Schedule coming soon" for it', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     await userEvent.click(await screen.findByRole('button', { name: /New Track Day/ }))
 
     const panel = await screen.findByRole('tabpanel')
-    expect(within(panel).getByText('Schedule not posted yet')).toBeInTheDocument()
+    expect(within(panel).getByText('Schedule coming soon')).toBeInTheDocument()
   })
 
   it('resolves a direct link to a created event once it has loaded', async () => {
     window.location.hash = `#/event/${created.id}`
     render(<EventsProvider><App /></EventsProvider>)
 
-    expect(await screen.findByText('Schedule not posted yet')).toBeInTheDocument()
+    expect(await screen.findByText('Schedule coming soon')).toBeInTheDocument()
   })
 
   it('waits for created events instead of showing another event, then says when one is gone', async () => {

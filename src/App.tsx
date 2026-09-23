@@ -252,7 +252,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Top-level tab bar: Schedule | My notes | Info */}
+        {/* Top-level tab bar: Schedule | Info | My notes */}
         <div className="mb-3">
           <EventTabs active={activeTab} onChange={setActiveTab} />
         </div>
@@ -270,8 +270,8 @@ export default function App() {
           {activeTab === 'schedule' && !hasSchedule && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
               <CalendarClock size={20} className="mx-auto text-gray-400" aria-hidden="true" />
-              <p className="mt-2 text-sm font-medium text-gray-700">Schedule not posted yet</p>
-              <p className="mt-1 text-xs text-gray-400">Check the Info tab for event details.</p>
+              <p className="mt-2 text-sm font-medium text-gray-700">Schedule coming soon</p>
+              <p className="mt-1 text-xs text-gray-400">It’ll be posted here once the organizer announces it.</p>
             </div>
           )}
 

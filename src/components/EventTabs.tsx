@@ -4,8 +4,8 @@ interface Tab { id: EventTabId; label: string }
 
 const TABS: readonly Tab[] = [
   { id: 'schedule', label: 'Schedule' },
-  { id: 'notes', label: 'My notes' },
   { id: 'info', label: 'Info' },
+  { id: 'notes', label: 'My notes' },
 ]
 
 /**
@@ -23,7 +23,7 @@ interface Props {
 }
 
 /**
- * Segmented top-level tabs for the event page (Schedule / My notes / Info).
+ * Segmented top-level tabs for the event page (Schedule / Info / My notes).
  * Visual language matches the multi-day day tabs: pill inside a white
  * rounded card, active segment is a dark-gray filled pill.
  */
