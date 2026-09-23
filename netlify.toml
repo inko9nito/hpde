@@ -15,3 +15,8 @@
   from = "/api/me"
   to = "/.netlify/functions/me"
   status = 200
+
+[[redirects]]
+  from = "/api/created-events"
+  to = "/.netlify/functions/created-events"
+  status = 200

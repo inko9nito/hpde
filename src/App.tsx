@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Home } from 'lucide-react'
+import { Home, CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
@@ -16,8 +16,9 @@ import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
 import { AccountButton } from './components/AccountButton'
 import { SignInPrompt } from './components/SignInPrompt'
+import { NewEventPage } from './components/NewEventPage'
 import { useAuth } from './auth/AuthContext'
-import { EVENTS, ALL_EVENTS } from './data'
+import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
@@ -65,6 +66,7 @@ function useHashRoute() {
 
 const EVENT_HASH_PREFIX = '#/event/'
 const LANDING_HASH = '#/'
+const NEW_EVENT_HASH = '#/new-event'
 
 function eventHash(eventId: string): string {
   return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
@@ -82,6 +84,7 @@ function isEmptyHash(hash: string): boolean {
 export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus } = useAuth()
+  const { events: EVENTS, allEvents: ALL_EVENTS } = useEvents()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -118,6 +121,9 @@ export default function App() {
   const todayDay = findTodayDay(activeEvent)
   const isToday = activeDay.date === todayLocalISO()
   const multiDay = activeEvent.days.length > 1
+  // Events created in the app start with no schedule (#229) — it's added
+  // separately, so until then the Schedule tab says so instead.
+  const hasSchedule = activeEvent.days.some(d => d.activities.length > 0)
 
   const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
   const isPastEvent = lastEventDate < todayLocalISO()
@@ -161,7 +167,9 @@ export default function App() {
       const { live } = partitionEvents(EVENTS)
       setHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
     }
-  }, [hash])
+    // ALL_EVENTS too: an event created in the app arrives after load, so a
+    // direct link to one only resolves once the fetch lands.
+  }, [hash, ALL_EVENTS])
 
   // '#/widget-script' is the old name for this page (pre-#213) — keep it
   // working in case anyone bookmarked or shared it.
@@ -171,6 +179,10 @@ export default function App() {
 
   if (hash === '#/share') {
     return <SharePage />
+  }
+
+  if (hash === NEW_EVENT_HASH) {
+    return <NewEventPage onCreated={switchEvent} />
   }
 
   return (
@@ -231,7 +243,15 @@ export default function App() {
           aria-labelledby={`event-tab-${activeTab}`}
           className="tab-fade"
         >
-          {activeTab === 'schedule' && (
+          {activeTab === 'schedule' && !hasSchedule && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+              <CalendarClock size={20} className="mx-auto text-gray-400" aria-hidden="true" />
+              <p className="mt-2 text-sm font-medium text-gray-700">Schedule not posted yet</p>
+              <p className="mt-1 text-xs text-gray-400">Check the Info tab for event details.</p>
+            </div>
+          )}
+
+          {activeTab === 'schedule' && hasSchedule && (
             <>
               {/* Day tabs + Now — only shown for multi-day events */}
               {multiDay && (

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Calendar as CalendarIcon, List } from 'lucide-react'
-import { EVENTS } from '../data'
+import { Calendar as CalendarIcon, List, Plus } from 'lucide-react'
+import { useEvents } from '../data/EventsContext'
+import { useAuth } from '../auth/AuthContext'
+import { ADMIN_ROLE } from './NewEventPage'
 import { partitionEvents } from '../utils/eventClass'
 import { eventSubtitle } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
@@ -75,6 +77,9 @@ function EventCard({
 
 export function LandingPage({ onOpenEvent }: Props) {
   const [view, setView] = useLocalStorage<LandingView>('hpde:landingView', 'list')
+  const { events: EVENTS } = useEvents()
+  const { user } = useAuth()
+  const isAdmin = !!user?.roles.includes(ADMIN_ROLE)
   const { live, upcoming, past } = partitionEvents(EVENTS)
   const upcomingRows = [...live, ...upcoming]
 
@@ -84,6 +89,15 @@ export function LandingPage({ onOpenEvent }: Props) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <h1 className="text-xl font-bold text-gray-900 leading-tight">HPDE Schedule</h1>
           <div className="flex shrink-0 items-center gap-2">
+          {isAdmin && (
+            <a
+              href="#/new-event"
+              aria-label="New event"
+              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+            >
+              <Plus size={18} />
+            </a>
+          )}
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('list')}

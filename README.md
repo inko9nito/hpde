@@ -48,8 +48,29 @@ widget still reads `api/events.json` from GitHub Pages.
   `requireUser(context)` (`netlify/lib/auth.mjs`) and return 401 without
   one. `/api/me` is the first example.
 - Roles (*Identity → Users → a user → Roles*) come through as
-  `user.roles`. Nothing checks them yet; they're how creating events will
-  be limited to organizers later.
+  `user.roles`. The `admin` role can create events (below).
+
+## Creating events (admins)
+
+Admins get a **+** button on the home page that opens a *New event* form:
+title, start/end date, organizer, location, city, track configuration,
+direction and event page. A new event starts with no schedule — its
+Schedule tab says "Schedule not posted yet" until one is added.
+
+Created events are stored in **Netlify Blobs** (store `events`) by the
+`created-events` function (`/api/created-events`: public `GET`, admin-only
+`POST`). No extra Netlify setup is needed for Blobs. They show up on the
+Netlify site only — not on GitHub Pages or in the iOS widget yet.
+
+**Make yourself an admin (one time)**
+1. Sign in on the Netlify site once with Google, so your user exists.
+2. Netlify → your site → *Identity* (or *Project configuration →
+   Identity*) → **Users** → click your user.
+3. Under *Roles*, **Edit settings** → type `admin` → **Save**.
+4. Back on the site, sign out and in again (or wait up to an hour for the
+   token to refresh) — the **+** appears on the home page.
+
+Repeat for anyone else who should be able to add events.
 
 ---
 
