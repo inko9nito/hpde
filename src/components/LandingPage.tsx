@@ -79,7 +79,7 @@ function EventCard({
       <DateBlock event={event} muted={muted} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-rubik text-base font-bold leading-tight text-gray-900">
+          <span className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">
             {event.name}
           </span>
           {live && <StatusBadge status="live" size="sm" />}
