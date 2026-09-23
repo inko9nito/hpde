@@ -3,7 +3,7 @@ import { Home } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
 import { EventPicker } from './components/EventPicker'
-import { EventTabs } from './components/EventTabs'
+import { EventTabs, isEventTabId } from './components/EventTabs'
 import type { EventTabId } from './components/EventTabs'
 import { EventInfo } from './components/EventInfo'
 import { Toggle } from './components/Toggle'
@@ -82,10 +82,12 @@ export default function App() {
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
-  // Active tab on the event page. Starts on Schedule every time the app
-  // loads; persists across event switches within a session (natural
-  // useState behavior — the tab bar isn't remounted on event change).
-  const [activeTab, setActiveTab] = useState<EventTabId>('schedule')
+  // Active tab on the event page. Persisted so pull-to-refresh — which
+  // reloads the page — comes back on the tab you were reading. Switching
+  // events deliberately resets it to Schedule (see switchEvent): the tab
+  // is a view of one event, not a global mode.
+  const [storedTab, setActiveTab] = useLocalStorage<EventTabId>('hpde:activeTab', 'schedule')
+  const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
@@ -131,6 +133,7 @@ export default function App() {
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
+    setActiveTab('schedule')
     setHash(eventHash(event.id))
   }
 
