@@ -23,6 +23,7 @@ import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
+import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -183,6 +184,12 @@ export default function App() {
   // Events created in the app start with no schedule (#229) — it's added
   // separately, so until then the Schedule tab says so instead.
   const hasSchedule = activeEvent.days.some(d => d.activities.length > 0)
+
+  // While an event's page is open, the tab shows its name and track shape
+  // (#233) — and so do iOS Favorites / Home Screen bookmarks made from it.
+  const routeEvent = ALL_EVENTS.find(e => e.id === routeEventId)
+  useTrackFavicon(routeEvent?.trackId)
+  useDocumentTitle(routeEvent?.name)
 
   const lastEventDate = activeEvent.days.reduce((max, d) => (d.date > max ? d.date : max), activeEvent.days[0].date)
   const isPastEvent = lastEventDate < todayLocalISO()

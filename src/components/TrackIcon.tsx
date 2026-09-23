@@ -17,6 +17,12 @@ const TRACK_ICONS: Record<string, string> = {
 /** Every trackId that has a real icon (the New event form matches these). */
 export const TRACK_ICON_IDS = Object.keys(TRACK_ICONS)
 
+/** URL of a track's raw (black-fill) SVG, or undefined when there's no
+ *  real icon for it. */
+export function trackIconSrc(trackId?: string): string | undefined {
+  return trackId ? TRACK_ICONS[trackId] : undefined
+}
+
 type TrackIconTone = 'default' | 'selected'
 
 interface Props {
@@ -49,7 +55,7 @@ interface Props {
  * text color.
  */
 export function TrackIcon({ trackId, size = 28, muted = false, tone = 'default', className }: Props) {
-  const src = trackId ? TRACK_ICONS[trackId] : undefined
+  const src = trackIconSrc(trackId)
   const toneCls = tone === 'selected'
     ? 'bg-blue-100 text-blue-600'
     : 'bg-gray-100 text-gray-700'
