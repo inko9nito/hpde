@@ -58,6 +58,23 @@ function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
   )
 }
 
+/** Event name (with a LIVE pill when it's on today) over its organizer. */
+function EventTitle({ event, live }: { event: EventConfig; live: boolean }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <span className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">
+          {event.name}
+        </span>
+        {live && <StatusBadge status="live" size="sm" />}
+      </div>
+      <div className="mt-0.5 truncate text-sm text-gray-500">
+        {event.organizer ?? 'Organizer not set'}
+      </div>
+    </div>
+  )
+}
+
 function EventCard({
   event,
   muted,
@@ -77,20 +94,39 @@ function EventCard({
       }`}
     >
       <DateBlock event={event} muted={muted} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">
-            {event.name}
-          </span>
-          {live && <StatusBadge status="live" size="sm" />}
-        </div>
-        <div className="mt-0.5 truncate text-sm text-gray-500">
-          {event.organizer ?? 'Organizer not set'}
-        </div>
-      </div>
+      <EventTitle event={event} live={live} />
       {/* Same dark tile as the event page header; no padding, the SVGs
           carry their own margin. */}
       <TrackIcon trackId={event.trackId} tone="dark" size={48} padding={0} radius="rounded-xl" />
+    </button>
+  )
+}
+
+/** The next upcoming (or live) event: the track shape large on a dark
+ *  banner across the top, date and name underneath. */
+function FeaturedEventCard({
+  event,
+  live,
+  onClick,
+}: {
+  event: EventConfig
+  live: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-sm transition-colors hover:border-gray-400"
+    >
+      {/* The SVGs are square with the shape in a wide band across the
+          middle, so a box taller than the banner is cropped by it. */}
+      <div className="flex h-28 items-center justify-center overflow-hidden bg-gray-900">
+        <TrackIcon trackId={event.trackId} tone="dark" size={144} padding={0} radius="rounded-none" />
+      </div>
+      <div className="flex items-center gap-3 p-3">
+        <DateBlock event={event} muted={false} />
+        <EventTitle event={event} live={live} />
+      </div>
     </button>
   )
 }
@@ -184,15 +220,24 @@ export function LandingPage({ onOpenEvent }: Props) {
                 loaded ? <EmptyRow>No upcoming events.</EmptyRow> : <EventCardSkeleton />
               ) : (
                 <div className="space-y-2">
-                  {upcomingRows.map(e => (
-                    <EventCard
-                      key={e.id}
-                      event={e}
-                      muted={false}
-                      live={live.includes(e)}
-                      onClick={() => onOpenEvent(e)}
-                    />
-                  ))}
+                  {upcomingRows.map((e, i) =>
+                    i === 0 ? (
+                      <FeaturedEventCard
+                        key={e.id}
+                        event={e}
+                        live={live.includes(e)}
+                        onClick={() => onOpenEvent(e)}
+                      />
+                    ) : (
+                      <EventCard
+                        key={e.id}
+                        event={e}
+                        muted={false}
+                        live={live.includes(e)}
+                        onClick={() => onOpenEvent(e)}
+                      />
+                    ),
+                  )}
                 </div>
               )}
             </section>
