@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T14:21:21.397Z",
+  "generatedAt": "2026-09-23T16:12:13.579Z",
   "events": [
     {
       "id": "2026-09-13_msr-scca",
@@ -8,7 +8,7 @@
       "organizer": "Texas Region SCCA",
       "track": "Motorsport Ranch - Cresson",
       "city": "Cresson, TX",
-      "configuration": "1.7",
+      "configuration": "1.7 mile",
       "direction": "Clockwise",
       "runGroups": [
         {
