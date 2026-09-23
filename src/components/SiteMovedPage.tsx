@@ -28,7 +28,7 @@ export function SiteMovedPage() {
           HPDE Events has moved
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          The site now lives at{' '}
+          The app now lives at{' '}
           <span className="font-medium text-gray-900">{NEW_SITE_HOST}</span>.
         </p>
         <p className="mt-1 text-sm text-gray-600">
@@ -38,7 +38,7 @@ export function SiteMovedPage() {
           href={newSiteUrl(window.location.hash)}
           className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700"
         >
-          Go to the new site
+          Go to the new app
           <ArrowRight size={16} aria-hidden="true" />
         </a>
       </div>
