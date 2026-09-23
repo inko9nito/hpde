@@ -9,7 +9,7 @@ import { EventInfo } from './components/EventInfo'
 import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
-import { WidgetScriptPage } from './components/WidgetScriptPage'
+import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { SharePage } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
@@ -159,8 +159,10 @@ export default function App() {
     }
   }, [hash])
 
-  if (hash === '#/widget-script') {
-    return <WidgetScriptPage />
+  // '#/widget-script' is the old name for this page (pre-#213) — keep it
+  // working in case anyone bookmarked or shared it.
+  if (hash === '#/widget-setup' || hash === '#/widget-script') {
+    return <WidgetSetupPage />
   }
 
   if (hash === '#/share') {

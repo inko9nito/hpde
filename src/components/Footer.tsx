@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <div className="mt-6 pb-8 text-center text-xs">
       <div>
-        <a href="#/widget-script" className="text-gray-600 underline hover:text-gray-800">
+        <a href="#/widget-setup" className="text-gray-600 underline hover:text-gray-800">
           iOS widget
         </a>
         {' · '}
