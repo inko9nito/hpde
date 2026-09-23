@@ -3,8 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { useTrackFavicon, useDocumentTitle } from './trackFavicon'
 import { trackIconSrc } from '../components/TrackIcon'
 
-function iconHref(rel = 'icon') {
-  return document.head.querySelector(`link[rel~="${rel}"]`)?.getAttribute('href') ?? null
+function iconHref(rel = 'icon', sizes = '64x64') {
+  return document.head.querySelector(`link[rel~="${rel}"][sizes="${sizes}"]`)?.getAttribute('href') ?? null
 }
 
 // jsdom has no canvas, so the hook falls back to the raw SVG URL — enough
@@ -25,9 +25,18 @@ describe('useTrackFavicon (#233)', () => {
 
   it('also sets the iOS touch icon (Favorites / Home Screen)', async () => {
     const { unmount } = renderHook(() => useTrackFavicon('msrc-3-1'))
-    await waitFor(() => expect(iconHref('apple-touch-icon')).toBe(trackIconSrc('msrc-3-1')))
+    await waitFor(() => expect(iconHref('apple-touch-icon', '180x180')).toBe(trackIconSrc('msrc-3-1')))
     unmount()
-    expect(iconHref('apple-touch-icon')).toBeNull()
+    expect(iconHref('apple-touch-icon', '180x180')).toBeNull()
+  })
+
+  it('also sets a 192px icon for Android home-screen shortcuts', async () => {
+    const { unmount } = renderHook(() => useTrackFavicon('msrc-3-1'))
+    await waitFor(() => expect(iconHref('icon', '192x192')).toBe(trackIconSrc('msrc-3-1')))
+    expect(iconHref('icon', '64x64')).toBe(trackIconSrc('msrc-3-1'))
+    unmount()
+    expect(iconHref('icon', '192x192')).toBeNull()
+    expect(iconHref('icon', '64x64')).toBeNull()
   })
 
   it('follows the track when switching events', async () => {
@@ -50,6 +59,7 @@ describe('useTrackFavicon (#233)', () => {
     const link = document.createElement('link')
     link.rel = 'icon'
     link.href = '/favicon.png'
+    link.setAttribute('sizes', '64x64')
     document.head.appendChild(link)
 
     const { unmount } = renderHook(() => useTrackFavicon('ecr-2-7'))

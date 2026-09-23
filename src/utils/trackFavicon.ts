@@ -11,6 +11,12 @@ import { trackIconSrc } from '../components/TrackIcon'
 // - apple-touch-icon: what iOS uses for Favorites and Add to Home Screen
 //   (it never reads the favicon). Square and opaque, because iOS rounds
 //   the corners itself and fills any transparency with black.
+// - 192px icon: what Android Chrome uses for Add to Home screen when the
+//   site has no manifest — it picks the largest <link rel="icon">. Extra
+//   padding keeps the shape inside the circle many launchers mask it to.
+//
+// The favicon and the Android icon are both rel="icon", told apart by
+// `sizes`, so desktop browsers pick the 64px one tuned for tabs.
 interface IconStyle {
   size: number
   padding: number
@@ -23,6 +29,7 @@ interface IconStyle {
 const FAVICON: IconStyle = { size: 64, padding: 7, radius: 14, bolden: 1.5, tileColor: '#f3f4f6' }
 // White like other Favorites tiles: gray-100 vanishes on iOS's gray sheet.
 const TOUCH_ICON: IconStyle = { size: 180, padding: 30, radius: 0, bolden: 2, tileColor: '#ffffff' }
+const ANDROID_ICON: IconStyle = { size: 192, padding: 40, radius: 0, bolden: 2, tileColor: '#ffffff' }
 const SHAPE_COLOR = '#374151'
 // Raster size for an SVG that reports no intrinsic size (ours are 437).
 const SOURCE_FALLBACK = 437
@@ -106,15 +113,16 @@ export async function renderTrackIcon(src: string, style: IconStyle = FAVICON): 
 }
 
 /**
- * Point the page's `<link rel={rel}>` at `href`, creating the link if
- * there isn't one. Returns a function that puts back whatever was there
- * before (or removes the link it added).
+ * Point the page's `<link rel={rel} sizes={sizes}>` at `href`, creating
+ * the link if there isn't one. Returns a function that puts back whatever
+ * was there before (or removes the link it added).
  */
-function swapLink(rel: string, href: string): () => void {
-  const existing = document.head.querySelector<HTMLLinkElement>(`link[rel~="${rel}"]`)
+function swapLink(rel: string, sizes: string, href: string): () => void {
+  const existing = document.head.querySelector<HTMLLinkElement>(`link[rel~="${rel}"][sizes="${sizes}"]`)
   const previousHref = existing?.getAttribute('href') ?? null
   const link = existing ?? document.createElement('link')
   link.rel = rel
+  link.setAttribute('sizes', sizes)
   link.setAttribute('href', href)
   if (!existing) document.head.appendChild(link)
   return () => {
@@ -125,8 +133,8 @@ function swapLink(rel: string, href: string): () => void {
 }
 
 /**
- * While `trackId` has a real icon, use it as the page's favicon and iOS
- * touch icon; put back whatever was there before (or nothing) when it
+ * While `trackId` has a real icon, use it as the page's favicon and its
+ * iOS / Android home-screen icons; put back whatever was there before (or nothing) when it
  * changes or the page goes away.
  */
 export function useTrackFavicon(trackId: string | undefined) {
@@ -139,10 +147,12 @@ export function useTrackFavicon(trackId: string | undefined) {
     const icons: [rel: string, style: IconStyle][] = [
       ['icon', FAVICON],
       ['apple-touch-icon', TOUCH_ICON],
+      ['icon', ANDROID_ICON],
     ]
     for (const [rel, style] of icons) {
+      const sizes = `${style.size}x${style.size}`
       const apply = (href: string) => {
-        if (!cancelled) restores.push(swapLink(rel, href))
+        if (!cancelled) restores.push(swapLink(rel, sizes, href))
       }
       renderTrackIcon(src, style).then(apply, () => apply(src))
     }
