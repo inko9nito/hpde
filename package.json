@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "widget:preview": "node scripts/widget-preview.mjs",
-    "widget:showcase": "node scripts/widget-showcase.mjs"
+    "widget:showcase": "node scripts/widget-showcase.mjs",
+    "icons:generate": "node scripts/app-icon/generate.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^11.1.0",
