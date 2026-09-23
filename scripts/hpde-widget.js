@@ -1,6 +1,6 @@
 // HPDE track-day schedule — iOS Home Screen widget for Scriptable.
 // Source: https://github.com/inko9nito/hpde/blob/main/scripts/hpde-widget.js
-// Data:   https://inko9nito.github.io/hpde/api/events.json
+// Data:   https://myhpde.netlify.app/api/events.json
 //
 // Setup: install Scriptable → paste this script → long-press Home Screen →
 //   Add Widget → Scriptable → Medium → Edit Widget → Script = this script.
@@ -24,7 +24,7 @@
 //   groups are alerted N minutes before start; all-drivers events (anything
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.
 
-const DATA_URL = "https://inko9nito.github.io/hpde/api/events.json"
+const DATA_URL = "https://myhpde.netlify.app/api/events.json"
 const SITE_URL = "https://myhpde.netlify.app/"
 const CACHE_FILENAME = "hpde-events.json"
 const NOTIF_STATE_FILENAME = "hpde-notif-state.json"

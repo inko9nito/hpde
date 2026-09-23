@@ -1,7 +1,7 @@
-// The app moved from GitHub Pages to Netlify (#246). The GitHub Pages copy
-// keeps deploying — the iOS widget still reads api/events.json from it — but
-// its pages now only point visitors at the new address.
-export const NEW_SITE_URL = 'https://myhpde.netlify.app/'
+// The app moved from GitHub Pages to Netlify (#246), and GitHub Pages stopped
+// deploying (#227). What's left there is the last build, whose pages only
+// point visitors at the new address.
+export const SITE_URL = 'https://myhpde.netlify.app/'
 
 type SiteLocation = Pick<Location, 'hostname' | 'pathname' | 'search'>
 
@@ -17,5 +17,5 @@ export function isOldSite(loc: SiteLocation): boolean {
 
 /** Same page on the new site: a bookmarked event opens that event there. */
 export function newSiteUrl(hash: string): string {
-  return hash && hash !== '#' ? `${NEW_SITE_URL}${hash}` : NEW_SITE_URL
+  return hash && hash !== '#' ? `${SITE_URL}${hash}` : SITE_URL
 }

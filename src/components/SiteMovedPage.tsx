@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { ArrowRight } from 'lucide-react'
-import { NEW_SITE_URL, newSiteUrl } from '../utils/siteMoved'
+import { SITE_URL, newSiteUrl } from '../utils/siteMoved'
 
-const NEW_SITE_HOST = new URL(NEW_SITE_URL).host
+const NEW_SITE_HOST = new URL(SITE_URL).host
 
 /**
  * Shown instead of the app on the old GitHub Pages site (#246). Nothing

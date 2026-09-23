@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Check, Copy, X } from 'lucide-react'
 import QRCode from 'qrcode'
+import { SITE_URL } from '../utils/siteMoved'
 
-const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}`
+// Always the live site, even when opened on a deploy preview or localhost.
+const shareUrl = SITE_URL
 
 export function SharePage() {
   const [copied, setCopied] = useState(false)

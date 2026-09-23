@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isOldSite, newSiteUrl, NEW_SITE_URL } from './siteMoved'
+import { isOldSite, newSiteUrl, SITE_URL } from './siteMoved'
 
 function loc(url: string) {
   const { hostname, pathname, search } = new URL(url)
@@ -27,8 +27,8 @@ describe('isOldSite', () => {
 
 describe('newSiteUrl', () => {
   it('points at the new site root when there is no route', () => {
-    expect(newSiteUrl('')).toBe(NEW_SITE_URL)
-    expect(newSiteUrl('#')).toBe(NEW_SITE_URL)
+    expect(newSiteUrl('')).toBe(SITE_URL)
+    expect(newSiteUrl('#')).toBe(SITE_URL)
   })
 
   it('keeps the route, so a bookmarked event opens that event', () => {
