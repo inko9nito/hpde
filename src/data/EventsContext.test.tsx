@@ -65,3 +65,27 @@ describe('withTrackMap', () => {
     expect(withTrackMap(created)).not.toHaveProperty('mapImage')
   })
 })
+
+describe('landing page while created events load', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('shows a loading row, not "No upcoming events", until the fetch lands', async () => {
+    // Far future: every built-in event is past, so Upcoming depends on the fetch.
+    vi.setSystemTime(new Date('2100-01-01T12:00:00'))
+    let resolve!: (r: Response) => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(r => { resolve = r })))
+    localStorage.clear()
+    window.location.hash = '#/'
+    render(<EventsProvider><App /></EventsProvider>)
+
+    expect(screen.getByLabelText('Loading events')).toBeInTheDocument()
+    expect(screen.queryByText('No upcoming events.')).not.toBeInTheDocument()
+
+    resolve(new Response(JSON.stringify({ events: [] }), { headers: { 'Content-Type': 'application/json' } }))
+    expect(await screen.findByText('No upcoming events.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Loading events')).not.toBeInTheDocument()
+  })
+})
