@@ -75,6 +75,18 @@ function EventCard({
   )
 }
 
+function AddEventLink() {
+  return (
+    <a
+      href="#/new-event"
+      className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+    >
+      <Plus size={14} aria-hidden="true" />
+      Add event
+    </a>
+  )
+}
+
 export function LandingPage({ onOpenEvent }: Props) {
   const [view, setView] = useLocalStorage<LandingView>('hpde:landingView', 'list')
   const { events: EVENTS } = useEvents()
@@ -89,15 +101,6 @@ export function LandingPage({ onOpenEvent }: Props) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <h1 className="text-xl font-bold text-gray-900 leading-tight">HPDE Schedule</h1>
           <div className="flex shrink-0 items-center gap-2">
-          {isAdmin && (
-            <a
-              href="#/new-event"
-              aria-label="New event"
-              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
-            >
-              <Plus size={18} />
-            </a>
-          )}
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
             <button
               onClick={() => setView('list')}
@@ -127,9 +130,12 @@ export function LandingPage({ onOpenEvent }: Props) {
         {view === 'list' ? (
           <div className="space-y-6">
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Upcoming
-              </h2>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Upcoming
+                </h2>
+                {isAdmin && <AddEventLink />}
+              </div>
               {upcomingRows.length === 0 ? (
                 <div className="rounded-lg border border-gray-200 bg-white px-3 py-4 text-center text-sm text-gray-500">
                   No upcoming events.

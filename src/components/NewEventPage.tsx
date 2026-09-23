@@ -3,6 +3,9 @@ import { X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, CREATED_EVENTS_URL } from '../data/EventsContext'
 import { SignInPrompt } from './SignInPrompt'
+import { SuggestInput } from './SuggestInput'
+import { collectOptions, findExact } from '../utils/fieldOptions'
+import type { SuggestField } from '../utils/fieldOptions'
 import type { EventConfig } from '../types'
 
 // Must match ADMIN_ROLE in netlify/lib/newEvent.mjs — the function is what
@@ -56,7 +59,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
  */
 export function NewEventPage({ onCreated }: Props) {
   const { status, user, authedFetch } = useAuth()
-  const { allEvents, addEvent } = useEvents()
+  const { events, allEvents, addEvent } = useEvents()
   const [form, setForm] = useState<FormState>(EMPTY)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -64,6 +67,41 @@ export function NewEventPage({ onCreated }: Props) {
   function set<K extends keyof FormState>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
+  }
+
+  // Suggestions come from the listed events (not the hidden test fixture).
+  // Once the location is a known track, only its configurations are offered.
+  const knownTrack = findExact(form.track, collectOptions(events, 'track'))
+  const sameTrack = (e: EventConfig) => !!knownTrack && findExact(e.track ?? '', [knownTrack]) !== null
+  const options: Record<SuggestField, string[]> = {
+    organizer: collectOptions(events, 'organizer'),
+    track: collectOptions(events, 'track'),
+    city: collectOptions(events, 'city'),
+    configuration: knownTrack
+      ? collectOptions(events, 'configuration', sameTrack)
+      : collectOptions(events, 'configuration'),
+  }
+
+  function suggest(key: SuggestField) {
+    return (value: string) => setForm(f => {
+      const next = { ...f, [key]: value }
+      // Picking a known track fills in its city, unless one's already set.
+      const track = key === 'track' ? findExact(value, options.track) : null
+      if (track && !next.city) {
+        const past = events.filter(e => e.track && findExact(e.track, [track]))
+        next.city = collectOptions(past, 'city')[0] ?? ''
+      }
+      return next
+    })
+  }
+
+  // Final pass so a re-spelling of an existing value is never saved as new.
+  function canonical(f: FormState): FormState {
+    const out = { ...f }
+    for (const key of Object.keys(options) as SuggestField[]) {
+      out[key] = findExact(f[key], options[key]) ?? f[key].trim()
+    }
+    return out
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -74,7 +112,7 @@ export function NewEventPage({ onCreated }: Props) {
       const res = await authedFetch(CREATED_EVENTS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: form, takenIds: allEvents.map(ev => ev.id) }),
+        body: JSON.stringify({ event: canonical(form), takenIds: allEvents.map(ev => ev.id) }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok || !body.event) {
@@ -116,20 +154,20 @@ export function NewEventPage({ onCreated }: Props) {
             </Field>
           </div>
           <Field label="Organizer">
-            <input value={form.organizer} onChange={set('organizer')} className={inputClass} placeholder="Texas Region SCCA" />
+            <SuggestInput value={form.organizer} onChange={suggest('organizer')} options={options.organizer} className={inputClass} placeholder="Texas Region SCCA" />
           </Field>
         </div>
 
         <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <Field label="Location">
-            <input value={form.track} onChange={set('track')} className={inputClass} placeholder="Motorsport Ranch - Cresson" />
+            <SuggestInput value={form.track} onChange={suggest('track')} options={options.track} className={inputClass} placeholder="Motorsport Ranch - Cresson" />
           </Field>
           <Field label="City">
-            <input value={form.city} onChange={set('city')} className={inputClass} placeholder="Cresson, TX" />
+            <SuggestInput value={form.city} onChange={suggest('city')} options={options.city} className={inputClass} placeholder="Cresson, TX" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Track configuration">
-              <input value={form.configuration} onChange={set('configuration')} className={inputClass} placeholder="1.7" />
+              <SuggestInput value={form.configuration} onChange={suggest('configuration')} options={options.configuration} className={inputClass} placeholder="1.7 mile" />
             </Field>
             <Field label="Direction">
               <select value={form.direction} onChange={set('direction')} className={inputClass}>
