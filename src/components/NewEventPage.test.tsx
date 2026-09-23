@@ -34,20 +34,22 @@ describe('NewEventPage', () => {
     return { fetchMock, posted }
   }
 
-  it('sends the end date, and "Clear end date" empties it', async () => {
+  it('defaults the end date to the start date and moves it with the start', async () => {
     const { posted } = setup()
     await userEvent.type(await screen.findByLabelText('Title'), 'Fall Track Day')
-    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-30' } })
+    const start = screen.getByLabelText('Start date') as HTMLInputElement
     const end = screen.getByLabelText('End date') as HTMLInputElement
-    fireEvent.change(end, { target: { value: '2026-11-01' } })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Clear end date' }))
-    expect(end.value).toBe('')
-    expect(screen.getByText('Leave blank for one day')).toBeInTheDocument()
+    fireEvent.change(start, { target: { value: '2026-10-30' } })
+    expect(end.value).toBe('2026-10-30')
 
+    // Make it a 3-day event, then move the start: the length is kept.
     fireEvent.change(end, { target: { value: '2026-11-01' } })
+    fireEvent.change(start, { target: { value: '2026-11-06' } })
+    expect(end.value).toBe('2026-11-08')
+
     await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
-    expect(await posted()).toMatchObject({ startDate: '2026-10-30', endDate: '2026-11-01' })
+    expect(await posted()).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-08' })
   })
 
   it('blocks an end date before the start date', async () => {

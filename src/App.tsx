@@ -18,6 +18,8 @@ import { AccountButton } from './components/AccountButton'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage } from './components/NewEventPage'
 import { DeleteEventButton } from './components/DeleteEventButton'
+import { Toast } from './components/Toast'
+import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { partitionEvents } from './utils/eventClass'
@@ -113,6 +115,10 @@ export default function App() {
   const [storedTab, setActiveTab] = useLocalStorage<EventTabId>('hpde:activeTab', 'schedule')
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  function showToast(text: string) {
+    setToast({ id: Date.now(), text })
+  }
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
   // empty-hash-redirects-to-today's-live-event effect below — should show
@@ -203,7 +209,15 @@ export default function App() {
   }
 
   if (hash === NEW_EVENT_HASH) {
-    return <NewEventPage onCreated={switchEvent} />
+    return (
+      <NewEventPage
+        onCreated={event => {
+          switchEvent(event)
+          // Reassurance that this is the new event, not an old one.
+          showToast(`“${event.name}” created`)
+        }}
+      />
+    )
   }
 
   return (
@@ -351,7 +365,13 @@ export default function App() {
           {activeTab === 'info' && (
             <>
               <EventInfo event={activeEvent} />
-              <DeleteEventButton event={activeEvent} onDeleted={goHome} />
+              <DeleteEventButton
+                event={activeEvent}
+                onDeleted={() => {
+                  showToast(`“${activeEvent.name}” deleted`)
+                  goHome()
+                }}
+              />
             </>
           )}
         </div>
@@ -363,6 +383,7 @@ export default function App() {
     </PullToRefresh>
     </PushPage>
     )}
+    <Toast toast={toast} onDone={() => setToast(null)} />
     </>
   )
 }

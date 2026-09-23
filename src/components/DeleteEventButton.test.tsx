@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { AuthProvider } from '../auth/AuthContext'
@@ -36,7 +36,9 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
   if (String(url).includes('/.netlify/identity/settings')) return json({})
   if (String(url).includes('api/created-events')) {
-    return init?.method === 'DELETE' ? json({ deleted: created.id }) : json({ events: [created] })
+    if (init?.method === 'DELETE') return json({ deleted: created.id })
+    if (init?.method === 'POST') return json({ event: { ...created, id: '2099-11-11_fresh', name: 'Fresh Event' } }, 201)
+    return json({ events: [created] })
   }
   return new Response('not found', { status: 404 })
 })
@@ -77,6 +79,7 @@ describe('deleting a created event (#229)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(window.location.hash).toBe('#/'))
+    expect(screen.getByRole('status')).toHaveTextContent('“Test” deleted')
     const [url, init] = fetchMock.mock.calls.find(([, i]) => i?.method === 'DELETE')!
     expect(url).toContain(`?id=${created.id}`)
     expect(new Headers(init!.headers).get('Authorization')).toBe('Bearer token')
@@ -101,4 +104,17 @@ describe('deleting a created event (#229)', () => {
     await screen.findAllByRole('heading', { name: new RegExp(eventName) })
     expect(screen.queryByRole('button', { name: 'Delete event' })).not.toBeInTheDocument()
   })
+
+  it('confirms a new event with a toast on its page', async () => {
+    signInAs(['admin'])
+    window.location.hash = '#/new-event'
+    renderApp()
+    await userEvent.type(await screen.findByLabelText('Title'), 'Fresh Event')
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2099-11-11' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+
+    await waitFor(() => expect(window.location.hash).toBe('#/event/2099-11-11_fresh'))
+    expect(await screen.findByRole('status')).toHaveTextContent('“Fresh Event” created')
+  })
 })
+
