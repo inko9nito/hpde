@@ -102,8 +102,8 @@ function EventCard({
   )
 }
 
-/** The next upcoming (or live) event: the track shape large on a dark
- *  banner across the top, date and name underneath. */
+/** An upcoming (or live) event: the track shape large on a dark banner
+ *  across the top, date and name underneath. */
 function FeaturedEventCard({
   event,
   live,
@@ -206,7 +206,7 @@ export function LandingPage({ onOpenEvent }: Props) {
         </div>
 
         {view === 'list' ? (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
@@ -219,25 +219,15 @@ export function LandingPage({ onOpenEvent }: Props) {
                 // upcoming ones — don't flash "No upcoming events" meanwhile.
                 loaded ? <EmptyRow>No upcoming events.</EmptyRow> : <EventCardSkeleton />
               ) : (
-                <div className="space-y-2">
-                  {upcomingRows.map((e, i) =>
-                    i === 0 ? (
-                      <FeaturedEventCard
-                        key={e.id}
-                        event={e}
-                        live={live.includes(e)}
-                        onClick={() => onOpenEvent(e)}
-                      />
-                    ) : (
-                      <EventCard
-                        key={e.id}
-                        event={e}
-                        muted={false}
-                        live={live.includes(e)}
-                        onClick={() => onOpenEvent(e)}
-                      />
-                    ),
-                  )}
+                <div className="space-y-4">
+                  {upcomingRows.map(e => (
+                    <FeaturedEventCard
+                      key={e.id}
+                      event={e}
+                      live={live.includes(e)}
+                      onClick={() => onOpenEvent(e)}
+                    />
+                  ))}
                 </div>
               )}
             </section>
@@ -248,7 +238,7 @@ export function LandingPage({ onOpenEvent }: Props) {
               {past.length === 0 ? (
                 <EmptyRow>No past events.</EmptyRow>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {past.map(e => (
                     <EventCard
                       key={e.id}
