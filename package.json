@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "widget:preview": "node scripts/widget-preview.mjs"
+    "widget:preview": "node scripts/widget-preview.mjs",
+    "widget:showcase": "node scripts/widget-showcase.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
