@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Check, Copy, X, Bell, RefreshCw, ArrowUpRight, Plus, ChevronDown } from 'lucide-react'
+import { Check, Copy, X, Bell, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 import widgetSmall from '../assets/widget-small.png'
 import widgetMedium from '../assets/widget-medium.png'
 import widgetLarge from '../assets/widget-large.png'
-import { EVENTS } from '../data'
-import { partitionEvents } from '../utils/eventClass'
-import type { RunGroupConfig } from '../types'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/scriptable/id1405459188'
 
@@ -18,17 +15,6 @@ const PREVIEWS = [
   { id: 'large', label: 'Large', src: widgetLarge, width: 364 },
 ] as const
 type PreviewId = (typeof PREVIEWS)[number]['id']
-
-const DEFAULT_LEAD_MIN = 10
-const LEAD_OPTIONS = [5, 10, 15, 20, 30]
-
-// Run groups differ per event; offer the ones from the event a new user
-// is most likely setting up for.
-function relevantRunGroups(): RunGroupConfig[] {
-  const { live, upcoming, past } = partitionEvents(EVENTS)
-  const event = live[0] ?? upcoming[0] ?? past[0]
-  return event?.runGroups ?? []
-}
 
 function useCopy(): [boolean, (text: string) => Promise<void>] {
   const [copied, setCopied] = useState(false)
@@ -68,6 +54,31 @@ function Step({ n, title, last, children }: {
   )
 }
 
+function Chip({ children }: { children: string }) {
+  return (
+    <code className="rounded bg-gray-900 px-2 py-1 text-xs font-semibold text-white">
+      {children}
+    </code>
+  )
+}
+
+function ParamOption({ title, description, examples }: {
+  title: string
+  description: string
+  examples: string[]
+}) {
+  return (
+    <li className="py-3 first:pt-0 last:pb-0">
+      <div className="text-sm font-semibold text-gray-900">{title}</div>
+      <div className="text-sm text-gray-600">{description}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-xs font-medium text-gray-400">Examples:</span>
+        {examples.map(e => <Chip key={e}>{e}</Chip>)}
+      </div>
+    </li>
+  )
+}
+
 function Accordion({ icon, title, children }: {
   icon: React.ReactNode
   title: string
@@ -78,7 +89,8 @@ function Accordion({ icon, title, children }: {
       <summary className="flex cursor-pointer list-none items-center gap-3 py-3.5 text-sm font-medium text-gray-900 [&::-webkit-details-marker]:hidden">
         <span className="text-gray-400">{icon}</span>
         <span className="flex-1">{title}</span>
-        <Plus size={16} className="text-gray-400 transition-transform group-open:rotate-45" />
+        <Plus size={16} className="text-gray-400 group-open:hidden" />
+        <Minus size={16} className="hidden text-gray-400 group-open:block" />
       </summary>
       <div className="pb-4 pl-7 text-sm text-gray-600">{children}</div>
     </details>
@@ -89,27 +101,10 @@ export function WidgetSetupPage() {
   const [preview, setPreview] = useState<PreviewId>('medium')
   const [showScript, setShowScript] = useState(false)
   const [scriptCopied, copyScript] = useCopy()
-  const [paramCopied, copyParam] = useCopy()
-  const [groups] = useState(relevantRunGroups)
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([])
-  const [leadMinutes, setLeadMinutes] = useState(DEFAULT_LEAD_MIN)
 
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [])
-
-  function toggleGroup(id: string) {
-    setSelectedGroups(sel => (sel.includes(id) ? sel.filter(g => g !== id) : [...sel, id]))
-  }
-
-  // Selected groups in the event's own order, then the lead time — the
-  // format parseWidgetParameter() in scripts/hpde-widget.js reads.
-  const orderedGroups = groups.filter(g => selectedGroups.includes(g.id)).map(g => g.id)
-  const parts = [
-    orderedGroups.join(','),
-    leadMinutes === DEFAULT_LEAD_MIN ? '' : `${leadMinutes}m`,
-  ].filter(Boolean)
-  const param = parts.join('|')
 
   const current = PREVIEWS.find(p => p.id === preview)!
 
@@ -228,84 +223,26 @@ export function WidgetSetupPage() {
             <span className="text-xs text-gray-400">Optional</span>
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
-            Filter by run group and choose when alerts arrive.
+            Long-press the widget → <strong>Edit Widget</strong> → <strong>Parameter</strong>. You
+            can change two things:
           </p>
-
-          <div className="mt-4 text-xs font-semibold text-gray-700">Run group</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setSelectedGroups([])}
-              aria-pressed={selectedGroups.length === 0}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                selectedGroups.length === 0
-                  ? 'border-gray-900 bg-gray-900 text-white'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
-              }`}
-            >
-              All groups
-            </button>
-            {groups.map(g => {
-              const on = selectedGroups.includes(g.id)
-              return (
-                <button
-                  key={g.id}
-                  onClick={() => toggleGroup(g.id)}
-                  aria-pressed={on}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    on
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
-                  }`}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full ${g.bgClass}`} aria-hidden="true" />
-                  {g.label}
-                </button>
-              )
-            })}
-          </div>
-
-          <label htmlFor="lead-time" className="mt-4 block text-xs font-semibold text-gray-700">
-            Alert before activities
-          </label>
-          <div className="relative mt-2">
-            <select
-              id="lead-time"
-              value={leadMinutes}
-              onChange={e => setLeadMinutes(Number(e.target.value))}
-              className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2 pr-9 text-sm text-gray-900 hover:border-gray-400"
-            >
-              {LEAD_OPTIONS.map(n => (
-                <option key={n} value={n}>
-                  {n} minutes{n === DEFAULT_LEAD_MIN ? ' (default)' : ''}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          </div>
-
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-2.5">
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                Widget parameter
-              </div>
-              <div className="mt-0.5 truncate font-mono text-sm font-semibold text-gray-900">
-                {param || 'Leave blank'}
-              </div>
-            </div>
-            {param && (
-              <button
-                onClick={() => copyParam(param)}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-400"
-              >
-                {paramCopied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                {paramCopied ? 'Copied' : 'Copy'}
-              </button>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-gray-400">
-            Paste this in <strong className="text-gray-500">Edit Widget → Parameter</strong>.
-            Select more than one group to combine them.
-          </p>
+          <ul className="mt-3 divide-y divide-gray-100">
+            <ParamOption
+              title="Run group"
+              description="Show only your group's sessions and alerts. Leave blank for all groups."
+              examples={['blue', 'blue,orange']}
+            />
+            <ParamOption
+              title="Alert timing"
+              description="How many minutes before each activity you're alerted. Default is 10."
+              examples={['5m', '15m']}
+            />
+            <ParamOption
+              title="Run group and timing"
+              description="Separate them with a vertical bar."
+              examples={['blue|15m']}
+            />
+          </ul>
         </section>
 
         {/* More info */}
