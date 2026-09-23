@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { EventsProvider, withTrackMap, CREATED_EVENTS_CACHE_KEY } from './EventsContext'
@@ -128,7 +128,11 @@ describe('created events cache (#231)', () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     expect(await screen.findByText('This event doesn’t exist')).toBeInTheDocument()
-    expect(JSON.parse(localStorage.getItem(CREATED_EVENTS_CACHE_KEY)!)).toEqual([])
+    // The cache is written in an effect after that render commits, so the
+    // text can appear a beat before the storage is updated.
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(CREATED_EVENTS_CACHE_KEY)!)).toEqual([]),
+    )
   })
 
   it('keeps the cached events when the fetch fails', async () => {
