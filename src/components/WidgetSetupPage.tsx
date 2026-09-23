@@ -282,8 +282,8 @@ export function WidgetSetupPage() {
             />
             <ParamOption
               title="Run group and timing"
-              description="Separate them with a vertical bar."
-              examples={['blue|15m', 'blue,orange|15m']}
+              description="Separate everything with commas."
+              examples={['blue,15m', 'blue,orange,15m']}
             />
           </ul>
         </section>

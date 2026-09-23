@@ -42,8 +42,9 @@ whenever it changes.
 ## Widget parameter
 
 The `Parameter` field on the widget (long-press → Edit Widget → Parameter)
-takes a small comma-separated string. Three kinds of token, split by `,` and
-optionally `|` for readability:
+takes a small comma-separated string. Tokens are split by `,` (a `|` also
+works as a separator, but user-facing docs only show commas — the pipe is
+hard to find on the iPhone keyboard):
 
 | Token             | Effect                                                                 |
 | ----------------- | ---------------------------------------------------------------------- |
@@ -55,7 +56,7 @@ optionally `|` for readability:
 Examples:
 
 - `orange` — filter to orange, default 10-min lead.
-- `orange,blue|15m` — filter to orange + blue, 15-min lead.
+- `orange,blue,15m` — filter to orange + blue, 15-min lead.
 - `15m` — no filter, 15-min lead.
 - (blank) — no filter, 10-min lead.
 
@@ -87,7 +88,7 @@ widget a fake "today" to work from. That's what the standing test-live
 fixture is for.
 
 - Set the widget's Parameter to `test` (or combine, e.g.
-  `test,orange|10m`) → the widget rewrites the Test Event's day date to
+  `test,orange,10m`) → the widget rewrites the Test Event's day date to
   today client-side, schedules notifications for its remaining sessions,
   and renders it like a real event.
 - Set the Parameter back to whatever you normally use (or blank) → the
