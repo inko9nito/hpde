@@ -18,13 +18,31 @@ function Card({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ParamExample({ scenario, param }: { scenario: string; param: string }) {
+function Chip({ children }: { children: string }) {
   return (
-    <li className="py-2.5 first:pt-0 last:pb-0">
-      <div className="text-sm text-gray-600">{scenario}</div>
-      <code className="mt-1 inline-block w-fit rounded bg-gray-900 px-2 py-1 text-xs font-semibold text-white">
-        {param}
-      </code>
+    <code className="rounded bg-gray-900 px-2 py-1 text-xs font-semibold text-white">
+      {children}
+    </code>
+  )
+}
+
+function ParamOption({
+  title,
+  description,
+  examples,
+}: {
+  title: string
+  description: string
+  examples: string[]
+}) {
+  return (
+    <li className="py-3 first:pt-0 last:pb-0">
+      <div className="text-sm font-semibold text-gray-900">{title}</div>
+      <div className="text-sm text-gray-600">{description}</div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-xs font-medium text-gray-400">Examples:</span>
+        {examples.map(e => <Chip key={e}>{e}</Chip>)}
+      </div>
     </li>
   )
 }
@@ -151,9 +169,6 @@ export function WidgetSetupPage() {
               </button>
             </div>
             <Card>
-              <p className="mb-2 text-xs text-gray-500">
-                Shown here to read, or in case the copy button above misbehaves.
-              </p>
               <pre className="max-h-40 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-[11px] leading-relaxed text-gray-700">
                 <code>{loaderScript}</code>
               </pre>
@@ -163,24 +178,25 @@ export function WidgetSetupPage() {
           <section id="widget-parameter">
             <SectionHeading>Widget parameter</SectionHeading>
             <Card>
-              <p className="mb-2 text-sm text-gray-600">
+              <p className="mb-3 text-sm text-gray-600">
                 Long-press the widget → <strong>Edit Widget</strong> →{' '}
-                <strong>Parameter</strong>. A run group id filters the schedule and alerts to
-                just that group; add <code className="text-xs">|Nm</code> to change the alert
-                lead time from the default 10 minutes.
+                <strong>Parameter</strong>. You can adjust two things:
               </p>
               <ul className="divide-y divide-gray-100">
-                <ParamExample
-                  scenario="Filter to blue run group, with the default alert lead time"
-                  param="blue"
+                <ParamOption
+                  title="Run group"
+                  description="Show only your group's sessions and alerts. Leave blank for all groups."
+                  examples={['blue', 'blue,orange']}
                 />
-                <ParamExample
-                  scenario="Filter to blue and orange groups, with an alert 15 minutes before each activity"
-                  param="blue,orange|15m"
+                <ParamOption
+                  title="Alert lead time"
+                  description="How many minutes before each activity you're alerted. Default is 10."
+                  examples={['5m', '15m']}
                 />
-                <ParamExample
-                  scenario="No filter, alerts 5 minutes before each activity"
-                  param="5m"
+                <ParamOption
+                  title="Both"
+                  description="Separate them with a vertical bar."
+                  examples={['blue|15m']}
                 />
               </ul>
             </Card>
@@ -191,19 +207,11 @@ export function WidgetSetupPage() {
             <Card>
               <div className="flex gap-2.5">
                 <Bell size={16} className="mt-0.5 shrink-0 text-gray-400" />
-                <div className="flex flex-col gap-2 text-sm text-gray-600">
-                  <p>
-                    The widget schedules a notification a few minutes before each session your
-                    filter matches, plus every all-drivers activity (meetings, lunch, etc.)
-                    regardless of filter. The first run asks for notification permission — allow
-                    it to get alerts.
-                  </p>
-                  <p>
-                    They show up under <strong>Scriptable's</strong> app icon, not HPDE's — that's
-                    an iOS/Scriptable limitation, not a bug. If you don't hear them, check
-                    Settings → Notifications → Scriptable, and make sure Sounds is on there too.
-                  </p>
-                </div>
+                <p className="text-sm text-gray-600">
+                  You'll get an alert before each of your sessions and every all-drivers activity
+                  (meetings, lunch). Allow notifications when Scriptable asks. Alerts appear under
+                  Scriptable's icon.
+                </p>
               </div>
             </Card>
           </section>
@@ -215,17 +223,13 @@ export function WidgetSetupPage() {
                 <li className="flex gap-2.5">
                   <RefreshCw size={16} className="mt-0.5 shrink-0 text-gray-400" />
                   <span>
-                    Not truly live — iOS decides when to actually rebuild the widget. It asks for
-                    a refresh every 5 minutes on an event day, hourly otherwise, so it can lag a
-                    bit behind what's happening on track. Force one by long-pressing the widget →
-                    Edit Widget → toggle a setting.
+                    Updates every few minutes, not live — iOS decides exactly when.
                   </span>
                 </li>
                 <li className="flex gap-2.5">
                   <WifiOff size={16} className="mt-0.5 shrink-0 text-gray-400" />
                   <span>
-                    Works offline — it caches the last successful schedule on your phone and shows
-                    a small "offline" tag if the network is unreachable when it tries to refresh.
+                    Works offline, showing the last schedule it loaded.
                   </span>
                 </li>
               </ul>
