@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
@@ -9,9 +9,11 @@ import { formatDateRangeWithWeekday } from '../utils/time'
 import type { EventStatus } from '../utils/eventClass'
 import type { EventConfig } from '../types'
 
-/** Height of the sticky top bar (back / compact title / overflow). The
- *  tab strip sticks directly beneath it. */
+/** Height of the top bar (back / compact title / overflow). */
 const TOP_BAR_PX = 52
+/** Height of the title block under it — fixed (the name truncates) so
+ *  the header knows exactly how far to scroll before it sticks. */
+const TITLE_BLOCK_PX = 78
 
 type BadgeSize = 'md' | 'sm'
 
@@ -57,36 +59,46 @@ interface Props {
 }
 
 /**
- * Event page header (#216). Three stacked bands on one white surface:
+ * Event page header (#216). One white sticky surface — with the shadow
+ * along its bottom edge — holding three bands:
  *
- *   1. Top bar (sticky): back chevron · compact title · admin "…" menu
+ *   1. Top bar: back chevron · compact title · admin "…" menu
  *   2. Title block: track icon + name + date line with LIVE/PAST badge
- *   3. Tabs (sticky, directly under the top bar)
+ *   3. Tabs
  *
- * On scroll the title block slides up under the top bar, and once it's
- * mostly covered a compact copy of it fades into the top bar — the
- * "collapsed" state from the design. Nothing changes height, so the
- * page never jumps while scrolling.
+ * The header sticks at `top: -TITLE_BLOCK_PX`, so scrolling first slides
+ * it up by the title block's height and then pins the top bar and tabs.
+ * The top bar is itself sticky inside it, so it stays put while the
+ * title block slides up underneath. Only once the title block is fully
+ * hidden does the compact copy fade into the top bar — the "collapsed"
+ * state from the design — so the two are never visible together.
+ * Nothing changes height, so the page never jumps while scrolling.
  */
 export function EventHeader({ event, status, activeTab, onTabChange, onBack, onDeleted, scrollRef }: Props) {
-  const titleRef = useRef<HTMLDivElement>(null)
-  const collapsed = useCollapsed(scrollRef, titleRef)
+  const collapsed = useCollapsed(scrollRef)
   const date = dateLine(event)
 
   return (
-    <>
+    <div
+      className="sticky z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]"
+      style={{ top: -TITLE_BLOCK_PX }}
+    >
       <div
-        className="sticky top-0 z-20 bg-white"
+        className="sticky top-0 z-10 bg-white"
         style={{ height: TOP_BAR_PX }}
       >
         <div className="mx-auto flex h-full max-w-lg items-center gap-2 px-4">
           <BackButton onClick={onBack} />
           {/* Visual echo of the <h1> below — hidden from assistive tech
               so the name isn't announced twice. */}
+          {/* Fades in, but hides instantly: scrolling back up must not
+              show it alongside the title block coming back into view. */}
           <div
             aria-hidden="true"
-            className={`flex min-w-0 flex-1 justify-center transition-[opacity,transform] duration-200 ${
-              collapsed ? 'opacity-100' : 'pointer-events-none translate-y-1 opacity-0'
+            className={`flex min-w-0 flex-1 justify-center ${
+              collapsed
+                ? 'opacity-100 transition-[opacity,transform] duration-200'
+                : 'pointer-events-none translate-y-1 opacity-0'
             }`}
           >
             <div className="flex min-w-0 items-center gap-2">
@@ -108,8 +120,8 @@ export function EventHeader({ event, status, activeTab, onTabChange, onBack, onD
         </div>
       </div>
 
-      <div ref={titleRef} className="bg-white">
-        <div className="mx-auto flex max-w-lg items-center gap-3 px-6 pb-2.5 pt-2.5">
+      <div className="bg-white" style={{ height: TITLE_BLOCK_PX }}>
+        <div className="mx-auto flex h-full max-w-lg items-center gap-3 px-6">
           {/* No padding: the track SVGs already carry their own margin
               inside a square viewBox. */}
           <TrackIcon trackId={event.trackId} tone="dark" size={58} padding={0} radius="rounded-xl" />
@@ -123,15 +135,10 @@ export function EventHeader({ event, status, activeTab, onTabChange, onBack, onD
         </div>
       </div>
 
-      <div
-        className="sticky z-10 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]"
-        style={{ top: TOP_BAR_PX }}
-      >
-        <div className="mx-auto max-w-lg">
-          <EventTabs active={activeTab} onChange={onTabChange} />
-        </div>
+      <div className="mx-auto max-w-lg">
+        <EventTabs active={activeTab} onChange={onTabChange} />
       </div>
-    </>
+    </div>
   )
 }
 
@@ -147,27 +154,16 @@ export function BackButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-/**
- * True once the title block has scrolled at least halfway under the
- * sticky top bar. Re-reads the block's height on each scroll so a font
- * load or rotation doesn't leave a stale threshold.
- */
-function useCollapsed(
-  scrollRef: RefObject<HTMLElement | null>,
-  titleRef: RefObject<HTMLElement | null>,
-): boolean {
+/** True once the title block has scrolled fully under the top bar. */
+function useCollapsed(scrollRef: RefObject<HTMLElement | null>): boolean {
   const [collapsed, setCollapsed] = useState(false)
   useEffect(() => {
     const scroller = scrollRef.current
     if (!scroller) return
-    const update = () => {
-      const title = titleRef.current
-      const threshold = title ? title.offsetHeight / 2 : 40
-      setCollapsed(scroller.scrollTop > threshold)
-    }
+    const update = () => setCollapsed(scroller.scrollTop >= TITLE_BLOCK_PX)
     update()
     scroller.addEventListener('scroll', update, { passive: true })
     return () => scroller.removeEventListener('scroll', update)
-  }, [scrollRef, titleRef])
+  }, [scrollRef])
   return collapsed
 }
