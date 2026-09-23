@@ -92,61 +92,63 @@ describe('sign-in (#223)', () => {
   })
 })
 
-
 describe('coming back from Google (#231)', () => {
   beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     vi.restoreAllMocks()
     vi.spyOn(identity, 'identityAvailable').mockResolvedValue(true)
   })
 
-  it('reloads into the signed-in page once the login completes', async () => {
+  it('shows the signed-in view in place, back where sign-in started', async () => {
     vi.spyOn(identity, 'isSignInReturn').mockReturnValue(true)
-    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
     const widget = fakeWidget(null)
     vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
-    renderApp()
+    // The widget clears the token hash; sign-in started on an event page.
+    window.location.hash = ''
+    sessionStorage.setItem(identity.RETURN_TO_KEY, `#/event/${encodeURIComponent(EVENTS[0].id)}`)
+    render(<AuthProvider><App /></AuthProvider>)
     await new Promise(r => setTimeout(r, 0))
 
-    // gotrue saves the session, then the widget reports the login.
-    localStorage.setItem('gotrue.user', '{}')
     widget.completeLogin(driver)
-    expect(reload).toHaveBeenCalledTimes(1)
+    expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
     expect(widget.close).toHaveBeenCalled()
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${encodeURIComponent(EVENTS[0].id)}`))
+    expect(sessionStorage.getItem(identity.RETURN_TO_KEY)).toBeNull()
   })
 
-  it("doesn't reload into a signed-out page when the session isn't saved yet", async () => {
+  it("keeps the widget's modal hidden until the Google login lands", async () => {
     vi.spyOn(identity, 'isSignInReturn').mockReturnValue(true)
-    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
+    const show = vi.spyOn(identity, 'showIdentityWidget')
     const widget = fakeWidget(null)
     vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
     renderApp()
     await new Promise(r => setTimeout(r, 0))
+    expect(show).not.toHaveBeenCalled()
 
     widget.completeLogin(driver)
-    expect(reload).not.toHaveBeenCalled()
+    expect(show).toHaveBeenCalled()
+  })
+
+  it("doesn't trust currentUser() before the Google login completes", async () => {
+    // Mid token exchange gotrue already reports a user with no details yet.
+    vi.spyOn(identity, 'isSignInReturn').mockReturnValue(true)
+    const widget = fakeWidget({ id: 'u1' } as IdentityUser)
+    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
+    renderApp()
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument()
+
+    widget.completeLogin(driver)
     expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
   })
 
-  it("never re-initializes the widget (v1 has no guard and restarts mid sign-in)", async () => {
+  it('never re-initializes the widget (v1 has no guard and crashes mid sign-in)', async () => {
     const widget = fakeWidget(driver)
     vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
     renderApp()
     await screen.findAllByRole('button', { name: 'Account: driver@example.com' })
     expect(widget.init).not.toHaveBeenCalled()
-  })
-
-  it("doesn't reload for the login the widget reports on an ordinary load", async () => {
-    vi.spyOn(identity, 'isSignInReturn').mockReturnValue(false)
-    const reload = vi.spyOn(identity, 'reloadAfterSignIn').mockImplementation(() => {})
-    const widget = fakeWidget(null)
-    vi.spyOn(identity, 'loadIdentityWidget').mockResolvedValue(widget)
-    renderApp()
-    await screen.findByRole('button', { name: 'Sign in with Google' })
-
-    widget.completeLogin(driver)
-    expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
-    expect(reload).not.toHaveBeenCalled()
   })
 
   it('picks up a session even when the widget initialized before we listened', async () => {
@@ -158,16 +160,12 @@ describe('coming back from Google (#231)', () => {
     expect(await screen.findAllByRole('button', { name: 'Account: driver@example.com' })).not.toHaveLength(0)
   })
 
-  it('reloads back to where sign-in started, without the token in the URL', () => {
-    const reload = vi.fn()
-    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, pathname: '/', search: '', reload })
-    const replace = vi.spyOn(window.history, 'replaceState')
-    sessionStorage.setItem(identity.RETURN_TO_KEY, '#/event/test')
-
-    identity.reloadAfterSignIn()
-
-    expect(replace).toHaveBeenCalledWith(null, '', '/#/event/test')
-    expect(reload).toHaveBeenCalled()
-    expect(sessionStorage.getItem(identity.RETURN_TO_KEY)).toBeNull()
+  it('holds the account spot with a person icon while sign-in loads', async () => {
+    vi.spyOn(identity, 'loadIdentityWidget').mockReturnValue(new Promise(() => {}))
+    window.location.hash = '#/'
+    const { container } = render(<AuthProvider><App /></AuthProvider>)
+    await new Promise(r => setTimeout(r, 0))
+    // Same 36px box the avatar will fill, so nothing shifts when it arrives.
+    expect(container.querySelector('div[aria-hidden="true"].h-9.w-9 svg')).toBeInTheDocument()
   })
 })

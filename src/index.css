@@ -17,6 +17,12 @@
   }
 }
 
+/* Hides the Identity widget's modal while the Google sign-in finishes
+   (src/auth/identity.ts). */
+html.finishing-sign-in #netlify-identity-widget {
+  visibility: hidden !important;
+}
+
 /* Crossfade applied to the active event tab's panel — the panel is
    remounted (React key) on tab change and this animation replays. Matches
    iOS's near-instant tab switch. */
