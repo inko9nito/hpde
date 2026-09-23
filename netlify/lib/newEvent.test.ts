@@ -1,24 +1,46 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { buildEvent, isAdmin, slugify } from './newEvent.mjs'
+import handler from '../functions/created-events.mjs'
 
 const store = new Map<string, unknown>()
-vi.mock('@netlify/blobs', () => ({
-  connectLambda: () => {},
-  getStore: () => ({
+const storeOptions: unknown[] = []
+const fakeGetStore = (opts: unknown) => {
+  storeOptions.push(opts)
+  return {
     list: async () => ({ blobs: [...store.keys()].map(key => ({ key })) }),
     get: async (key: string) => store.get(key) ?? null,
-    setJSON: async (key: string, value: unknown, opts?: { onlyIfNew?: boolean }) => {
-      if (opts?.onlyIfNew && store.has(key)) return { modified: false }
+    setJSON: async (key: string, value: unknown, o?: { onlyIfNew?: boolean }) => {
+      if (o?.onlyIfNew && store.has(key)) return { modified: false }
       store.set(key, value)
       return { modified: true }
     },
     delete: async (key: string) => {
       store.delete(key)
     },
-  }),
-}))
+  }
+}
 
-const { handler } = await import('../functions/created-events.mjs')
+// Stands in for Netlify Identity's /user endpoint: one token per user.
+const identityUsers: Record<string, unknown> = {
+  'admin-token': { id: 'a', email: 'admin@example.com', app_metadata: { roles: ['admin'] } },
+  'driver-token': { id: 'd', email: 'driver@example.com' },
+}
+const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
+  expect(String(url)).toBe('https://site.example/.netlify/identity/user')
+  const u = identityUsers[init.headers.Authorization.replace('Bearer ', '')]
+  return u ? new Response(JSON.stringify(u)) : new Response('{}', { status: 401 })
+}
+
+const call = (method: string, { token, body, query = '' }: { token?: string; body?: unknown; query?: string } = {}) =>
+  handler(
+    new Request(`https://site.example/api/created-events${query}`, {
+      method,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    }),
+    {},
+    { getStore: fakeGetStore, fetch: fakeFetch },
+  )
 
 const valid = {
   name: 'SCCA at MSRC 1.7 CW',
@@ -94,54 +116,57 @@ describe('isAdmin', () => {
 })
 
 describe('created-events function', () => {
-  const admin = { clientContext: { user: { sub: 'a', email: 'admin@example.com', app_metadata: { roles: ['admin'] } } } }
-  const driver = { clientContext: { user: { sub: 'd', email: 'driver@example.com' } } }
-  const post = (body: unknown) => ({ httpMethod: 'POST', body: JSON.stringify(body) })
-
   beforeEach(() => store.clear())
 
-  it('rejects signed-out and non-admin creates', async () => {
-    expect((await handler(post({ event: valid }), { clientContext: {} })).statusCode).toBe(401)
-    expect((await handler(post({ event: valid }), driver)).statusCode).toBe(403)
+  it('reads with strong consistency, so a fresh create shows up on refresh', async () => {
+    await call('GET')
+    expect(storeOptions.at(-1)).toEqual({ name: 'events', consistency: 'strong' })
+  })
+
+  it('rejects signed-out, bad-token and non-admin creates', async () => {
+    expect((await call('POST', { body: { event: valid } })).status).toBe(401)
+    expect((await call('POST', { token: 'forged', body: { event: valid } })).status).toBe(401)
+    expect((await call('POST', { token: 'driver-token', body: { event: valid } })).status).toBe(403)
     expect(store.size).toBe(0)
   })
 
   it('lets an admin create an event that GET then lists publicly', async () => {
-    const res = await handler(post({ event: valid, takenIds: [] }), admin)
-    expect(res.statusCode).toBe(201)
-    const created = JSON.parse(res.body).event
+    const res = await call('POST', { token: 'admin-token', body: { event: valid, takenIds: [] } })
+    expect(res.status).toBe(201)
+    const created = (await res.json()).event
     expect(created.createdBy).toBe('admin@example.com')
 
-    const list = await handler({ httpMethod: 'GET' }, { clientContext: {} })
-    expect(JSON.parse(list.body).events.map((e: { id: string }) => e.id)).toEqual([created.id])
+    const list = await (await call('GET')).json()
+    expect(list.events.map((e: { id: string }) => e.id)).toEqual([created.id])
   })
 
   it('avoids built-in and previously created ids', async () => {
-    const first = JSON.parse((await handler(post({ event: valid }), admin)).body).event
-    const second = JSON.parse(
-      (await handler(post({ event: valid, takenIds: ['2026-10-10_scca-at-msrc-1-7-cw-2'] }), admin)).body,
-    ).event
+    const first = (await (await call('POST', { token: 'admin-token', body: { event: valid } })).json()).event
+    const second = (await (await call('POST', {
+      token: 'admin-token',
+      body: { event: valid, takenIds: ['2026-10-10_scca-at-msrc-1-7-cw-2'] },
+    })).json()).event
     expect(first.id).toBe('2026-10-10_scca-at-msrc-1-7-cw')
     expect(second.id).toBe('2026-10-10_scca-at-msrc-1-7-cw-3')
   })
 
   it('lets only admins delete, and only events that exist', async () => {
-    const created = JSON.parse((await handler(post({ event: valid }), admin)).body).event
-    const del = (id?: string) => ({ httpMethod: 'DELETE', queryStringParameters: id ? { id } : {} })
+    const created = (await (await call('POST', { token: 'admin-token', body: { event: valid } })).json()).event
+    const query = `?id=${created.id}`
 
-    expect((await handler(del(created.id), { clientContext: {} })).statusCode).toBe(401)
-    expect((await handler(del(created.id), driver)).statusCode).toBe(403)
+    expect((await call('DELETE', { query })).status).toBe(401)
+    expect((await call('DELETE', { token: 'driver-token', query })).status).toBe(403)
     expect(store.has(created.id)).toBe(true)
 
-    expect((await handler(del(), admin)).statusCode).toBe(400)
-    expect((await handler(del('2026-01-01_nope'), admin)).statusCode).toBe(404)
-    expect((await handler(del(created.id), admin)).statusCode).toBe(200)
+    expect((await call('DELETE', { token: 'admin-token' })).status).toBe(400)
+    expect((await call('DELETE', { token: 'admin-token', query: '?id=2026-01-01_nope' })).status).toBe(404)
+    expect((await call('DELETE', { token: 'admin-token', query })).status).toBe(200)
     expect(store.has(created.id)).toBe(false)
   })
 
   it('returns validation errors as 400', async () => {
-    const res = await handler(post({ event: { ...valid, name: '' } }), admin)
-    expect(res.statusCode).toBe(400)
-    expect(JSON.parse(res.body).error).toMatch(/Title/)
+    const res = await call('POST', { token: 'admin-token', body: { event: { ...valid, name: '' } } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/Title/)
   })
 })

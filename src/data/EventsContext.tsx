@@ -19,12 +19,28 @@ interface EventsValue {
   removeEvent(id: string): void
   // Created in the app (deletable), as opposed to built into src/data.
   isCreated(id: string): boolean
+  // False until the created-events fetch settles, so a link to a created
+  // event can wait for it instead of falling back to another event.
+  loaded: boolean
 }
 
 function isEventConfig(e: unknown): e is EventConfig {
   const v = e as EventConfig
   return !!v && typeof v.id === 'string' && typeof v.name === 'string'
     && Array.isArray(v.days) && v.days.length > 0 && Array.isArray(v.runGroups)
+}
+
+// Track map images are build assets (hashed URLs), so they're not stored
+// with a created event — it borrows the map of a built-in event that has
+// the same track icon (e.g. a new ECR 2.7 event gets ecr.png).
+const MAP_BY_TRACK_ID = new Map(
+  ALL_EVENTS.filter(e => e.trackId && e.mapImage).map(e => [e.trackId!, e.mapImage!]),
+)
+
+export function withTrackMap(event: EventConfig): EventConfig {
+  if (event.mapImage || !event.trackId) return event
+  const mapImage = MAP_BY_TRACK_ID.get(event.trackId)
+  return mapImage ? { ...event, mapImage } : event
 }
 
 function merge(base: EventConfig[], created: EventConfig[]): EventConfig[] {
@@ -38,7 +54,7 @@ export async function fetchCreatedEvents(): Promise<EventConfig[]> {
     const res = await fetch(CREATED_EVENTS_URL)
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return []
     const body = await res.json()
-    return Array.isArray(body?.events) ? body.events.filter(isEventConfig) : []
+    return Array.isArray(body?.events) ? body.events.filter(isEventConfig).map(withTrackMap) : []
   } catch {
     return []
   }
@@ -48,11 +64,14 @@ const EventsContext = createContext<EventsValue | null>(null)
 
 export function EventsProvider({ children }: { children: ReactNode }) {
   const [created, setCreated] = useState<EventConfig[]>([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     fetchCreatedEvents().then(events => {
-      if (!cancelled) setCreated(events)
+      if (cancelled) return
+      setCreated(events)
+      setLoaded(true)
     })
     return () => {
       cancelled = true
@@ -60,7 +79,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addEvent = useCallback((event: EventConfig) => {
-    setCreated(prev => [...prev.filter(e => e.id !== event.id), event])
+    setCreated(prev => [...prev.filter(e => e.id !== event.id), withTrackMap(event)])
   }, [])
 
   const removeEvent = useCallback((id: string) => {
@@ -76,8 +95,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       addEvent,
       removeEvent,
       isCreated: id => createdIds.has(id) && !builtInIds.has(id),
+      loaded,
     }
-  }, [created, addEvent, removeEvent])
+  }, [created, loaded, addEvent, removeEvent])
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>
 }
@@ -88,6 +108,7 @@ const STATIC_FALLBACK: EventsValue = {
   addEvent: () => {},
   removeEvent: () => {},
   isCreated: () => false,
+  loaded: true,
 }
 
 // Rendered without a provider (isolated tests) → just the built-in events.

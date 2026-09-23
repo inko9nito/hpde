@@ -78,6 +78,22 @@ function eventIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
 }
 
+function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => void }) {
+  if (loading) return <div className="h-40" aria-busy="true" aria-label="Loading event" />
+  return (
+    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+      <p className="text-sm font-medium text-gray-700">This event doesn’t exist</p>
+      <p className="mt-1 text-xs text-gray-400">It may have been deleted.</p>
+      <button
+        onClick={onHome}
+        className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+      >
+        See all events
+      </button>
+    </div>
+  )
+}
+
 function isEmptyHash(hash: string): boolean {
   return hash === '' || hash === '#'
 }
@@ -85,7 +101,7 @@ function isEmptyHash(hash: string): boolean {
 export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus } = useAuth()
-  const { events: EVENTS, allEvents: ALL_EVENTS } = useEvents()
+  const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded } = useEvents()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -107,7 +123,11 @@ export default function App() {
   // that happens BEFORE that mount (i.e. a real click) flips it.
   const skipPushEnterAnimationRef = useRef(true)
 
-  const isOnEventRoute = eventIdFromHash(hash) !== null
+  const routeEventId = eventIdFromHash(hash)
+  const isOnEventRoute = routeEventId !== null
+  // A link to an event we don't have (yet): an app-created one before the
+  // fetch lands, or one that was deleted. Don't show some other event.
+  const routeMissing = isOnEventRoute && !ALL_EVENTS.some(e => e.id === routeEventId)
   // Keep the pushed page mounted through its slide-out animation. Starts
   // mounted whenever the current hash is an event (including cold-boot);
   // becomes false again only after PushPage's onExited fires.
@@ -202,6 +222,9 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
 
+        {routeMissing ? (
+          <MissingEvent loading={!eventsLoaded} onHome={goHome} />
+        ) : (<>
         {/* Header: Home | centered EventPicker | symmetric spacer */}
         <div className="mb-4 flex items-start gap-3">
           <button
@@ -332,6 +355,7 @@ export default function App() {
             </>
           )}
         </div>
+        </>)}
 
       </div>
       <Footer />
