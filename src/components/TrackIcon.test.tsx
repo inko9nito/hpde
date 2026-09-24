@@ -13,11 +13,11 @@ describe('TrackIcon', () => {
     expect(glyph(container).style.maskImage).toContain(TRACK_ICON_IDS[0])
   })
 
-  it.each([undefined, 'no-such-track'])('falls back to a 7% white checkered flag on the dark tile (trackId %s)', trackId => {
+  it.each([undefined, 'no-such-track'])('falls back to a 15% white checkered flag on the dark tile (trackId %s)', trackId => {
     const { container } = render(<TrackIcon trackId={trackId} tone="dark" />)
     expect(glyph(container)).toHaveAttribute('data-track-icon', 'placeholder')
     expect(glyph(container)).toHaveClass('text-white')
-    expect(glyph(container).style.opacity).toBe('0.07')
+    expect(glyph(container).style.opacity).toBe('0.15')
     expect(glyph(container).style.maskImage).toMatch(/checkered-flag|svg/)
   })
 })
