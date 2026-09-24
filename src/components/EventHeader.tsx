@@ -5,6 +5,7 @@ import { TrackIcon } from './TrackIcon'
 import { EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
+import { ICON_BUTTON } from './iconButton'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import type { EventStatus } from '../utils/eventClass'
 import type { EventConfig } from '../types'
@@ -155,7 +156,7 @@ export function BackButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label="Back"
-      className="-ml-1 inline-grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+      className={`-ml-1 ${ICON_BUTTON}`}
     >
       <ChevronLeft size={26} strokeWidth={2.25} />
     </button>

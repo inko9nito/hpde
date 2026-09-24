@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { buildEvent, isAdmin, slugify } from './newEvent.mjs'
-import handler from '../functions/events.mjs'
+import handler from '../functions/events.mts'
 import { fakeBlobs } from './fakeBlobs'
 
 const blobs = fakeBlobs()
@@ -194,5 +194,84 @@ describe('events function', () => {
     const res = await call('POST', { token: 'admin-token', body: { event: { ...valid, name: '' } } })
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(/Title/)
+  })
+
+  describe('PUT ?id= — the schedule editor (#232)', () => {
+    const query = `?id=${liveEvent.id}`
+    const runGroups = [{ label: 'Red', bgClass: 'bg-runred-500', description: 'Advanced' }]
+    const schedule = `## Sunday | 2026-09-13
+08:00 session 1 | track: Red
+`
+    const put = (opts: { token?: string; body?: unknown; query?: string; context?: unknown }) =>
+      call('PUT', { query, ...opts })
+
+    it('lets only admins save a schedule', async () => {
+      store.set(liveEvent.id, liveEvent)
+      expect((await put({ body: { runGroups, schedule } })).status).toBe(401)
+      expect((await put({ token: 'forged', body: { runGroups, schedule } })).status).toBe(401)
+      expect((await put({ token: 'driver-token', body: { runGroups, schedule } })).status).toBe(403)
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+    })
+
+    it('replaces the schedule, keeps the details, and keeps the old version in history', async () => {
+      const event = { ...liveEvent, organizer: 'Texas Region SCCA', createdBy: 'admin@example.com' }
+      store.set(event.id, event)
+      const res = await put({ token: 'admin-token', body: { runGroups, schedule } })
+      expect(res.status).toBe(200)
+      const saved = (await res.json()).event
+      expect(saved).toEqual({
+        ...event,
+        runGroups: [{ id: 'red', label: 'Red', bgClass: 'bg-runred-500', textClass: 'text-white', description: 'Advanced' }],
+        days: [{ ...event.days[0], activities: [{ time: '08:00', type: 'session', sessionNumber: 1, onTrack: ['red'] }] }],
+        updatedBy: 'admin@example.com',
+        updatedAt: expect.any(String),
+      })
+      expect(store.get(event.id)).toEqual(saved)
+      // GET lists the new version.
+      const listed = (await (await call('GET')).json()).events
+      expect(listed).toEqual([saved])
+
+      const history = blobs.data('site:events-history')
+      expect([...history.keys()]).toEqual([`${event.id}/${saved.updatedAt}`])
+      expect(history.get(`${event.id}/${saved.updatedAt}`)).toEqual(event)
+    })
+
+    it('checks the groups and the markdown itself, and refuses anything the editor would flag', async () => {
+      store.set(liveEvent.id, liveEvent)
+      const res = await put({ token: 'admin-token', body: { runGroups, schedule: schedule.replace('track: Red', 'track: Blue') } })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe('Line 2: There’s no group “Blue”.')
+      expect(body.problems).toContainEqual({ line: 2, message: 'There’s no group “Blue”.', blocking: true })
+      // Another date: dates belong to the details.
+      const moved = await put({ token: 'admin-token', body: { runGroups, schedule: schedule.replace('2026-09-13', '2026-09-14') } })
+      expect(moved.status).toBe(400)
+      // A color that isn't in the palette (so wouldn't draw).
+      const pink = await put({ token: 'admin-token', body: { runGroups: [{ ...runGroups[0], bgClass: 'bg-pink-500' }], schedule } })
+      expect((await pink.json()).error).toBe('Group 1: Pick a color.')
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+      expect(blobs.data('site:events-history').size).toBe(0)
+    })
+
+    it('needs an id, groups, a schedule string, and an event that exists', async () => {
+      store.set(liveEvent.id, liveEvent)
+      expect((await put({ token: 'admin-token', query: '', body: { runGroups, schedule } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: { runGroups } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: { schedule } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: { runGroups, schedule: 'x'.repeat(50_001) } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', query: '?id=test-live', body: { runGroups, schedule } })).status).toBe(404)
+    })
+
+    it('on a deploy preview, edits the preview’s copy and never the live event', async () => {
+      const preview = { deploy: { context: 'deploy-preview' } }
+      store.set(liveEvent.id, liveEvent)
+      // Straight to a save, with no GET first: the copy is made anyway.
+      const res = await put({ token: 'admin-token', body: { runGroups, schedule }, context: preview })
+      expect(res.status).toBe(200)
+      expect(blobs.data('deploy:events').get(liveEvent.id)).toMatchObject({ updatedBy: 'admin@example.com' })
+      expect(blobs.data('deploy:events-history').size).toBe(1)
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+      expect(blobs.data('site:events-history').size).toBe(0)
+    })
   })
 })

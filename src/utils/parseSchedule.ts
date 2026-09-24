@@ -96,17 +96,8 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
     }
 
     if (inGroups) {
-      const parts = line.split('|').map(s => s.trim())
-      if (parts.length >= 4) {
-        const description = parts[4] || undefined
-        runGroups.push({
-          id: parts[0],
-          label: parts[1],
-          bgClass: parts[2],
-          textClass: parts[3],
-          ...(description ? { description } : {}),
-        })
-      }
+      const group = parseGroupLine(line)
+      if (group) runGroups.push(group)
       continue
     }
 
@@ -135,7 +126,21 @@ export function parseScheduleMD(id: string, src: string): EventConfig {
   }
 }
 
-function parseActivityLine(line: string): ScheduleActivity | null {
+// `<id> | <Label> | <bg class> | <text class> | <optional description>`
+export function parseGroupLine(line: string): RunGroupConfig | null {
+  const parts = line.split('|').map(s => s.trim())
+  if (parts.length < 4) return null
+  const description = parts[4] || undefined
+  return {
+    id: parts[0],
+    label: parts[1],
+    bgClass: parts[2],
+    textClass: parts[3],
+    ...(description ? { description } : {}),
+  }
+}
+
+export function parseActivityLine(line: string): ScheduleActivity | null {
   const tokens = line.split('|').map(s => s.trim())
   const firstToken = tokens[0]
   const rest = tokens.slice(1)

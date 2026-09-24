@@ -57,15 +57,46 @@ title, start/end date, organizer, location, city, track configuration,
 direction and event page. A new event starts with no schedule — its
 Schedule tab says "Schedule coming soon" until one is added.
 
+Admins add or change an event's schedule in the app: event page → **…** →
+**Edit schedule** (or **Add schedule** on an event that has none).
+- **The schedule** is markdown, one section per day, with a live preview.
+  Sessions name run groups however the organizer does:
+```
+## Saturday | 2026-10-03
+7:00 AM general | Registration & tech | Paddock
+8:00 AM session 1 | track: Red, Blue | class: Novice | note: Lead-follow
+12:00 PM lunch | Lunch
+break | Track walk
+1:30 PM session 4 | track: Red, Blue
+```
+
+Times are written with AM or PM (`1:30 PM`, `1:30pm`); 24-hour times
+like `13:30` work too. A time like `1:30` with no AM or PM is flagged
+rather than guessed. They're stored 24-hour either way.
+
+- **Run groups** come from the sessions and are listed below the
+  schedule. Each gets a color from its name (Red → red, Instructors →
+  black, anything else → a color no other group has). Tap
+  **Change color** to pick another, and add a description if you like.
+
+Each day opens with commented-out (`//`) example lines to copy.
+Anything the editor can't read is listed by line number, and saving waits
+until it's fixed, so nothing typed is silently dropped. The days are the
+event's own dates. Each save keeps the version it replaced in the
+`events-history` store. Unsaved changes stay on the device if you leave
+the page.
+
 Admins can also delete any event: event page → **…** → **Delete event** →
 confirm. (Only the `test-live` test event, which ships with the app, can't
-be deleted.)
+be edited or deleted.)
 
 **Where events live (#232).** Every event is stored in **Netlify Blobs**
 (store `events`), not in the repo, so anyone deploying this app starts with
 their own events. No extra Netlify setup is needed for Blobs.
-- `netlify/functions/events.mjs` — `/api/events`: public `GET`, admin-only
-  `POST` and `DELETE ?id=`. The app loads every event from here.
+- `netlify/functions/events.mts` — `/api/events`: public `GET`, admin-only
+  `POST`, `PUT ?id=` (the editor's run groups and schedule markdown, which
+  the function checks itself) and `DELETE ?id=`. The app loads every event
+  from here.
 - `netlify/functions/events-json.mts` — `/api/events.json`, the iOS
   widget's feed: the same events in the widget's format, cached for a
   minute.

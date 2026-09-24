@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
+import { DayTabs } from './components/DayTabs'
 import { isEventTabId } from './components/EventTabs'
 import type { EventTabId } from './components/EventTabs'
 import { EventInfo } from './components/EventInfo'
@@ -15,7 +16,8 @@ import { PushPage } from './components/PushPage'
 import { Footer } from './components/Footer'
 import { EventHeader, BackButton } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
-import { NewEventPage } from './components/NewEventPage'
+import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
+import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -137,8 +139,8 @@ function isEmptyHash(hash: string): boolean {
 
 export default function App() {
   const [hash, setHash] = useHashRoute()
-  const { status: authStatus } = useAuth()
-  const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded } = useEvents()
+  const { status: authStatus, user } = useAuth()
+  const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -254,6 +256,27 @@ export default function App() {
     return <SharePage />
   }
 
+  const editScheduleEventId = eventIdFromEditScheduleHash(hash)
+  if (editScheduleEventId !== null) {
+    const backToEvent = () => {
+      // Back where the editor was opened from, without replaying the
+      // event page's slide-in.
+      skipPushEnterAnimationRef.current = true
+      setHash(eventHash(editScheduleEventId))
+    }
+    return (
+      <ScheduleEditorPage
+        eventId={editScheduleEventId}
+        onClose={backToEvent}
+        onSaved={() => {
+          setActiveTab('schedule')
+          backToEvent()
+          showToast('Schedule saved')
+        }}
+      />
+    )
+  }
+
   if (hash === NEW_EVENT_HASH) {
     return (
       <NewEventPage
@@ -313,6 +336,14 @@ export default function App() {
               <CalendarClock size={20} className="mx-auto text-gray-400" aria-hidden="true" />
               <p className="mt-2 text-sm font-medium text-gray-700">Schedule coming soon</p>
               <p className="mt-1 text-xs text-gray-400">It’ll be posted here once the organizer announces it.</p>
+              {user?.roles.includes(ADMIN_ROLE) && isStored(activeEvent.id) && (
+                <a
+                  href={editScheduleHash(activeEvent.id)}
+                  className="mt-4 inline-block rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+                >
+                  Add schedule
+                </a>
+              )}
             </div>
           )}
 
@@ -320,34 +351,12 @@ export default function App() {
             <>
               {/* Day tabs + Now — only shown for multi-day events */}
               {multiDay && (
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
-                    {activeEvent.days.map(day => (
-                      <button
-                        key={day.id}
-                        onClick={() => setActiveDayId(day.id)}
-                        className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
-                          activeDay.id === day.id
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-500 hover:text-gray-800'
-                        }`}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => todayDay && setActiveDayId(todayDay.id)}
-                    disabled={isToday || !todayDay}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
-                      isToday || !todayDay
-                        ? 'border-gray-100 bg-white text-gray-300 cursor-default'
-                        : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
-                    }`}
-                  >
-                    Now
-                  </button>
-                </div>
+                <DayTabs
+                  days={activeEvent.days}
+                  activeDayId={activeDay.id}
+                  onSelect={setActiveDayId}
+                  todayDayId={todayDay?.id}
+                />
               )}
 
               {/* Filters */}
