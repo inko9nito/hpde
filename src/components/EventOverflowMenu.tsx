@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Ellipsis, Trash2 } from 'lucide-react'
+import { CalendarClock, Ellipsis, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
+import { editScheduleHash } from './ScheduleEditorPage'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -13,10 +14,10 @@ interface Props {
 
 /**
  * The "…" button at the right of the event header (#216). Admins only.
- * Holds Delete for now (Edit comes later). Every stored event can be
- * deleted (#232); the test fixtures that ship with the app can't, so on
- * those the item is shown disabled with the reason, rather than leaving an
- * admin wondering where it went.
+ * Edit schedule and Delete (#232). Every stored event can be edited and
+ * deleted; the test fixtures that ship with the app can't, so on those the
+ * items are shown disabled with the reason, rather than leaving an admin
+ * wondering where they went.
  */
 export function EventOverflowMenu({ event, onDeleted }: Props) {
   const { user } = useAuth()
@@ -32,7 +33,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
   }, [open])
 
   if (!user?.roles.includes(ADMIN_ROLE)) return null
-  const deletable = isStored(event.id)
+  const stored = isStored(event.id)
 
   return (
     <div className="relative shrink-0">
@@ -56,7 +57,26 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
           >
             <button
               role="menuitem"
-              disabled={!deletable}
+              disabled={!stored}
+              onClick={() => {
+                setOpen(false)
+                window.location.hash = editScheduleHash(event.id)
+              }}
+              className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:cursor-default disabled:text-gray-400 disabled:hover:bg-transparent"
+            >
+              <CalendarClock size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              <span>
+                Edit schedule
+                {!stored && (
+                  <span className="block text-xs font-normal text-gray-400">
+                    Test events can’t be edited
+                  </span>
+                )}
+              </span>
+            </button>
+            <button
+              role="menuitem"
+              disabled={!stored}
               onClick={() => {
                 setOpen(false)
                 setConfirming(true)
@@ -66,7 +86,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
               <Trash2 size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
               <span>
                 Delete event
-                {!deletable && (
+                {!stored && (
                   <span className="block text-xs font-normal text-gray-400">
                     Test events can’t be deleted
                   </span>

@@ -48,6 +48,12 @@ test('/api/events.json is the widget feed, in the widget’s format', async ({ r
   }
 })
 
+test('/api/events refuses to save a schedule without sign-in', async ({ request }) => {
+  // Refused at the sign-in check, so this changes nothing.
+  const res = await request.put('/api/events?id=test-live', { data: { schedule: '## groups\n' } })
+  expect(res.status()).toBe(401)
+})
+
 test('/api/me says who is signed in, and no one is', async ({ request }) => {
   expect((await request.get('/api/me')).status()).toBe(401)
 })

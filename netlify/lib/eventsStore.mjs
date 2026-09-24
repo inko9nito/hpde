@@ -8,6 +8,10 @@ export const STORE = 'events'
 // it only ever returns events.
 export const META_STORE = 'events-meta'
 
+// Each event as it was before a save replaced it, keyed
+// `<event id>/<saved at>` — so a bad edit can be undone (#232).
+export const HISTORY_STORE = 'events-history'
+
 // Written by the build (scripts/vite-plugin-events-json.ts): the test
 // events (test-live) that ship with the app and are never stored.
 export const BUILTIN_PATH = '/api/builtin-events.json'
@@ -27,9 +31,9 @@ export function openStores(context, deps = {}) {
   const deploy = name => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
   const deployContext = context?.deploy?.context
   if (!deployContext || deployContext === 'production') {
-    return { events: site(STORE), meta: site(META_STORE) }
+    return { events: site(STORE), meta: site(META_STORE), history: site(HISTORY_STORE) }
   }
-  return { events: deploy(STORE), meta: deploy(META_STORE), live: site(STORE) }
+  return { events: deploy(STORE), meta: deploy(META_STORE), history: deploy(HISTORY_STORE), live: site(STORE) }
 }
 
 export async function listEvents(store) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { buildEvent, isAdmin, slugify } from './newEvent.mjs'
-import handler from '../functions/events.mjs'
+import handler from '../functions/events.mts'
 import { fakeBlobs } from './fakeBlobs'
 
 const blobs = fakeBlobs()
@@ -194,5 +194,82 @@ describe('events function', () => {
     const res = await call('POST', { token: 'admin-token', body: { event: { ...valid, name: '' } } })
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(/Title/)
+  })
+
+  describe('PUT ?id= — the schedule editor (#232)', () => {
+    const query = `?id=${liveEvent.id}`
+    const schedule = `## groups
+red | Red | bg-runred-500 | text-white | Advanced
+
+## Sunday | 2026-09-13
+08:00 session 1 | track: red
+`
+    const put = (opts: { token?: string; body?: unknown; query?: string; context?: unknown }) =>
+      call('PUT', { query, ...opts })
+
+    it('lets only admins save a schedule', async () => {
+      store.set(liveEvent.id, liveEvent)
+      expect((await put({ body: { schedule } })).status).toBe(401)
+      expect((await put({ token: 'forged', body: { schedule } })).status).toBe(401)
+      expect((await put({ token: 'driver-token', body: { schedule } })).status).toBe(403)
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+    })
+
+    it('replaces the schedule, keeps the details, and keeps the old version in history', async () => {
+      const event = { ...liveEvent, organizer: 'Texas Region SCCA', createdBy: 'admin@example.com' }
+      store.set(event.id, event)
+      const res = await put({ token: 'admin-token', body: { schedule } })
+      expect(res.status).toBe(200)
+      const saved = (await res.json()).event
+      expect(saved).toEqual({
+        ...event,
+        runGroups: [{ id: 'red', label: 'Red', bgClass: 'bg-runred-500', textClass: 'text-white', description: 'Advanced' }],
+        days: [{ ...event.days[0], activities: [{ time: '08:00', type: 'session', sessionNumber: 1, onTrack: ['red'] }] }],
+        updatedBy: 'admin@example.com',
+        updatedAt: expect.any(String),
+      })
+      expect(store.get(event.id)).toEqual(saved)
+      // GET lists the new version.
+      const listed = (await (await call('GET')).json()).events
+      expect(listed).toEqual([saved])
+
+      const history = blobs.data('site:events-history')
+      expect([...history.keys()]).toEqual([`${event.id}/${saved.updatedAt}`])
+      expect(history.get(`${event.id}/${saved.updatedAt}`)).toEqual(event)
+    })
+
+    it('parses the markdown itself and refuses anything the editor would flag', async () => {
+      store.set(liveEvent.id, liveEvent)
+      const res = await put({ token: 'admin-token', body: { schedule: schedule.replace('track: red', 'track: blue') } })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe('Line 5: There’s no group “blue” in “## groups”.')
+      expect(body.problems).toContainEqual({ line: 5, message: 'There’s no group “blue” in “## groups”.', blocking: true })
+      // Another date: dates belong to the details.
+      const moved = await put({ token: 'admin-token', body: { schedule: schedule.replace('2026-09-13', '2026-09-14') } })
+      expect(moved.status).toBe(400)
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+      expect(blobs.data('site:events-history').size).toBe(0)
+    })
+
+    it('needs an id, a schedule string, and an event that exists', async () => {
+      store.set(liveEvent.id, liveEvent)
+      expect((await put({ token: 'admin-token', query: '', body: { schedule } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: {} })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: { schedule: 'x'.repeat(50_001) } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', query: '?id=test-live', body: { schedule } })).status).toBe(404)
+    })
+
+    it('on a deploy preview, edits the preview’s copy and never the live event', async () => {
+      const preview = { deploy: { context: 'deploy-preview' } }
+      store.set(liveEvent.id, liveEvent)
+      // Straight to a save, with no GET first: the copy is made anyway.
+      const res = await put({ token: 'admin-token', body: { schedule }, context: preview })
+      expect(res.status).toBe(200)
+      expect(blobs.data('deploy:events').get(liveEvent.id)).toMatchObject({ updatedBy: 'admin@example.com' })
+      expect(blobs.data('deploy:events-history').size).toBe(1)
+      expect(store.get(liveEvent.id)).toEqual(liveEvent)
+      expect(blobs.data('site:events-history').size).toBe(0)
+    })
   })
 })

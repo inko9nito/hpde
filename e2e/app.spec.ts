@@ -3,6 +3,7 @@ import { test, expect } from './fixtures'
 import { TEST_EVENTS } from '../src/test/events'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../src/theme/runGroupColors'
 import { resolveTailwindBgColor } from '../src/utils/eventsJson'
+import { applySchedule } from '../src/utils/scheduleEditor'
 import type { EventConfig } from '../src/types'
 
 // The built app (vite preview of dist/) in real browsers, with the events
@@ -137,3 +138,57 @@ test('share page shares the live address with a QR code', async ({ page }) => {
   const qr = page.locator('img[src^="data:image/png"]')
   await expect(qr).toBeVisible()
 })
+
+// Signed in as an admin: a stand-in for the Netlify Identity widget, which
+// the app uses when it's already on the page.
+async function signInAsAdmin(page: Page) {
+  await page.route('**/.netlify/identity/settings', route => route.fulfill({ json: {} }))
+  await page.addInitScript(() => {
+    const user = { id: 'a', email: 'admin@example.com', app_metadata: { roles: ['admin'] }, jwt: async () => 'token' }
+    ;(window as unknown as { netlifyIdentity: unknown }).netlifyIdentity = {
+      init() {}, open() {}, close() {}, logout() {}, on() {}, currentUser: () => user,
+    }
+  })
+}
+
+test('an admin adds a schedule: edit, preview, save (#232)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  let saved: string | null = null
+  await page.route(`**/api/events?id=${upcoming.id}`, async route => {
+    expect(route.request().method()).toBe('PUT')
+    expect(route.request().headers().authorization).toBe('Bearer token')
+    saved = route.request().postDataJSON().schedule
+    const result = applySchedule(upcoming, saved!)
+    await route.fulfill('error' in result ? { status: 400, json: result } : { json: { event: result.event } })
+  })
+
+  await page.goto(`/#/event/${upcoming.id}`)
+  await page.getByRole('link', { name: 'Add schedule' }).click()
+  const textarea = page.getByRole('textbox', { name: 'Schedule' })
+  await expect(textarea).toHaveValue(new RegExp(`## ${upcoming.days[0].label} \\| ${upcoming.days[0].date}`))
+  // 16px, or iOS zooms the page in when the box is tapped.
+  await expect(textarea).toHaveCSS('font-size', '16px')
+
+  // Uncomment the examples, the way it's meant to be used on a phone.
+  const text = (await textarea.inputValue())
+    .replace('// novice | Novice', 'novice | Novice')
+    .replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
+  await textarea.fill(text)
+  await expect(page.getByRole('list', { name: 'Problems' })).toContainText('There’s no group “intermediate”')
+  await expect(page.getByRole('button', { name: 'Save schedule' })).toBeDisabled()
+  await textarea.fill(text.replace('class: intermediate', 'class: novice'))
+  await expect(page.getByRole('list', { name: 'Problems' })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: 'Preview' }).click()
+  await expect(page.getByText('Registration & tech')).toBeVisible()
+  // Nothing wider than the screen.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.getByRole('button', { name: 'Save schedule' }).click()
+  await expect(page.getByText('Schedule saved')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
+  await expect(page.getByText('Registration & tech')).toBeVisible()
+  expect(saved).toContain('novice | Novice | bg-rungreen-500')
+})
+
