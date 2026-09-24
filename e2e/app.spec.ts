@@ -350,3 +350,53 @@ test('an admin edits an event’s details: renamed and a day added (#232)', asyn
   await expect(page.getByRole('heading', { name: /Upcoming Track Weekend/ })).toBeVisible()
   expect(details).toMatchObject({ name: 'Upcoming Track Weekend', startDate: isoInDays(10), endDate: isoInDays(11), track: 'Charlie Raceway' })
 })
+
+test('a driver logs a session’s lap times from spreadsheet rows, and sees them on My notes (#210)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  let sessions: { key: string }[] = []
+  await page.route('**/api/laps?*', async route => {
+    const req = route.request()
+    expect(req.headers().authorization).toBe('Bearer token')
+    expect(new URL(req.url()).searchParams.get('event')).toBe(alpha.id)
+    if (req.method() === 'PUT') {
+      const { session } = req.postDataJSON()
+      const saved = { ...session, key: `${session.date} ${session.time} ${session.group}` }
+      sessions = [saved]
+      return route.fulfill({ json: { session: saved } })
+    }
+    return route.fulfill({ json: { sessions } })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await expect(sheet).toBeVisible()
+  // A sheet along the bottom of the screen, as wide as the phone at most.
+  const viewport = page.viewportSize()!
+  await expect.poll(async () => {
+    const box = (await sheet.boundingBox())!
+    return Math.round(box.y + box.height)
+  }).toBe(viewport.height)
+
+  await sheet.getByLabel('Lap times or timestamps').fill([
+    'Lap\tStart Crossing\tFinish Crossing\tLap Time\tNotes',
+    'Out\t8:31:02 AM\t8:33:20 AM\t2:18\tCold tires',
+    '1\t8:33:20 AM\t8:35:12 AM\t1:52\t',
+    '2\t8:35:12 AM\t8:36:58 AM\t1:46\tClean lap',
+  ].join('\n'))
+  await expect(sheet.getByRole('region', { name: 'Laps read' })).toContainText('2 laps · Best 1:46 · Avg 1:49.0 · + 1 out/in')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+
+  await expect(sheet).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Lap times saved')
+  await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (saved)' })).toBeVisible()
+
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
+  await expect(card).toContainText('2 laps · Best 1:46')
+  await card.getByText('Lap details').click()
+  await expect(card).toContainText('Clean lap')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})

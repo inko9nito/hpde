@@ -130,6 +130,41 @@ their own events. No extra Netlify setup is needed for Blobs.
 
 Repeat for anyone else who should be able to add events.
 
+## Lap times (signed in)
+
+Signed-in drivers can log their lap times for each session they drove.
+Only they can see them.
+
+- **Add:** on an event's Schedule tab, tap a session's *On track* row.
+  If more than one group is on track, pick yours. Then paste your times
+  and tap **Save lap times**. The sheet shows what it read (laps, best,
+  average) before you save.
+- **What you can paste:**
+  - a list: `1:39.42, 1:38.91, 1:39.08` (commas, spaces, `;` or `|`)
+  - a spreadsheet column: one time per line
+  - rows copied from a timing sheet, in the order
+    lap, start crossing, finish crossing, lap time, note. Title, header
+    and total rows are passed over. `Out` / `In` laps are kept but left
+    out of the best and the average. `~` times are kept as written. A row
+    with no lap time uses the gap between its crossings.
+  - crossing times: clock times (`9:52:49 AM`) or video timestamps
+    (`0:02:13`), in a list or a column. Each gap is a lap.
+    For a list of increasing times like `2:13, 4:09, 5:57`, the sheet
+    asks whether they're lap times or video timestamps.
+
+  Anything it can't read is listed by line, and saving waits until it's
+  fixed. Paste one session at a time.
+- **See / edit:** the **My notes** tab lists your laps session by
+  session: chips (best lap highlighted), then laps · best · average, then
+  *Lap details* (crossings and notes). Tap **Edit** to change or remove
+  them. The tab shows how many sessions have laps, e.g. *My notes (2)*.
+- **Where they live:** `netlify/functions/laps.mts` (`/api/laps`) in
+  Netlify Blobs (store `laps`), one record per driver per event, keyed by
+  their Identity user id. Every request needs a sign-in and only ever
+  reaches the driver's own laps. A deploy preview gets an empty store of
+  its own, so laps saved on a preview never touch the real ones, and
+  they're gone with the next deploy.
+
 ---
 
 ## iPhone Home Screen widget

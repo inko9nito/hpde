@@ -54,6 +54,13 @@ test('/api/events refuses to save a schedule without sign-in', async ({ request 
   expect(res.status()).toBe(401)
 })
 
+test('/api/laps keeps lap times to signed-in drivers (#210)', async ({ request }) => {
+  // Refused at the sign-in check, so this reads and changes nothing.
+  expect((await request.get('/api/laps?event=test-live')).status()).toBe(401)
+  const res = await request.put('/api/laps?event=test-live', { data: { session: {} } })
+  expect(res.status()).toBe(401)
+})
+
 test('/api/me says who is signed in, and no one is', async ({ request }) => {
   expect((await request.get('/api/me')).status()).toBe(401)
 })

@@ -19,6 +19,10 @@ import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
 import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
 import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventPage'
+import { LapTimesSheet } from './components/LapTimesSheet'
+import type { SessionSlot } from './components/LapTimesSheet'
+import { MyLapTimes } from './components/MyLapTimes'
+import { useLapLog } from './data/lapLog'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -153,6 +157,8 @@ export default function App() {
   const [storedTab, setActiveTab] = useLocalStorage<EventTabId>('hpde:activeTab', 'schedule')
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
+  // The session whose lap times are open in the sheet (#210), if any.
+  const [lapSlot, setLapSlot] = useState<SessionSlot | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   function showToast(text: string) {
     setToast({ id: Date.now(), text })
@@ -204,6 +210,11 @@ export default function App() {
 
   const eventStatus = classifyEvent(activeEvent)
 
+  // The signed-in driver's lap times for this event (#210).
+  // Fetched only while this event's page is open.
+  const lapLog = useLapLog(routeEventId !== null && routeEventId === activeEvent.id ? activeEvent.id : null)
+  const savedLapKeys = new Set(lapLog.byKey.keys())
+
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!isToday) return
@@ -220,6 +231,7 @@ export default function App() {
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
     setActiveTab('schedule')
+    setLapSlot(null)
     setHash(eventHash(event.id))
   }
 
@@ -329,6 +341,7 @@ export default function App() {
           status={eventStatus}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          notesCount={lapLog.sessions.length}
           onBack={goHome}
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)
@@ -398,6 +411,16 @@ export default function App() {
                 isToday={isToday}
                 selectedGroups={selectedGroups}
                 hidePast={hidePast}
+                lapTimes={authStatus === 'signed-in' ? {
+                  date: activeDay.date,
+                  saved: savedLapKeys,
+                  onOpen: session => setLapSlot({
+                    date: activeDay.date,
+                    time: session.time,
+                    sessionNumber: session.sessionNumber,
+                    groups: session.onTrack,
+                  }),
+                } : undefined}
               />
 
               <Legend groups={activeEvent.runGroups} />
@@ -409,10 +432,16 @@ export default function App() {
           )}
 
           {activeTab === 'notes' && authStatus === 'signed-in' && (
-            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-16 text-center">
-              <p className="text-sm font-medium text-gray-500">My notes</p>
-              <p className="mt-1 text-xs text-gray-400">Coming soon</p>
-            </div>
+            <MyLapTimes
+              log={lapLog}
+              runGroups={activeEvent.runGroups}
+              onEdit={session => setLapSlot({
+                date: session.date,
+                time: session.time,
+                sessionNumber: session.sessionNumber,
+                groups: [session.group],
+              })}
+            />
           )}
 
           {activeTab === 'info' && <EventInfo event={activeEvent} />}
@@ -423,6 +452,27 @@ export default function App() {
     </div>
     </PullToRefresh>
     </PushPage>
+    )}
+    {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
+      <LapTimesSheet
+        // A fresh sheet for each session, so nothing typed carries over.
+        key={`${activeEvent.id} ${lapSlot.date} ${lapSlot.time} ${lapSlot.groups.join(',')}`}
+        slot={lapSlot}
+        runGroups={activeEvent.runGroups}
+        showDate={multiDay}
+        saved={key => lapLog.byKey.get(key)}
+        onSave={async session => {
+          await lapLog.save(session)
+          setLapSlot(null)
+          showToast('Lap times saved')
+        }}
+        onRemove={async key => {
+          await lapLog.remove(key)
+          setLapSlot(null)
+          showToast('Lap times removed')
+        }}
+        onClose={() => setLapSlot(null)}
+      />
     )}
     <Toast toast={toast} onDone={() => setToast(null)} />
     </>
