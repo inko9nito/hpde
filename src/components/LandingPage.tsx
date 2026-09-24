@@ -135,7 +135,7 @@ function FeaturedEventCard({
       {/* The SVGs are square with the shape in a wide band across the
           middle, so a box taller than the banner is cropped by it. The
           gradient fades the bottom of the shape into the card. */}
-      <div className="relative flex h-36 items-center justify-center overflow-hidden">
+      <div className="relative flex h-32 items-center justify-center overflow-hidden">
         <TrackIcon
           trackId={event.trackId}
           tone="dark"
@@ -149,8 +149,9 @@ function FeaturedEventCard({
         />
       </div>
       {/* Same left inset and date column as the past cards, so the date
-          stacks line up down the page. */}
-      <div className={`flex items-center gap-4 ${CARD_PADDING} pt-2`}>
+          stacks line up down the page. Tucked up into the faded bottom
+          of the track, painted above the gradient. */}
+      <div className={`relative -mt-3 flex items-center gap-4 ${CARD_PADDING} pt-0`}>
         <DateBlock event={event} muted={false} dark />
         <div aria-hidden="true" className="w-px self-stretch bg-gray-700" />
         <div className="min-w-0 flex-1">
