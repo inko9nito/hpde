@@ -1,0 +1,140 @@
+name: CI
+
+# Runs everything that can catch a bug before (and right after) it reaches
+# the live site (#256):
+#   checks          type check, unit tests, build, browser tests of the build
+#   deploy-preview  read-only browser + API checks against the PR's Netlify
+#                   deploy preview, real functions included
+#   production      the same checks against https://myhpde.netlify.app once
+#                   it serves the merged commit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Type check, unit tests, build, browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same major version Netlify builds and runs with (netlify.toml).
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npx tsc -b
+      - name: Unit tests
+        run: npx vitest run
+      - name: Build
+        run: npm run build
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Browser tests (built app, events API stubbed)
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-checks
+          path: playwright-report
+          retention-days: 7
+
+  deploy-preview:
+    name: Deploy preview (real functions)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      statuses: read
+    env:
+      PREVIEW_URL: https://deploy-preview-${{ github.event.pull_request.number }}--myhpde.netlify.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Wait for Netlify's deploy preview of this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Netlify reports the preview as a commit status; then make sure
+          # the preview serves this exact commit (dist/version.json).
+          for i in $(seq 1 90); do
+            state=$(gh api "repos/${{ github.repository }}/commits/$SHA/status" \
+              --jq '[.statuses[] | select(.context == "netlify/myhpde/deploy-preview")][0].state // "missing"')
+            case "$state" in
+              failure|error) echo "::error::Netlify's deploy preview $state — see the netlify/myhpde/deploy-preview check"; exit 1 ;;
+              success)
+                served=$(curl -fsS "$PREVIEW_URL/version.json" | jq -r .commit || true)
+                [ "$served" = "$SHA" ] && { echo "Preview serves $SHA"; exit 0; } ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Timed out waiting for the deploy preview (last status: $state)"; exit 1
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Checks against the deploy preview
+        run: npx playwright test
+        env:
+          E2E_BASE_URL: ${{ env.PREVIEW_URL }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-deploy-preview
+          path: playwright-report
+          retention-days: 7
+
+  production:
+    name: Production (after merge)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # A newer merge replaces the site before an older run could see its
+    # commit live, so only the latest one is checked.
+    concurrency:
+      group: production-check
+      cancel-in-progress: true
+    env:
+      SITE_URL: https://myhpde.netlify.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Wait for the live site to serve this commit
+        run: |
+          for i in $(seq 1 90); do
+            served=$(curl -fsS "$SITE_URL/version.json" | jq -r .commit || true)
+            [ "$served" = "$GITHUB_SHA" ] && { echo "Live site serves $GITHUB_SHA"; exit 0; }
+            sleep 10
+          done
+          echo "::error::The live site still serves ${served:-nothing} after 15 minutes — did the Netlify production deploy fail?"; exit 1
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: Checks against the live site (read-only)
+        run: npx playwright test
+        env:
+          E2E_BASE_URL: ${{ env.SITE_URL }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-production
+          path: playwright-report
+          retention-days: 7

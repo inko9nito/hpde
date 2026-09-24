@@ -48,22 +48,48 @@ or failed. (GitHub Pages previews were retired in #227.)
 
 Put the link in the PR body and in the issue status comment.
 
-## Netlify functions — test them the way Netlify runs them
+## Tests and CI (#256)
 
-Vitest's resolver forgives imports that Node rejects, so a function can
-pass every unit test and still crash on Netlify (#253: the widget feed
-answered 502 for an hour). `netlify/lib/functionsLoad.test.ts` loads each
-function in a plain Node process, packaged the way Netlify packages it;
-keep it passing, and don't loosen it to make a function "load".
+`.github/workflows/ci.yml` runs on every PR and every push to `main`:
 
-Deploy-preview hosts aren't reachable from Claude's sandbox, but
-`https://myhpde.netlify.app` is. So:
+- **checks** — `tsc -b`, `vitest run`, `npm run build`, then browser tests
+  of the built app in WebKit (iPhone-sized) and Chromium with the events
+  API stubbed (`e2e/app.spec.ts`).
+- **deploy-preview** (PRs) — waits until the Netlify preview serves the
+  PR's head commit (`/version.json`), then runs read-only checks against
+  it, real functions included (`e2e/live.spec.ts`): `/api/events`,
+  `/api/events.json` (the widget feed) and the app pages.
+- **production** (after merge) — the same read-only checks against
+  `https://myhpde.netlify.app` once it serves the merged commit.
 
-- In the PR, ask the user to open any changed function's URL on the
-  preview (e.g. `/api/events.json`), not just the app pages.
-- After a merge that touches `netlify/functions/` or anything they
-  import, `curl` the live endpoint until the new deploy answers, and say
-  what it returned.
+Before pushing, run locally what CI runs first — `npx tsc -b`,
+`npx vitest run`, `npm run build`, and
+`PLAYWRIGHT_EXECUTABLE_PATH=/opt/pw-browsers/chromium npm run test:e2e -- --project=chromium`
+(only Chromium is installed in the sandbox; WebKit runs in CI). Any page
+error fails a browser test. Never skip, loosen or delete a test to get
+green.
+
+When the user says "merge", read the PR's check results first and merge
+only if they're green (that's an explicit ask, not auto-watching). If a
+check is red, say which one and why instead of merging. After merging,
+see the merge through: wait for the live site to serve the merged commit
+(`curl https://myhpde.netlify.app/version.json`), then check what changed
+(e.g. `curl` a changed endpoint) and report what it returned.
+
+**Netlify functions.** Vitest's resolver forgives imports that Node
+rejects, so a function can pass every unit test and still crash on
+Netlify (#253: the widget feed answered 502 for an hour).
+`netlify/lib/functionsLoad.test.ts` loads each function in a plain Node
+process, packaged the way Netlify packages it; keep it passing, and don't
+loosen it to make a function "load". The deploy-preview job then checks
+the real functions on the preview.
+
+**Sandbox limits.** Deploy-preview hosts aren't reachable from Claude's
+sandbox; `https://myhpde.netlify.app` is, through a proxy that re-signs
+HTTPS. `E2E_SANDBOX_PROXY=1 E2E_BASE_URL=https://myhpde.netlify.app` runs
+the live checks from here, but page loads through the proxy are flaky
+(`ERR_TOO_MANY_RETRIES`) — treat CI's run as the verdict, not the
+sandbox's.
 
 ## Handing the widget script back to the user
 

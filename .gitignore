@@ -5,3 +5,5 @@ dist/
 *.local
 *.tsbuildinfo
 scripts/.widget-preview/
+playwright-report/
+test-results/
