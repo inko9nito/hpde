@@ -9,10 +9,11 @@ import { applySchedule } from '../../src/utils/scheduleEditor.ts'
 //   POST              creates an event (the New event form). The client
 //                     sends the ids it knows about (the test-live fixture
 //                     ships with the app) so a new id never collides.
-//   PUT ?id=          replaces an event's schedule with `schedule`, the
-//                     editor's markdown, parsed here with the same code the
-//                     editor previews with. The event as it was is kept in
-//                     the history store first.
+//   PUT ?id=          replaces an event's run groups and schedule: the
+//                     editor's `runGroups` (its form) and `schedule` (its
+//                     markdown), checked here with the same code the editor
+//                     previews with. The event as it was is kept in the
+//                     history store first.
 //   DELETE ?id=       removes an event.
 //
 // Also answers at /api/created-events, its name before #232, for app pages
@@ -77,7 +78,8 @@ export default async function handler(req: Request, context: unknown, deps: Reco
 
     const current = await store.get(id, { type: 'json' })
     if (!current) return json(404, { error: 'That event doesn’t exist.' })
-    const result = applySchedule(current, schedule)
+    if (!Array.isArray(body?.runGroups)) return json(400, { error: 'Missing the run groups.' })
+    const result = applySchedule(current, body.runGroups, schedule)
     if ('error' in result) return json(400, { error: result.error, problems: result.problems })
 
     const savedAt = new Date().toISOString()

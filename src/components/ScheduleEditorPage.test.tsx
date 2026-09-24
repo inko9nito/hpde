@@ -16,12 +16,9 @@ const blank: EventConfig = {
   days: [{ id: 'saturday', label: 'Saturday', date: '2099-10-03', activities: [] }],
 }
 
-const SCHEDULE = `## groups
-red | Red | bg-runred-500 | text-white | Advanced
-
-## Saturday | 2099-10-03
+const SCHEDULE = `## Saturday | 2099-10-03
 07:30 general | Drivers meeting
-08:00 session 1 | track: red
+08:00 session 1 | track: Red
 `
 
 // identity.ts caches the first widget it loads, so every test shares one
@@ -45,7 +42,8 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   if (String(url).includes('api/events')) {
     if (init?.method === 'PUT') {
       if (refusePut) return json({ error: refusePut }, 403)
-      const result = applySchedule(blank, JSON.parse(init.body as string).schedule)
+      const { runGroups, schedule } = JSON.parse(init.body as string)
+      const result = applySchedule(blank, runGroups, schedule)
       return 'error' in result ? json(result, 400) : json({ event: result.event })
     }
     return json({ events: [blank] })
@@ -62,6 +60,13 @@ function open(hash: string, as: string[] = ['admin']) {
 const editor = () => screen.findByRole('textbox', { name: 'Schedule' }) as Promise<HTMLTextAreaElement>
 const saveButton = () => screen.getByRole('button', { name: 'Save schedule' })
 
+// Adds a run group in the form; it gets the first color not yet used.
+async function addGroup(name: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Add group' }))
+  const inputs = screen.getAllByRole('textbox', { name: /^Group \d+ name$/ })
+  await userEvent.type(inputs[inputs.length - 1], name)
+}
+
 describe('schedule editor (#232)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -74,12 +79,13 @@ describe('schedule editor (#232)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('opens from “Add schedule” on an event with none, with a section per day and examples to copy', async () => {
+  it('opens from “Add schedule” on an event with none: no groups yet, a section per day with examples to copy', async () => {
     open(`#/event/${blank.id}`)
     await userEvent.click(await screen.findByRole('link', { name: 'Add schedule' }))
     const textarea = await editor()
-    expect(textarea.value).toContain('## groups\n// id | Label | color | text color')
+    expect(textarea.value).not.toContain('## groups')
     expect(textarea.value).toContain('## Saturday | 2099-10-03\n// 07:00 general | Registration & tech')
+    expect(screen.queryByRole('listitem', { name: /^Group/ })).not.toBeInTheDocument()
     // Nothing changed yet, nothing to save.
     expect(saveButton()).toBeDisabled()
   })
@@ -94,20 +100,53 @@ describe('schedule editor (#232)', () => {
 
   it('lists what it can’t read, by line, and won’t save until it’s fixed', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    fireEvent.change(await editor(), { target: { value: SCHEDULE.replace('track: red', 'track: blue') + '7:00 general | Gates\n' } })
+    fireEvent.change(await editor(), { target: { value: SCHEDULE + '7:00 general | Gates\n' } })
 
     const problems = within(screen.getByRole('list', { name: 'Problems' }))
-    expect(problems.getByText(/There’s no group “blue”/)).toHaveTextContent('Line 6:')
-    expect(problems.getByText(/use 24-hour HH:MM/)).toHaveTextContent('Line 7:')
+    expect(problems.getByText(/There’s no group “Red”/)).toHaveTextContent('Line 3:')
+    expect(problems.getByText(/use 24-hour HH:MM/)).toHaveTextContent('Line 4:')
     expect(saveButton()).toBeDisabled()
 
+    await addGroup('red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     expect(screen.queryByRole('list', { name: 'Problems' })).not.toBeInTheDocument()
     expect(saveButton()).toBeEnabled()
   })
 
+  it('sets up run groups in a form: name, description, color, order', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    await editor()
+    await addGroup('Novice')
+    await addGroup('Advanced')
+    // Each new group starts on a color the others don't use.
+    expect(screen.getByRole('radio', { name: 'Red', checked: true })).toBeInTheDocument()
+    const advanced = within(screen.getByRole('listitem', { name: 'Group 2' }))
+    expect(advanced.getByRole('radio', { name: 'Orange' })).toBeChecked()
+    await userEvent.click(advanced.getByRole('radio', { name: 'Purple' }))
+    await userEvent.type(advanced.getByRole('textbox', { name: 'Group 2 description' }), 'Solo')
+    await userEvent.click(screen.getByRole('button', { name: 'Move Advanced up' }))
+    expect(screen.getByRole('textbox', { name: 'Group 1 name' })).toHaveValue('Advanced')
+
+    // A group with no name can't be saved.
+    await userEvent.click(screen.getByRole('button', { name: 'Add group' }))
+    expect(within(screen.getByRole('list', { name: 'Problems' })).getByText('Group 3: Give this group a name.')).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove group 3' }))
+
+    fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: advanced, Novice\n' } })
+    await userEvent.click(saveButton())
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect(JSON.parse(put[1]!.body as string).runGroups).toEqual([
+      { label: 'Advanced', bgClass: 'bg-runpurple-500', description: 'Solo' },
+      { label: 'Novice', bgClass: 'bg-runred-500' },
+    ])
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
+  })
+
   it('previews the schedule as it will look', async () => {
     open(`#/edit-schedule/${blank.id}`)
+    await editor()
+    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
@@ -116,14 +155,19 @@ describe('schedule editor (#232)', () => {
     expect((await editor()).value).toBe(SCHEDULE)
   })
 
-  it('saves the markdown, then shows the event with its new schedule', async () => {
+  it('saves the groups and the markdown, then shows the event with its new schedule', async () => {
     open(`#/edit-schedule/${blank.id}`)
+    await editor()
+    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
 
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!
     expect(put[0]).toBe(`/api/events?id=${blank.id}`)
-    expect(JSON.parse(put[1]!.body as string)).toEqual({ schedule: SCHEDULE })
+    expect(JSON.parse(put[1]!.body as string)).toEqual({
+      runGroups: [{ label: 'Red', bgClass: 'bg-runred-500' }],
+      schedule: SCHEDULE,
+    })
     expect((put[1]!.headers as Headers).get('Authorization')).toBe('Bearer token')
 
     await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
@@ -136,6 +180,8 @@ describe('schedule editor (#232)', () => {
   it('shows the server’s reason when a save is refused, and stays put', async () => {
     refusePut = 'Only admins can change events.'
     open(`#/edit-schedule/${blank.id}`)
+    await editor()
+    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
@@ -143,16 +189,20 @@ describe('schedule editor (#232)', () => {
     expect((await editor()).value).toBe(SCHEDULE)
   })
 
-  it('keeps unsaved changes if you leave, and offers to discard them', async () => {
+  it('keeps unsaved changes — groups and schedule — if you leave, and offers to discard them', async () => {
     open(`#/edit-schedule/${blank.id}`)
+    await editor()
+    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     cleanup()
 
     open(`#/edit-schedule/${blank.id}`)
     expect((await editor()).value).toBe(SCHEDULE)
+    expect(screen.getByRole('textbox', { name: 'Group 1 name' })).toHaveValue('Red')
     expect(screen.getByText('Your unsaved changes are back.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect((await editor()).value).toContain('// 07:00 general')
+    expect(screen.queryByRole('textbox', { name: 'Group 1 name' })).not.toBeInTheDocument()
     expect(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)).toBeNull()
   })
 

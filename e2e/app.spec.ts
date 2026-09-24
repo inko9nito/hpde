@@ -151,15 +151,15 @@ async function signInAsAdmin(page: Page) {
   })
 }
 
-test('an admin adds a schedule: edit, preview, save (#232)', async ({ page }) => {
+test('an admin adds a schedule: groups in the form, days in markdown, preview, save (#232)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
-  let saved: string | null = null
+  let body: { runGroups: unknown[]; schedule: string } | null = null
   await page.route(`**/api/events?id=${upcoming.id}`, async route => {
     expect(route.request().method()).toBe('PUT')
     expect(route.request().headers().authorization).toBe('Bearer token')
-    saved = route.request().postDataJSON().schedule
-    const result = applySchedule(upcoming, saved!)
+    body = route.request().postDataJSON()
+    const result = applySchedule(upcoming, body!.runGroups, body!.schedule)
     await route.fulfill('error' in result ? { status: 400, json: result } : { json: { event: result.event } })
   })
 
@@ -167,21 +167,28 @@ test('an admin adds a schedule: edit, preview, save (#232)', async ({ page }) =>
   await page.getByRole('link', { name: 'Add schedule' }).click()
   const textarea = page.getByRole('textbox', { name: 'Schedule' })
   await expect(textarea).toHaveValue(new RegExp(`## ${upcoming.days[0].label} \\| ${upcoming.days[0].date}`))
-  // 16px, or iOS zooms the page in when the box is tapped.
+  // 16px, or iOS zooms the page in when a field is tapped.
   await expect(textarea).toHaveCSS('font-size', '16px')
 
+  // The examples name "novice" and "intermediate": set those groups up.
+  await page.getByRole('button', { name: 'Add group' }).click()
+  const novice = page.getByRole('textbox', { name: 'Group 1 name' })
+  await expect(novice).toBeFocused()
+  await expect(novice).toHaveCSS('font-size', '16px')
+  await novice.fill('Novice')
+  await page.getByRole('listitem', { name: 'Group 1' }).getByRole('radio', { name: 'Green' }).check()
+
   // Uncomment the examples, the way it's meant to be used on a phone.
-  const text = (await textarea.inputValue())
-    .replace('// novice | Novice', 'novice | Novice')
-    .replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
-  await textarea.fill(text)
+  await textarea.fill((await textarea.inputValue()).replace(/\/\/ (\d\d:\d\d|break)/g, '$1'))
   await expect(page.getByRole('list', { name: 'Problems' })).toContainText('There’s no group “intermediate”')
   await expect(page.getByRole('button', { name: 'Save schedule' })).toBeDisabled()
-  await textarea.fill(text.replace('class: intermediate', 'class: novice'))
+  await page.getByRole('button', { name: 'Add group' }).click()
+  await page.getByRole('textbox', { name: 'Group 2 name' }).fill('Intermediate')
   await expect(page.getByRole('list', { name: 'Problems' })).toHaveCount(0)
 
   await page.getByRole('tab', { name: 'Preview' }).click()
   await expect(page.getByText('Registration & tech')).toBeVisible()
+  await expect(page.getByText('Novice').first()).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor('bg-rungreen-500')))
   // Nothing wider than the screen.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
@@ -189,6 +196,8 @@ test('an admin adds a schedule: edit, preview, save (#232)', async ({ page }) =>
   await expect(page.getByText('Schedule saved')).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
   await expect(page.getByText('Registration & tech')).toBeVisible()
-  expect(saved).toContain('novice | Novice | bg-rungreen-500')
+  expect(body!.runGroups).toEqual([
+    { label: 'Novice', bgClass: 'bg-rungreen-500' },
+    { label: 'Intermediate', bgClass: 'bg-runred-500' },
+  ])
 })
-

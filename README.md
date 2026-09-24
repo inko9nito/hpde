@@ -58,21 +58,21 @@ direction and event page. A new event starts with no schedule — its
 Schedule tab says "Schedule coming soon" until one is added.
 
 Admins add or change an event's schedule in the app: event page → **…** →
-**Edit schedule** (or **Add schedule** on an event that has none). It's the
-run groups and each day's schedule as markdown, with a live preview:
+**Edit schedule** (or **Add schedule** on an event that has none).
+- **Run groups** are a form: a name, an optional description and a color
+  from the palette for each, in the order they're listed.
+- **The schedule** is markdown, one section per day, with a live preview.
+  Sessions name groups as they're called in the form:
 
 ```
-## groups
-red | Red | bg-runred-500 | text-white | Advanced
-
 ## Saturday | 2026-10-03
 07:00 general | Registration & tech | Paddock
-08:00 session 1 | track: red | class: blue | note: Lead-follow
+08:00 session 1 | track: Red, Blue | class: Novice | note: Lead-follow
 12:00 lunch | Lunch
 break | Track walk
 ```
 
-Every section opens with commented-out (`//`) example lines to copy.
+Each day opens with commented-out (`//`) example lines to copy.
 Anything the editor can't read is listed by line number, and saving waits
 until it's fixed, so nothing typed is silently dropped. The days are the
 event's own dates. Each save keeps the version it replaced in the
@@ -87,8 +87,8 @@ be edited or deleted.)
 (store `events`), not in the repo, so anyone deploying this app starts with
 their own events. No extra Netlify setup is needed for Blobs.
 - `netlify/functions/events.mts` — `/api/events`: public `GET`, admin-only
-  `POST`, `PUT ?id=` (a new schedule, as the editor's markdown, which the
-  function parses itself) and `DELETE ?id=`. The app loads every event
+  `POST`, `PUT ?id=` (the editor's run groups and schedule markdown, which
+  the function checks itself) and `DELETE ?id=`. The app loads every event
   from here.
 - `netlify/functions/events-json.mts` — `/api/events.json`, the iOS
   widget's feed: the same events in the widget's format, cached for a
