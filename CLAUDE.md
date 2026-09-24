@@ -48,6 +48,23 @@ or failed. (GitHub Pages previews were retired in #227.)
 
 Put the link in the PR body and in the issue status comment.
 
+## Netlify functions — test them the way Netlify runs them
+
+Vitest's resolver forgives imports that Node rejects, so a function can
+pass every unit test and still crash on Netlify (#253: the widget feed
+answered 502 for an hour). `netlify/lib/functionsLoad.test.ts` loads each
+function in a plain Node process, packaged the way Netlify packages it;
+keep it passing, and don't loosen it to make a function "load".
+
+Deploy-preview hosts aren't reachable from Claude's sandbox, but
+`https://myhpde.netlify.app` is. So:
+
+- In the PR, ask the user to open any changed function's URL on the
+  preview (e.g. `/api/events.json`), not just the app pages.
+- After a merge that touches `netlify/functions/` or anything they
+  import, `curl` the live endpoint until the new deploy answers, and say
+  what it returned.
+
 ## Handing the widget script back to the user
 
 The user runs a small paste-once loader (`scripts/hpde-widget-loader.js`)

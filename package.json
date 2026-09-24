@@ -33,6 +33,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^4.1.7",
     "autoprefixer": "^10.4.20",
+    "esbuild": "^0.25.12",
     "jsdom": "^29.1.1",
     "playwright": "^1.63.0",
     "postcss": "^8.4.49",
