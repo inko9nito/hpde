@@ -7,6 +7,7 @@ import {
   isSignInReturn,
   restoreReturnTo,
   showIdentityWidget,
+  adoptSavedToken,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
 
@@ -37,6 +38,20 @@ interface AuthValue {
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
+
+/**
+ * authedFetch couldn't get a token: the sign-in has lapsed. It's renewed
+ * behind the scenes after an hour (gotrue-js, with a one-time refresh
+ * token), and when that renewal fails gotrue-js drops the session without
+ * telling anyone. Callers show "signed out", not a connection problem —
+ * retrying could never work.
+ */
+export class SignedOutError extends Error {
+  constructor() {
+    super('Signed out')
+    this.name = 'SignedOutError'
+  }
+}
 
 function toAuthUser(u: IdentityUser): AuthUser {
   return {
@@ -117,19 +132,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // The access token, renewed if it's due — with the newest refresh token
+  // on the device (see adoptSavedToken). If Identity still refuses (the
+  // sign-in was revoked), gotrue-js has already dropped it, so show it:
+  // signed out, with a way back in.
+  const renew = useCallback(async (u: IdentityUser): Promise<string> => {
+    adoptSavedToken(u)
+    try {
+      return await u.jwt()
+    } catch (err) {
+      console.error('Sign-in renewal failed:', err)
+      setIdentityUser(null)
+      setStatus('signed-out')
+      throw new SignedOutError()
+    }
+  }, [])
+
+  // Renew in the background when the app is opened or comes back to the
+  // front, so a save never waits on it — or finds out only then that the
+  // sign-in lapsed. jwt() only goes to the network when the token is due.
+  useEffect(() => {
+    if (!identityUser) return
+    const renewIfVisible = () => {
+      if (document.visibilityState === 'visible') renew(identityUser).catch(() => {})
+    }
+    renewIfVisible()
+    document.addEventListener('visibilitychange', renewIfVisible)
+    window.addEventListener('focus', renewIfVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', renewIfVisible)
+      window.removeEventListener('focus', renewIfVisible)
+    }
+  }, [identityUser, renew])
+
   const signIn = useCallback(() => startGoogleSignIn(), [])
   const openAccount = useCallback(() => widget?.open(), [widget])
   const signOut = useCallback(() => widget?.logout(), [widget])
   const authedFetch = useCallback(
     async (input: RequestInfo, init: RequestInit = {}) => {
-      if (!identityUser) throw new Error('Not signed in')
-      // jwt() refreshes the token first if it has expired.
-      const token = await identityUser.jwt()
+      if (!identityUser) throw new SignedOutError()
+      const token = await renew(identityUser)
       const headers = new Headers(init.headers)
       headers.set('Authorization', `Bearer ${token}`)
       return fetch(input, { ...init, headers })
     },
-    [identityUser],
+    [identityUser, renew],
   )
 
   const value = useMemo<AuthValue>(
@@ -153,7 +200,7 @@ const SIGNED_OUT_FALLBACK: AuthValue = {
   signIn: () => {},
   openAccount: () => {},
   signOut: () => {},
-  authedFetch: () => Promise.reject(new Error('Not signed in')),
+  authedFetch: () => Promise.reject(new SignedOutError()),
 }
 
 // Components rendered without a provider (isolated tests) behave as if

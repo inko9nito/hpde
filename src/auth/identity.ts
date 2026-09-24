@@ -2,12 +2,49 @@
 // sign-in setup the BEI app uses, loaded on demand so the public schedule
 // never waits on it.
 
+export interface IdentityToken {
+  access_token: string
+  refresh_token: string
+  // Milliseconds since the epoch.
+  expires_at: number
+}
+
 export interface IdentityUser {
   id: string
   email: string
   user_metadata?: { full_name?: string; avatar_url?: string }
   app_metadata?: { roles?: string[] }
+  // gotrue-js's copy of the sign-in (the widget is built on it).
+  token?: IdentityToken | null
+  // The access token, renewed first if it's (nearly) expired.
   jwt(): Promise<string>
+}
+
+// Where gotrue-js keeps the sign-in, in every version the widget has used.
+export const SESSION_KEY = 'gotrue.user'
+
+/**
+ * Brings this page's copy of the sign-in up to date with the one saved on
+ * the device, before it's renewed.
+ *
+ * A sign-in lasts an hour and is then renewed with a refresh token that
+ * works once. Another copy of the site (a second tab, or this page before
+ * a reload) may have renewed it since this page read it — and then this
+ * page's refresh token is spent: renewing with it fails, and gotrue-js
+ * responds by clearing the sign-in everywhere. Renewing with the newest
+ * token, the one saved on the device, avoids that.
+ */
+export function adoptSavedToken(user: IdentityUser): void {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null')
+    const token = saved?.token as IdentityToken | undefined
+    if (saved?.id !== user.id || !token?.refresh_token || !token.access_token) return
+    if (token.refresh_token === user.token?.refresh_token) return
+    if ((token.expires_at ?? 0) < (user.token?.expires_at ?? 0)) return
+    user.token = token
+  } catch {
+    // Unreadable storage: renew with what this page has.
+  }
 }
 
 export interface IdentityWidget {

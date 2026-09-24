@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, X } from 'lucide-react'
-import { useAuth } from '../auth/AuthContext'
+import { useAuth, SignedOutError } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
@@ -90,13 +90,16 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   const { status, user } = useAuth()
   const { allEvents, isStored, loaded } = useEvents()
   const event = allEvents.find(e => e.id === eventId)
+  // Set once the editor has been shown, so a sign-in that lapses mid-edit
+  // says so (changes kept) rather than showing the generic prompt.
+  const wasEditing = useRef(false)
 
   let content: React.ReactNode
   if (status === 'loading' || (!loaded && (!event || isStored(eventId)))) {
     // Wait for the fresh list, so the editor never starts from a stale copy.
     content = <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" aria-busy="true" aria-label="Loading" />
   } else if (status !== 'signed-in') {
-    content = <SignInPrompt reason="edit schedules" />
+    content = wasEditing.current ? <SignedOutNotice /> : <SignInPrompt reason="edit schedules" />
   } else if (!user?.roles.includes(ADMIN_ROLE)) {
     content = <Notice title="Only admins can edit schedules." detail={`Signed in as ${user?.email}`} />
   } else if (!event) {
@@ -104,6 +107,7 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   } else if (!isStored(event.id)) {
     content = <Notice title="Test events can’t be edited." detail="They ship with the app." />
   } else {
+    wasEditing.current = true
     content = <Editor key={event.id} event={event} onSaved={onSaved} />
   }
 
@@ -128,6 +132,24 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
         </div>
         {content}
       </div>
+    </div>
+  )
+}
+
+function SignedOutNotice() {
+  const { signIn } = useAuth()
+  return (
+    <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+      <p className="text-sm font-semibold text-amber-900">You’ve been signed out</p>
+      <p className="mt-1 text-sm text-amber-800">
+        Sign in again to save. Your changes are kept on this device.
+      </p>
+      <button
+        onClick={signIn}
+        className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+      >
+        Sign in
+      </button>
     </div>
   )
 }
@@ -254,8 +276,12 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
       writeDraft(event.id, null)
       addEvent(body.event)
       onSaved(body.event)
-    } catch {
-      setError('Couldn’t reach the server. Check your connection and try again.')
+    } catch (err) {
+      // Signed out: the page swaps to a notice with a way back in, and the
+      // changes are already kept on the device.
+      if (err instanceof SignedOutError) return
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : ''
+      setError(`Couldn’t reach the server. Check your connection and try again.${reason}`)
     } finally {
       setSaving(false)
     }

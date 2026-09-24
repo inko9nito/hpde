@@ -24,8 +24,28 @@ const SCHEDULE = `## Saturday | 2099-10-03
 // identity.ts caches the first widget it loads, so every test shares one
 // fake and just changes who's signed in.
 let roles: string[] = []
+// Identity, as far as renewing the sign-in goes — the way gotrue-js does
+// it: the access token is renewed when it's (nearly) expired, with a
+// refresh token that works once. `renewalFails` refuses every renewal (a
+// revoked sign-in).
+const HOUR = 3_600_000
+let renewalFails = false
+let acceptedRefresh = 'r1'
+let startToken = { access_token: 'token', refresh_token: 'r1', expires_at: Date.now() + HOUR }
 const handlers: Record<string, (u: unknown) => void> = {}
-const currentUser = () => ({ id: 'u', email: 'v@example.com', app_metadata: { roles }, jwt: async () => 'token' })
+const currentUser = () => ({
+  id: 'u', email: 'v@example.com', app_metadata: { roles },
+  token: { ...startToken } as { access_token: string; refresh_token: string; expires_at: number } | null,
+  async jwt() {
+    if (renewalFails) throw new Error('invalid_grant: Invalid Refresh Token')
+    const t = this.token!
+    if (t.expires_at - 60_000 > Date.now()) return t.access_token
+    if (t.refresh_token !== acceptedRefresh) throw new Error('invalid_grant: Invalid Refresh Token')
+    acceptedRefresh = `${t.refresh_token}+`
+    this.token = { access_token: 'renewed', refresh_token: acceptedRefresh, expires_at: Date.now() + HOUR }
+    return this.token.access_token
+  },
+})
 window.netlifyIdentity = {
   init: () => handlers.init?.(currentUser()),
   on: (e: string, cb: (u: unknown) => void) => { handlers[e] = cb },
@@ -35,6 +55,7 @@ window.netlifyIdentity = {
 // The events function, as far as these tests need it: the PUT answers the
 // way the real one does, from the same parser — unless a test refuses it.
 let refusePut: string | null = null
+let putThrows = false
 const defaultFetch = async (url: string, init?: RequestInit) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -42,6 +63,7 @@ const defaultFetch = async (url: string, init?: RequestInit) => {
   if (String(url).includes('api/events')) {
     if (init?.method === 'PUT') {
       if (refusePut) return json({ error: refusePut }, 403)
+      if (putThrows) throw new TypeError('Load failed')
       const { runGroups, schedule } = JSON.parse(init.body as string)
       const result = applySchedule(blank, runGroups, schedule)
       return 'error' in result ? json(result, 400) : json({ event: result.event })
@@ -67,6 +89,10 @@ describe('schedule editor (#232)', () => {
   beforeEach(() => {
     localStorage.clear()
     refusePut = null
+    putThrows = false
+    renewalFails = false
+    acceptedRefresh = 'r1'
+    startToken = { access_token: 'token', refresh_token: 'r1', expires_at: Date.now() + HOUR }
     fetchMock.mockClear()
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -226,6 +252,56 @@ describe('schedule editor (#232)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
     expect(window.location.hash).toBe(`#/edit-schedule/${blank.id}`)
     expect((await editor()).value).toBe(SCHEDULE)
+  })
+
+  it('renews an expired sign-in quietly, with the refresh token another copy of the site saved', async () => {
+    // This page's refresh token (r1) was spent by another tab, which saved
+    // the renewed sign-in (r2) — itself expired by now.
+    startToken = { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - HOUR }
+    acceptedRefresh = 'r2'
+    localStorage.setItem('gotrue.user', JSON.stringify({
+      id: 'u', token: { access_token: 'stale', refresh_token: 'r2', expires_at: Date.now() - 1000 },
+    }))
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    await userEvent.click(saveButton())
+
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect((put[1]!.headers as Headers).get('Authorization')).toBe('Bearer renewed')
+    expect(screen.queryByText('You’ve been signed out')).not.toBeInTheDocument()
+  })
+
+  it('finds out a sign-in has lapsed when the app comes back to the front, not at save', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    renewalFails = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('You’ve been signed out')
+    expect(JSON.parse(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)!).text).toBe(SCHEDULE)
+  })
+
+  it('says so when the sign-in has lapsed, and keeps the changes for after signing back in', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    renewalFails = true
+    await userEvent.click(saveButton())
+
+    // Not "couldn't reach the server": retrying could never work.
+    const notice = await screen.findByRole('alert')
+    expect(notice).toHaveTextContent('You’ve been signed out')
+    expect(notice).toHaveTextContent('Your changes are kept on this device.')
+    expect(within(notice).getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PUT' }))
+    expect(JSON.parse(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)!).text).toBe(SCHEDULE)
+  })
+
+  it('says when the server can’t be reached, with the browser’s reason', async () => {
+    putThrows = true
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    await userEvent.click(saveButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach the server. Check your connection and try again. (Load failed)')
   })
 
   it('keeps unsaved changes — groups and schedule — if you leave, and offers to discard them', async () => {
