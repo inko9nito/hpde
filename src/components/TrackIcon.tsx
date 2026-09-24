@@ -62,9 +62,9 @@ interface Props {
  * text color.
  */
 const TONE_CLASSES: Record<TrackIconTone, { container: string; placeholder: string }> = {
-  default:  { container: 'bg-gray-100 text-gray-700', placeholder: 'text-gray-300' },
-  selected: { container: 'bg-blue-100 text-blue-600', placeholder: 'text-blue-300' },
-  dark:     { container: 'bg-gray-900 text-white',    placeholder: 'text-gray-500' },
+  default:  { container: 'bg-gray-100 text-gray-700', placeholder: 'text-black' },
+  selected: { container: 'bg-blue-100 text-blue-600', placeholder: 'text-black' },
+  dark:     { container: 'bg-gray-900 text-white',    placeholder: 'text-white' },
 }
 
 export function TrackIcon({
@@ -92,8 +92,9 @@ export function TrackIcon({
       style={{ width: boxSize, height: boxSize }}
       aria-hidden="true"
     >
-      {/* The placeholder takes its own lighter tone so it clearly reads
-          as "not yet added" rather than as a real track. */}
+      {/* The placeholder flag is a 2% watermark in the tile's contrasting
+          color (white on dark, black on light), so it reads as "not yet
+          added" rather than as a real track. */}
       <span
         data-track-icon={src ? trackId : 'placeholder'}
         className={`block bg-current ${src ? '' : toneCls.placeholder}`.trim()}
