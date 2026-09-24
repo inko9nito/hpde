@@ -204,7 +204,7 @@ export function scheduleToMarkdown(event: EventConfig): string {
   const examples = event.runGroups.length >= 2 ? event.runGroups.slice(-2).map(g => g.label) : EXAMPLE_GROUPS
   const out: string[] = [
     '// Lines starting with // are examples and notes, and aren’t saved.',
-    '// Remove the // to use one.',
+    '// Remove the // to use one. Times are 24-hour: 13:30 is 1:30 PM.',
   ]
   for (const day of event.days) {
     out.push(
@@ -214,6 +214,7 @@ export function scheduleToMarkdown(event: EventConfig): string {
       `// 08:00 session 1 | track: ${examples[0]} | class: ${examples[1]} | note: Lead-follow`,
       '// 12:00 lunch | Lunch',
       '// break | Track walk',
+      `// 13:30 session 4 | track: ${examples[0]}, ${examples[1]}`,
       ...day.activities.map(a => activityLine(a, names)),
     )
   }

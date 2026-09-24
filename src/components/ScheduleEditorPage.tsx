@@ -107,17 +107,20 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6">
-        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-1 pb-4 pt-2">
+    // Its own scroll area, like the event page's (PushPage): html and body
+    // clip overflow-x, which stops `sticky` from working against the window,
+    // and the Edit / Preview tabs stick to the top of this instead.
+    <div data-scroll-root className="fixed inset-0 overflow-y-auto overflow-x-hidden bg-gray-50">
+      <div className="mx-auto max-w-lg px-3 pt-3 sm:px-4 sm:pt-5">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-1 pb-3">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900">Edit schedule</h1>
-            {event && <p className="mt-1 truncate text-sm text-gray-500">{event.name}</p>}
+            <h1 className="text-xl font-bold text-gray-900">Edit schedule</h1>
+            {event && <p className="truncate text-sm text-gray-500">{event.name}</p>}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+            className="-mr-2 grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
           >
             <X size={20} />
           </button>
@@ -191,9 +194,8 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
     el.style.height = `${el.scrollHeight + 2}px`
   }, [text, tab])
 
-  // The save bar is fixed to the bottom of the screen (html and body clip
-  // overflow-x, which stops `sticky` from working), so the page gets room
-  // for it underneath, however tall the problem list makes it.
+  // The save bar is fixed to the bottom of the screen, so the page gets
+  // room for it underneath, however tall the problem list makes it.
   useEffect(() => {
     const el = barRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
@@ -275,7 +277,12 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
         </div>
       )}
 
-      <div role="tablist" aria-label="Editor view" className="mb-5 flex gap-8 border-b border-gray-200 px-1">
+      <div
+        role="tablist"
+        aria-label="Editor view"
+        // Stays at the top while the page scrolls, so you can switch any time.
+        className="sticky top-0 z-10 -mx-3 mb-5 flex gap-8 border-b border-gray-200 bg-gray-50 px-4 sm:-mx-4 sm:px-5"
+      >
         <button role="tab" aria-selected={tab === 'edit'} onClick={() => setTab('edit')} className={tabClass('edit')}>
           Edit
         </button>
@@ -528,10 +535,14 @@ function FormatHelp() {
             <li><code className={code}>08:00 session 1 | track: Red, Blue | class: Novice | note: …</code></li>
             <li><code className={code}>break | Label</code> — a gap between blocks, no time</li>
           </ul>
+          <p className="mt-2">
+            Times use the 24-hour clock, so there’s no AM or PM: <code className={code}>07:30</code> is 7:30 AM,{' '}
+            <code className={code}>12:00</code> is noon, and <code className={code}>13:30</code> is 1:30 PM.
+          </p>
         </div>
         <p className="text-xs text-gray-500">
-          Name run groups however the organizer does; each one shows up under Run groups with a color. Times are
-          24-hour, HH:MM. The days are the event’s dates; they’re changed in the event’s details.
+          Name run groups however the organizer does; each one shows up under Run groups with a color. The days
+          are the event’s dates; they’re changed in the event’s details.
         </p>
       </div>
     </details>

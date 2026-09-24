@@ -188,11 +188,18 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   await novice.getByRole('textbox', { name: 'Novice description' }).fill('First timers')
   await expect(novice.getByRole('textbox', { name: 'Novice description' })).toHaveCSS('font-size', '16px')
 
+  // Scrolled all the way down, the Edit / Preview tabs are still on screen.
+  const scrollRoot = page.locator('[data-scroll-root]')
+  await scrollRoot.evaluate(el => el.scrollTo(0, el.scrollHeight))
+  await expect.poll(() => scrollRoot.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  await expect(page.getByRole('tab', { name: 'Preview' })).toBeInViewport()
+  // Nothing wider than the screen.
+  expect(await scrollRoot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+
   await page.getByRole('tab', { name: 'Preview' }).click()
   await expect(page.getByText('Registration & tech')).toBeVisible()
   await expect(page.getByText('Novice', { exact: true }).first()).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor('bg-rungreen-500')))
-  // Nothing wider than the screen.
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(await scrollRoot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
   await page.getByRole('button', { name: 'Save schedule' }).click()
   await expect(page.getByText('Schedule saved')).toBeVisible()

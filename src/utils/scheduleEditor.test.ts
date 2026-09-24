@@ -48,6 +48,9 @@ describe('the editor round trip (#232)', () => {
     expect(md).toContain('## Sunday | 2026-10-04\n// 07:00 general |')
     expect(md).toContain('// 08:00 session 1 | track: Novice | class: Intermediate')
     expect(md).toContain('// break | Track walk')
+    // An afternoon example, since the clock is 24-hour.
+    expect(md).toContain('Times are 24-hour: 13:30 is 1:30 PM.')
+    expect(md).toContain('// 13:30 session 4 | track: Novice, Intermediate')
     // The examples are comments: nothing saved, nothing flagged.
     const edit = readScheduleEdit(blank, [], md)
     expect(edit.problems).toEqual([])
@@ -74,6 +77,7 @@ describe('the editor round trip (#232)', () => {
       { time: '08:00', type: 'session', sessionNumber: 1, onTrack: ['novice'], inClass: ['intermediate'], note: 'Lead-follow' },
       { time: '12:00', type: 'lunch', label: 'Lunch' },
       { type: 'break', label: 'Track walk' },
+      { time: '13:30', type: 'session', sessionNumber: 4, onTrack: ['novice', 'intermediate'] },
     ])
   })
 
