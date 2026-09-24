@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
 import { formatLapTime, formatAverage, lapLabels, lapStats } from '../utils/lapTimes'
@@ -70,7 +71,9 @@ export function lapColumns(laps: Lap[]): LapColumns {
  * (#210): lap, start, finish, lap time, note. Every column has a fixed
  * width, so tables for different sessions line up down the page. The best
  * lap's time is in a chip; out and in laps are dimmed, since they don't
- * count.
+ * count. With start and finish times there's a gap before the lap time, so
+ * it stands apart from them — and on a phone that leaves too little room
+ * for a note column, so each note goes on a line of its own under its lap.
  */
 export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
   laps: Lap[]
@@ -79,6 +82,10 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
 }) {
   const labels = lapLabels(laps)
   const { bestIndex } = lapStats(laps)
+  const crossings = columns.start || columns.finish
+  const stacked = columns.note && crossings
+  // Shown on wider screens only when notes are stacked on a phone.
+  const noteColumn = stacked ? 'hidden sm:table-cell' : ''
   const crossing = 'truncate py-1.5 pr-2 font-mono text-[10px] tabular-nums text-gray-500'
   return (
     <table className="w-full table-fixed border-collapse text-left text-xs" aria-label="Laps">
@@ -86,32 +93,47 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
         <col className="w-8" />
         {columns.start && <col className="w-20" />}
         {columns.finish && <col className="w-20" />}
-        <col className="w-[4.75rem]" />
-        {columns.note && <col />}
+        {/* With notes stacked on a phone, the lap time takes what's left there. */}
+        <col className={crossings ? (stacked ? 'sm:w-[5.75rem]' : 'w-[5.75rem]') : 'w-[4.75rem]'} />
+        {columns.note && <col className={stacked ? 'hidden sm:table-column' : ''} />}
       </colgroup>
       <thead className="whitespace-nowrap text-[10px] uppercase tracking-wide text-gray-400">
         <tr>
           <th scope="col" className="py-1 pr-2 font-medium">Lap</th>
           {columns.start && <th scope="col" className="py-1 pr-2 font-medium">Start</th>}
           {columns.finish && <th scope="col" className="py-1 pr-2 font-medium">Finish</th>}
-          <th scope="col" className="py-1 pr-2 font-medium">Lap time</th>
-          {columns.note && <th scope="col" className="py-1 font-medium">Note</th>}
+          <th scope="col" className={`py-1 pr-2 font-medium ${crossings ? 'pl-4' : ''}`}>Lap time</th>
+          {columns.note && <th scope="col" className={`py-1 font-medium ${noteColumn}`}>Note</th>}
         </tr>
       </thead>
       <tbody>
-        {laps.map((lap, i) => (
-          <tr key={i} className={`border-t border-gray-100 align-top ${lap.kind ? 'text-gray-400' : 'text-gray-700'}`}>
-            <th scope="row" className="py-1.5 pr-2 font-normal">{labels[i]}</th>
-            {columns.start && <td className={crossing}>{lap.start}</td>}
-            {columns.finish && <td className={crossing}>{lap.end}</td>}
-            <td className="whitespace-nowrap py-1 pr-2 text-[13px]">
-              {i === bestIndex
-                ? <BestChip ms={lap.ms} allTime={lap.ms === allTimeBest} />
-                : <span className={`font-mono tabular-nums ${lap.kind ? '' : 'text-gray-900'}`}>{formatLapTime(lap.ms)}</span>}
-            </td>
-            {columns.note && <td className="py-1.5">{lap.note}</td>}
-          </tr>
-        ))}
+        {laps.map((lap, i) => {
+          const dim = lap.kind ? 'text-gray-400' : 'text-gray-700'
+          const noteBelow = stacked && !!lap.note
+          return (
+            <Fragment key={i}>
+              <tr className={`border-t border-gray-100 align-top ${dim}`}>
+                <th scope="row" className="py-1.5 pr-2 font-normal">{labels[i]}</th>
+                {columns.start && <td className={crossing}>{lap.start}</td>}
+                {columns.finish && <td className={crossing}>{lap.end}</td>}
+                <td className={`whitespace-nowrap py-1 pr-2 text-[13px] ${crossings ? 'pl-4' : ''}`}>
+                  {i === bestIndex
+                    ? <BestChip ms={lap.ms} allTime={lap.ms === allTimeBest} />
+                    : <span className={`font-mono tabular-nums ${lap.kind ? '' : 'text-gray-900'}`}>{formatLapTime(lap.ms)}</span>}
+                </td>
+                {columns.note && <td className={`py-1.5 ${noteColumn}`}>{lap.note}</td>}
+              </tr>
+              {noteBelow && (
+                <tr className={`sm:hidden ${dim}`} data-note-row>
+                  <td />
+                  <td colSpan={(columns.start ? 1 : 0) + (columns.finish ? 1 : 0) + 1} className="pb-1.5">
+                    {lap.note}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          )
+        })}
       </tbody>
     </table>
   )

@@ -152,9 +152,6 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
                   </div>
                   <GroupBadge group={groupFor(session.group, runGroups)} size="sm" />
                 </div>
-                {session.summary && (
-                  <p className="text-sm text-gray-700" data-session-summary>{session.summary}</p>
-                )}
                 <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -185,6 +182,9 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
                       />
                     </button>
                   </div>
+                  {session.summary && (
+                    <p className="text-sm text-gray-700" data-lap-summary>{session.summary}</p>
+                  )}
                   {expanded && (
                     <div id={tableId}>
                       <LapTable laps={session.laps} columns={columns} allTimeBest={allTimeBest} />

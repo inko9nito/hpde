@@ -110,9 +110,12 @@ function figures(el: HTMLElement): Record<string, string> {
   return out
 }
 
-// A table of laps, as text, header first.
+// A table of laps, as text, header first — as a wide screen shows it,
+// without the rows that put each note on a line of its own on a phone.
 function rows(el: HTMLElement): string[][] {
-  return within(el).getAllByRole('row').map(row => [...row.children].map(cell => cell.textContent ?? ''))
+  return within(el).getAllByRole('row')
+    .filter(row => !row.hasAttribute('data-note-row'))
+    .map(row => [...row.children].map(cell => cell.textContent ?? ''))
 }
 
 const lapCalls = (method: string) =>
@@ -165,6 +168,12 @@ describe('lap times (#210)', () => {
       ['2', '11:50:47 AM', '11:52:31 AM', '1:44', 'Best so far'],
     ])
     expect(read.querySelectorAll('[data-best-lap]')).toHaveLength(2)
+    // On a phone, the note column is hidden and each note sits under its lap.
+    expect(read.querySelector('th:last-child')).toHaveClass('hidden', 'sm:table-cell')
+    expect([...read.querySelectorAll('tr[data-note-row]')].map(row => {
+      expect(row).toHaveClass('sm:hidden')
+      return row.textContent
+    })).toEqual(['Traffic', 'Best so far'])
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
@@ -296,14 +305,14 @@ describe('lap times (#210)', () => {
     })
   })
 
-  it('takes the session summary from the paste, and saves and shows it', async () => {
+  it('takes the lap time summary from the paste, and saves and shows it', async () => {
     openEvent()
     await tapSession('Lap times: 11:45 AM, Blue')
     const sheet = screen.getByRole('dialog')
     fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), {
       target: { value: `SESSION 2 — Started 11:46 AM\nTires were complaining as heat built.\n${SHEET_ROWS}` },
     })
-    const summaryBox = within(sheet).getByLabelText(/Session summary/)
+    const summaryBox = within(sheet).getByLabelText(/Lap time summary/)
     expect(summaryBox).toHaveValue('Tires were complaining as heat built.')
     expect(sheet).toHaveTextContent('From your paste')
     // Passed over: the title, the header and the totals — not the summary.

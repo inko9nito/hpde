@@ -54,7 +54,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
   const existing = group ? saved(sessionKey(slot.date, slot.time, group)) : undefined
   const [text, setText] = useState(() => (existing ? lapsToText(existing.laps) : ''))
   const [readAs, setReadAs] = useState<ReadAs | undefined>(undefined)
-  // The session's summary. Until it's typed in, a summary found in the
+  // A summary of the laps. Until it's typed in, a summary found in the
   // paste (the words under a timing sheet's session title) fills it.
   const [summaryText, setSummaryText] = useState(() => existing?.summary ?? '')
   const [summaryTouched, setSummaryTouched] = useState(false)
@@ -195,7 +195,6 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
 
         {group !== null && existing && !editing && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
-            {existing.summary && <p className="text-sm text-gray-700" data-session-summary>{existing.summary}</p>}
             <div className="flex items-start gap-3">
               <LapFigures laps={existing.laps} allTimeBest={allTimeBest} />
               <button
@@ -205,6 +204,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
                 Edit
               </button>
             </div>
+            {existing.summary && <p className="text-sm text-gray-700" data-lap-summary>{existing.summary}</p>}
             <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
           </section>
         )}
@@ -275,7 +275,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
             )}
 
             <label htmlFor={summaryId} className="mt-4 flex items-baseline justify-between text-xs font-medium text-gray-700">
-              Session summary
+              Lap time summary
               <span className="font-normal text-gray-400">{summaryFromPaste ? 'From your paste' : 'Optional'}</span>
             </label>
             <textarea
@@ -287,7 +287,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
               }}
               rows={3}
               maxLength={MAX_SUMMARY}
-              placeholder="How did it go? Traffic, flags, tires…"
+              placeholder="Out lap, traffic, flags, checkered…"
               className="mt-1.5 w-full resize-y rounded-xl border border-gray-300 px-3 py-2 text-base leading-snug text-gray-900 placeholder:text-gray-400 focus:border-gray-900 focus:outline-none sm:text-sm"
             />
           </>

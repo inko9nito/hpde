@@ -40,7 +40,10 @@ export interface SessionLaps {
   /** Kept so the laps still read "Session 3" if the schedule changes later. */
   sessionNumber?: number
   laps: Lap[]
-  /** How the session went overall, in the driver's words. */
+  /**
+   * A summary of the laps, in the driver's words: out lap, traffic, flags.
+   * (Notes on the session as a whole will be a separate field, #205.)
+   */
   summary?: string
   updatedAt?: string
 }
@@ -153,7 +156,7 @@ export interface ParsedLaps {
   readAs: ReadAs
   /**
    * The words under a timing sheet's session title, before its laps
-   * ("Tires were complaining as heat built…"): the session's summary.
+   * ("Tires were complaining as heat built…"): the lap time summary.
    */
   summary?: string
 }
@@ -270,7 +273,7 @@ function read(text: string, readAs: ReadAs): Reading {
   const listed: number[] = []
   let sessionTitles = 0
   // Words before the laps start (and before the column headers) are the
-  // session's summary; the session title isn't.
+  // lap time summary; the session title isn't.
   let beforeLaps = true
   const summary: string[] = []
 
