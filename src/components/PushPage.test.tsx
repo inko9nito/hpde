@@ -45,3 +45,29 @@ describe('PushPage entered state (#245)', () => {
     expect(onEnteredChange).toHaveBeenLastCalledWith(true)
   })
 })
+
+describe('PushPage direction (#278)', () => {
+  it('pushes in from the right by default', async () => {
+    const { container, rerender } = render(<PushPage open><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    expect(page.style.transform).toBe('translateX(100%)')
+    await act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+    expect(page.style.transform).toBe('translateX(0)')
+    rerender(<PushPage open={false}><div /></PushPage>)
+    expect(page.style.transform).toBe('translateX(100%)')
+  })
+
+  it('slides up from the bottom, and back down, as a modal page', async () => {
+    const onExited = vi.fn()
+    const { container, rerender } = render(<PushPage open from="bottom" onExited={onExited}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    expect(page.style.transform).toBe('translateY(100%)')
+    await act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+    expect(page.style.transform).toBe('translateY(0)')
+
+    rerender(<PushPage open={false} from="bottom" onExited={onExited}><div /></PushPage>)
+    expect(page.style.transform).toBe('translateY(100%)')
+    slideEnd(page)
+    expect(onExited).toHaveBeenCalled()
+  })
+})

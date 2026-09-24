@@ -12,7 +12,7 @@ const ITEMS = [
 /**
  * The landing page's menu button (#273). Opens a sheet from the bottom
  * with the app-wide pages — Share and the iOS widget — which then slide
- * in from the right.
+ * up from the bottom too (#278).
  */
 export function AppMenu() {
   const [open, setOpen] = useState(false)
