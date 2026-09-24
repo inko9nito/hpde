@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
-import { scheduleToMarkdown, readScheduleEdit, describeProblem } from '../utils/scheduleEditor'
+import { GroupBadge } from './GroupBadge'
+import { scheduleToMarkdown, readScheduleEdit, describeProblem, deriveGroups } from '../utils/scheduleEditor'
 import type { GroupInput, ScheduleProblem } from '../utils/scheduleEditor'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
 import type { EventConfig } from '../types'
@@ -23,8 +24,9 @@ export function eventIdFromEditScheduleHash(hash: string): string | null {
 }
 
 // Unsaved changes, per event, so leaving the page (or the phone killing the
-// tab) doesn't lose a long paste. `base` is the saved version they started
-// from, to tell whether that changed since.
+// tab) doesn't lose a long paste: the text, and the groups' colors and
+// descriptions as set. `base` is the saved version they started from, to
+// tell whether that changed since.
 const DRAFT_KEY_PREFIX = 'hpde:scheduleDraft:'
 
 interface Content {
@@ -80,10 +82,12 @@ interface Props {
 }
 
 /**
- * Schedule editor (#232): an event's run groups, in a form, and its
- * day-by-day schedule, as markdown, with a live preview. Admins only; the
- * events function checks that, and checks both again itself before saving.
- * The event's details — dates included — aren't edited here.
+ * Schedule editor (#232): an event's day-by-day schedule as markdown, with
+ * a live preview. The run groups come from the sessions, each with a color
+ * picked from its name, which can be changed below the schedule. Admins
+ * only; the events function checks that, and checks the groups and the
+ * schedule again itself before saving. The event's details — dates
+ * included — aren't edited here.
  */
 export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   const { status, user } = useAuth()
@@ -140,9 +144,6 @@ function Notice({ title, detail }: { title: string; detail: string }) {
 
 type Tab = 'edit' | 'preview'
 
-// A group row in the form; `key` keeps React's rows straight as they move.
-type GroupRow = GroupInput & { key: number }
-
 function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: EventConfig) => void }) {
   const { authedFetch } = useAuth()
   const { addEvent } = useEvents()
@@ -155,13 +156,14 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   }))
   const [restored, setRestored] = useState(() => {
     const draft = readDraft(event.id)
-    return draft && contentKey({ groups: draft.groups, text: draft.text }) !== contentKey(saved) ? draft : null
+    return draft && contentKey({ groups: deriveGroups(draft.text, draft.groups), text: draft.text }) !== contentKey(saved)
+      ? draft
+      : null
   })
-  const nextKey = useRef(0)
-  const toRows = (groups: GroupInput[]) => groups.map(g => ({ ...g, key: nextKey.current++ }))
-  const [rows, setRows] = useState<GroupRow[]>(() => toRows(restored?.groups ?? saved.groups))
+  // What's known about groups: the saved ones, plus any whose color or
+  // description was set here. The groups themselves come from the text.
+  const [settings, setSettings] = useState<GroupInput[]>(restored?.groups ?? saved.groups)
   const [text, setText] = useState(restored?.text ?? saved.text)
-  const [newRowKey, setNewRowKey] = useState<number | null>(null)
   const [tab, setTab] = useState<Tab>('edit')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -169,14 +171,21 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   const barRef = useRef<HTMLDivElement>(null)
   const [barHeight, setBarHeight] = useState(0)
 
-  const groups = useMemo(() => rows.map(({ key: _key, ...g }) => g), [rows])
+  const groups = useMemo(() => deriveGroups(text, settings), [text, settings])
   const edit = useMemo(() => readScheduleEdit(event, groups, text), [event, groups, text])
   const blocking = edit.problems.filter(p => p.blocking)
   const changed = contentKey({ groups, text }) !== contentKey(saved)
 
+  // A new group's picked color is kept once it's shown, so changing
+  // another group's color never recolors this one.
   useEffect(() => {
-    writeDraft(event.id, changed ? { groups, text, base: restored?.base ?? contentKey(saved) } : null)
-  }, [event.id, groups, text, changed, saved, restored])
+    const unset = groups.filter(g => !settings.some(s => s.label.toLowerCase() === g.label.toLowerCase()))
+    if (unset.length) setSettings(list => [...list, ...unset])
+  }, [groups, settings])
+
+  useEffect(() => {
+    writeDraft(event.id, changed ? { groups: settings, text, base: restored?.base ?? contentKey(saved) } : null)
+  }, [event.id, settings, text, changed, saved, restored])
 
   // Tall enough for every line, wrapped ones included, so the page scrolls
   // rather than a box inside it — easier on a phone.
@@ -199,18 +208,19 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   }, [])
 
   function discardDraft() {
-    setRows(toRows(saved.groups))
+    setSettings(saved.groups)
     setText(saved.text)
     setRestored(null)
     setError(null)
   }
 
-  function addGroup() {
-    const used = new Set(rows.map(r => r.bgClass))
-    const key = nextKey.current++
-    const bgClass = RUN_GROUP_BG_CLASSES.find(c => !used.has(c)) ?? RUN_GROUP_BG_CLASSES[0]
-    setRows(r => [...r, { key, label: '', bgClass }])
-    setNewRowKey(key)
+  // A color or description set here sticks to the group by its name, even
+  // if its sessions are retyped.
+  function updateGroup(group: GroupInput, patch: Partial<GroupInput>) {
+    setSettings(list => {
+      const i = list.findIndex(g => g === group || g.label.toLowerCase() === group.label.toLowerCase())
+      return i >= 0 ? list.map((g, j) => (j === i ? { ...g, ...patch } : g)) : [...list, { ...group, ...patch }]
+    })
   }
 
   // Tapping a problem takes you to it: the start of its line, or its group.
@@ -218,9 +228,7 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
     setTab('edit')
     requestAnimationFrame(() => {
       if (p.group !== undefined) {
-        const input = document.getElementById(`run-group-${p.group}-name`) as HTMLInputElement | null
-        input?.scrollIntoView({ block: 'center' })
-        input?.focus()
+        document.getElementById(`run-group-${p.group}`)?.scrollIntoView({ block: 'center' })
         return
       }
       const el = textareaRef.current
@@ -283,15 +291,8 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
 
       {tab === 'edit' ? (
         <div className="space-y-4">
-          <RunGroupsForm
-            rows={rows}
-            setRows={setRows}
-            problems={edit.problems}
-            newRowKey={newRowKey}
-            onAdd={addGroup}
-          />
           <section aria-labelledby="schedule-title">
-            <h2 id="schedule-title" className="mb-1 px-1 text-sm font-semibold text-gray-900">Schedule</h2>
+            <h2 id="schedule-title" className="sr-only">Schedule</h2>
             <textarea
               ref={textareaRef}
               aria-labelledby="schedule-title"
@@ -307,6 +308,7 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
             />
             <FormatHelp />
           </section>
+          <RunGroups groups={groups} problems={edit.problems} onChange={updateGroup} />
         </div>
       ) : (
         <Preview event={{ ...event, runGroups: edit.runGroups, days: edit.days }} />
@@ -333,109 +335,98 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   )
 }
 
-const iconButton =
-  'grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-800 disabled:opacity-30 disabled:hover:border-gray-200'
 const textInput =
   'block h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm'
 
-function RunGroupsForm({ rows, setRows, problems, newRowKey, onAdd }: {
-  rows: GroupRow[]
-  setRows: React.Dispatch<React.SetStateAction<GroupRow[]>>
+function RunGroups({ groups, problems, onChange }: {
+  groups: GroupInput[]
   problems: ScheduleProblem[]
-  newRowKey: number | null
-  onAdd: () => void
+  onChange: (group: GroupInput, patch: Partial<GroupInput>) => void
 }) {
-  const update = (i: number, patch: Partial<GroupInput>) =>
-    setRows(r => r.map((row, j) => (j === i ? { ...row, ...patch } : row)))
-  const move = (i: number, by: number) =>
-    setRows(r => {
-      const next = [...r]
-      const [row] = next.splice(i, 1)
-      next.splice(i + by, 0, row)
-      return next
-    })
-  const remove = (i: number) => setRows(r => r.filter((_, j) => j !== i))
-
   return (
     <section aria-labelledby="run-groups-title" className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <h2 id="run-groups-title" className="text-sm font-semibold text-gray-900">Run groups</h2>
       <p className="mt-0.5 text-xs text-gray-500">
-        Sessions in the schedule name these, e.g. “track: Red, Blue”. Listed in this order.
+        From the sessions in the schedule, each with a color picked from its name.
       </p>
-      {rows.length > 0 && (
-        <ol className="mt-3 space-y-3">
-          {rows.map((g, i) => {
-            const n = i + 1
-            const name = g.label.trim() || `group ${n}`
-            const rowProblems = problems.filter(p => p.group === i)
-            return (
-              <li key={g.key} aria-label={`Group ${n}`} className="rounded-xl border border-gray-200 p-3">
-                <div className="flex items-center gap-1.5">
-                  <input
-                    id={`run-group-${i}-name`}
-                    aria-label={`Group ${n} name`}
-                    value={g.label}
-                    onChange={e => update(i, { label: e.target.value })}
-                    placeholder="Name, e.g. Novice"
-                    autoFocus={g.key === newRowKey}
-                    aria-invalid={rowProblems.length > 0}
-                    className={textInput}
-                  />
-                  <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${name} up`} className={iconButton}>
-                    <ChevronUp size={18} />
-                  </button>
-                  <button onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label={`Move ${name} down`} className={iconButton}>
-                    <ChevronDown size={18} />
-                  </button>
-                  <button onClick={() => remove(i)} aria-label={`Remove ${name}`} className={`${iconButton} hover:text-red-600`}>
-                    <Trash2 size={17} />
-                  </button>
-                </div>
-                <input
-                  aria-label={`Group ${n} description`}
-                  value={g.description ?? ''}
-                  onChange={e => update(i, { description: e.target.value })}
-                  placeholder="Description (optional)"
-                  className={`${textInput} mt-2`}
-                />
-                <fieldset className="mt-3">
-                  <legend className="sr-only">{`Group ${n} color`}</legend>
-                  <div className="flex flex-wrap gap-2.5">
-                    {RUN_GROUP_BG_CLASSES.map(c => (
-                      <label key={c} className="relative block">
-                        <input
-                          type="radio"
-                          name={`run-group-${g.key}-color`}
-                          value={c}
-                          checked={g.bgClass === c}
-                          onChange={() => update(i, { bgClass: c })}
-                          aria-label={colorName(c)}
-                          // Invisible, over its swatch, so a tap lands on it.
-                          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
-                        />
-                        <span
-                          aria-hidden="true"
-                          className={`block h-7 w-7 rounded-full ${c} ring-gray-900 ring-offset-2 peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                {rowProblems.map((p, j) => (
-                  <p key={j} className="mt-2 text-xs text-red-600">{p.message}</p>
-                ))}
-              </li>
-            )
-          })}
-        </ol>
+      {groups.length === 0 ? (
+        <p className="mt-3 rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
+          Groups named in sessions (“track: Red, Blue”) show up here.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {groups.map((g, i) => (
+            <GroupRow
+              key={g.label.toLowerCase()}
+              index={i}
+              group={g}
+              problems={problems.filter(p => p.group === i)}
+              onChange={patch => onChange(g, patch)}
+            />
+          ))}
+        </ul>
       )}
-      <button
-        onClick={onAdd}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400"
-      >
-        <Plus size={16} aria-hidden="true" /> Add group
-      </button>
     </section>
+  )
+}
+
+function GroupRow({ index, group, problems, onChange }: {
+  index: number
+  group: GroupInput
+  problems: ScheduleProblem[]
+  onChange: (patch: Partial<GroupInput>) => void
+}) {
+  const [picking, setPicking] = useState(false)
+  const swatchesId = `run-group-${index}-colors`
+  return (
+    <li id={`run-group-${index}`} aria-label={group.label} className="rounded-xl border border-gray-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <GroupBadge group={{ id: group.id ?? '', label: group.label, bgClass: group.bgClass, textClass: group.textClass ?? 'text-white' }} />
+        <button
+          onClick={() => setPicking(p => !p)}
+          aria-expanded={picking}
+          aria-controls={swatchesId}
+          className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        >
+          {picking ? 'Done' : 'Change color'}
+        </button>
+      </div>
+      {picking && (
+        <fieldset id={swatchesId} className="mt-3">
+          <legend className="sr-only">{`${group.label} color`}</legend>
+          <div className="flex flex-wrap gap-2.5">
+            {RUN_GROUP_BG_CLASSES.map(c => (
+              <label key={c} className="relative block">
+                <input
+                  type="radio"
+                  name={swatchesId}
+                  value={c}
+                  checked={group.bgClass === c}
+                  onChange={() => onChange({ bgClass: c })}
+                  aria-label={colorName(c)}
+                  // Invisible, over its swatch, so a tap lands on it.
+                  className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+                />
+                <span
+                  aria-hidden="true"
+                  className={`block h-8 w-8 rounded-full ${c} ring-gray-900 ring-offset-2 peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
+                />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      <input
+        aria-label={`${group.label} description`}
+        value={group.description ?? ''}
+        onChange={e => onChange({ description: e.target.value })}
+        placeholder="Description (optional)"
+        className={`${textInput} mt-3`}
+      />
+      {problems.map((p, j) => (
+        <p key={j} className="mt-2 text-xs text-red-600">{p.message}</p>
+      ))}
+    </li>
   )
 }
 
@@ -509,8 +500,8 @@ function FormatHelp() {
           </ul>
         </div>
         <p className="text-xs text-gray-500">
-          Sessions name run groups as they’re called above (any capitalization). Times are 24-hour, HH:MM. The
-          days are the event’s dates; they’re changed in the event’s details.
+          Name run groups however the organizer does; each one shows up under Run groups with a color. Times are
+          24-hour, HH:MM. The days are the event’s dates; they’re changed in the event’s details.
         </p>
       </div>
     </details>

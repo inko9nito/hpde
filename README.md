@@ -59,11 +59,8 @@ Schedule tab says "Schedule coming soon" until one is added.
 
 Admins add or change an event's schedule in the app: event page → **…** →
 **Edit schedule** (or **Add schedule** on an event that has none).
-- **Run groups** are a form: a name, an optional description and a color
-  from the palette for each, in the order they're listed.
 - **The schedule** is markdown, one section per day, with a live preview.
-  Sessions name groups as they're called in the form:
-
+  Sessions name run groups however the organizer does:
 ```
 ## Saturday | 2026-10-03
 07:00 general | Registration & tech | Paddock
@@ -71,6 +68,11 @@ Admins add or change an event's schedule in the app: event page → **…** →
 12:00 lunch | Lunch
 break | Track walk
 ```
+
+- **Run groups** come from the sessions and are listed below the
+  schedule. Each gets a color from its name (Red → red, Instructors →
+  black, anything else → a color no other group has). Tap
+  **Change color** to pick another, and add a description if you like.
 
 Each day opens with commented-out (`//`) example lines to copy.
 Anything the editor can't read is listed by line number, and saving waits

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { parseScheduleMD } from './parseSchedule'
-import { scheduleToMarkdown, normalizeGroups, parseScheduleEdit, readScheduleEdit, applySchedule, describeProblem } from './scheduleEditor'
+import { scheduleToMarkdown, normalizeGroups, parseScheduleEdit, readScheduleEdit, applySchedule, describeProblem, deriveGroups, suggestColor, scheduleGroupNames } from './scheduleEditor'
 import { resolveTailwindBgColor } from './eventsJson'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -34,18 +34,19 @@ function problems(src: string, event = blank, groups = GROUPS) {
 
 describe('the editor round trip (#232)', () => {
   it.each(showcase.map(e => [e.id, e] as const))('round-trips %s exactly, with no problems', (_, event) => {
-    const edit = readScheduleEdit(event, event.runGroups, scheduleToMarkdown(event))
+    const md = scheduleToMarkdown(event)
+    const edit = readScheduleEdit(event, deriveGroups(md, event.runGroups), md)
     expect(edit.problems).toEqual([])
     expect(edit.runGroups).toEqual(event.runGroups)
     expect(edit.days).toEqual(event.days)
   })
 
-  it('writes only the days — groups are in the form — each with example lines to copy', () => {
+  it('writes only the days — groups come from the sessions — each with example lines to copy', () => {
     const md = scheduleToMarkdown(blank)
     expect(md).not.toContain('## groups')
     expect(md).toContain('## Saturday | 2026-10-03\n// 07:00 general | Registration & tech | Paddock')
     expect(md).toContain('## Sunday | 2026-10-04\n// 07:00 general |')
-    expect(md).toContain('// 08:00 session 1 | track: novice | class: intermediate')
+    expect(md).toContain('// 08:00 session 1 | track: Novice | class: Intermediate')
     expect(md).toContain('// break | Track walk')
     // The examples are comments: nothing saved, nothing flagged.
     const edit = readScheduleEdit(blank, [], md)
@@ -60,17 +61,13 @@ describe('the editor round trip (#232)', () => {
     expect(scheduleToMarkdown(withSession)).toContain('\n08:00 session 1 | track: Red | class: Blue\n')
   })
 
-  it('uncommenting the examples, with those groups in the form, gives a working schedule', () => {
+  it('uncommenting the examples gives a working schedule, with a group for each name', () => {
     const md = scheduleToMarkdown(blank).replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
-    const groups = [
-      { label: 'Novice', bgClass: 'bg-rungreen-500' },
-      { label: 'Intermediate', bgClass: 'bg-runblue-500' },
-    ]
-    const edit = readScheduleEdit(blank, groups, md)
+    const edit = readScheduleEdit(blank, deriveGroups(md, []), md)
     expect(edit.problems).toEqual([])
     expect(edit.runGroups).toEqual([
-      { id: 'novice', label: 'Novice', bgClass: 'bg-rungreen-500', textClass: 'text-white' },
-      { id: 'intermediate', label: 'Intermediate', bgClass: 'bg-runblue-500', textClass: 'text-white' },
+      { id: 'novice', label: 'Novice', bgClass: 'bg-runred-500', textClass: 'text-white' },
+      { id: 'intermediate', label: 'Intermediate', bgClass: 'bg-runorange-500', textClass: 'text-white' },
     ])
     expect(edit.days[0].activities).toEqual([
       { time: '07:00', type: 'general', label: 'Registration & tech', subtitle: 'Paddock' },
@@ -98,7 +95,54 @@ describe('the editor round trip (#232)', () => {
   })
 })
 
-describe('normalizeGroups — the run groups form', () => {
+describe('run groups come from the schedule', () => {
+  const day = (lines: string) => `## Saturday | 2026-10-03\n${lines}\n`
+
+  it('finds every group the sessions name, in order, spelled as first written', () => {
+    expect(scheduleGroupNames(day([
+      '08:00 session 1 | track: Instructors, Red | class: Novice',
+      '08:30 session 1 | track: red, Blue Group',
+      '// 09:00 session 2 | track: Commented',
+      '09:00 general | Not a group: Green',
+      '7:30 session 0 | track: Early',
+    ].join('\n')))).toEqual(['Instructors', 'Red', 'Novice', 'Blue Group', 'Early'])
+  })
+
+  it('picks a color from the name, black for instructors, else the next one unused', () => {
+    expect(suggestColor('Red')).toBe('bg-runred-500')
+    expect(suggestColor('Blue group')).toBe('bg-runblue-500')
+    expect(suggestColor('Grey')).toBe('bg-rungray-500')
+    expect(suggestColor('Instructors')).toBe('bg-zinc-900')
+    expect(suggestColor('Coach')).toBe('bg-zinc-900')
+    expect(suggestColor('Reddish')).toBe('bg-runred-500')
+    expect(suggestColor('Reddish', ['bg-runred-500'])).toBe('bg-runorange-500')
+    expect(suggestColor('Novice', ['bg-runred-500', 'bg-runorange-500'])).toBe('bg-runyellow-500')
+  })
+
+  it('names new groups’ colors around the ones already taken', () => {
+    const md = day('08:00 session 1 | track: Novice, Red, Advanced, Instructors')
+    expect(deriveGroups(md, []).map(g => [g.label, g.bgClass])).toEqual([
+      ['Novice', 'bg-runorange-500'],
+      ['Red', 'bg-runred-500'],
+      ['Advanced', 'bg-runyellow-500'],
+      ['Instructors', 'bg-zinc-900'],
+    ])
+  })
+
+  it('keeps saved groups — order, color, description — and matches them by name or id, any case', () => {
+    const saved = [{ id: 'blue', label: 'Blue', bgClass: 'bg-runpurple-500', textClass: 'text-white', description: 'Novice' }, GROUPS[0]]
+    const md = day('08:00 session 1 | track: red, New, BLUE')
+    expect(deriveGroups(md, saved)).toEqual([saved[0], saved[1], { label: 'New', bgClass: 'bg-runorange-500' }])
+  })
+
+  it('uses a color or description set in the editor for a new group, and drops groups no longer named', () => {
+    const settings = [GROUPS[0], { label: 'Novice', bgClass: 'bg-runtan-500', description: 'First timers' }]
+    expect(deriveGroups(day('08:00 session 1 | track: novice'), settings)).toEqual([settings[1]])
+    expect(deriveGroups(day('08:00 general | Lunch'), settings)).toEqual([])
+  })
+})
+
+describe('normalizeGroups — what a save sends', () => {
   it('keeps saved ids, gives new groups one from their name, and defaults to white text', () => {
     const { runGroups, problems: p } = normalizeGroups([
       GROUPS[0],
@@ -145,7 +189,7 @@ describe('parseScheduleEdit problems — nothing typed is silently dropped', () 
     const p = problems('## Saturday | 2026-10-03\n## Saturday | 2026-10-03\n## Notes\n## groups\nred | Red | bg-runred-500 | text-white\n')
     expect(p).toContainEqual({ line: 2, blocking: true, message: '2026-10-03 has two sections — keep one.' })
     expect(p).toContainEqual(expect.objectContaining({ line: 3, blocking: true }))
-    expect(p).toContainEqual({ line: 4, blocking: true, message: 'Run groups are set in the form above the schedule — remove this section.' })
+    expect(p).toContainEqual({ line: 4, blocking: true, message: 'Run groups come from the sessions, with their colors below — remove this section.' })
     // The section's own lines aren't flagged again.
     expect(p.find(x => x.line === 5)).toBeUndefined()
   })
@@ -161,10 +205,10 @@ describe('parseScheduleEdit problems — nothing typed is silently dropped', () 
     expect(p.find(x => x.line === 2)!.message).toContain('07:00')
   })
 
-  it('rejects a session naming a group that isn’t in the form', () => {
+  it('rejects a session naming a group it wasn’t sent (the function checks what it’s given)', () => {
     expect(problems('## Saturday | 2026-10-03\n08:00 session 1 | track: Red, Green | class: Blu\n')).toEqual([
-      { line: 2, blocking: true, message: 'There’s no group “Green” — add it under Run groups.' },
-      { line: 2, blocking: true, message: 'There’s no group “Blu” — add it under Run groups.' },
+      { line: 2, blocking: true, message: 'There’s no group “Green”.' },
+      { line: 2, blocking: true, message: 'There’s no group “Blu”.' },
       expect.objectContaining({ line: undefined, blocking: false }),
     ])
   })
@@ -196,7 +240,7 @@ describe('applySchedule', () => {
 
   it('refuses with the first blocking problem, groups first', () => {
     expect(applySchedule(blank, GROUPS, '## Saturday | 2026-10-03\n08:00 session 1 | track: Green\n'))
-      .toMatchObject({ error: 'Line 2: There’s no group “Green” — add it under Run groups.' })
+      .toMatchObject({ error: 'Line 2: There’s no group “Green”.' })
     expect(applySchedule(blank, [{ label: '', bgClass: 'bg-runred-500' }], '08:00 x\n'))
       .toMatchObject({ error: 'Group 1: Give this group a name.' })
   })

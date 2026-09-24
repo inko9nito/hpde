@@ -151,7 +151,7 @@ async function signInAsAdmin(page: Page) {
   })
 }
 
-test('an admin adds a schedule: groups in the form, days in markdown, preview, save (#232)', async ({ page }) => {
+test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
   let body: { runGroups: unknown[]; schedule: string } | null = null
@@ -170,25 +170,27 @@ test('an admin adds a schedule: groups in the form, days in markdown, preview, s
   // 16px, or iOS zooms the page in when a field is tapped.
   await expect(textarea).toHaveCSS('font-size', '16px')
 
-  // The examples name "novice" and "intermediate": set those groups up.
-  await page.getByRole('button', { name: 'Add group' }).click()
-  const novice = page.getByRole('textbox', { name: 'Group 1 name' })
-  await expect(novice).toBeFocused()
-  await expect(novice).toHaveCSS('font-size', '16px')
-  await novice.fill('Novice')
-  await page.getByRole('listitem', { name: 'Group 1' }).getByRole('radio', { name: 'Green' }).check()
-
-  // Uncomment the examples, the way it's meant to be used on a phone.
-  await textarea.fill((await textarea.inputValue()).replace(/\/\/ (\d\d:\d\d|break)/g, '$1'))
-  await expect(page.getByRole('list', { name: 'Problems' })).toContainText('There’s no group “intermediate”')
+  // Uncomment the examples, the way it's meant to be used on a phone, with
+  // a typo to fix.
+  const text = (await textarea.inputValue()).replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
+  await textarea.fill(text.replace('07:00 general', '7:00 general'))
+  await expect(page.getByRole('list', { name: 'Problems' })).toContainText('“7:00” isn’t a time')
   await expect(page.getByRole('button', { name: 'Save schedule' })).toBeDisabled()
-  await page.getByRole('button', { name: 'Add group' }).click()
-  await page.getByRole('textbox', { name: 'Group 2 name' }).fill('Intermediate')
+  await textarea.fill(text)
   await expect(page.getByRole('list', { name: 'Problems' })).toHaveCount(0)
+
+  // The groups the sessions name, below the schedule, colored.
+  const groups = page.getByRole('region', { name: 'Run groups' })
+  await expect(groups.getByRole('listitem')).toHaveText([/Novice/, /Intermediate/])
+  const novice = groups.getByRole('listitem', { name: 'Novice' })
+  await novice.getByRole('button', { name: 'Change color' }).click()
+  await novice.getByRole('radio', { name: 'Green' }).check()
+  await novice.getByRole('textbox', { name: 'Novice description' }).fill('First timers')
+  await expect(novice.getByRole('textbox', { name: 'Novice description' })).toHaveCSS('font-size', '16px')
 
   await page.getByRole('tab', { name: 'Preview' }).click()
   await expect(page.getByText('Registration & tech')).toBeVisible()
-  await expect(page.getByText('Novice').first()).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor('bg-rungreen-500')))
+  await expect(page.getByText('Novice', { exact: true }).first()).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor('bg-rungreen-500')))
   // Nothing wider than the screen.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
@@ -197,7 +199,7 @@ test('an admin adds a schedule: groups in the form, days in markdown, preview, s
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
   await expect(page.getByText('Registration & tech')).toBeVisible()
   expect(body!.runGroups).toEqual([
-    { label: 'Novice', bgClass: 'bg-rungreen-500' },
-    { label: 'Intermediate', bgClass: 'bg-runred-500' },
+    { label: 'Novice', bgClass: 'bg-rungreen-500', description: 'First timers' },
+    { label: 'Intermediate', bgClass: 'bg-runorange-500' },
   ])
 })

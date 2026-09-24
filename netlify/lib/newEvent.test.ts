@@ -241,8 +241,8 @@ describe('events function', () => {
       const res = await put({ token: 'admin-token', body: { runGroups, schedule: schedule.replace('track: Red', 'track: Blue') } })
       expect(res.status).toBe(400)
       const body = await res.json()
-      expect(body.error).toBe('Line 2: There’s no group “Blue” — add it under Run groups.')
-      expect(body.problems).toContainEqual({ line: 2, message: 'There’s no group “Blue” — add it under Run groups.', blocking: true })
+      expect(body.error).toBe('Line 2: There’s no group “Blue”.')
+      expect(body.problems).toContainEqual({ line: 2, message: 'There’s no group “Blue”.', blocking: true })
       // Another date: dates belong to the details.
       const moved = await put({ token: 'admin-token', body: { runGroups, schedule: schedule.replace('2026-09-13', '2026-09-14') } })
       expect(moved.status).toBe(400)

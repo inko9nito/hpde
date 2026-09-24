@@ -2,11 +2,13 @@ import { parseActivityLine } from './parseSchedule'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../theme/runGroupColors'
 import type { DaySchedule, EventConfig, RunGroupConfig, ScheduleActivity } from '../types'
 
-// The schedule editor (#232). An event's run groups are set in a form
-// (name, color, description); its day-by-day schedule is markdown, in the
-// format the event files used — one `## <Day> | YYYY-MM-DD` section per
-// day. The event's details (name, dates, track…) are edited elsewhere, so
-// the days are fixed: each section fills in one of the event's own dates.
+// The schedule editor (#232). An event's day-by-day schedule is markdown,
+// in the format the event files used — one `## <Day> | YYYY-MM-DD` section
+// per day. Its run groups come from the schedule: every group a session
+// names gets a color picked from its name (see deriveGroups), which the
+// editor lets you change, along with a description. The event's details
+// (name, dates, track…) are edited elsewhere, so the days are fixed: each
+// section fills in one of the event's own dates.
 //
 // Shared by the editor page (live preview) and the events function (which
 // checks what it's sent itself before saving).
@@ -21,9 +23,9 @@ export interface ScheduleProblem {
   blocking: boolean
 }
 
-// A run group as the form edits it. `id` is what the stored schedule refers
-// to; groups that have been saved keep theirs, new ones get one from their
-// name. The text color isn't offered: the palette is picked for white.
+// A run group as the editor handles it. `id` is what the stored schedule
+// refers to; groups that have been saved keep theirs, new ones get one from
+// their name. The text color isn't offered: the palette is picked for white.
 export interface GroupInput {
   id?: string
   label: string
@@ -40,7 +42,86 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 // Lines that belong to the event's details, not its schedule.
 const DETAIL_LINE = /^(# |(subtitle|link|organizer|track|city|configuration|config|direction|trackId):)/
 
-const EXAMPLE_GROUPS = ['novice', 'intermediate']
+const EXAMPLE_GROUPS = ['Novice', 'Intermediate']
+
+// A color named in a group's name picks it ("Red", "Blue group"); so does
+// a role that's conventionally black. Otherwise a group gets the first
+// palette color no other group has.
+const NAMED_COLORS: [RegExp, string][] = [
+  [/\bred\b/i, 'bg-runred-500'],
+  [/\borange\b/i, 'bg-runorange-500'],
+  [/\byellow\b/i, 'bg-runyellow-500'],
+  [/\bgreen\b/i, 'bg-rungreen-500'],
+  [/\bblue\b/i, 'bg-runblue-500'],
+  [/\bpink\b/i, 'bg-runpink-500'],
+  [/\bpurple\b/i, 'bg-runpurple-500'],
+  [/\bbrown\b/i, 'bg-runbrown-500'],
+  [/\bgr[ae]y\b/i, 'bg-rungray-500'],
+  [/\btan\b/i, 'bg-runtan-500'],
+  [/\b(black|instructors?|staff|coach(es)?)\b/i, 'bg-zinc-900'],
+]
+
+export function suggestColor(name: string, taken: Iterable<string> = []): string {
+  const named = NAMED_COLORS.find(([re]) => re.test(name))
+  if (named) return named[1]
+  const used = new Set(taken)
+  // The rest of the palette, before black (kept for instructors).
+  const palette = RUN_GROUP_BG_CLASSES.filter(c => c !== 'bg-zinc-900')
+  return palette.find(c => !used.has(c)) ?? palette[0]
+}
+
+/**
+ * The group names the schedule's sessions use (`track:` and `class:`), in
+ * the order they first appear, each spelled as it first appears.
+ */
+export function scheduleGroupNames(src: string): string[] {
+  const names = new Map<string, string>()
+  for (const raw of src.split('\n')) {
+    const line = raw.trim().replace(/^-\s+/, '')
+    if (!/^\d{1,2}:\d{2}\s+session\b/.test(line)) continue
+    const activity = parseActivityLine(line.replace(/^(\d):/, '0$1:'))
+    if (activity?.type !== 'session') continue
+    for (const name of [...activity.onTrack, ...(activity.inClass ?? [])]) {
+      if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name)
+    }
+  }
+  return [...names.values()]
+}
+
+function sameGroup(g: GroupInput, name: string): boolean {
+  const n = name.toLowerCase()
+  return g.label.toLowerCase() === n || (!!g.id && g.id.toLowerCase() === n)
+}
+
+/**
+ * The run groups for a schedule: one per group name its sessions use.
+ * `settings` holds what's known about groups — the event's saved ones, and
+ * any whose color or description was set in the editor — and a name
+ * that matches one (by name or id, any case) takes it. Saved groups keep
+ * their order; the rest follow in the order the schedule first names them,
+ * each with a color picked from its name. Names no longer in the schedule
+ * are left out.
+ */
+export function deriveGroups(src: string, settings: GroupInput[]): GroupInput[] {
+  const names = scheduleGroupNames(src)
+  const saved = settings.filter(g => g.id && names.some(n => sameGroup(g, n)))
+  const rest = names.filter(n => !saved.some(g => sameGroup(g, n)))
+  const known = new Map(rest.map(name => [name, settings.find(g => sameGroup(g, name))]))
+  // Colors already spoken for — saved or set groups', and the ones named in
+  // group names ("Red") — so "Novice" isn't handed the red "Red" needs.
+  const taken = new Set([
+    ...saved.map(g => g.bgClass),
+    ...rest.map(name => known.get(name)?.bgClass ?? NAMED_COLORS.find(([re]) => re.test(name))?.[1]),
+  ].filter((c): c is string => !!c))
+  return [
+    ...saved,
+    ...rest.map(name => {
+      const group = known.get(name) ?? { label: name, bgClass: suggestColor(name, taken) }
+      taken.add(group.bgClass)
+      return group
+    }),
+  ]
+}
 
 function slug(s: string): string {
   return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -160,8 +241,7 @@ export function parseScheduleEdit(
   const error = (line: number | undefined, message: string) => problems.push({ line, message, blocking: true })
   const warn = (line: number | undefined, message: string) => problems.push({ line, message, blocking: false })
 
-  // By the name shown in the form first; then by id, so a group renamed in
-  // the form still matches the schedule written with its old name.
+  // By name first, then by id (any case).
   const groupFor = (name: string) =>
     runGroups.find(g => g.label.toLowerCase() === name.toLowerCase())
     ?? runGroups.find(g => g.id.toLowerCase() === name.toLowerCase())
@@ -180,7 +260,7 @@ export function parseScheduleEdit(
     if (line.startsWith('## ')) {
       const heading = line.slice(3).trim()
       if (heading.toLowerCase() === 'groups') {
-        error(n, 'Run groups are set in the form above the schedule — remove this section.')
+        error(n, 'Run groups come from the sessions, with their colors below — remove this section.')
         section = { kind: 'skip' }
         return
       }
@@ -242,7 +322,7 @@ export function parseScheduleEdit(
     if (activity.type === 'session') {
       const resolve = (names: string[]) => names.flatMap(name => {
         const group = groupFor(name)
-        if (!group) error(n, `There’s no group “${name}” — add it under Run groups.`)
+        if (!group) error(n, `There’s no group “${name}”.`)
         return group ? [group.id] : []
       })
       activity.onTrack = resolve(activity.onTrack)

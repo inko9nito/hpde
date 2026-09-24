@@ -60,12 +60,7 @@ function open(hash: string, as: string[] = ['admin']) {
 const editor = () => screen.findByRole('textbox', { name: 'Schedule' }) as Promise<HTMLTextAreaElement>
 const saveButton = () => screen.getByRole('button', { name: 'Save schedule' })
 
-// Adds a run group in the form; it gets the first color not yet used.
-async function addGroup(name: string) {
-  await userEvent.click(screen.getByRole('button', { name: 'Add group' }))
-  const inputs = screen.getAllByRole('textbox', { name: /^Group \d+ name$/ })
-  await userEvent.type(inputs[inputs.length - 1], name)
-}
+const groupRow = (name: string) => within(screen.getByRole('listitem', { name }))
 
 describe('schedule editor (#232)', () => {
   beforeEach(() => {
@@ -79,13 +74,13 @@ describe('schedule editor (#232)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('opens from “Add schedule” on an event with none: no groups yet, a section per day with examples to copy', async () => {
+  it('opens from “Add schedule” on an event with none: a section per day with examples to copy, no groups yet', async () => {
     open(`#/event/${blank.id}`)
     await userEvent.click(await screen.findByRole('link', { name: 'Add schedule' }))
     const textarea = await editor()
     expect(textarea.value).not.toContain('## groups')
     expect(textarea.value).toContain('## Saturday | 2099-10-03\n// 07:00 general | Registration & tech')
-    expect(screen.queryByRole('listitem', { name: /^Group/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Groups named in sessions (“track: Red, Blue”) show up here.')).toBeInTheDocument()
     // Nothing changed yet, nothing to save.
     expect(saveButton()).toBeDisabled()
   })
@@ -100,53 +95,72 @@ describe('schedule editor (#232)', () => {
 
   it('lists what it can’t read, by line, and won’t save until it’s fixed', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    fireEvent.change(await editor(), { target: { value: SCHEDULE + '7:00 general | Gates\n' } })
+    fireEvent.change(await editor(), { target: { value: SCHEDULE + '7:00 general | Gates\n## Sunday | 2099-10-04\n' } })
 
     const problems = within(screen.getByRole('list', { name: 'Problems' }))
-    expect(problems.getByText(/There’s no group “Red”/)).toHaveTextContent('Line 3:')
     expect(problems.getByText(/use 24-hour HH:MM/)).toHaveTextContent('Line 4:')
+    expect(problems.getByText(/isn’t one of this event’s dates/)).toHaveTextContent('Line 5:')
     expect(saveButton()).toBeDisabled()
 
-    await addGroup('red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     expect(screen.queryByRole('list', { name: 'Problems' })).not.toBeInTheDocument()
     expect(saveButton()).toBeEnabled()
   })
 
-  it('sets up run groups in a form: name, description, color, order', async () => {
+  it('never recolors a group because another one’s color changed', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    await editor()
-    await addGroup('Novice')
-    await addGroup('Advanced')
-    // Each new group starts on a color the others don't use.
-    expect(screen.getByRole('radio', { name: 'Red', checked: true })).toBeInTheDocument()
-    const advanced = within(screen.getByRole('listitem', { name: 'Group 2' }))
-    expect(advanced.getByRole('radio', { name: 'Orange' })).toBeChecked()
-    await userEvent.click(advanced.getByRole('radio', { name: 'Purple' }))
-    await userEvent.type(advanced.getByRole('textbox', { name: 'Group 2 description' }), 'Solo')
-    await userEvent.click(screen.getByRole('button', { name: 'Move Advanced up' }))
-    expect(screen.getByRole('textbox', { name: 'Group 1 name' })).toHaveValue('Advanced')
+    fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: Novice, Advanced\n' } })
+    expect(groupRow('Novice').getByText('Novice')).toHaveClass('bg-runred-500')
+    expect(groupRow('Advanced').getByText('Advanced')).toHaveClass('bg-runorange-500')
+    await userEvent.click(groupRow('Novice').getByRole('button', { name: 'Change color' }))
+    await userEvent.click(groupRow('Novice').getByRole('radio', { name: 'Green' }))
+    // Red is free now, but Advanced stays orange.
+    expect(groupRow('Advanced').getByText('Advanced')).toHaveClass('bg-runorange-500')
+  })
 
-    // A group with no name can't be saved.
-    await userEvent.click(screen.getByRole('button', { name: 'Add group' }))
-    expect(within(screen.getByRole('list', { name: 'Problems' })).getByText('Group 3: Give this group a name.')).toBeInTheDocument()
-    expect(saveButton()).toBeDisabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Remove group 3' }))
+  it('lists the groups the sessions name, below the schedule, with colors picked from their names', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: Instructors, Novice, Blue | class: novice\n' } })
 
-    fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: advanced, Novice\n' } })
+    const section = screen.getByRole('region', { name: 'Run groups' })
+    expect(within(section).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))).toEqual(['Instructors', 'Novice', 'Blue'])
+    // The schedule comes first on the page, the groups after it.
+    expect(screen.getByRole('textbox', { name: 'Schedule' }).compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(groupRow('Instructors').getByText('Instructors')).toHaveClass('bg-zinc-900')
+    expect(groupRow('Blue').getByText('Blue')).toHaveClass('bg-runblue-500')
+    // No color in its name: the first one nobody else has.
+    expect(groupRow('Novice').getByText('Novice')).toHaveClass('bg-runred-500')
+  })
+
+  it('lets a picked color be changed, and a description added, and saves them', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE.replace('track: Red', 'track: Red, Novice') } })
+
+    const novice = groupRow('Novice')
+    expect(novice.queryByRole('radio')).not.toBeInTheDocument()
+    await userEvent.click(novice.getByRole('button', { name: 'Change color' }))
+    expect(novice.getByRole('radio', { name: 'Orange' })).toBeChecked()
+    await userEvent.click(novice.getByRole('radio', { name: 'Green' }))
+    expect(novice.getByText('Novice')).toHaveClass('bg-rungreen-500')
+    // Other groups keep theirs.
+    expect(groupRow('Red').getByText('Red')).toHaveClass('bg-runred-500')
+    await userEvent.type(novice.getByRole('textbox', { name: 'Novice description' }), 'First timers')
+
+    // Retyping the sessions keeps what was set for the group.
+    fireEvent.change(await editor(), { target: { value: SCHEDULE.replace('track: Red', 'track: novice, Red') } })
+    expect(groupRow('Novice').getByText('Novice')).toHaveClass('bg-rungreen-500')
+
     await userEvent.click(saveButton())
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!
     expect(JSON.parse(put[1]!.body as string).runGroups).toEqual([
-      { label: 'Advanced', bgClass: 'bg-runpurple-500', description: 'Solo' },
-      { label: 'Novice', bgClass: 'bg-runred-500' },
+      { label: 'Novice', bgClass: 'bg-rungreen-500', description: 'First timers' },
+      { label: 'Red', bgClass: 'bg-runred-500' },
     ])
     await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
   })
 
   it('previews the schedule as it will look', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    await editor()
-    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
@@ -157,8 +171,6 @@ describe('schedule editor (#232)', () => {
 
   it('saves the groups and the markdown, then shows the event with its new schedule', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    await editor()
-    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
 
@@ -180,8 +192,6 @@ describe('schedule editor (#232)', () => {
   it('shows the server’s reason when a save is refused, and stays put', async () => {
     refusePut = 'Only admins can change events.'
     open(`#/edit-schedule/${blank.id}`)
-    await editor()
-    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
@@ -191,18 +201,16 @@ describe('schedule editor (#232)', () => {
 
   it('keeps unsaved changes — groups and schedule — if you leave, and offers to discard them', async () => {
     open(`#/edit-schedule/${blank.id}`)
-    await editor()
-    await addGroup('Red')
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     cleanup()
 
     open(`#/edit-schedule/${blank.id}`)
     expect((await editor()).value).toBe(SCHEDULE)
-    expect(screen.getByRole('textbox', { name: 'Group 1 name' })).toHaveValue('Red')
+    expect(groupRow('Red').getByText('Red')).toBeInTheDocument()
     expect(screen.getByText('Your unsaved changes are back.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect((await editor()).value).toContain('// 07:00 general')
-    expect(screen.queryByRole('textbox', { name: 'Group 1 name' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('listitem', { name: 'Red' })).not.toBeInTheDocument()
     expect(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)).toBeNull()
   })
 
