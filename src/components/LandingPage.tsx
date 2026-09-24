@@ -175,7 +175,7 @@ function AddEventLink() {
   return (
     <a
       href="#/new-event"
-      className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
     >
       <Plus size={16} aria-hidden="true" />
       Add event
@@ -224,28 +224,32 @@ export function LandingPage({ onOpenEvent }: Props) {
               <AccountButton reserveSpace={false} />
             </div>
           </div>
-          {/* List / calendar, under the title (#273). */}
-          <div className="mt-4 inline-flex gap-1 rounded-lg bg-gray-100 p-1">
-            <button
-              onClick={() => setView('list')}
-              className={`rounded-md p-2 transition-colors ${
-                view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-              }`}
-              style={{ minWidth: 36, minHeight: 36 }}
-              aria-label="List view"
-            >
-              <List size={18} />
-            </button>
-            <button
-              onClick={() => setView('calendar')}
-              className={`rounded-md p-2 transition-colors ${
-                view === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-              }`}
-              style={{ minWidth: 36, minHeight: 36 }}
-              aria-label="Calendar view"
-            >
-              <CalendarIcon size={18} />
-            </button>
+          {/* List / calendar, under the title (#273), with Add event
+              across from it (#279). */}
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="inline-flex gap-1 rounded-lg bg-gray-100 p-1">
+              <button
+                onClick={() => setView('list')}
+                className={`rounded-md p-2 transition-colors ${
+                  view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                }`}
+                style={{ minWidth: 36, minHeight: 36 }}
+                aria-label="List view"
+              >
+                <List size={18} />
+              </button>
+              <button
+                onClick={() => setView('calendar')}
+                className={`rounded-md p-2 transition-colors ${
+                  view === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                }`}
+                style={{ minWidth: 36, minHeight: 36 }}
+                aria-label="Calendar view"
+              >
+                <CalendarIcon size={18} />
+              </button>
+            </div>
+            {isAdmin && <AddEventLink />}
           </div>
         </div>
 
@@ -253,11 +257,6 @@ export function LandingPage({ onOpenEvent }: Props) {
           <div className="space-y-16">
             {/* Live and upcoming events together, no heading (#276). */}
             <section aria-label="Live and upcoming events">
-              {isAdmin && (
-                <div className="mb-2 flex justify-end">
-                  <AddEventLink />
-                </div>
-              )}
               {upcomingRows.length === 0 ? (
                 // Created events are fetched after load and are usually the
                 // upcoming ones — don't flash "No upcoming events" meanwhile.

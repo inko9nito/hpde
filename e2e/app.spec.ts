@@ -234,7 +234,7 @@ test('share page shares the live address with a QR code', async ({ page }) => {
   await expect(qr).toBeVisible()
 })
 
-test('the landing menu slides up, and Share slides in over the list (#273)', async ({ page }) => {
+test('the landing menu slides up, and Share slides up over the list (#273, #278)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/')
   await page.getByRole('button', { name: 'Menu' }).click()
@@ -270,6 +270,70 @@ async function signInAsAdmin(page: Page) {
     }
   })
 }
+
+// Follows the page that `open()` brings in, frame by frame, until it
+// settles: which way it moved, and where it ended up.
+async function trackSlide(page: Page, open: () => Promise<void>, heading: string) {
+  const track = page.evaluate(heading => new Promise<{ fromBelow: boolean; fromSide: boolean }>(resolve => {
+    let fromBelow = false
+    let fromSide = false
+    let still = 0
+    let last = ''
+    const step = () => {
+      const h = [...document.querySelectorAll('h1')].find(el => el.textContent === heading)
+      const page = h?.closest<HTMLElement>('.fixed')
+      if (page) {
+        const { top, left } = page.getBoundingClientRect()
+        if (top > 1) fromBelow = true
+        if (left > 1) fromSide = true
+        const at = `${top},${left}`
+        still = at === last ? still + 1 : 0
+        last = at
+        if (still > 10 && top === 0 && left === 0) return resolve({ fromBelow, fromSide })
+      }
+      requestAnimationFrame(step)
+    }
+    step()
+  }), heading)
+  await open()
+  return track
+}
+
+test('an admin adds an event from beside the list/calendar toggle; the page slides up, and back down (#278, #279)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/')
+
+  // In line with the toggle, not in a row of its own above the events.
+  const add = page.getByRole('link', { name: 'Add event' })
+  const toggle = page.getByRole('button', { name: 'List view' })
+  const [addBox, toggleBox] = [await add.boundingBox(), await toggle.boundingBox()]
+  expect(Math.abs((addBox!.y + addBox!.height / 2) - (toggleBox!.y + toggleBox!.height / 2))).toBeLessThan(2)
+  await expect(add).toBeVisible()
+
+  const slide = await trackSlide(page, () => add.click(), 'New event')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  await expect(page.getByLabel('Title')).toBeInViewport()
+
+  await page.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/$/)
+  await expect(add).toBeInViewport()
+})
+
+test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto('/#/')
+  const menu = page.getByRole('dialog', { name: 'Menu' })
+  for (const [item, heading] of [['Share', 'Share'], ['Get iOS widget', 'iOS widget']]) {
+    await page.getByRole('button', { name: 'Menu' }).click()
+    const link = menu.getByRole('link', { name: item })
+    const slide = await trackSlide(page, () => link.click(), heading)
+    expect(slide).toEqual({ fromBelow: true, fromSide: false })
+    await page.getByRole('link', { name: 'Close' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  }
+})
 
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
   await stubEvents(page)

@@ -28,15 +28,22 @@ interface Props {
    * gray-50 all the way up — Share, iOS widget (#273).
    */
   whiteHeader?: boolean
+  /**
+   * Which edge it slides in from, and back out to. 'right' is a push
+   * (the event page); 'bottom' is a modal page closed with ✕ — New
+   * event, Share, iOS widget (#278).
+   */
+  from?: 'right' | 'bottom'
 }
 
 /**
  * Full-viewport slide-over that animates in from the right on push and
- * back out to the right on pop. Kept mounted through the exit animation
+ * back out to the right on pop — or up from the bottom and back down,
+ * for a modal page (`from="bottom"`). Kept mounted through the exit animation
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true, from = 'right' }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
   // frame never paints and the transition doesn't fire. The one
@@ -82,10 +89,15 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // rubber-banding past either end, so keep it white above
         // (header) and gray-50 below (page).
         backgroundImage: white ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)' : undefined,
-        transform: `translateX(${inPosition ? '0' : '100%'})`,
+        transform: from === 'bottom'
+          ? `translateY(${inPosition ? '0' : '100%'})`
+          : `translateX(${inPosition ? '0' : '100%'})`,
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         willChange: 'transform',
-        boxShadow: '-8px 0 32px -8px rgba(0, 0, 0, 0.18)',
+        // Cast onto the page it's covering: left of a push, above a modal.
+        boxShadow: from === 'bottom'
+          ? '0 -8px 32px -8px rgba(0, 0, 0, 0.18)'
+          : '-8px 0 32px -8px rgba(0, 0, 0, 0.18)',
       }}
       onTransitionEnd={e => {
         if (e.target !== e.currentTarget || e.propertyName !== 'transform') return

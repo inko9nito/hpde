@@ -89,11 +89,13 @@ function eventIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length).split('/')[0])
 }
 
-/** A page that slides in from the right over the landing or event page
- *  (#273): Share (the site, or one event) or the iOS widget setup. */
-type Overlay = { kind: 'widget' } | { kind: 'share'; eventId?: string }
+/** A page that slides up from the bottom over the landing or event page
+ *  (#273, #278): New event, Share (the site, or one event) or the iOS
+ *  widget setup. */
+type Overlay = { kind: 'new-event' } | { kind: 'widget' } | { kind: 'share'; eventId?: string }
 
 function overlayFromHash(hash: string): Overlay | null {
+  if (hash === NEW_EVENT_HASH) return { kind: 'new-event' }
   // '#/widget-script' is the old name for the widget page (pre-#213) —
   // keep it working in case anyone bookmarked or shared it.
   if (hash === '#/widget-setup' || hash === '#/widget-script') return { kind: 'widget' }
@@ -201,8 +203,8 @@ export default function App() {
     if (isOnEventRoute) setPushMounted(true)
   }, [isOnEventRoute])
 
-  // Same for Share / iOS widget: the last one opened stays mounted
-  // through its slide-out.
+  // Same for New event / Share / iOS widget: the last one opened stays
+  // mounted through its slide-out.
   const overlay = overlayFromHash(hash)
   const [lastOverlay, setLastOverlay] = useState(overlay)
   useEffect(() => {
@@ -331,19 +333,6 @@ export default function App() {
         onSaved={() => {
           backToEvent(editEventId)
           showToast('Details saved')
-        }}
-      />
-    )
-  }
-
-  if (hash === NEW_EVENT_HASH) {
-    return (
-      <NewEventPage
-        onClose={goHome}
-        onCreated={event => {
-          switchEvent(event)
-          // Reassurance that this is the new event, not an old one.
-          showToast(`“${event.name}” created`)
         }}
       />
     )
@@ -487,14 +476,27 @@ export default function App() {
     )}
     {shownOverlay && (
       <PushPage
-        key={shownOverlay.kind === 'share' ? `share ${shownOverlay.eventId ?? ''}` : 'widget'}
+        key={shownOverlay.kind === 'share' ? `share ${shownOverlay.eventId ?? ''}` : shownOverlay.kind}
         open={overlay !== null}
         onExited={() => setLastOverlay(null)}
         onEnteredChange={setOverlayEntered}
         skipEnterAnimation={bootHashRef.current !== null}
         whiteHeader={false}
+        from="bottom"
       >
-        {shownOverlay.kind === 'widget' ? (
+        {shownOverlay.kind === 'new-event' ? (
+          <NewEventPage
+            onClose={goHome}
+            onCreated={event => {
+              switchEvent(event)
+              // Already in place under this page, so sliding it back down
+              // reveals the new event — rather than that sliding in too.
+              skipPushEnterAnimationRef.current = true
+              // Reassurance that this is the new event, not an old one.
+              showToast(`“${event.name}” created`)
+            }}
+          />
+        ) : shownOverlay.kind === 'widget' ? (
           <WidgetSetupPage />
         ) : shownOverlay.eventId !== undefined ? (
           <SharePage
