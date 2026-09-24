@@ -24,15 +24,26 @@ const SCHEDULE = `## Saturday | 2099-10-03
 // identity.ts caches the first widget it loads, so every test shares one
 // fake and just changes who's signed in.
 let roles: string[] = []
-// Renewing the sign-in fails, as gotrue-js does when a refresh token has
-// already been used.
+// Identity, as far as renewing the sign-in goes — the way gotrue-js does
+// it: the access token is renewed when it's (nearly) expired, with a
+// refresh token that works once. `renewalFails` refuses every renewal (a
+// revoked sign-in).
+const HOUR = 3_600_000
 let renewalFails = false
+let acceptedRefresh = 'r1'
+let startToken = { access_token: 'token', refresh_token: 'r1', expires_at: Date.now() + HOUR }
 const handlers: Record<string, (u: unknown) => void> = {}
 const currentUser = () => ({
   id: 'u', email: 'v@example.com', app_metadata: { roles },
-  jwt: async () => {
+  token: { ...startToken } as { access_token: string; refresh_token: string; expires_at: number } | null,
+  async jwt() {
     if (renewalFails) throw new Error('invalid_grant: Invalid Refresh Token')
-    return 'token'
+    const t = this.token!
+    if (t.expires_at - 60_000 > Date.now()) return t.access_token
+    if (t.refresh_token !== acceptedRefresh) throw new Error('invalid_grant: Invalid Refresh Token')
+    acceptedRefresh = `${t.refresh_token}+`
+    this.token = { access_token: 'renewed', refresh_token: acceptedRefresh, expires_at: Date.now() + HOUR }
+    return this.token.access_token
   },
 })
 window.netlifyIdentity = {
@@ -80,6 +91,8 @@ describe('schedule editor (#232)', () => {
     refusePut = null
     putThrows = false
     renewalFails = false
+    acceptedRefresh = 'r1'
+    startToken = { access_token: 'token', refresh_token: 'r1', expires_at: Date.now() + HOUR }
     fetchMock.mockClear()
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -239,6 +252,33 @@ describe('schedule editor (#232)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
     expect(window.location.hash).toBe(`#/edit-schedule/${blank.id}`)
     expect((await editor()).value).toBe(SCHEDULE)
+  })
+
+  it('renews an expired sign-in quietly, with the refresh token another copy of the site saved', async () => {
+    // This page's refresh token (r1) was spent by another tab, which saved
+    // the renewed sign-in (r2) — itself expired by now.
+    startToken = { access_token: 'old', refresh_token: 'r1', expires_at: Date.now() - HOUR }
+    acceptedRefresh = 'r2'
+    localStorage.setItem('gotrue.user', JSON.stringify({
+      id: 'u', token: { access_token: 'stale', refresh_token: 'r2', expires_at: Date.now() - 1000 },
+    }))
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    await userEvent.click(saveButton())
+
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!
+    expect((put[1]!.headers as Headers).get('Authorization')).toBe('Bearer renewed')
+    expect(screen.queryByText('You’ve been signed out')).not.toBeInTheDocument()
+  })
+
+  it('finds out a sign-in has lapsed when the app comes back to the front, not at save', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    renewalFails = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('You’ve been signed out')
+    expect(JSON.parse(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)!).text).toBe(SCHEDULE)
   })
 
   it('says so when the sign-in has lapsed, and keeps the changes for after signing back in', async () => {

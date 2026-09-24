@@ -7,6 +7,7 @@ import {
   isSignInReturn,
   restoreReturnTo,
   showIdentityWidget,
+  adoptSavedToken,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
 
@@ -131,29 +132,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // The access token, renewed if it's due — with the newest refresh token
+  // on the device (see adoptSavedToken). If Identity still refuses (the
+  // sign-in was revoked), gotrue-js has already dropped it, so show it:
+  // signed out, with a way back in.
+  const renew = useCallback(async (u: IdentityUser): Promise<string> => {
+    adoptSavedToken(u)
+    try {
+      return await u.jwt()
+    } catch (err) {
+      console.error('Sign-in renewal failed:', err)
+      setIdentityUser(null)
+      setStatus('signed-out')
+      throw new SignedOutError()
+    }
+  }, [])
+
+  // Renew in the background when the app is opened or comes back to the
+  // front, so a save never waits on it — or finds out only then that the
+  // sign-in lapsed. jwt() only goes to the network when the token is due.
+  useEffect(() => {
+    if (!identityUser) return
+    const renewIfVisible = () => {
+      if (document.visibilityState === 'visible') renew(identityUser).catch(() => {})
+    }
+    renewIfVisible()
+    document.addEventListener('visibilitychange', renewIfVisible)
+    window.addEventListener('focus', renewIfVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', renewIfVisible)
+      window.removeEventListener('focus', renewIfVisible)
+    }
+  }, [identityUser, renew])
+
   const signIn = useCallback(() => startGoogleSignIn(), [])
   const openAccount = useCallback(() => widget?.open(), [widget])
   const signOut = useCallback(() => widget?.logout(), [widget])
   const authedFetch = useCallback(
     async (input: RequestInfo, init: RequestInit = {}) => {
       if (!identityUser) throw new SignedOutError()
-      // jwt() renews the token first if it has expired.
-      let token: string
-      try {
-        token = await identityUser.jwt()
-      } catch (err) {
-        // The renewal failed and gotrue-js has already dropped the session,
-        // so show it: signed out, with a way back in.
-        console.error('Sign-in renewal failed:', err)
-        setIdentityUser(null)
-        setStatus('signed-out')
-        throw new SignedOutError()
-      }
+      const token = await renew(identityUser)
       const headers = new Headers(init.headers)
       headers.set('Authorization', `Bearer ${token}`)
       return fetch(input, { ...init, headers })
     },
-    [identityUser],
+    [identityUser, renew],
   )
 
   const value = useMemo<AuthValue>(
