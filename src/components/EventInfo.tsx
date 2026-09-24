@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Calendar, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximize2, Route, Users, X } from 'lucide-react'
+import { Calendar, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximize2, Route, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { MapViewer } from './MapViewer'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -132,26 +133,11 @@ export function EventInfo({ event }: Props) {
       )}
 
       {mapExpanded && event.mapImage && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${event.name} track map`}
-          onClick={() => setMapExpanded(false)}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
-        >
-          <button
-            onClick={() => setMapExpanded(false)}
-            aria-label="Close map"
-            className="absolute right-4 top-4 inline-grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-          >
-            <X size={20} />
-          </button>
-          <img
-            src={event.mapImage}
-            alt={`${event.name} track map`}
-            className="max-h-full max-w-full rounded-lg object-contain"
-          />
-        </div>
+        <MapViewer
+          src={event.mapImage}
+          alt={`${event.name} track map`}
+          onClose={() => setMapExpanded(false)}
+        />
       )}
     </>
   )

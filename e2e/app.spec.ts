@@ -96,6 +96,53 @@ test('shows the track map for the event’s track', async ({ page }) => {
   await expect.poll(() => map.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
 })
 
+// A pinch on the map zoomed the whole app, and it stayed zoomed after the
+// map closed (#259). The map zooms itself now, and the page can't.
+test('the full-screen track map zooms on its own, not the page', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'Details' }).click()
+  await page.getByRole('button', { name: 'Expand track map' }).click()
+
+  const dialog = page.getByRole('dialog', { name: `${alpha.name} track map` })
+  const map = dialog.getByRole('img', { name: `${alpha.name} track map` })
+  await expect.poll(() => map.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  // Covers the screen, and the browser leaves pinches on it to the app.
+  const viewport = page.viewportSize()!
+  expect(await dialog.boundingBox()).toEqual({ x: 0, y: 0, ...viewport })
+  await expect(dialog).toHaveCSS('touch-action', 'none')
+
+  const scale = () => map.evaluate(img => new DOMMatrix(getComputedStyle(img).transform).a)
+  await map.dblclick()
+  await expect.poll(scale).toBeCloseTo(2.5)
+  await map.dblclick()
+  await expect.poll(scale).toBe(1)
+
+  // Two fingers spreading from 80px to 200px apart: 2.5×.
+  const box = (await map.boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  await page.locator('[data-map-stage]').evaluate((stage, { cx, cy }) => {
+    const fire = (type: string, pointerId: number, x: number) => {
+      const target = type === 'pointerdown' ? document.elementFromPoint(x, cy)! : stage
+      target.dispatchEvent(new PointerEvent(type, { pointerId, pointerType: 'touch', isPrimary: pointerId === 1, clientX: x, clientY: cy, bubbles: true }))
+    }
+    fire('pointerdown', 1, cx - 40)
+    fire('pointerdown', 2, cx + 40)
+    fire('pointermove', 1, cx - 100)
+    fire('pointermove', 2, cx + 100)
+    fire('pointerup', 1, cx - 100)
+    fire('pointerup', 2, cx + 100)
+  }, { cx, cy })
+  expect(await scale()).toBeCloseTo(2.5)
+
+  await page.getByRole('button', { name: 'Close map' }).click()
+  await expect(dialog).toBeHidden()
+  // Nothing left zoomed or scrolled sideways behind it.
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
 test('shows today’s schedule with the now-line, scrolled into view', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/event/test-live')
