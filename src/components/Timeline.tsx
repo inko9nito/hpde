@@ -4,6 +4,7 @@ import { ActivityCard } from './ActivityCard'
 import { TimeIndicator } from './TimeIndicator'
 import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
 import type { ScheduleActivity, RunGroupConfig } from '../types'
+import noFutureEventsArt from '../assets/no-future-events.svg'
 
 interface Props {
   activities: ScheduleActivity[]
@@ -90,16 +91,21 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
   const indicatorAtEnd = isToday && indicatorIndex === -1 && visible.length > 0
 
   const allCollapsed = visible.length > 0 && collapsed.every(Boolean)
+  // With the whole day hidden, "now" belongs above the zero state rather
+  // than trailing below it.
+  const indicatorOnTop = indicatorAtEnd && allCollapsed
 
   let lastSessionNumber: number | undefined = undefined
 
   return (
     <div className="flex flex-col pb-10">
+      {indicatorOnTop && <TimeIndicator ref={indicatorRef} activities={visible} />}
       {visible.length > 0 && (
         <Collapse collapsed={!allCollapsed}>
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm">
-            <p className="text-sm font-medium text-gray-500">That's a wrap for today</p>
-            <p className="text-xs text-gray-400">Every activity on today's schedule has already happened.</p>
+          <div className="flex flex-col items-center gap-1 px-6 pt-6 pb-10 text-center">
+            <img src={noFutureEventsArt} alt="" className="mb-2 w-48" />
+            <p className="text-sm font-medium text-gray-700">No more events today</p>
+            <p className="text-xs text-gray-400">Everything on today’s schedule has already happened. Turn off “Hide past activities” to see it.</p>
           </div>
         </Collapse>
       )}
@@ -140,7 +146,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
           </Collapse>
         )
       })}
-      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} activities={visible} />}
+      {indicatorAtEnd && !indicatorOnTop && <TimeIndicator ref={indicatorRef} activities={visible} />}
     </div>
   )
 }
