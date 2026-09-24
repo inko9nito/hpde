@@ -55,7 +55,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const titleId = useId()
+  // Saved laps open read-only; Edit brings up the text box.
+  const [editing, setEditing] = useState(() => !existing)
   const textareaId = useId()
   const closeRef = useRef<HTMLButtonElement>(null)
 
@@ -66,6 +67,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
     setGroup(next)
     const laps = saved(sessionKey(slot.date, slot.time, next))
     setText(laps ? lapsToText(laps.laps) : '')
+    setEditing(!laps)
     setReadAs(undefined)
     setConfirmingRemove(false)
     setFailure(null)
@@ -111,11 +113,18 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
   }
 
   const title = `${formatTime(slot.time)} ${formatAmPm(slot.time)}${group ? ` · ${groupFor(group, runGroups).label}` : ''}`
-  const subtitle = [
+  const overline = [
     slot.sessionNumber !== undefined ? `Session ${slot.sessionNumber}` : null,
-    'On track',
     showDate ? shortDate(slot.date) : null,
   ].filter(Boolean).join(' · ')
+
+  function cancelEdit() {
+    if (!existing) return
+    setText(lapsToText(existing.laps))
+    setReadAs(undefined)
+    setFailure(null)
+    setEditing(false)
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center" data-lap-sheet>
@@ -123,14 +132,21 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-label={title}
         className="sheet-up relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-t-2xl bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
       >
         <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3 pt-3">
+          {/* Like the session's card on the schedule: its time and group. */}
           <div className="min-w-0">
-            <h2 id={titleId} className="font-rubik text-lg font-semibold text-gray-900">{title}</h2>
-            <p className="text-xs text-gray-500">{subtitle}</p>
+            {overline && <p className="text-xs text-gray-500">{overline}</p>}
+            <h2 className="mt-0.5 flex items-center gap-3">
+              <span className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
+                {formatTime(slot.time)}
+                <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(slot.time)}</span>
+              </span>
+              {group !== null && <GroupBadge group={groupFor(group, runGroups)} size="sm" />}
+            </h2>
           </div>
           <button
             ref={closeRef}
@@ -161,7 +177,22 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
           </fieldset>
         )}
 
-        {group !== null && (
+        {group !== null && existing && !editing && (
+          <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <LapFigures laps={existing.laps} />
+              <button
+                onClick={() => setEditing(true)}
+                className="shrink-0 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Edit
+              </button>
+            </div>
+            <LapTable laps={existing.laps} />
+          </section>
+        )}
+
+        {group !== null && editing && (
           <>
             <label htmlFor={textareaId} className="mt-4 text-xs font-medium text-gray-700">
               Lap times or timestamps
@@ -203,7 +234,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
             )}
 
             {parsed.laps.length > 0 && (
-              <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl bg-gray-50 p-3">
+              <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
                 <LapFigures laps={parsed.laps} />
                 <LapTable laps={parsed.laps} />
               </section>
@@ -231,13 +262,20 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
         {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
         <div className="mt-5 flex flex-col items-center gap-3">
-          <button
-            onClick={save}
-            disabled={!canSave}
-            className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-          >
-            {busy === 'saving' ? 'Saving…' : 'Save lap times'}
-          </button>
+          {(editing || group === null) && (
+            <button
+              onClick={save}
+              disabled={!canSave}
+              className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
+            >
+              {busy === 'saving' ? 'Saving…' : 'Save lap times'}
+            </button>
+          )}
+          {editing && existing && (
+            <button onClick={cancelEdit} disabled={!!busy} className="text-sm text-gray-600 hover:text-gray-800">
+              Cancel
+            </button>
+          )}
           {existing && !confirmingRemove && (
             <button
               onClick={() => setConfirmingRemove(true)}

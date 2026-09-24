@@ -45,16 +45,16 @@ export function layoutLabel(event: EventConfig): string | null {
 }
 
 /**
- * The best lap on this event's layout across every event with laps — this
- * one's taken from `thisBest` (what's on screen, saved a moment ago
- * included), the others from the summary. Undefined when there's none.
+ * The best lap on this event's layout across every event with laps, and how
+ * many events that is — this one's best taken from `thisBest` (what's on
+ * screen, saved a moment ago included), the others' from the summary.
  */
 export function bestOnLayout(
   event: EventConfig,
   events: EventConfig[],
   summary: EventBest[],
   thisBest: number | undefined,
-): number | undefined {
+): { best?: number; events: number } {
   const byId = new Map(events.map(e => [e.id, e]))
   const bests = summary
     .filter(s => s.eventId !== event.id && s.best !== undefined)
@@ -64,5 +64,5 @@ export function bestOnLayout(
     })
     .map(s => s.best!)
   if (thisBest !== undefined) bests.push(thisBest)
-  return bests.length ? Math.min(...bests) : undefined
+  return bests.length ? { best: Math.min(...bests), events: bests.length } : { events: 0 }
 }

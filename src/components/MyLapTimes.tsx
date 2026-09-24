@@ -1,4 +1,5 @@
-import { Lock, Timer } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronRight, Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { LapFigures, LapTable } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
@@ -6,7 +7,7 @@ import { useLapSummary } from '../data/lapLog'
 import { useEvents } from '../data/EventsContext'
 import { formatTime, formatAmPm } from '../utils/time'
 import { formatLapTime, lapStats } from '../utils/lapTimes'
-import { bestOnLayout, layoutLabel, trackShortName } from '../utils/trackStats'
+import { bestOnLayout, trackShortName } from '../utils/trackStats'
 import type { LapLog } from '../data/lapLog'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventConfig } from '../types'
@@ -27,6 +28,10 @@ function eventBest(sessions: SessionLaps[]): number | undefined {
   return bests.length ? Math.min(...bests) : undefined
 }
 
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
 function StatCard({ label, ms, caption }: { label: string; ms: number | undefined; caption: string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4" role="group" aria-label={label}>
@@ -44,12 +49,32 @@ function StatCard({ label, ms, caption }: { label: string; ms: number | undefine
 export function MyLapTimes({ event, log, onEdit }: Props) {
   const { allEvents } = useEvents()
   const summary = useLapSummary(true)
+  // Sessions whose lap table is open. All closed to start, so the figures
+  // for every session fit on screen at once.
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
   const runGroups = event.runGroups
   const track = trackShortName(event)
-  const layout = layoutLabel(event)
+  const allOpen = log.sessions.length > 0 && log.sessions.every(s => open.has(s.key))
+
+  function toggle(key: string) {
+    setOpen(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const header = (
-    <div className="mb-3 flex items-center justify-between gap-3 px-1 text-xs text-gray-500">
-      <span className="truncate">{[track, layout].filter(Boolean).join(' · ')}</span>
+    <div className="mb-3 flex min-h-[20px] items-center justify-between gap-3 px-1 text-xs text-gray-500">
+      {log.sessions.length > 0 ? (
+        <button
+          onClick={() => setOpen(allOpen ? new Set() : new Set(log.sessions.map(s => s.key)))}
+          className="font-medium text-blue-600 hover:text-blue-700"
+        >
+          {allOpen ? 'Collapse all' : 'Expand all'}
+        </button>
+      ) : <span />}
       <span className="flex shrink-0 items-center gap-1" title="Only you can see your lap times">
         <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
       </span>
@@ -94,23 +119,30 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
   const best = eventBest(log.sessions)
   const days = new Set(log.sessions.map(s => s.date))
   // Until the summary arrives, this event's best is the best known.
-  const layoutBest = track ? bestOnLayout(event, allEvents, summary ?? [], best) : undefined
+  const layoutBest = bestOnLayout(event, allEvents, summary ?? [], best)
 
   return (
     <>
       {header}
       <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        <StatCard label="Best lap this event" ms={best} caption="Across all recorded sessions" />
+        <StatCard
+          label="Best lap this event"
+          ms={best}
+          caption={`Across ${plural(log.sessions.length, 'recorded session', 'recorded sessions')}`}
+        />
         {track && (
           <StatCard
-            label={layout ? `Best on ${layout}` : `Best at ${track}`}
-            ms={layoutBest}
-            caption={`Across every ${track} event`}
+            label="All time best"
+            ms={layoutBest.best}
+            caption={`Across ${plural(layoutBest.events, 'event', 'events')} at this track config`}
           />
         )}
       </div>
       <div className="flex flex-col gap-5">
-        {log.sessions.map(session => (
+        {log.sessions.map(session => {
+          const expanded = open.has(session.key)
+          const tableId = `laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`
+          return (
           <section key={session.key} aria-label={`${sessionTitle(session)}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
             <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-widest text-gray-400">
               {sessionTitle(session)}
@@ -135,12 +167,29 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
                 <p className="flex items-center gap-1.5 text-xs text-gray-500">
                   <Timer size={13} aria-hidden="true" /> Lap times
                 </p>
-                <LapFigures laps={session.laps} />
-                <LapTable laps={session.laps} />
+                {/* The whole row opens the table: the chevron's button stretches over it. */}
+                <div className="relative flex items-center gap-2">
+                  <LapFigures laps={session.laps} />
+                  <button
+                    onClick={() => toggle(session.key)}
+                    aria-expanded={expanded}
+                    aria-controls={tableId}
+                    aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${sessionTitle(session)}`}
+                    className="shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+                  >
+                    <ChevronRight
+                      size={18}
+                      className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                {expanded && <div id={tableId}><LapTable laps={session.laps} /></div>}
               </div>
             </div>
           </section>
-        ))}
+          )
+        })}
       </div>
     </>
   )

@@ -59,13 +59,14 @@ describe('bestOnLayout', () => {
       // Stale: this event's own laps come from the screen.
       { eventId: scca.id, best: 95_000, sessions: 1 },
     ]
-    expect(bestOnLayout(scca, events, summary, 101_000)).toBe(99_000)
-    expect(bestOnLayout(scca, events, summary, 98_500)).toBe(98_500)
+    expect(bestOnLayout(scca, events, summary, 101_000)).toEqual({ best: 99_000, events: 2 })
+    expect(bestOnLayout(scca, events, summary, 98_500)).toEqual({ best: 98_500, events: 2 })
+    expect(bestOnLayout(scca, events, summary, undefined)).toEqual({ best: 99_000, events: 1 })
   })
 
   it('skips events it doesn’t know, and events with no best', () => {
     const summary = [{ eventId: 'gone', best: 50_000, sessions: 1 }, { eventId: tde.id, sessions: 1 }]
-    expect(bestOnLayout(scca, events, summary, undefined)).toBeUndefined()
-    expect(bestOnLayout(scca, events, summary, 101_000)).toBe(101_000)
+    expect(bestOnLayout(scca, events, summary, undefined)).toEqual({ events: 0 })
+    expect(bestOnLayout(scca, events, summary, 101_000)).toEqual({ best: 101_000, events: 1 })
   })
 })

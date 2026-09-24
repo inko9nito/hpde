@@ -148,19 +148,23 @@ describe('lap times (#210)', () => {
     await tapSession('Lap times: 11:45 AM, Blue')
 
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
-    expect(sheet).toHaveTextContent('Session 2 · On track')
+    // Headed like the session's card: session, then time and group.
+    expect(within(sheet).getByRole('heading')).toHaveTextContent('11:45AMBlue')
+    expect(sheet).toHaveTextContent('Session 2')
     const box = within(sheet).getByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: SHEET_ROWS } })
 
     // What was read, before saving: the out lap doesn't count.
     const read = within(sheet).getByRole('region', { name: 'Laps read' })
-    expect(figures(read)).toEqual({ Laps: '2+ 1 out/in', Best: '1:44', Average: '1:50.0' })
+    expect(figures(read)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
+    // Columns in the order they're entered; the best lap in a chip.
     expect(rows(read)).toEqual([
-      ['Lap', 'Time', 'Start – finish', 'Note'],
-      ['Out', '2:19', '11:46:32 AM11:48:51 AM', 'Traffic'],
-      ['1', '1:56', '11:48:51 AM11:50:47 AM', ''],
-      ['2', '1:44Best', '11:50:47 AM11:52:31 AM', 'Best so far'],
+      ['Lap', 'Start', 'Finish', 'Lap time', 'Note'],
+      ['Out', '11:46:32 AM', '11:48:51 AM', '2:19', 'Traffic'],
+      ['1', '11:48:51 AM', '11:50:47 AM', '1:56', ''],
+      ['2', '11:50:47 AM', '11:52:31 AM', '1:44', 'Best so far'],
     ])
+    expect(read.querySelectorAll('[data-best-lap]')).toHaveLength(2)
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
@@ -181,9 +185,13 @@ describe('lap times (#210)', () => {
     expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    expect(figures(card)).toEqual({ Laps: '2+ 1 out/in', Best: '1:44', Average: '1:50.0' })
-    // The whole table, open: no chips, nothing to expand.
-    expect(rows(card)[3]).toEqual(['2', '1:44Best', '11:50:47 AM11:52:31 AM', 'Best so far'])
+    expect(figures(card)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
+    // The laps are folded away until asked for.
+    expect(within(card).queryByRole('table')).not.toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Show laps for Session 2' }))
+    expect(rows(card)[3]).toEqual(['2', '11:50:47 AM', '11:52:31 AM', '1:44', 'Best so far'])
+    await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
+    expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
   })
@@ -220,7 +228,7 @@ describe('lap times (#210)', () => {
     expect(figures(within(sheet).getByRole('region', { name: 'Laps read' })).Laps).toBe('3')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Video timestamps' }))
-    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' }))).toEqual({ Laps: '2', Best: '1:48', Average: '1:52.0' })
+    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' }))).toEqual({ Laps: '2', Average: '1:52.0', Best: '1:48' })
   })
 
   it('keeps the sheet open with the reason when a save fails', async () => {
@@ -245,7 +253,20 @@ describe('lap times (#210)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit lap times for Session 2' }))
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
-    expect(within(sheet).getByLabelText('Lap times or timestamps')).toHaveValue('1:39.42, 1:38.91')
+    // Saved laps open read-only, with a way to edit them.
+    expect(within(sheet).queryByLabelText('Lap times or timestamps')).not.toBeInTheDocument()
+    expect(within(sheet).queryByRole('button', { name: 'Save lap times' })).not.toBeInTheDocument()
+    expect(rows(within(sheet).getByRole('region', { name: 'Saved laps' }))).toEqual([
+      ['Lap', 'Lap time'], ['1', '1:39.42'], ['2', '1:38.91'],
+    ])
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Edit' }))
+    const box = within(sheet).getByLabelText('Lap times or timestamps')
+    expect(box).toHaveValue('1:39.42, 1:38.91')
+    // Cancel puts back what's saved.
+    fireEvent.change(box, { target: { value: '1:44' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }))
+    expect(within(sheet).queryByLabelText('Lap times or timestamps')).not.toBeInTheDocument()
+    expect(rows(within(sheet).getByRole('region', { name: 'Saved laps' }))[1]).toEqual(['1', '1:39.42'])
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Remove from session' }))
     await userEvent.click(within(sheet).getByRole('button', { name: 'Remove' }))
@@ -266,12 +287,27 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    expect(screen.getByText('MSRC · 1.7 CW')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91Across all recorded sessions')
+    // The event header already names the track.
+    expect(screen.queryByText('MSRC · 1.7 CW')).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91Across 1 recorded session')
     // The counter-clockwise event doesn't count.
     await waitFor(() => {
-      expect(screen.getByRole('group', { name: 'Best on 1.7 CW' })).toHaveTextContent('1:38.54Across every MSRC event')
+      expect(screen.getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54Across 2 events at this track config')
     })
+  })
+
+  it('opens and closes every session’s laps at once', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910 }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    expect(screen.queryAllByRole('table')).toHaveLength(0)
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    expect(screen.getAllByRole('table')).toHaveLength(2)
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
+    expect(screen.queryAllByRole('table')).toHaveLength(0)
   })
 
   it('closes on Escape without saving', async () => {

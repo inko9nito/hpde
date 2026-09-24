@@ -388,7 +388,7 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
     '2\t8:35:12 AM\t8:36:58 AM\t1:46\tClean lap',
   ].join('\n'))
   const read = sheet.getByRole('region', { name: 'Laps read' })
-  await expect(read.getByRole('definition')).toHaveText(['2+ 1 out/in', '1:46', '1:49.0'])
+  await expect(read.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
   await expect(read.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
@@ -399,7 +399,11 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
-  await expect(card.getByRole('definition')).toHaveText(['2+ 1 out/in', '1:46', '1:49.0'])
+  await expect(card.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
+  // Tapping anywhere on the figures opens the laps (the toggle covers them).
+  const figure = (await card.getByRole('definition').first().boundingBox())!
+  await page.mouse.click(figure.x + 4, figure.y + 4)
+  await expect(card.getByRole('button', { name: 'Hide laps for Session 1' })).toHaveAttribute('aria-expanded', 'true')
   await expect(card.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:46')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
