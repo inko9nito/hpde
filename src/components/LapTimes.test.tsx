@@ -110,12 +110,11 @@ function figures(el: HTMLElement): Record<string, string> {
   return out
 }
 
-// A table of laps, as text, header first — as a wide screen shows it,
-// without the rows that put each note on a line of its own on a phone.
+// A table of laps, as text, header first. Lines stacked in one cell (start
+// over finish) are joined with a dash.
 function rows(el: HTMLElement): string[][] {
-  return within(el).getAllByRole('row')
-    .filter(row => !row.hasAttribute('data-note-row'))
-    .map(row => [...row.children].map(cell => cell.textContent ?? ''))
+  return within(el).getAllByRole('row').map(row => [...row.children].map(cell =>
+    cell.children.length > 1 ? [...cell.children].map(line => line.textContent).join(' – ') : cell.textContent ?? ''))
 }
 
 const lapCalls = (method: string) =>
@@ -162,18 +161,16 @@ describe('lap times (#210)', () => {
     expect(figures(read)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
     // Columns in the order they're entered; the best lap in a chip.
     expect(rows(read)).toEqual([
-      ['Lap', 'Start', 'Finish', 'Lap time', 'Note'],
-      ['Out', '11:46:32 AM', '11:48:51 AM', '2:19', 'Traffic'],
-      ['1', '11:48:51 AM', '11:50:47 AM', '1:56', ''],
-      ['2', '11:50:47 AM', '11:52:31 AM', '1:44', 'Best so far'],
+      ['Lap', 'Start – Finish', 'Lap time', 'Note'],
+      ['Out', '11:46:32 AM – 11:48:51 AM', '2:19', 'Traffic'],
+      ['1', '11:48:51 AM – 11:50:47 AM', '1:56', ''],
+      ['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'],
     ])
-    expect(read.querySelectorAll('[data-best-lap]')).toHaveLength(2)
-    // On a phone, the note column is hidden and each note sits under its lap.
-    expect(read.querySelector('th:last-child')).toHaveClass('hidden', 'sm:table-cell')
-    expect([...read.querySelectorAll('tr[data-note-row]')].map(row => {
-      expect(row).toHaveClass('sm:hidden')
-      return row.textContent
-    })).toEqual(['Traffic', 'Best so far'])
+    // The chip is in both; only the table's is pulled left, to line up with
+    // the times above and below it.
+    const [inFigures, inTable] = read.querySelectorAll('[data-best-lap]')
+    expect(inFigures).not.toHaveClass('-ml-1.5')
+    expect(inTable).toHaveClass('-ml-1.5')
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
@@ -198,7 +195,7 @@ describe('lap times (#210)', () => {
     // The laps are folded away until asked for.
     expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     await userEvent.click(within(card).getByRole('button', { name: 'Show laps for Session 2' }))
-    expect(rows(card)[3]).toEqual(['2', '11:50:47 AM', '11:52:31 AM', '1:44', 'Best so far'])
+    expect(rows(card)[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
     await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
     expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
@@ -353,7 +350,7 @@ describe('lap times (#210)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     const headers = screen.getAllByRole('table').map(t => rows(t)[0])
-    expect(headers).toEqual([['Lap', 'Start', 'Finish', 'Lap time'], ['Lap', 'Start', 'Finish', 'Lap time']])
+    expect(headers).toEqual([['Lap', 'Start – Finish', 'Lap time'], ['Lap', 'Start – Finish', 'Lap time']])
   })
 
   it('opens and closes every session’s laps at once', async () => {
