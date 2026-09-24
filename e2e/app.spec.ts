@@ -113,6 +113,10 @@ test('says there are no more events today once they’ve all passed', async ({ p
 
   await expect(page.getByText('No more events today')).toBeVisible()
   await expect(page.getByText('Track walk')).not.toBeInViewport()
+  // The now-line leads into the zero state instead of trailing after it.
+  const lineBox = await page.locator('[data-time-indicator]').boundingBox()
+  const textBox = await page.getByText('No more events today').boundingBox()
+  expect(lineBox!.y).toBeLessThan(textBox!.y)
   const art = page.locator('img[src*="svg"]')
   await expect(art).toBeVisible()
   await expect.poll(() => art.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)

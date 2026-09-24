@@ -91,11 +91,15 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
   const indicatorAtEnd = isToday && indicatorIndex === -1 && visible.length > 0
 
   const allCollapsed = visible.length > 0 && collapsed.every(Boolean)
+  // With the whole day hidden, "now" belongs above the zero state rather
+  // than trailing below it.
+  const indicatorOnTop = indicatorAtEnd && allCollapsed
 
   let lastSessionNumber: number | undefined = undefined
 
   return (
     <div className="flex flex-col pb-10">
+      {indicatorOnTop && <TimeIndicator ref={indicatorRef} activities={visible} />}
       {visible.length > 0 && (
         <Collapse collapsed={!allCollapsed}>
           <div className="flex flex-col items-center gap-1 px-6 pt-6 pb-10 text-center">
@@ -142,7 +146,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
           </Collapse>
         )
       })}
-      {indicatorAtEnd && <TimeIndicator ref={indicatorRef} activities={visible} />}
+      {indicatorAtEnd && !indicatorOnTop && <TimeIndicator ref={indicatorRef} activities={visible} />}
     </div>
   )
 }

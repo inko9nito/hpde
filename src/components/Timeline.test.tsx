@@ -56,6 +56,23 @@ describe('hidePast toggle', () => {
     expect(zeroState?.querySelector('img')).toHaveAttribute('src', expect.stringContaining('svg'))
   })
 
+  it('puts the now-line above the zero state when every activity is hidden', () => {
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    const indicators = document.querySelectorAll('[data-time-indicator]')
+    expect(indicators).toHaveLength(1)
+    const zeroState = screen.getByText(/no more events today/i)
+    expect(indicators[0].compareDocumentPosition(zeroState) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the now-line after the last activity when past ones are shown', () => {
+    vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60)
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={false} />)
+    const indicators = document.querySelectorAll('[data-time-indicator]')
+    expect(indicators).toHaveLength(1)
+    expect(indicators[0].compareDocumentPosition(screen.getByText('Lunch')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  })
+
   it('keeps the zero state collapsed while events are still to come', () => {
     render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText(/no more events today/i).closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
