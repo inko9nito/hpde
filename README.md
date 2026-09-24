@@ -69,8 +69,10 @@ their own events. No extra Netlify setup is needed for Blobs.
 - `netlify/functions/events-json.mts` — `/api/events.json`, the iOS
   widget's feed: the same events in the widget's format, cached for a
   minute.
-- Deploy previews get a store of their own per deploy, so creating or
-  deleting events on a preview never touches the live ones.
+- Each deploy preview gets its own store, which starts as a copy of the
+  live events (taken the first time that deploy is loaded). You see real
+  data on a preview, but creating or deleting events there never touches
+  the live ones. A later push makes a new deploy with a fresh copy.
 - The events that used to live in `src/data/schedules/*.md` are imported
   into the store once, the first time it's read after a deploy (the build
   writes them to `api/builtin-events.json`). An event deleted after that

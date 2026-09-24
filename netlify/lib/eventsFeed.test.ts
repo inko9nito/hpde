@@ -84,10 +84,15 @@ describe('events.json feed', () => {
     expect(ids).not.toContain('bad-color')
   })
 
-  it('reads a deploy preview’s own events, not the live ones', async () => {
+  it('serves a deploy preview’s own copy of the events', async () => {
+    const preview = { deploy: { context: 'deploy-preview' } }
     store.set(created.id, created)
-    const ids = await idsOf(await call({ deploy: { context: 'deploy-preview' } }))
-    expect(ids).toEqual([seedEvent.id, 'test-live'])
+    expect(await idsOf(await call(preview))).toEqual([created.id, seedEvent.id, 'test-live'])
+
+    // Gone from the preview's copy, still live.
+    blobs.data('deploy:events').delete(created.id)
+    expect(await idsOf(await call(preview))).toEqual([seedEvent.id, 'test-live'])
+    expect(store.has(created.id)).toBe(true)
   })
 
   it('answers 503 in plain text when the build’s file is unavailable', async () => {

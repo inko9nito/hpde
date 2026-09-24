@@ -164,14 +164,25 @@ describe('events function', () => {
     expect(await ids()).toContain(seedEvent.id)
   })
 
-  it('keeps a deploy preview’s events apart from the live ones', async () => {
+  it('starts a deploy preview from a copy of the live events, and keeps its changes to itself', async () => {
     const preview = { deploy: { context: 'deploy-preview' } }
-    await call('GET', { context: preview })
+    const liveEvent = { ...seedEvent, id: '2026-10-03_live', name: 'Live only' }
+    store.set(liveEvent.id, liveEvent)
+
+    const listed = (await (await call('GET', { context: preview })).json()).events.map((e: { id: string }) => e.id)
+    expect(listed.sort()).toEqual([liveEvent.id, seedEvent.id].sort())
+
     const res = await call('POST', { token: 'admin-token', body: { event: valid }, context: preview })
     expect(res.status).toBe(201)
-    expect(store.size).toBe(0)
-    expect(blobs.data('deploy:events').size).toBe(2) // the seed + the new one
-    expect(blobs.opened.every(o => o.kind === 'deploy')).toBe(true)
+    const del = await call('DELETE', { token: 'admin-token', query: `?id=${liveEvent.id}`, context: preview })
+    expect(del.status).toBe(200)
+
+    // The live store is exactly as it was: no seed import, no new event, nothing deleted.
+    expect([...store.keys()]).toEqual([liveEvent.id])
+    expect(blobs.data('site:events-meta').size).toBe(0)
+    // …and the preview only ever read from it.
+    const siteOpens = blobs.opened.filter(o => o.kind === 'site').map(o => (o.options as { name: string }).name)
+    expect(new Set(siteOpens)).toEqual(new Set(['events']))
   })
 
   it('rejects signed-out, bad-token and non-admin creates', async () => {

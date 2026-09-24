@@ -19,18 +19,19 @@ const SEED_KEY = 'seeded'
 
 /**
  * Production reads and writes the live events. Anything else (a deploy
- * preview, a branch deploy) gets stores of its own for that deploy, seeded
- * from its build — so deleting or creating events on a preview never
- * touches the live ones.
+ * preview, a branch deploy) gets stores of its own for that deploy, which
+ * start as a copy of the live events (see ensureSeeded) — so a preview
+ * shows real data, but creating or deleting events there never touches
+ * the live ones. `live` is only read from, to make that copy.
  */
 export function openStores(context, deps = {}) {
+  const site = name => (deps.getStore ?? getStore)({ name, consistency: 'strong' })
+  const deploy = name => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
   const deployContext = context?.deploy?.context
-  const isolated = !!deployContext && deployContext !== 'production'
-  const open = name =>
-    isolated
-      ? (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
-      : (deps.getStore ?? getStore)({ name, consistency: 'strong' })
-  return { events: open(STORE), meta: open(META_STORE) }
+  if (!deployContext || deployContext === 'production') {
+    return { events: site(STORE), meta: site(META_STORE) }
+  }
+  return { events: deploy(STORE), meta: deploy(META_STORE), live: site(STORE) }
 }
 
 export async function listEvents(store) {
@@ -54,13 +55,18 @@ export async function fetchBuiltin(origin, fetchImpl = fetch) {
  * then records that it did, so an event deleted afterwards doesn't come
  * back. An id already in the store is left alone. Safe to run twice at
  * once: each copy only writes if the key is new.
+ *
+ * A preview's store first gets a copy of the live events as they are at
+ * that moment, then the seed — what the live site will show once this
+ * deploy is live.
  */
 export async function ensureSeeded(stores, origin, fetchImpl = fetch) {
   if (await stores.meta.get(SEED_KEY, { type: 'json' })) return
   const { seed } = await fetchBuiltin(origin, fetchImpl)
+  const live = stores.live ? await listEvents(stores.live) : []
   const importedAt = new Date().toISOString()
   const imported = []
-  for (const event of seed) {
+  for (const event of [...live, ...seed]) {
     if (!event || typeof event.id !== 'string') continue
     const { modified } = await stores.events.setJSON(event.id, { ...event, importedAt }, { onlyIfNew: true })
     if (modified) imported.push(event.id)
