@@ -48,23 +48,23 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 /** Month + day-of-month tile on the left of a card. A multi-day event
  *  shows only its first day (#243). The year goes under the day, only
- *  when it isn't this year (#266). */
-function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
+ *  when it isn't this year (#266). `dark` is for the featured card's
+ *  near-black background (#276). */
+function DateBlock({ event, muted, dark = false }: { event: EventConfig; muted: boolean; dark?: boolean }) {
   if (event.days.length === 0) return <div className="w-10 shrink-0" />
   const [y, m, d] = firstDate(event).split('-').map(Number)
   const thisYear = Number(todayLocalISO().slice(0, 4))
+  const monthColor = muted ? 'text-gray-500' : dark ? 'text-red-400' : 'text-red-600'
   return (
     <div className="flex w-10 shrink-0 flex-col items-center font-rubik leading-none">
-      <span
-        className={`text-[11px] font-medium uppercase tracking-wider ${
-          muted ? 'text-gray-500' : 'text-red-600'
-        }`}
-      >
+      <span className={`text-[11px] font-medium uppercase tracking-wider ${monthColor}`}>
         {MONTHS[m - 1]}
       </span>
-      <span className="mt-1 text-2xl font-bold text-gray-900">{d}</span>
+      <span className={`mt-1 text-2xl font-bold ${dark ? 'text-white' : 'text-gray-900'}`}>{d}</span>
       {y !== thisYear && (
-        <span className="mt-0.5 text-[11px] font-normal tracking-wider text-gray-400">{y}</span>
+        <span className={`mt-0.5 text-[11px] font-normal tracking-wider ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
+          {y}
+        </span>
       )}
     </div>
   )
@@ -114,8 +114,10 @@ function EventCard({
   )
 }
 
-/** An upcoming (or live) event: the track shape large on a dark banner
- *  across the top, date and name underneath. */
+/** An upcoming (or live) event (#276): one near-black card, the track
+ *  shape large across the top fading out at its bottom edge, then the
+ *  date, a hairline divider, and the name over the organizer. A live
+ *  event gets the same LIVE badge as the event page's date line. */
 function FeaturedEventCard({
   event,
   live,
@@ -128,16 +130,40 @@ function FeaturedEventCard({
   return (
     <button
       onClick={onClick}
-      className={`block w-full overflow-hidden rounded-xl border border-gray-200 bg-white text-left transition-colors hover:border-gray-400 ${CARD_SHADOW}`}
+      className="block w-full overflow-hidden rounded-2xl border border-gray-900 bg-gray-900 text-left shadow-[0_2px_4px_rgba(17,24,39,0.08),0_12px_28px_rgba(17,24,39,0.18)] transition-colors hover:border-gray-500"
     >
       {/* The SVGs are square with the shape in a wide band across the
-          middle, so a box taller than the banner is cropped by it. */}
-      <div className="flex h-28 items-center justify-center overflow-hidden bg-gray-900">
-        <TrackIcon trackId={event.trackId} tone="dark" size={144} padding={0} radius="rounded-none" />
+          middle, so a box taller than the banner is cropped by it. The
+          gradient fades the bottom of the shape into the card. */}
+      <div className="relative flex h-36 items-center justify-center overflow-hidden">
+        <TrackIcon
+          trackId={event.trackId}
+          tone="dark"
+          size={232}
+          padding={0}
+          radius="rounded-none"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-b from-gray-900/0 to-gray-900"
+        />
       </div>
-      <div className={`flex items-center gap-4 ${CARD_PADDING}`}>
-        <DateBlock event={event} muted={false} />
-        <EventTitle event={event} live={live} />
+      {/* Same left inset and date column as the past cards, so the date
+          stacks line up down the page. */}
+      <div className={`flex items-center gap-4 ${CARD_PADDING} pt-2`}>
+        <DateBlock event={event} muted={false} dark />
+        <div aria-hidden="true" className="w-px self-stretch bg-gray-700" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-rubik text-[17px] font-semibold leading-tight text-white">
+            {event.name}
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-2.5">
+            <span className="truncate text-sm text-gray-400">
+              {event.organizer ?? 'Organizer not set'}
+            </span>
+            {live && <StatusBadge status="live" />}
+          </div>
+        </div>
       </div>
     </button>
   )
@@ -224,13 +250,13 @@ export function LandingPage({ onOpenEvent }: Props) {
 
         {view === 'list' ? (
           <div className="space-y-16">
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
-                  Upcoming
-                </h2>
-                {isAdmin && <AddEventLink />}
-              </div>
+            {/* Live and upcoming events together, no heading (#276). */}
+            <section aria-label="Live and upcoming events">
+              {isAdmin && (
+                <div className="mb-2 flex justify-end">
+                  <AddEventLink />
+                </div>
+              )}
               {upcomingRows.length === 0 ? (
                 // Created events are fetched after load and are usually the
                 // upcoming ones — don't flash "No upcoming events" meanwhile.

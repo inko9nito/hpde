@@ -85,6 +85,47 @@ describe('landing event cards (#243)', () => {
   })
 })
 
+describe('live and upcoming cards (#276)', () => {
+  const liveEvent: EventConfig = {
+    id: `${todayLocalISO()}_live`,
+    name: 'Live Event',
+    organizer: 'Live Club',
+    runGroups: [],
+    days: [day('today', todayLocalISO())],
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    window.location.hash = '#/'
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ events: [twoDay, liveEvent, lastYearEvent] }), { headers: { 'Content-Type': 'application/json' } }),
+    ))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('lists live and upcoming events together, with no Upcoming heading', async () => {
+    render(<EventsProvider><App /></EventsProvider>)
+
+    const section = screen.getByRole('region', { name: 'Live and upcoming events' })
+    await within(section).findByRole('button', { name: /Two Day Event/ })
+    expect(within(section).getAllByRole('button').map(b => b.textContent)).toEqual([
+      expect.stringContaining('Live Event'),
+      expect.stringContaining('Two Day Event'),
+    ])
+    expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Past' })).toBeInTheDocument()
+  })
+
+  it('puts a LIVE badge on a live event, after its organizer as on the event page', async () => {
+    render(<EventsProvider><App /></EventsProvider>)
+
+    const live = await screen.findByRole('button', { name: /Live Event/ })
+    expect(within(live).getByText('Live Club').nextElementSibling).toHaveTextContent(/^Live$/)
+    const upcoming = screen.getByRole('button', { name: /Two Day Event/ })
+    expect(within(upcoming).queryByText('Live')).not.toBeInTheDocument()
+  })
+})
+
 describe('landing menu and footer (#273)', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -127,9 +168,9 @@ describe('landing menu and footer (#273)', () => {
     render(<EventsProvider><App /></EventsProvider>)
     await screen.findByRole('button', { name: /Two Day Event/ })
     await userEvent.click(screen.getByRole('button', { name: 'Calendar view' }))
-    expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Past' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'List view' }))
-    expect(screen.getByRole('heading', { name: 'Upcoming' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Past' })).toBeInTheDocument()
   })
 
   it('shows the footer — just the build date — on the landing page only', async () => {
