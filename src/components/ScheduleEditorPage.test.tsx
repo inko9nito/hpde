@@ -24,8 +24,17 @@ const SCHEDULE = `## Saturday | 2099-10-03
 // identity.ts caches the first widget it loads, so every test shares one
 // fake and just changes who's signed in.
 let roles: string[] = []
+// Renewing the sign-in fails, as gotrue-js does when a refresh token has
+// already been used.
+let renewalFails = false
 const handlers: Record<string, (u: unknown) => void> = {}
-const currentUser = () => ({ id: 'u', email: 'v@example.com', app_metadata: { roles }, jwt: async () => 'token' })
+const currentUser = () => ({
+  id: 'u', email: 'v@example.com', app_metadata: { roles },
+  jwt: async () => {
+    if (renewalFails) throw new Error('invalid_grant: Invalid Refresh Token')
+    return 'token'
+  },
+})
 window.netlifyIdentity = {
   init: () => handlers.init?.(currentUser()),
   on: (e: string, cb: (u: unknown) => void) => { handlers[e] = cb },
@@ -35,6 +44,7 @@ window.netlifyIdentity = {
 // The events function, as far as these tests need it: the PUT answers the
 // way the real one does, from the same parser — unless a test refuses it.
 let refusePut: string | null = null
+let putThrows = false
 const defaultFetch = async (url: string, init?: RequestInit) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -42,6 +52,7 @@ const defaultFetch = async (url: string, init?: RequestInit) => {
   if (String(url).includes('api/events')) {
     if (init?.method === 'PUT') {
       if (refusePut) return json({ error: refusePut }, 403)
+      if (putThrows) throw new TypeError('Load failed')
       const { runGroups, schedule } = JSON.parse(init.body as string)
       const result = applySchedule(blank, runGroups, schedule)
       return 'error' in result ? json(result, 400) : json({ event: result.event })
@@ -67,6 +78,8 @@ describe('schedule editor (#232)', () => {
   beforeEach(() => {
     localStorage.clear()
     refusePut = null
+    putThrows = false
+    renewalFails = false
     fetchMock.mockClear()
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -226,6 +239,29 @@ describe('schedule editor (#232)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
     expect(window.location.hash).toBe(`#/edit-schedule/${blank.id}`)
     expect((await editor()).value).toBe(SCHEDULE)
+  })
+
+  it('says so when the sign-in has lapsed, and keeps the changes for after signing back in', async () => {
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    renewalFails = true
+    await userEvent.click(saveButton())
+
+    // Not "couldn't reach the server": retrying could never work.
+    const notice = await screen.findByRole('alert')
+    expect(notice).toHaveTextContent('You’ve been signed out')
+    expect(notice).toHaveTextContent('Your changes are kept on this device.')
+    expect(within(notice).getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PUT' }))
+    expect(JSON.parse(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)!).text).toBe(SCHEDULE)
+  })
+
+  it('says when the server can’t be reached, with the browser’s reason', async () => {
+    putThrows = true
+    open(`#/edit-schedule/${blank.id}`)
+    fireEvent.change(await editor(), { target: { value: SCHEDULE } })
+    await userEvent.click(saveButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach the server. Check your connection and try again. (Load failed)')
   })
 
   it('keeps unsaved changes — groups and schedule — if you leave, and offers to discard them', async () => {

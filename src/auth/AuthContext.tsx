@@ -38,6 +38,20 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null)
 
+/**
+ * authedFetch couldn't get a token: the sign-in has lapsed. It's renewed
+ * behind the scenes after an hour (gotrue-js, with a one-time refresh
+ * token), and when that renewal fails gotrue-js drops the session without
+ * telling anyone. Callers show "signed out", not a connection problem —
+ * retrying could never work.
+ */
+export class SignedOutError extends Error {
+  constructor() {
+    super('Signed out')
+    this.name = 'SignedOutError'
+  }
+}
+
 function toAuthUser(u: IdentityUser): AuthUser {
   return {
     id: u.id,
@@ -122,9 +136,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => widget?.logout(), [widget])
   const authedFetch = useCallback(
     async (input: RequestInfo, init: RequestInit = {}) => {
-      if (!identityUser) throw new Error('Not signed in')
-      // jwt() refreshes the token first if it has expired.
-      const token = await identityUser.jwt()
+      if (!identityUser) throw new SignedOutError()
+      // jwt() renews the token first if it has expired.
+      let token: string
+      try {
+        token = await identityUser.jwt()
+      } catch (err) {
+        // The renewal failed and gotrue-js has already dropped the session,
+        // so show it: signed out, with a way back in.
+        console.error('Sign-in renewal failed:', err)
+        setIdentityUser(null)
+        setStatus('signed-out')
+        throw new SignedOutError()
+      }
       const headers = new Headers(init.headers)
       headers.set('Authorization', `Bearer ${token}`)
       return fetch(input, { ...init, headers })
@@ -153,7 +177,7 @@ const SIGNED_OUT_FALLBACK: AuthValue = {
   signIn: () => {},
   openAccount: () => {},
   signOut: () => {},
-  authedFetch: () => Promise.reject(new Error('Not signed in')),
+  authedFetch: () => Promise.reject(new SignedOutError()),
 }
 
 // Components rendered without a provider (isolated tests) behave as if
