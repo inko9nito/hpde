@@ -4,6 +4,7 @@ import { useEvents } from '../data/EventsContext'
 import { useAuth } from '../auth/AuthContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { firstDate, partitionEvents } from '../utils/eventClass'
+import { todayLocalISO } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { TrackIcon } from './TrackIcon'
@@ -45,10 +46,12 @@ const CARD_SHELL = `flex w-full items-center gap-4 rounded-xl border border-gray
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** Month + day-of-month tile on the left of a card. A multi-day event
- *  shows only its first day (#243). */
+ *  shows only its first day (#243). The year goes under the day, only
+ *  when it isn't this year (#266). */
 function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
   if (event.days.length === 0) return <div className="w-10 shrink-0" />
-  const [, m, d] = firstDate(event).split('-').map(Number)
+  const [y, m, d] = firstDate(event).split('-').map(Number)
+  const thisYear = Number(todayLocalISO().slice(0, 4))
   return (
     <div className="flex w-10 shrink-0 flex-col items-center font-rubik leading-none">
       <span
@@ -59,6 +62,9 @@ function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
         {MONTHS[m - 1]}
       </span>
       <span className="mt-1 text-2xl font-bold text-gray-900">{d}</span>
+      {y !== thisYear && (
+        <span className="mt-0.5 text-[11px] font-normal tracking-wider text-gray-400">{y}</span>
+      )}
     </div>
   )
 }
