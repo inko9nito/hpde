@@ -98,7 +98,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
     <div className="flex flex-col pb-10">
       {visible.length > 0 && (
         <Collapse collapsed={!allCollapsed}>
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-gray-200 bg-white px-6 pt-6 pb-10 text-center shadow-sm">
+          <div className="flex flex-col items-center gap-1 px-6 pt-6 pb-10 text-center">
             <img src={noFutureEventsArt} alt="" className="mb-2 w-48" />
             <p className="text-sm font-medium text-gray-700">No more events today</p>
             <p className="text-xs text-gray-400">Everything on today’s schedule has already happened. Turn off “Hide past activities” to see it.</p>
