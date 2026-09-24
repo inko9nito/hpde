@@ -14,4 +14,4 @@
   to = "/.netlify/functions/me"
   status = 200
 
-# /api/created-events is routed by the function's own `config.path`.
+# /api/events and /api/events.json are routed by their functions' own `config.path`.

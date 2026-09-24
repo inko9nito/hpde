@@ -1,107 +1,108 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import handler, { BUILTIN_PATH } from '../functions/events-json.mts'
+import handler from '../functions/events-json.mts'
+import { fakeBlobs } from './fakeBlobs'
 
-const builtIn = {
-  generatedAt: '2026-09-01T00:00:00.000Z',
-  events: [
-    { id: '2026-09-13_msr-scca', name: 'SCCA', runGroups: [], days: [{ id: 'sunday', label: 'Sunday', date: '2026-09-13', activities: [] }] },
-    { id: 'test-live', name: 'Test Event', runGroups: [], days: [{ id: 'today', label: 'Today', date: '2000-01-01', activities: [] }] },
-  ],
-}
+const day = (date: string) => ({ id: 'd', label: 'Day', date, activities: [] })
 
+const seedEvent = { id: '2026-09-13_msr-scca', name: 'SCCA', runGroups: [], days: [day('2026-09-13')] }
+const fixture = { id: 'test-live', name: 'Test Event', runGroups: [], days: [day('2000-01-01')] }
 const created = {
   id: '2026-10-03_tde-at-ecr-2-7-cw',
   name: 'TDE at ECR 2.7 CW',
   track: 'Eagles Canyon Raceway',
-  trackId: 'ecr',
-  runGroups: [],
+  trackId: 'ecr-2-7',
+  runGroups: [{ id: 'orange', label: 'Orange', bgClass: 'bg-orange-500', textClass: 'text-white' }],
   days: [{ id: 'saturday', label: 'Saturday', date: '2026-10-03', activities: [] }],
   createdBy: 'admin@example.com',
   createdAt: '2026-09-20T00:00:00.000Z',
 }
 
-let store: Map<string, unknown>
-const fakeGetStore = () => ({
-  list: async () => ({ blobs: [...store.keys()].map(key => ({ key })) }),
-  get: async (key: string) => store.get(key) ?? null,
+const blobs = fakeBlobs()
+const store = blobs.data('site:events')
+let builtinStatus = 200
+
+const fakeFetch = vi.fn(async (url: URL) => {
+  expect(String(url)).toBe('https://myhpde.netlify.app/api/builtin-events.json')
+  return builtinStatus === 200
+    ? new Response(JSON.stringify({ seed: [seedEvent], fixtures: [fixture] }))
+    : new Response('nope', { status: builtinStatus })
 })
 
-const okFetch = vi.fn(async () => new Response(JSON.stringify(builtIn), { status: 200 }))
-
-function call(deps: Record<string, unknown> = {}) {
+function call(context: unknown = {}) {
   const req = new Request('https://myhpde.netlify.app/api/events.json')
-  return handler(req, undefined, { getStore: fakeGetStore as never, fetch: okFetch as never, ...deps })
+  return handler(req, context, { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch as never })
 }
 
+const idsOf = async (res: Response) => (await res.json()).events.map((e: { id: string }) => e.id)
+
 beforeEach(() => {
-  store = new Map()
-  okFetch.mockClear()
+  blobs.clear()
+  builtinStatus = 200
+  vi.restoreAllMocks()
 })
 
 describe('events.json feed', () => {
-  it('reads the built-in events from the same site', async () => {
-    await call()
-    expect(String(okFetch.mock.calls[0][0])).toBe(`https://myhpde.netlify.app${BUILTIN_PATH}`)
-  })
-
-  it('adds created events, newest first, in the widget format', async () => {
+  it('serves every stored event plus the fixtures, newest first', async () => {
     store.set(created.id, created)
     const res = await call()
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('application/json')
-    const body = await res.json()
-    expect(body.events.map((e: { id: string }) => e.id)).toEqual([
-      '2026-10-03_tde-at-ecr-2-7-cw',
-      '2026-09-13_msr-scca',
-      'test-live',
-    ])
-    // Serialized like built-in events: no app-only fields leak out.
-    const ev = body.events[0]
-    expect(ev).toEqual({
+    // The seed was imported on the way.
+    expect(await idsOf(res)).toEqual([created.id, seedEvent.id, 'test-live'])
+  })
+
+  it('uses the widget format: colors resolved, no app-only fields', async () => {
+    store.set(created.id, created)
+    blobs.data('site:events-meta').set('seeded', { imported: [] })
+    const body = await (await call()).json()
+    expect(body.events[0]).toEqual({
       id: created.id,
       name: created.name,
       track: created.track,
-      runGroups: [],
+      runGroups: [{ id: 'orange', label: 'Orange', color: expect.stringMatching(/^#[0-9a-f]{6}$/i) }],
       days: created.days,
     })
     expect(typeof body.generatedAt).toBe('string')
   })
 
-  it('keeps the built-in event when a created one has the same id', async () => {
-    store.set('2026-09-13_msr-scca', { ...created, id: '2026-09-13_msr-scca', name: 'Imposter' })
+  it('shows the fixture, not a stored event with the same id', async () => {
+    store.set('test-live', { ...created, id: 'test-live', name: 'Imposter' })
     const body = await (await call()).json()
-    const matches = body.events.filter((e: { id: string }) => e.id === '2026-09-13_msr-scca')
+    const matches = body.events.filter((e: { id: string }) => e.id === 'test-live')
     expect(matches).toHaveLength(1)
-    expect(matches[0].name).toBe('SCCA')
+    expect(matches[0].name).toBe('Test Event')
   })
 
-  it('leaves out malformed created events instead of failing', async () => {
+  it('leaves out malformed events instead of failing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     store.set('no-days', { ...created, id: 'no-days', days: [] })
-    store.set('bad-color', {
-      ...created,
-      id: 'bad-color',
-      runGroups: [{ id: 'x', label: 'X', bgClass: 'not-a-class' }],
-    })
+    store.set('bad-color', { ...created, id: 'bad-color', runGroups: [{ id: 'x', label: 'X', bgClass: 'nope' }] })
     const res = await call()
     expect(res.status).toBe(200)
-    const ids = (await res.json()).events.map((e: { id: string }) => e.id)
+    const ids = await idsOf(res)
     expect(ids).not.toContain('no-days')
     expect(ids).not.toContain('bad-color')
-    expect(ids).toHaveLength(2)
   })
 
-  it('answers 503 in plain text when the built-in events are unavailable', async () => {
+  it('reads a deploy preview’s own events, not the live ones', async () => {
+    store.set(created.id, created)
+    const ids = await idsOf(await call({ deploy: { context: 'deploy-preview' } }))
+    expect(ids).toEqual([seedEvent.id, 'test-live'])
+  })
+
+  it('answers 503 in plain text when the build’s file is unavailable', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await call({ fetch: async () => new Response('nope', { status: 404 }) })
+    builtinStatus = 404
+    const res = await call()
     expect(res.status).toBe(503)
     expect(res.headers.get('content-type')).toContain('text/plain')
   })
 
   it('answers 503 when Blobs fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const res = await call({
-      getStore: () => ({ list: async () => { throw new Error('blobs down') } }),
-    })
+    const broken = () => ({ get: async () => { throw new Error('blobs down') } })
+    const req = new Request('https://myhpde.netlify.app/api/events.json')
+    const res = await handler(req, {}, { getStore: broken, fetch: fakeFetch as never })
     expect(res.status).toBe(503)
   })
 })

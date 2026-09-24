@@ -3,36 +3,48 @@
 // src/assets/widget-{small,medium,large}.png and notifications.png.
 //
 // Uses the same simulator as `npm run widget:preview` — the real
-// hpde-widget.js rendered through the Scriptable mock — against real
-// events from the built builtin-events.json, with the clock frozen: small and
+// hpde-widget.js rendered through the Scriptable mock — against two real
+// events kept in scripts/fixtures/showcase/, with the clock frozen: small and
 // medium show the countdown ahead of an event, large shows a busy event
 // day mid-morning. notifications.png shows alerts the widget actually
 // schedules for that day with an `orange` filter. Re-run after a visible
 // widget or notification change:
 //
-//   npm run build && npm run widget:showcase
+//   npm run widget:showcase
 //
 // Same caveat as the simulator: the fonts and SF Symbols are stand-ins,
 // so this is close to, not pixel-identical with, the on-device widget.
 
-import { readFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright'
+import { createServer } from 'vite'
 import { renderScenario, fontFaceCss, loadLucideIconShapes, WIDGET_ENV_CONSTANTS } from './widget-preview.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '..', 'src', 'assets')
 mkdirSync(outDir, { recursive: true })
 
-const eventsJson = JSON.parse(readFileSync(join(__dirname, '..', 'dist', 'api', 'builtin-events.json'), 'utf8'))
-const realEvents = eventsJson.events.filter(e => e.id !== 'test-live')
+// The events live in the events store (#232), not the repo, so the
+// images use copies of the two the countdown shows. Parsed and serialized
+// by the app's own code, loaded through Vite since it's TypeScript.
+const fixturesDir = join(__dirname, 'fixtures', 'showcase')
+const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' })
+const { parseScheduleMD } = await vite.ssrLoadModule('/src/utils/parseSchedule.ts')
+const { serializeEvents } = await vite.ssrLoadModule('/src/utils/eventsJson.ts')
+await vite.close()
+const realEvents = serializeEvents(
+  readdirSync(fixturesDir)
+    .filter(f => f.endsWith('.md'))
+    .map(f => parseScheduleMD(f.replace(/\.md$/, ''), readFileSync(join(fixturesDir, f), 'utf8'))),
+).events.sort((a, b) => b.days[0].date.localeCompare(a.days[0].date))
 
 // Large: a full on-track day (TDE at MSRC 1.7, day 2) mid-morning, so
 // the populated view has past, current and upcoming rows.
 const EVENT_DAY = '2026-09-12'
 const eventDay = realEvents.find(e => e.id === '2026-09-11_msrc-1-7')
-if (!eventDay) throw new Error('2026-09-11_msrc-1-7 not in dist/api/builtin-events.json — run `npm run build` first')
+if (!eventDay) throw new Error(`2026-09-11_msrc-1-7.md missing from ${fixturesDir}`)
 
 // Small / medium: the countdown view ahead of that event. Those sizes
 // are laid out for the countdown; the event-day view is designed for
