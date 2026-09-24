@@ -71,6 +71,21 @@ test('lists upcoming and past events, and opens one', async ({ page }) => {
   await expect(page.getByText('Drivers meeting')).toBeVisible()
 })
 
+// An event without a track icon gets the checkered flag (#263). A mask
+// url() the browser can't parse is dropped to `none` — no error, just a
+// blank tile — so check what the browser actually applied.
+test('an event without a track icon shows the checkered flag', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${upcoming.id}`)
+  const placeholder = page.locator('[data-track-icon="placeholder"]').first()
+  await expect(placeholder).toBeVisible()
+  const mask = await placeholder.evaluate(el => {
+    const style = getComputedStyle(el)
+    return style.maskImage || style.getPropertyValue('-webkit-mask-image')
+  })
+  expect(mask).toContain('data:image/svg+xml')
+})
+
 test('shows the track map for the event’s track', async ({ page }) => {
   await stubEvents(page)
   await page.goto(`/#/event/${alpha.id}`)

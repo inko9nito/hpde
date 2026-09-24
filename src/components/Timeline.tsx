@@ -4,7 +4,7 @@ import { ActivityCard } from './ActivityCard'
 import { TimeIndicator } from './TimeIndicator'
 import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
 import type { ScheduleActivity, RunGroupConfig } from '../types'
-import noFutureEventsArt from '../assets/no-future-events.svg'
+import checkeredFlag from '../assets/checkered-flag.svg'
 
 interface Props {
   activities: ScheduleActivity[]
@@ -103,7 +103,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
       {visible.length > 0 && (
         <Collapse collapsed={!allCollapsed}>
           <div className="flex flex-col items-center gap-1 px-6 pt-6 pb-10 text-center">
-            <img src={noFutureEventsArt} alt="" className="mb-2 w-48" />
+            <img src={checkeredFlag} alt="" className="mb-2 w-48 opacity-[0.02]" />
             <p className="text-sm font-medium text-gray-700">No more events today</p>
             <p className="text-xs text-gray-400">Everything on today’s schedule has already happened. Turn off “Hide past activities” to see it.</p>
           </div>
