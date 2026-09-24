@@ -51,12 +51,19 @@ describe('hidePast toggle', () => {
     vi.mocked(timeModule.nowMinutes).mockReturnValue(23 * 60) // 11:00 PM, after every activity
     render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
     expect(screen.getByText('Lunch').closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
-    expect(screen.getByText(/wrap/i).closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'false')
+    const zeroState = screen.getByText(/no more events today/i).closest('[data-collapsed]')
+    expect(zeroState).toHaveAttribute('data-collapsed', 'false')
+    expect(zeroState?.querySelector('img')).toHaveAttribute('src', expect.stringContaining('svg'))
+  })
+
+  it('keeps the zero state collapsed while events are still to come', () => {
+    render(<Timeline activities={activities} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
+    expect(screen.getByText(/no more events today/i).closest('[data-collapsed]')).toHaveAttribute('data-collapsed', 'true')
   })
 
   it('does not show the zero state when there are no activities at all', () => {
     render(<Timeline activities={[]} runGroups={runGroups} isToday={true} selectedGroups={[]} hidePast={true} />)
-    expect(screen.queryByText(/wrap/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no more events today/i)).not.toBeInTheDocument()
   })
 })
 

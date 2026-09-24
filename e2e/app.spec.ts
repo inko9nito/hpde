@@ -90,6 +90,34 @@ test('shows today’s schedule with the now-line, scrolled into view', async ({ 
   await expect(page.locator('[data-time-indicator]')).toBeInViewport()
 })
 
+// With past activities hidden and the day's last one over, the timeline
+// would otherwise be blank — which reads as "nothing loaded" (#6).
+test('says there are no more events today once they’ve all passed', async ({ page }) => {
+  const today = isoInDays(0)
+  const morning: EventConfig = {
+    id: `${today}_morning-only`,
+    name: 'Morning Only',
+    runGroups: [],
+    days: [{
+      id: 'saturday', label: 'Saturday', date: today,
+      activities: [
+        { time: '08:00', type: 'general', label: 'Drivers meeting' },
+        { time: '09:00', type: 'general', label: 'Track walk' },
+      ],
+    }],
+  }
+  await page.clock.setFixedTime(new Date(`${today}T22:00:00`))
+  await stubEvents(page, [morning, ...TEST_EVENTS])
+  await page.goto(`/#/event/${morning.id}`)
+  await page.getByRole('switch').click()
+
+  await expect(page.getByText('No more events today')).toBeVisible()
+  await expect(page.getByText('Track walk')).not.toBeInViewport()
+  const art = page.locator('img[src*="svg"]')
+  await expect(art).toBeVisible()
+  await expect.poll(() => art.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+})
+
 // Groups come from the events store, not source files Tailwind scans, so
 // every color a group may use has to be safelisted into the CSS — pink and
 // yellow drew no color at all once the event files left the repo.
