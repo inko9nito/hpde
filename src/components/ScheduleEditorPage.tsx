@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, ChevronUp, X } from 'lucide-react'
+import { ChevronRight, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
+import { DayTabs } from './DayTabs'
+import { RunGroupFilter } from './RunGroupFilter'
+import { todayLocalISO } from '../utils/time'
 import { scheduleToMarkdown, readScheduleEdit, describeProblem, deriveGroups } from '../utils/scheduleEditor'
 import type { GroupInput, ScheduleProblem } from '../utils/scheduleEditor'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
@@ -66,12 +69,6 @@ function contentKey(c: Content): string {
 function colorName(bgClass: string): string {
   const m = bgClass.match(/^bg-run([a-z]+)-500$/)
   return m ? m[1][0].toUpperCase() + m[1].slice(1) : 'Black'
-}
-
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', {
-    timeZone: 'UTC', weekday: 'long', month: 'short', day: 'numeric',
-  })
 }
 
 interface Props {
@@ -350,7 +347,7 @@ function RunGroups({ groups, problems, onChange }: {
           Groups named in sessions (“track: Red, Blue”) show up here.
         </p>
       ) : (
-        <ul className="mt-3 space-y-3">
+        <ul className="mt-2 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5">
           {groups.map((g, i) => (
             <GroupRow
               key={g.label.toLowerCase()}
@@ -368,8 +365,10 @@ function RunGroups({ groups, problems, onChange }: {
 
 const fieldLabel = 'block text-xs font-medium uppercase tracking-wider text-gray-500'
 
-// One card per group: its badge, and — tapped open — its description and
-// color. Closed, it shows the description under the badge, if there is one.
+// One row of the list, iOS-settings style: the group's chip, its
+// description (if any) in gray, and a chevron; tapped open, its
+// description and color below it. Rows after the first get an inset
+// divider.
 function GroupRow({ index, group, problems, onChange }: {
   index: number
   group: GroupInput
@@ -378,66 +377,67 @@ function GroupRow({ index, group, problems, onChange }: {
 }) {
   const [open, setOpen] = useState(false)
   const panelId = `run-group-${index}-panel`
-  const Chevron = open ? ChevronUp : ChevronRight
   return (
-    <li id={`run-group-${index}`} aria-label={group.label} className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5">
-      <button
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-left"
-      >
-        <span className="min-w-0">
-          <span className={`inline-block max-w-full truncate rounded-full px-4 py-1.5 text-base font-medium ${group.bgClass} ${group.textClass ?? 'text-white'}`}>
+    <li id={`run-group-${index}`} aria-label={group.label} className="pl-4">
+      <div className={index > 0 ? 'border-t border-gray-200' : ''}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex min-h-[52px] w-full items-center gap-3 py-2.5 pr-4 text-left"
+        >
+          <span className={`max-w-[60%] shrink-0 truncate rounded-full px-3 py-1 text-sm font-semibold ${group.bgClass} ${group.textClass ?? 'text-white'}`}>
             {group.label}
           </span>
-          {!open && group.description && (
-            <span className="mt-1.5 block truncate px-1 text-sm text-gray-500">{group.description}</span>
-          )}
-        </span>
-        <Chevron size={20} aria-hidden="true" className="shrink-0 text-gray-400" />
-      </button>
-      {open && (
-        <div id={panelId} className="px-4 pb-4">
-          <label className={fieldLabel}>
-            Description
-            <input
-              aria-label={`${group.label} description`}
-              value={group.description ?? ''}
-              onChange={e => onChange({ description: e.target.value })}
-              placeholder="Add optional description"
-              className="mt-2 block h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 text-base font-normal normal-case tracking-normal text-gray-900 focus:border-gray-400 focus:bg-white focus:outline-none sm:text-sm"
-            />
-          </label>
-          <fieldset className="mt-4 border-t border-gray-100 pt-4">
-            <legend className="sr-only">{`${group.label} color`}</legend>
-            <p aria-hidden="true" className={fieldLabel}>Color</p>
-            <div className="mt-3 grid grid-cols-[repeat(6,auto)] justify-between gap-y-3">
-              {RUN_GROUP_BG_CLASSES.map(c => (
-                <label key={c} className="relative block">
-                  <input
-                    type="radio"
-                    name={`run-group-${index}-color`}
-                    value={c}
-                    checked={group.bgClass === c}
-                    onChange={() => onChange({ bgClass: c })}
-                    aria-label={colorName(c)}
-                    // Invisible, over its swatch, so a tap lands on it.
-                    className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className={`block h-9 w-9 rounded-full ${c} ring-gray-900 ring-offset-[3px] peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
-                  />
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-      )}
-      {problems.map((p, j) => (
-        <p key={j} className="px-4 pb-3 text-xs text-red-600">{p.message}</p>
-      ))}
+          <span className="min-w-0 flex-1 truncate text-right text-sm text-gray-400">{group.description}</span>
+          <ChevronRight
+            size={18}
+            aria-hidden="true"
+            className={`shrink-0 text-gray-300 transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+        </button>
+        {open && (
+          <div id={panelId} className="pb-4 pr-4">
+            <label className={fieldLabel}>
+              Description
+              <input
+                aria-label={`${group.label} description`}
+                value={group.description ?? ''}
+                onChange={e => onChange({ description: e.target.value })}
+                placeholder="Add optional description"
+                className="mt-2 block h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 text-base font-normal normal-case tracking-normal text-gray-900 focus:border-gray-400 focus:bg-white focus:outline-none sm:text-sm"
+              />
+            </label>
+            <fieldset className="mt-4">
+              <legend className="sr-only">{`${group.label} color`}</legend>
+              <p aria-hidden="true" className={fieldLabel}>Color</p>
+              <div className="mt-3 grid grid-cols-[repeat(6,auto)] justify-between gap-y-3">
+                {RUN_GROUP_BG_CLASSES.map(c => (
+                  <label key={c} className="relative block">
+                    <input
+                      type="radio"
+                      name={`run-group-${index}-color`}
+                      value={c}
+                      checked={group.bgClass === c}
+                      onChange={() => onChange({ bgClass: c })}
+                      aria-label={colorName(c)}
+                      // Invisible, over its swatch, so a tap lands on it.
+                      className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`block h-9 w-9 rounded-full ${c} ring-gray-900 ring-offset-[3px] peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        )}
+        {problems.map((p, j) => (
+          <p key={j} className="pb-3 pr-4 text-xs text-red-600">{p.message}</p>
+        ))}
+      </div>
     </li>
   )
 }
@@ -471,23 +471,38 @@ function Problems({ problems, onGoTo }: { problems: ScheduleProblem[]; onGoTo: (
   )
 }
 
+// The schedule as the event page will show it: the same day tabs, run
+// group filter, timeline and legend.
 function Preview({ event }: { event: EventConfig }) {
-  const multiDay = event.days.length > 1
+  const today = event.days.find(d => d.date === todayLocalISO())
+  const [dayId, setDayId] = useState((today ?? event.days[0]).id)
+  const [selected, setSelected] = useState<string[]>([])
+  const day = event.days.find(d => d.id === dayId) ?? event.days[0]
+  const groupIds = new Set(event.runGroups.map(g => g.id))
   return (
-    <div className="space-y-4">
-      {event.days.map(day => (
-        <section key={day.id} aria-label={formatDay(day.date)}>
-          {multiDay && <h2 className="mb-2 text-sm font-semibold text-gray-700">{formatDay(day.date)}</h2>}
-          {day.activities.length > 0 ? (
-            <Timeline activities={day.activities} runGroups={event.runGroups} isToday={false} selectedGroups={[]} hidePast={false} />
-          ) : (
-            <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-8 text-center text-sm text-gray-500">
-              Nothing scheduled{multiDay ? ' this day' : ''} yet.
-            </p>
-          )}
-        </section>
-      ))}
-      <Legend groups={event.runGroups} />
+    <div>
+      {event.days.length > 1 && (
+        <DayTabs days={event.days} activeDayId={day.id} onSelect={setDayId} todayDayId={today?.id} />
+      )}
+      {day.activities.length > 0 ? (
+        <>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <RunGroupFilter groups={event.runGroups} selected={selected.filter(id => groupIds.has(id))} onChange={setSelected} />
+          </div>
+          <Timeline
+            activities={day.activities}
+            runGroups={event.runGroups}
+            isToday={day.date === todayLocalISO()}
+            selectedGroups={selected.filter(id => groupIds.has(id))}
+            hidePast={false}
+          />
+          <Legend groups={event.runGroups} />
+        </>
+      ) : (
+        <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-500">
+          Nothing scheduled{event.days.length > 1 ? ` on ${day.label}` : ''} yet.
+        </p>
+      )}
     </div>
   )
 }

@@ -35,7 +35,7 @@ window.netlifyIdentity = {
 // The events function, as far as these tests need it: the PUT answers the
 // way the real one does, from the same parser — unless a test refuses it.
 let refusePut: string | null = null
-const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+const defaultFetch = async (url: string, init?: RequestInit) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
   if (String(url).includes('/.netlify/identity/settings')) return json({})
@@ -49,7 +49,8 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     return json({ events: [blank] })
   }
   return new Response('not found', { status: 404 })
-})
+}
+const fetchMock = vi.fn(defaultFetch)
 
 function open(hash: string, as: string[] = ['admin']) {
   roles = as
@@ -145,7 +146,7 @@ describe('schedule editor (#232)', () => {
     // Other groups keep theirs.
     expect(groupRow('Red').getByText('Red')).toHaveClass('bg-runred-500')
     await userEvent.type(novice.getByRole('textbox', { name: 'Novice description' }), 'First timers')
-    // Closed, the card shows its description under the badge.
+    // Closed, the row shows its description next to the chip.
     await userEvent.click(novice.getByRole('button', { name: /^Novice/ }))
     expect(novice.queryByRole('textbox')).not.toBeInTheDocument()
     expect(novice.getByText('First timers')).toBeInTheDocument()
@@ -171,6 +172,30 @@ describe('schedule editor (#232)', () => {
     expect(screen.getAllByText('Red').length).toBeGreaterThan(0)
     await userEvent.click(screen.getByRole('tab', { name: 'Edit' }))
     expect((await editor()).value).toBe(SCHEDULE)
+  })
+
+  it('previews a multi-day event with the event page’s day tabs', async () => {
+    const twoDay: EventConfig = { ...blank, days: [...blank.days, { id: 'sunday', label: 'Sunday', date: '2099-10-04', activities: [] }] }
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/.netlify/identity/settings')
+        ? new Response('{}', { headers: { 'Content-Type': 'application/json' } })
+        : new Response(JSON.stringify({ events: [twoDay] }), { headers: { 'Content-Type': 'application/json' } }),
+    )
+    try {
+      open(`#/edit-schedule/${blank.id}`)
+      fireEvent.change(await editor(), { target: { value: `${SCHEDULE}\n## Sunday | 2099-10-04\n09:00 general | Sunday briefing\n` } })
+      await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
+
+      expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
+      expect(screen.queryByText('Sunday briefing')).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Sunday' }))
+      expect(screen.getByText('Sunday briefing')).toBeInTheDocument()
+      expect(screen.queryByText('Drivers meeting')).not.toBeInTheDocument()
+      // Not today, so Now has nowhere to go.
+      expect(screen.getByRole('button', { name: 'Now' })).toBeDisabled()
+    } finally {
+      fetchMock.mockImplementation(defaultFetch)
+    }
   })
 
   it('saves the groups and the markdown, then shows the event with its new schedule', async () => {

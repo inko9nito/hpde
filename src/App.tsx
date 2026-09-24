@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
+import { DayTabs } from './components/DayTabs'
 import { isEventTabId } from './components/EventTabs'
 import type { EventTabId } from './components/EventTabs'
 import { EventInfo } from './components/EventInfo'
@@ -350,34 +351,12 @@ export default function App() {
             <>
               {/* Day tabs + Now — only shown for multi-day events */}
               {multiDay && (
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="flex flex-1 gap-1 rounded-lg bg-white border border-gray-200 p-1 shadow-sm min-w-0">
-                    {activeEvent.days.map(day => (
-                      <button
-                        key={day.id}
-                        onClick={() => setActiveDayId(day.id)}
-                        className={`flex-1 rounded-md py-2 text-sm font-medium capitalize transition-colors ${
-                          activeDay.id === day.id
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-500 hover:text-gray-800'
-                        }`}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => todayDay && setActiveDayId(todayDay.id)}
-                    disabled={isToday || !todayDay}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
-                      isToday || !todayDay
-                        ? 'border-gray-100 bg-white text-gray-300 cursor-default'
-                        : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-400'
-                    }`}
-                  >
-                    Now
-                  </button>
-                </div>
+                <DayTabs
+                  days={activeEvent.days}
+                  activeDayId={activeDay.id}
+                  onSelect={setActiveDayId}
+                  todayDayId={todayDay?.id}
+                />
               )}
 
               {/* Filters */}
