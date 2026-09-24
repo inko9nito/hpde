@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
+import { ICON_BUTTON } from './iconButton'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
 import { DayTabs } from './DayTabs'
@@ -120,7 +121,7 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="-mr-2 grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+            className={`-mr-2 ${ICON_BUTTON}`}
           >
             <X size={20} />
           </button>

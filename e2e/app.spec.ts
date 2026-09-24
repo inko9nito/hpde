@@ -164,6 +164,17 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   })
 
   await page.goto(`/#/event/${upcoming.id}`)
+  // The header's icon buttons match: no background or border at rest…
+  const more = page.getByRole('button', { name: 'More actions' })
+  for (const button of [page.getByRole('button', { name: 'Back' }), more]) {
+    await expect(button).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(button).toHaveCSS('border-top-width', '0px')
+  }
+  // …and "…" shows its circle while its menu is open.
+  await more.click()
+  await expect(more).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await page.keyboard.press('Escape')
+
   await page.getByRole('link', { name: 'Add schedule' }).click()
   const textarea = page.getByRole('textbox', { name: 'Schedule' })
   await expect(textarea).toHaveValue(new RegExp(`## ${upcoming.days[0].label} \\| ${upcoming.days[0].date}`))

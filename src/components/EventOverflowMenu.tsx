@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { editScheduleHash } from './ScheduleEditorPage'
+import { ICON_BUTTON } from './iconButton'
 import type { EventConfig } from '../types'
 
 interface Props {
@@ -42,9 +43,9 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
         aria-label="More actions"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-grid h-9 w-9 place-items-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200"
+        className={ICON_BUTTON}
       >
-        <Ellipsis size={18} />
+        <Ellipsis size={22} strokeWidth={2.25} />
       </button>
 
       {open && (
