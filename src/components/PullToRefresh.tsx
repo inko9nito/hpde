@@ -33,6 +33,9 @@ export function PullToRefresh({ children, disabled, scrollContainerRef }: Props)
 
     const onTouchStart = (e: TouchEvent) => {
       if (getScrollTop() !== 0) return
+      // A drag in a dialog (e.g. panning the zoomed track map, #259) is the
+      // dialog's, not a pull on the page behind it.
+      if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
       startY.current = e.touches[0].clientY
     }
 
