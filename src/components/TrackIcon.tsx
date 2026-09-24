@@ -92,7 +92,7 @@ export function TrackIcon({
       style={{ width: boxSize, height: boxSize }}
       aria-hidden="true"
     >
-      {/* The placeholder flag is a 2% watermark in the tile's contrasting
+      {/* The placeholder flag is a 7% watermark in the tile's contrasting
           color (white on dark, black on light), so it reads as "not yet
           added" rather than as a real track. */}
       <span
@@ -104,10 +104,10 @@ export function TrackIcon({
           WebkitMaskImage: mask,
           maskImage: mask,
           // The flag is a quiet watermark, not a stand-in shape: small and
-          // at the same 2% as the timeline's "No more events today" art.
+          // faint (7%).
           WebkitMaskSize: src ? 'contain' : '37.5%',
           maskSize: src ? 'contain' : '37.5%',
-          opacity: src ? undefined : 0.02,
+          opacity: src ? undefined : 0.07,
           WebkitMaskRepeat: 'no-repeat',
           maskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
