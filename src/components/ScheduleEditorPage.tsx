@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, X } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuth, SignedOutError } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
-import { ICON_BUTTON } from './iconButton'
+import { PageHeader } from './PageHeader'
+import { Notice, SignedOutNotice } from './Notice'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
 import { DayTabs } from './DayTabs'
@@ -99,7 +100,7 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
     // Wait for the fresh list, so the editor never starts from a stale copy.
     content = <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" aria-busy="true" aria-label="Loading" />
   } else if (status !== 'signed-in') {
-    content = wasEditing.current ? <SignedOutNotice /> : <SignInPrompt reason="edit schedules" />
+    content = wasEditing.current ? <SignedOutNotice detail="Sign in again to save. Your changes are kept on this device." /> : <SignInPrompt reason="edit schedules" />
   } else if (!user?.roles.includes(ADMIN_ROLE)) {
     content = <Notice title="Only admins can edit schedules." detail={`Signed in as ${user?.email}`} />
   } else if (!event) {
@@ -117,48 +118,9 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
     // and the Edit / Preview tabs stick to the top of this instead.
     <div data-scroll-root className="fixed inset-0 overflow-y-auto overflow-x-hidden bg-gray-50">
       <div className="mx-auto max-w-lg px-3 pt-3 sm:px-4 sm:pt-5">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-1 pb-3">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900">Edit schedule</h1>
-            {event && <p className="truncate text-sm text-gray-500">{event.name}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className={`-mr-2 ${ICON_BUTTON}`}
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <PageHeader title="Edit schedule" subtitle={event?.name} onClose={onClose} />
         {content}
       </div>
-    </div>
-  )
-}
-
-function SignedOutNotice() {
-  const { signIn } = useAuth()
-  return (
-    <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
-      <p className="text-sm font-semibold text-amber-900">You’ve been signed out</p>
-      <p className="mt-1 text-sm text-amber-800">
-        Sign in again to save. Your changes are kept on this device.
-      </p>
-      <button
-        onClick={signIn}
-        className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
-      >
-        Sign in
-      </button>
-    </div>
-  )
-}
-
-function Notice({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-      <p className="text-sm font-medium text-gray-700">{title}</p>
-      <p className="mt-1 text-xs text-gray-400">{detail}</p>
     </div>
   )
 }

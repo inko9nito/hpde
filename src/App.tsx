@@ -18,6 +18,7 @@ import { EventHeader, BackButton } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
 import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
+import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventPage'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -256,22 +257,37 @@ export default function App() {
     return <SharePage />
   }
 
+  // Back where an editor was opened from, without replaying the event
+  // page's slide-in.
+  function backToEvent(eventId: string) {
+    skipPushEnterAnimationRef.current = true
+    setHash(eventHash(eventId))
+  }
+
   const editScheduleEventId = eventIdFromEditScheduleHash(hash)
   if (editScheduleEventId !== null) {
-    const backToEvent = () => {
-      // Back where the editor was opened from, without replaying the
-      // event page's slide-in.
-      skipPushEnterAnimationRef.current = true
-      setHash(eventHash(editScheduleEventId))
-    }
     return (
       <ScheduleEditorPage
         eventId={editScheduleEventId}
-        onClose={backToEvent}
+        onClose={() => backToEvent(editScheduleEventId)}
         onSaved={() => {
           setActiveTab('schedule')
-          backToEvent()
+          backToEvent(editScheduleEventId)
           showToast('Schedule saved')
+        }}
+      />
+    )
+  }
+
+  const editEventId = eventIdFromEditEventHash(hash)
+  if (editEventId !== null) {
+    return (
+      <EditEventPage
+        eventId={editEventId}
+        onClose={() => backToEvent(editEventId)}
+        onSaved={() => {
+          backToEvent(editEventId)
+          showToast('Details saved')
         }}
       />
     )
@@ -280,6 +296,7 @@ export default function App() {
   if (hash === NEW_EVENT_HASH) {
     return (
       <NewEventPage
+        onClose={goHome}
         onCreated={event => {
           switchEvent(event)
           // Reassurance that this is the new event, not an old one.

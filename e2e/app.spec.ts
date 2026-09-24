@@ -4,6 +4,7 @@ import { TEST_EVENTS } from '../src/test/events'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../src/theme/runGroupColors'
 import { resolveTailwindBgColor } from '../src/utils/eventsJson'
 import { applySchedule } from '../src/utils/scheduleEditor'
+import { editDetails } from '../netlify/lib/newEvent.mjs'
 import type { EventConfig } from '../src/types'
 
 // The built app (vite preview of dist/) in real browsers, with the events
@@ -220,4 +221,38 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
     { label: 'Novice', bgClass: 'bg-rungreen-500', description: 'First timers' },
     { label: 'Intermediate', bgClass: 'bg-runorange-500' },
   ])
+})
+
+test('an admin edits an event’s details: renamed and a day added (#232)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  let details: Record<string, string> | null = null
+  await page.route(`**/api/events?id=${upcoming.id}`, async route => {
+    expect(route.request().method()).toBe('PUT')
+    expect(route.request().headers().authorization).toBe('Bearer token')
+    details = route.request().postDataJSON().details
+    const result = editDetails(upcoming, details)
+    await route.fulfill(result.error ? { status: 400, json: result } : { json: { event: result.event } })
+  })
+
+  await page.goto(`/#/event/${upcoming.id}`)
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit details' }).click()
+  await expect(page.getByRole('heading', { name: 'Edit details' })).toBeVisible()
+  const title = page.getByLabel('Title')
+  await expect(title).toHaveValue('Upcoming Track Day')
+  await expect(page.getByLabel('Location')).toHaveValue('Charlie Raceway')
+  const save = page.getByRole('button', { name: 'Save' })
+  await expect(save).toBeDisabled()
+
+  await title.fill('Upcoming Track Weekend')
+  await page.getByLabel('End date').fill(isoInDays(11))
+  // Nothing on the page wider than the phone.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await save.click()
+
+  await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
+  await expect(page.getByRole('status')).toHaveText('Details saved')
+  await expect(page.getByRole('heading', { name: /Upcoming Track Weekend/ })).toBeVisible()
+  expect(details).toMatchObject({ name: 'Upcoming Track Weekend', startDate: isoInDays(10), endDate: isoInDays(11), track: 'Charlie Raceway' })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { buildEvent, isAdmin, slugify } from './newEvent.mjs'
+import { buildEvent, editDetails, isAdmin, slugify } from './newEvent.mjs'
 import handler from '../functions/events.mts'
 import { fakeBlobs } from './fakeBlobs'
 
@@ -194,6 +194,87 @@ describe('events function', () => {
     const res = await call('POST', { token: 'admin-token', body: { event: { ...valid, name: '' } } })
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(/Title/)
+  })
+
+  describe('PUT ?id= with details — the details form (#232)', () => {
+    const query = `?id=${liveEvent.id}`
+    const scheduled = {
+      ...liveEvent,
+      organizer: 'Texas Region SCCA',
+      link: 'https://example.com/old',
+      trackId: 'msrc-1-7',
+      importedAt: '2026-09-01T00:00:00Z',
+      runGroups: [{ id: 'red', label: 'Red', bgClass: 'bg-runred-500', textClass: 'text-white' }],
+      days: [{ ...liveEvent.days[0], activities: [{ time: '08:00', type: 'session', onTrack: ['red'] }] }],
+    }
+    const details = {
+      name: 'SCCA at MSRC 1.7 CCW',
+      startDate: '2026-09-20',
+      endDate: '2026-09-20',
+      organizer: 'Texas Region SCCA',
+      track: 'Motorsport Ranch - Cresson',
+      configuration: '1.7',
+      direction: 'Counter-clockwise',
+      link: '',
+    }
+    const put = (opts: { token?: string; body?: unknown; query?: string; context?: unknown }) =>
+      call('PUT', { query, ...opts })
+
+    it('lets only admins edit details', async () => {
+      store.set(scheduled.id, scheduled)
+      expect((await put({ body: { details } })).status).toBe(401)
+      expect((await put({ token: 'driver-token', body: { details } })).status).toBe(403)
+      expect(store.get(scheduled.id)).toEqual(scheduled)
+    })
+
+    it('replaces the details, moves the schedule to the new date, keeps the id and groups, and keeps history', async () => {
+      store.set(scheduled.id, scheduled)
+      const res = await put({ token: 'admin-token', body: { details } })
+      expect(res.status).toBe(200)
+      const saved = (await res.json()).event
+      // The blank link and the unsent trackId are gone; the rest is kept.
+      expect(saved).toEqual({
+        id: scheduled.id,
+        name: 'SCCA at MSRC 1.7 CCW',
+        organizer: 'Texas Region SCCA',
+        track: 'Motorsport Ranch - Cresson',
+        configuration: '1.7',
+        direction: 'Counter-clockwise',
+        importedAt: scheduled.importedAt,
+        runGroups: scheduled.runGroups,
+        days: [{ ...scheduled.days[0], date: '2026-09-20' }],
+        updatedBy: 'admin@example.com',
+        updatedAt: expect.any(String),
+      })
+      expect(store.get(scheduled.id)).toEqual(saved)
+      expect(blobs.data('site:events-history').get(`${scheduled.id}/${saved.updatedAt}`)).toEqual(scheduled)
+    })
+
+    it('refuses details the new-event form would refuse, and changes nothing', async () => {
+      store.set(scheduled.id, scheduled)
+      const res = await put({ token: 'admin-token', body: { details: { ...details, endDate: '2026-09-19' } } })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toMatch(/before the start/)
+      expect((await put({ token: 'admin-token', body: { details: { ...details, name: ' ' } } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', body: { details: null } })).status).toBe(400)
+      expect((await put({ token: 'admin-token', query: '?id=test-live', body: { details } })).status).toBe(404)
+      expect(store.get(scheduled.id)).toEqual(scheduled)
+      expect(blobs.data('site:events-history').size).toBe(0)
+    })
+  })
+
+  describe('editDetails', () => {
+    it('adds a day before the event without moving the existing schedule', () => {
+      const event = {
+        ...liveEvent,
+        days: [{ id: 'sunday', label: 'Sunday', date: '2026-09-13', activities: [{ type: 'break', label: 'Walk' }] }],
+      }
+      const { event: edited } = editDetails(event, { name: event.name, startDate: '2026-09-12', endDate: '2026-09-13' })
+      expect(edited.days).toEqual([
+        { id: 'saturday', label: 'Saturday', date: '2026-09-12', activities: [] },
+        event.days[0],
+      ])
+    })
   })
 
   describe('PUT ?id= — the schedule editor (#232)', () => {

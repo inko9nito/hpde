@@ -86,6 +86,13 @@ event's own dates. Each save keeps the version it replaced in the
 `events-history` store. Unsaved changes stay on the device if you leave
 the page.
 
+Admins change an event's details — dates included — with the same form:
+event page → **…** → **Edit details**. The event keeps its link. If the
+dates move, the schedule moves with them. Dates added to the event start
+with an empty day. If a day with a schedule is taken off the event, the
+form says so before saving. Each save keeps the version it replaced in
+`events-history`, as the schedule editor does.
+
 Admins can also delete any event: event page → **…** → **Delete event** →
 confirm. (Only the `test-live` test event, which ships with the app, can't
 be edited or deleted.)
@@ -94,8 +101,9 @@ be edited or deleted.)
 (store `events`), not in the repo, so anyone deploying this app starts with
 their own events. No extra Netlify setup is needed for Blobs.
 - `netlify/functions/events.mts` — `/api/events`: public `GET`, admin-only
-  `POST`, `PUT ?id=` (the editor's run groups and schedule markdown, which
-  the function checks itself) and `DELETE ?id=`. The app loads every event
+  `POST`, `PUT ?id=` (either the details form's fields, or the schedule
+  editor's run groups and markdown, which the function checks itself) and
+  `DELETE ?id=`. The app loads every event
   from here.
 - `netlify/functions/events-json.mts` — `/api/events.json`, the iOS
   widget's feed: the same events in the widget's format, cached for a
