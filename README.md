@@ -63,11 +63,16 @@ Admins add or change an event's schedule in the app: event page → **…** →
   Sessions name run groups however the organizer does:
 ```
 ## Saturday | 2026-10-03
-07:00 general | Registration & tech | Paddock
-08:00 session 1 | track: Red, Blue | class: Novice | note: Lead-follow
-12:00 lunch | Lunch
+7:00 AM general | Registration & tech | Paddock
+8:00 AM session 1 | track: Red, Blue | class: Novice | note: Lead-follow
+12:00 PM lunch | Lunch
 break | Track walk
+1:30 PM session 4 | track: Red, Blue
 ```
+
+Times are written with AM or PM (`1:30 PM`, `1:30pm`); 24-hour times
+like `13:30` work too. A time like `1:30` with no AM or PM is flagged
+rather than guessed. They're stored 24-hour either way.
 
 - **Run groups** come from the sessions and are listed below the
   schedule. Each gets a color from its name (Red → red, Instructors →

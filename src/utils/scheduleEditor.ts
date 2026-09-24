@@ -1,4 +1,5 @@
 import { parseActivityLine } from './parseSchedule'
+import { formatTime, formatAmPm } from './time'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../theme/runGroupColors'
 import type { DaySchedule, EventConfig, RunGroupConfig, ScheduleActivity } from '../types'
 
@@ -70,6 +71,39 @@ export function suggestColor(name: string, taken: Iterable<string> = []): string
   return palette.find(c => !used.has(c)) ?? palette[0]
 }
 
+// Times are written the way schedules are read, "7:30 AM" / "1:30 PM";
+// they're stored 24-hour ("07:30", "13:30"), and a two-digit 24-hour time
+// is accepted too. A one-digit hour with no AM or PM ("1:30") could be
+// either, so it's a problem rather than a guess.
+
+/** "13:30" → "1:30 PM" */
+export function formatClock(time: string): string {
+  return `${formatTime(time)} ${formatAmPm(time)}`
+}
+
+type LineTime =
+  | { time: string; rest: string }
+  | { error: string; rest: string }
+
+/** A line's leading time, as stored ("13:30"), and the rest of the line. */
+export function readLineTime(line: string): LineTime | null {
+  const m = line.match(/^(\d{1,2}):(\d{2})(?:\s*([ap])\.?m\.?)?(?=\s|\||$)/i)
+  if (!m) return null
+  const [whole, hours, mins, ampm] = m
+  const rest = line.slice(whole.length).trim()
+  const h = Number(hours)
+  const shown = whole.trim()
+  const notATime = { error: `“${shown}” isn’t a time — e.g. 7:30 AM or 1:30 PM.`, rest }
+  if (Number(mins) > 59) return notATime
+  if (ampm) {
+    if (h < 1 || h > 12) return notATime
+    const h24 = (h % 12) + (ampm.toLowerCase() === 'p' ? 12 : 0)
+    return { time: `${String(h24).padStart(2, '0')}:${mins}`, rest }
+  }
+  if (hours.length === 2) return h <= 23 ? { time: `${hours}:${mins}`, rest } : notATime
+  return { error: `“${shown}” needs AM or PM — e.g. ${shown} AM or ${shown} PM.`, rest }
+}
+
 /**
  * The group names the schedule's sessions use (`track:` and `class:`), in
  * the order they first appear, each spelled as it first appears.
@@ -78,8 +112,11 @@ export function scheduleGroupNames(src: string): string[] {
   const names = new Map<string, string>()
   for (const raw of src.split('\n')) {
     const line = raw.trim().replace(/^-\s+/, '')
-    if (!/^\d{1,2}:\d{2}\s+session\b/.test(line)) continue
-    const activity = parseActivityLine(line.replace(/^(\d):/, '0$1:'))
+    const t = readLineTime(line)
+    if (!t) continue
+    // Even with a problem in its time, a line's groups are listed, so the
+    // list doesn't jump about while it's being typed.
+    const activity = parseActivityLine(`${'time' in t ? t.time : '00:00'} ${t.rest}`)
     if (activity?.type !== 'session') continue
     for (const name of [...activity.onTrack, ...(activity.inClass ?? [])]) {
       if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name)
@@ -184,13 +221,13 @@ function activityLine(a: ScheduleActivity, names: Map<string, string>): string {
   if (a.type === 'break') return `break | ${a.label}`
   if (a.type === 'session') {
     const list = (ids: string[]) => ids.map(id => names.get(id) ?? id).join(', ')
-    const parts = [`${a.time} session${a.sessionNumber !== undefined ? ` ${a.sessionNumber}` : ''}`]
+    const parts = [`${formatClock(a.time)} session${a.sessionNumber !== undefined ? ` ${a.sessionNumber}` : ''}`]
     parts.push(`track: ${list(a.onTrack)}`)
     if (a.inClass?.length) parts.push(`class: ${list(a.inClass)}`)
     if (a.note) parts.push(`note: ${a.note}`)
     return parts.join(' | ')
   }
-  return [`${a.time} ${a.type}`, a.label, ...(a.subtitle ? [a.subtitle] : [])].join(' | ')
+  return [`${formatClock(a.time)} ${a.type}`, a.label, ...(a.subtitle ? [a.subtitle] : [])].join(' | ')
 }
 
 /**
@@ -204,17 +241,17 @@ export function scheduleToMarkdown(event: EventConfig): string {
   const examples = event.runGroups.length >= 2 ? event.runGroups.slice(-2).map(g => g.label) : EXAMPLE_GROUPS
   const out: string[] = [
     '// Lines starting with // are examples and notes, and aren’t saved.',
-    '// Remove the // to use one. Times are 24-hour: 13:30 is 1:30 PM.',
+    '// Remove the // to use one.',
   ]
   for (const day of event.days) {
     out.push(
       '',
       `## ${day.label} | ${day.date}`,
-      '// 07:00 general | Registration & tech | Paddock',
-      `// 08:00 session 1 | track: ${examples[0]} | class: ${examples[1]} | note: Lead-follow`,
-      '// 12:00 lunch | Lunch',
+      '// 7:00 AM general | Registration & tech | Paddock',
+      `// 8:00 AM session 1 | track: ${examples[0]} | class: ${examples[1]} | note: Lead-follow`,
+      '// 12:00 PM lunch | Lunch',
       '// break | Track walk',
-      `// 13:30 session 4 | track: ${examples[0]}, ${examples[1]}`,
+      `// 1:30 PM session 4 | track: ${examples[0]}, ${examples[1]}`,
       ...day.activities.map(a => activityLine(a, names)),
     )
   }
@@ -302,22 +339,22 @@ export function parseScheduleEdit(
       list.push({ type: 'break', label: line.slice(line.indexOf('|') + 1).trim() })
       return
     }
-    const time = line.match(/^(\d{1,2}):(\d{2})\b/)
+    const time = readLineTime(line)
     if (!time) {
-      error(n, 'Not a schedule line — start it with a time (07:00) or “break |”.')
+      error(n, 'Not a schedule line — start it with a time (7:30 AM) or “break |”.')
       return
     }
-    if (time[1].length !== 2 || Number(time[1]) > 23 || Number(time[2]) > 59) {
-      error(n, `“${time[0]}” isn’t a time — use 24-hour HH:MM, e.g. 07:00 or 13:30.`)
+    if ('error' in time) {
+      error(n, time.error)
       return
     }
-    const activity = parseActivityLine(line)
+    const activity = parseActivityLine(`${time.time} ${time.rest}`)
     if (!activity || activity.type === 'break') {
       error(n, 'After the time, use general, lunch, special or session <n>.')
       return
     }
     if (activity.type !== 'session' && !activity.label) {
-      error(n, 'Add a label after the |, e.g. “07:00 general | Registration”.')
+      error(n, 'Add a label after the |, e.g. “7:00 AM general | Registration”.')
       return
     }
     if (activity.type === 'session') {
@@ -333,7 +370,7 @@ export function parseScheduleEdit(
       }
     }
     if (section.lastTime && minutes(activity.time) < minutes(section.lastTime)) {
-      warn(n, `${activity.time} is earlier than the line before it (${section.lastTime}).`)
+      warn(n, `${formatClock(activity.time)} is earlier than the line before it (${formatClock(section.lastTime)}).`)
     }
     section.lastTime = activity.time
     list.push(activity)

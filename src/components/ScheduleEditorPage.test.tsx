@@ -80,7 +80,7 @@ describe('schedule editor (#232)', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'Add schedule' }))
     const textarea = await editor()
     expect(textarea.value).not.toContain('## groups')
-    expect(textarea.value).toContain('## Saturday | 2099-10-03\n// 07:00 general | Registration & tech')
+    expect(textarea.value).toContain('## Saturday | 2099-10-03\n// 7:00 AM general | Registration & tech')
     expect(screen.getByText('Groups named in sessions (“track: Red, Blue”) show up here.')).toBeInTheDocument()
     // Nothing changed yet, nothing to save.
     expect(saveButton()).toBeDisabled()
@@ -99,7 +99,7 @@ describe('schedule editor (#232)', () => {
     fireEvent.change(await editor(), { target: { value: SCHEDULE + '7:00 general | Gates\n## Sunday | 2099-10-04\n' } })
 
     const problems = within(screen.getByRole('list', { name: 'Problems' }))
-    expect(problems.getByText(/use 24-hour HH:MM/)).toHaveTextContent('Line 4:')
+    expect(problems.getByText(/needs AM or PM/)).toHaveTextContent('Line 4:')
     expect(problems.getByText(/isn’t one of this event’s dates/)).toHaveTextContent('Line 5:')
     expect(saveButton()).toBeDisabled()
 
@@ -238,7 +238,7 @@ describe('schedule editor (#232)', () => {
     expect(groupRow('Red').getByText('Red')).toBeInTheDocument()
     expect(screen.getByText('Your unsaved changes are back.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    expect((await editor()).value).toContain('// 07:00 general')
+    expect((await editor()).value).toContain('// 7:00 AM general')
     expect(screen.queryByRole('listitem', { name: 'Red' })).not.toBeInTheDocument()
     expect(localStorage.getItem(`hpde:scheduleDraft:${blank.id}`)).toBeNull()
   })

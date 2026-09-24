@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { parseScheduleMD } from './parseSchedule'
-import { scheduleToMarkdown, normalizeGroups, parseScheduleEdit, readScheduleEdit, applySchedule, describeProblem, deriveGroups, suggestColor, scheduleGroupNames } from './scheduleEditor'
+import { scheduleToMarkdown, normalizeGroups, parseScheduleEdit, readScheduleEdit, applySchedule, describeProblem, deriveGroups, suggestColor, scheduleGroupNames, readLineTime } from './scheduleEditor'
 import { resolveTailwindBgColor } from './eventsJson'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -44,13 +44,13 @@ describe('the editor round trip (#232)', () => {
   it('writes only the days — groups come from the sessions — each with example lines to copy', () => {
     const md = scheduleToMarkdown(blank)
     expect(md).not.toContain('## groups')
-    expect(md).toContain('## Saturday | 2026-10-03\n// 07:00 general | Registration & tech | Paddock')
-    expect(md).toContain('## Sunday | 2026-10-04\n// 07:00 general |')
-    expect(md).toContain('// 08:00 session 1 | track: Novice | class: Intermediate')
+    expect(md).toContain('## Saturday | 2026-10-03\n// 7:00 AM general | Registration & tech | Paddock')
+    expect(md).toContain('## Sunday | 2026-10-04\n// 7:00 AM general |')
+    expect(md).toContain('// 8:00 AM session 1 | track: Novice | class: Intermediate')
     expect(md).toContain('// break | Track walk')
-    // An afternoon example, since the clock is 24-hour.
-    expect(md).toContain('Times are 24-hour: 13:30 is 1:30 PM.')
-    expect(md).toContain('// 13:30 session 4 | track: Novice, Intermediate')
+    // Times as they're read, AM and PM.
+    expect(md).toContain('// 12:00 PM lunch | Lunch')
+    expect(md).toContain('// 1:30 PM session 4 | track: Novice, Intermediate')
     // The examples are comments: nothing saved, nothing flagged.
     const edit = readScheduleEdit(blank, [], md)
     expect(edit.problems).toEqual([])
@@ -59,13 +59,13 @@ describe('the editor round trip (#232)', () => {
 
   it('names groups by name in the schedule, and in the examples', () => {
     const event = { ...blank, runGroups: GROUPS }
-    expect(scheduleToMarkdown(event)).toContain('// 08:00 session 1 | track: Red | class: Blue')
+    expect(scheduleToMarkdown(event)).toContain('// 8:00 AM session 1 | track: Red | class: Blue')
     const withSession = { ...event, days: [{ ...blank.days[0], activities: [{ time: '08:00', type: 'session' as const, sessionNumber: 1, onTrack: ['red'], inClass: ['blue'] }] }] }
-    expect(scheduleToMarkdown(withSession)).toContain('\n08:00 session 1 | track: Red | class: Blue\n')
+    expect(scheduleToMarkdown(withSession)).toContain('\n8:00 AM session 1 | track: Red | class: Blue\n')
   })
 
   it('uncommenting the examples gives a working schedule, with a group for each name', () => {
-    const md = scheduleToMarkdown(blank).replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
+    const md = scheduleToMarkdown(blank).replace(/\/\/ (\d{1,2}:\d\d|break)/g, '$1')
     const edit = readScheduleEdit(blank, deriveGroups(md, []), md)
     expect(edit.problems).toEqual([])
     expect(edit.runGroups).toEqual([
@@ -203,10 +203,25 @@ describe('parseScheduleEdit problems — nothing typed is silently dropped', () 
     expect(p.filter(x => x.blocking).map(x => x.line)).toEqual([1, 2, 3])
   })
 
-  it('rejects times that aren’t HH:MM, unknown activity types and missing labels', () => {
-    const p = problems('## Saturday | 2026-10-03\n7:00 general | Gates\n25:00 general | Late\n08:00 lunchtime | Lunch\n08:00 general\nRegistration opens\n')
+  it('rejects times it can’t read (or would have to guess), unknown activity types and missing labels', () => {
+    const p = problems('## Saturday | 2026-10-03\n7:00 general | Gates\n25:00 general | Late\n8:00 AM lunchtime | Lunch\n8:00 AM general\nRegistration opens\n')
     expect(p.filter(x => x.blocking).map(x => x.line)).toEqual([2, 3, 4, 5, 6])
-    expect(p.find(x => x.line === 2)!.message).toContain('07:00')
+    expect(p.find(x => x.line === 2)!.message).toBe('“7:00” needs AM or PM — e.g. 7:00 AM or 7:00 PM.')
+  })
+
+  it('reads times with AM or PM, or 24-hour with two-digit hours', () => {
+    const t = (s: string) => readLineTime(`${s} general | x`)
+    expect(t('1:30 PM')).toEqual({ time: '13:30', rest: 'general | x' })
+    expect(t('1:30pm')).toMatchObject({ time: '13:30' })
+    expect(t('1:30 p.m.')).toMatchObject({ time: '13:30' })
+    expect(t('7:05 am')).toMatchObject({ time: '07:05' })
+    expect(t('12:00 PM')).toMatchObject({ time: '12:00' })
+    expect(t('12:30 AM')).toMatchObject({ time: '00:30' })
+    expect(t('13:30')).toMatchObject({ time: '13:30' })
+    expect(t('07:30')).toMatchObject({ time: '07:30' })
+    expect(t('1:30')).toMatchObject({ error: '“1:30” needs AM or PM — e.g. 1:30 AM or 1:30 PM.' })
+    for (const bad of ['13:30 PM', '0:30 AM', '9:75 AM', '24:00']) expect(t(bad)).toHaveProperty('error')
+    expect(readLineTime('break | Walk')).toBeNull()
   })
 
   it('rejects a session naming a group it wasn’t sent (the function checks what it’s given)', () => {
@@ -221,7 +236,7 @@ describe('parseScheduleEdit problems — nothing typed is silently dropped', () 
     const p = problems('## Saturday | 2026-10-03\n09:00 session 1 | track: Red\n08:00 session 2 |\n')
     expect(p).toEqual([
       { line: 3, blocking: false, message: 'This session has no groups on track (“track: <group names>”).' },
-      { line: 3, blocking: false, message: '08:00 is earlier than the line before it (09:00).' },
+      { line: 3, blocking: false, message: '8:00 AM is earlier than the line before it (9:00 AM).' },
       { line: undefined, blocking: false, message: 'Sunday (Sun, Oct 4) has no section, so it’ll have no schedule.' },
     ])
   })

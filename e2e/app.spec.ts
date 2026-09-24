@@ -183,9 +183,9 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
 
   // Uncomment the examples, the way it's meant to be used on a phone, with
   // a typo to fix.
-  const text = (await textarea.inputValue()).replace(/\/\/ (\d\d:\d\d|break)/g, '$1')
-  await textarea.fill(text.replace('07:00 general', '7:00 general'))
-  await expect(page.getByRole('list', { name: 'Problems' })).toContainText('“7:00” isn’t a time')
+  const text = (await textarea.inputValue()).replace(/\/\/ (\d{1,2}:\d\d|break)/g, '$1')
+  await textarea.fill(text.replace('7:00 AM general', '7:00 general'))
+  await expect(page.getByRole('list', { name: 'Problems' })).toContainText('“7:00” needs AM or PM')
   await expect(page.getByRole('button', { name: 'Save schedule' })).toBeDisabled()
   await textarea.fill(text)
   await expect(page.getByRole('list', { name: 'Problems' })).toHaveCount(0)

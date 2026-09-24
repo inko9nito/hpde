@@ -529,14 +529,15 @@ function FormatHelp() {
         <div>
           <p className="font-medium text-gray-900">Each day, under its <code className={code}>## Day | YYYY-MM-DD</code></p>
           <ul className="mt-1 space-y-1">
-            <li><code className={code}>07:00 general | Label | subtitle</code></li>
-            <li><code className={code}>12:00 lunch | Lunch</code> (also <code className={code}>special</code>)</li>
-            <li><code className={code}>08:00 session 1 | track: Red, Blue | class: Novice | note: …</code></li>
+            <li><code className={code}>7:00 AM general | Label | subtitle</code></li>
+            <li><code className={code}>12:00 PM lunch | Lunch</code> (also <code className={code}>special</code>)</li>
+            <li><code className={code}>1:30 PM session 4 | track: Red, Blue | class: Novice | note: …</code></li>
             <li><code className={code}>break | Label</code> — a gap between blocks, no time</li>
           </ul>
           <p className="mt-2">
-            Times use the 24-hour clock, so there’s no AM or PM: <code className={code}>07:30</code> is 7:30 AM,{' '}
-            <code className={code}>12:00</code> is noon, and <code className={code}>13:30</code> is 1:30 PM.
+            Write times with AM or PM: <code className={code}>7:30 AM</code>, <code className={code}>1:30 PM</code>{' '}
+            (<code className={code}>1:30pm</code> works too). 24-hour times like <code className={code}>13:30</code> are
+            fine as well.
           </p>
         </div>
         <p className="text-xs text-gray-500">
