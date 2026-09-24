@@ -4,7 +4,7 @@ import { fakeBlobs } from './fakeBlobs'
 
 const day = (date: string) => ({ id: 'd', label: 'Day', date, activities: [] })
 
-const seedEvent = { id: '2026-09-13_msr-scca', name: 'SCCA', runGroups: [], days: [day('2026-09-13')] }
+const pastEvent = { id: '2026-09-13_msr-scca', name: 'SCCA', runGroups: [], days: [day('2026-09-13')] }
 const fixture = { id: 'test-live', name: 'Test Event', runGroups: [], days: [day('2000-01-01')] }
 const created = {
   id: '2026-10-03_tde-at-ecr-2-7-cw',
@@ -24,7 +24,7 @@ let builtinStatus = 200
 const fakeFetch = vi.fn(async (url: URL) => {
   expect(String(url)).toBe('https://myhpde.netlify.app/api/builtin-events.json')
   return builtinStatus === 200
-    ? new Response(JSON.stringify({ seed: [seedEvent], fixtures: [fixture] }))
+    ? new Response(JSON.stringify({ fixtures: [fixture] }))
     : new Response('nope', { status: builtinStatus })
 })
 
@@ -43,17 +43,16 @@ beforeEach(() => {
 
 describe('events.json feed', () => {
   it('serves every stored event plus the fixtures, newest first', async () => {
+    store.set(pastEvent.id, pastEvent)
     store.set(created.id, created)
     const res = await call()
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('application/json')
-    // The seed was imported on the way.
-    expect(await idsOf(res)).toEqual([created.id, seedEvent.id, 'test-live'])
+    expect(await idsOf(res)).toEqual([created.id, pastEvent.id, 'test-live'])
   })
 
   it('uses the widget format: colors resolved, no app-only fields', async () => {
     store.set(created.id, created)
-    blobs.data('site:events-meta').set('seeded', { imported: [] })
     const body = await (await call()).json()
     expect(body.events[0]).toEqual({
       id: created.id,
@@ -86,12 +85,13 @@ describe('events.json feed', () => {
 
   it('serves a deploy preview’s own copy of the events', async () => {
     const preview = { deploy: { context: 'deploy-preview' } }
+    store.set(pastEvent.id, pastEvent)
     store.set(created.id, created)
-    expect(await idsOf(await call(preview))).toEqual([created.id, seedEvent.id, 'test-live'])
+    expect(await idsOf(await call(preview))).toEqual([created.id, pastEvent.id, 'test-live'])
 
     // Gone from the preview's copy, still live.
     blobs.data('deploy:events').delete(created.id)
-    expect(await idsOf(await call(preview))).toEqual([seedEvent.id, 'test-live'])
+    expect(await idsOf(await call(preview))).toEqual([pastEvent.id, 'test-live'])
     expect(store.has(created.id)).toBe(true)
   })
 
@@ -105,7 +105,7 @@ describe('events.json feed', () => {
 
   it('answers 503 when Blobs fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const broken = () => ({ get: async () => { throw new Error('blobs down') } })
+    const broken = () => ({ list: async () => { throw new Error('blobs down') } })
     const req = new Request('https://myhpde.netlify.app/api/events.json')
     const res = await handler(req, {}, { getStore: broken, fetch: fakeFetch as never })
     expect(res.status).toBe(503)

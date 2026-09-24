@@ -73,11 +73,8 @@ their own events. No extra Netlify setup is needed for Blobs.
   live events (taken the first time that deploy is loaded). You see real
   data on a preview, but creating or deleting events there never touches
   the live ones. A later push makes a new deploy with a fresh copy.
-- The events that used to live in `src/data/schedules/*.md` are imported
-  into the store once, the first time it's read after a deploy (the build
-  writes them to `api/builtin-events.json`). An event deleted after that
-  stays deleted. Those files go away once the import has run on the live
-  site.
+- The events that used to live in the repo (`src/data/schedules/*.md`)
+  were imported into the live store once, in #252.
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.

@@ -8,19 +8,17 @@ export const STORE = 'events'
 // it only ever returns events.
 export const META_STORE = 'events-meta'
 
-// Written by the build (scripts/vite-plugin-events-json.ts):
-//   seed     — the events that used to be built into the app, imported
-//              into the store once (see ensureSeeded)
-//   fixtures — test events (test-live) that ship with the app and are
-//              never stored
+// Written by the build (scripts/vite-plugin-events-json.ts): the test
+// events (test-live) that ship with the app and are never stored.
 export const BUILTIN_PATH = '/api/builtin-events.json'
 
-const SEED_KEY = 'seeded'
+// Set once a deploy's own store has its copy of the live events.
+const COPIED_KEY = 'copied-from-live'
 
 /**
  * Production reads and writes the live events. Anything else (a deploy
  * preview, a branch deploy) gets stores of its own for that deploy, which
- * start as a copy of the live events (see ensureSeeded) — so a preview
+ * start as a copy of the live events (see ensureCopied) — so a preview
  * shows real data, but creating or deleting events there never touches
  * the live ones. `live` is only read from, to make that copy.
  */
@@ -40,36 +38,27 @@ export async function listEvents(store) {
   return events.filter(Boolean)
 }
 
-export async function fetchBuiltin(origin, fetchImpl = fetch) {
+export async function fetchFixtures(origin, fetchImpl = fetch) {
   const res = await fetchImpl(new URL(BUILTIN_PATH, origin))
   if (!res.ok) throw new Error(`${BUILTIN_PATH} answered ${res.status}`)
   const body = await res.json()
-  return {
-    seed: Array.isArray(body?.seed) ? body.seed : [],
-    fixtures: Array.isArray(body?.fixtures) ? body.fixtures : [],
-  }
+  return Array.isArray(body?.fixtures) ? body.fixtures : []
 }
 
 /**
- * Copies the build's seed events into the store the first time it's used,
- * then records that it did, so an event deleted afterwards doesn't come
- * back. An id already in the store is left alone. Safe to run twice at
- * once: each copy only writes if the key is new.
- *
- * A preview's store first gets a copy of the live events as they are at
- * that moment, then the seed — what the live site will show once this
- * deploy is live.
+ * On a preview, copies the live events (as they are at that moment) into
+ * the deploy's own store the first time it's used, and records that it
+ * did, so an event deleted on the preview doesn't come back. Production
+ * has nothing to copy. Safe to run twice at once: each copy only writes
+ * if the key is new.
  */
-export async function ensureSeeded(stores, origin, fetchImpl = fetch) {
-  if (await stores.meta.get(SEED_KEY, { type: 'json' })) return
-  const { seed } = await fetchBuiltin(origin, fetchImpl)
-  const live = stores.live ? await listEvents(stores.live) : []
-  const importedAt = new Date().toISOString()
-  const imported = []
-  for (const event of [...live, ...seed]) {
+export async function ensureCopied(stores) {
+  if (!stores.live) return
+  if (await stores.meta.get(COPIED_KEY, { type: 'json' })) return
+  const copiedAt = new Date().toISOString()
+  for (const event of await listEvents(stores.live)) {
     if (!event || typeof event.id !== 'string') continue
-    const { modified } = await stores.events.setJSON(event.id, { ...event, importedAt }, { onlyIfNew: true })
-    if (modified) imported.push(event.id)
+    await stores.events.setJSON(event.id, event, { onlyIfNew: true })
   }
-  await stores.meta.setJSON(SEED_KEY, { at: importedAt, imported })
+  await stores.meta.setJSON(COPIED_KEY, { at: copiedAt })
 }

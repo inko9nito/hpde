@@ -1,4 +1,4 @@
-import { openStores, listEvents, ensureSeeded, fetchBuiltin } from '../lib/eventsStore.mjs'
+import { openStores, listEvents, ensureCopied, fetchFixtures } from '../lib/eventsStore.mjs'
 import { serializeEvents } from '../../src/utils/eventsJson.ts'
 import type { EventsManifest, SerializedEvent } from '../../src/utils/eventsJson.ts'
 import type { EventConfig } from '../../src/types.ts'
@@ -43,8 +43,8 @@ const firstDate = (e: SerializedEvent) => e.days[0]?.date ?? ''
 export default async function handler(req: Request, context?: unknown, deps: Deps = {}) {
   try {
     const stores = openStores(context, deps)
-    await ensureSeeded(stores, req.url, deps.fetch)
-    const { fixtures } = await fetchBuiltin(req.url, deps.fetch)
+    await ensureCopied(stores)
+    const fixtures = await fetchFixtures(req.url, deps.fetch)
 
     const fixtureIds = new Set(fixtures.map((e: EventConfig) => e.id))
     const stored = (await listEvents(stores.events)).filter((e: EventConfig) => !fixtureIds.has(e.id))

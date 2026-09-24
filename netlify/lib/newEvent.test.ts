@@ -6,14 +6,12 @@ import { fakeBlobs } from './fakeBlobs'
 const blobs = fakeBlobs()
 const store = blobs.data('site:events')
 
-// What the build writes to api/builtin-events.json.
-const seedEvent = {
+const liveEvent = {
   id: '2026-09-13_msr-scca',
   name: 'SCCA at MSRC 1.7 CW',
   runGroups: [],
   days: [{ id: 'sunday', label: 'Sunday', date: '2026-09-13', activities: [] }],
 }
-let seed: unknown[] | null = [seedEvent]
 
 // Stands in for Netlify Identity's /user endpoint: one token per user.
 const identityUsers: Record<string, unknown> = {
@@ -21,9 +19,6 @@ const identityUsers: Record<string, unknown> = {
   'driver-token': { id: 'd', email: 'driver@example.com' },
 }
 const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
-  if (String(url) === 'https://site.example/api/builtin-events.json') {
-    return seed === null ? new Response('nope', { status: 404 }) : new Response(JSON.stringify({ seed, fixtures: [] }))
-  }
   expect(String(url)).toBe('https://site.example/.netlify/identity/user')
   const u = identityUsers[init.headers.Authorization.replace('Bearer ', '')]
   return u ? new Response(JSON.stringify(u)) : new Response('{}', { status: 401 })
@@ -117,70 +112,40 @@ describe('isAdmin', () => {
 })
 
 describe('events function', () => {
-  beforeEach(() => {
-    blobs.clear()
-    seed = [seedEvent]
-  })
+  beforeEach(() => blobs.clear())
 
-  // Seed events don't get in the way of the create/delete tests below.
   const ids = async () => (await (await call('GET')).json()).events.map((e: { id: string }) => e.id)
 
   it('reads with strong consistency, so a fresh create shows up on refresh', async () => {
     await call('GET')
-    expect(blobs.opened.at(-1)).toEqual({ kind: 'site', options: { name: 'events-meta', consistency: 'strong' } })
     expect(blobs.opened).toContainEqual({ kind: 'site', options: { name: 'events', consistency: 'strong' } })
   })
 
-  it('imports the seed events on first use, once', async () => {
-    expect(await ids()).toEqual([seedEvent.id])
-    expect(store.get(seedEvent.id)).toMatchObject({ ...seedEvent, importedAt: expect.any(String) })
-
-    // Deleted after the import: it stays deleted.
-    expect((await call('DELETE', { token: 'admin-token', query: `?id=${seedEvent.id}` })).status).toBe(200)
-    expect(await ids()).toEqual([])
-  })
-
-  it('leaves an event already in the store alone when importing', async () => {
-    store.set(seedEvent.id, { ...seedEvent, name: 'Edited' })
-    await call('GET')
-    expect(store.get(seedEvent.id)).toMatchObject({ name: 'Edited' })
-  })
-
-  it('still lists events when the seed can’t be read, and imports next time', async () => {
-    seed = null
-    const errorLog = console.error
-    console.error = () => {}
-    try {
-      store.set('2026-01-01_x', { ...seedEvent, id: '2026-01-01_x' })
-      const res = await call('GET')
-      expect(res.status).toBe(200)
-      expect((await res.json()).events.map((e: { id: string }) => e.id)).toEqual(['2026-01-01_x'])
-    } finally {
-      console.error = errorLog
-    }
-    expect(blobs.data('site:events-meta').has('seeded')).toBe(false)
-
-    seed = [seedEvent]
-    expect(await ids()).toContain(seedEvent.id)
+  it('lists what’s in the live store, and writes nothing on a read', async () => {
+    store.set(liveEvent.id, liveEvent)
+    expect(await ids()).toEqual([liveEvent.id])
+    expect([...store.keys()]).toEqual([liveEvent.id])
+    expect(blobs.data('site:events-meta').size).toBe(0)
   })
 
   it('starts a deploy preview from a copy of the live events, and keeps its changes to itself', async () => {
     const preview = { deploy: { context: 'deploy-preview' } }
-    const liveEvent = { ...seedEvent, id: '2026-10-03_live', name: 'Live only' }
     store.set(liveEvent.id, liveEvent)
 
     const listed = (await (await call('GET', { context: preview })).json()).events.map((e: { id: string }) => e.id)
-    expect(listed.sort()).toEqual([liveEvent.id, seedEvent.id].sort())
+    expect(listed).toEqual([liveEvent.id])
 
     const res = await call('POST', { token: 'admin-token', body: { event: valid }, context: preview })
     expect(res.status).toBe(201)
     const del = await call('DELETE', { token: 'admin-token', query: `?id=${liveEvent.id}`, context: preview })
     expect(del.status).toBe(200)
 
-    // The live store is exactly as it was: no seed import, no new event, nothing deleted.
+    // Deleted on the preview, it stays deleted there…
+    const after = (await (await call('GET', { context: preview })).json()).events.map((e: { id: string }) => e.id)
+    expect(after).not.toContain(liveEvent.id)
+    // …and the live store is exactly as it was.
     expect([...store.keys()]).toEqual([liveEvent.id])
     expect(blobs.data('site:events-meta').size).toBe(0)
-    // …and the preview only ever read from it.
     const siteOpens = blobs.opened.filter(o => o.kind === 'site').map(o => (o.options as { name: string }).name)
     expect(new Set(siteOpens)).toEqual(new Set(['events']))
   })
@@ -198,7 +163,7 @@ describe('events function', () => {
     const created = (await res.json()).event
     expect(created.createdBy).toBe('admin@example.com')
 
-    expect((await ids()).sort()).toEqual([created.id, seedEvent.id].sort())
+    expect(await ids()).toEqual([created.id])
   })
 
   it('avoids ids the client knows and ones already stored', async () => {

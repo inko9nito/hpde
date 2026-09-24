@@ -20,16 +20,6 @@ export function eventsJsonPlugin(): Plugin {
     apply: 'build',
     writeBundle(options) {
       const outDir = options.dir ?? 'dist'
-      const schedulesDir = path.resolve('src/data/schedules')
-
-      const scheduled: EventConfig[] = fs
-        .readdirSync(schedulesDir)
-        .filter(f => f.endsWith('.md'))
-        .map(file => {
-          const id = file.replace(/\.md$/, '')
-          const src = fs.readFileSync(path.join(schedulesDir, file), 'utf8')
-          return parseScheduleMD(id, src)
-        })
 
       const fixtures: EventConfig[] = FIXTURES.map(({ id, sourceFile }) => {
         const src = fs.readFileSync(path.resolve(sourceFile), 'utf8')
@@ -38,18 +28,16 @@ export function eventsJsonPlugin(): Plugin {
 
       // Fails the build on a run-group color the widget couldn't resolve,
       // the same check the widget feed runs at request time.
-      serializeEvents([...scheduled, ...fixtures])
+      serializeEvents(fixtures)
 
       // Not events.json: on Netlify that path is a function
       // (netlify/functions/events-json.mts) that serves every stored event
-      // to the iOS widget (#232). This file is what the functions read:
-      //   seed     — imported into the Blobs store once, on first use
-      //   fixtures — test events that ship with the app, never stored
+      // to the iOS widget (#232), plus these fixtures, read from here.
       const apiDir = path.join(outDir, 'api')
       fs.mkdirSync(apiDir, { recursive: true })
       const outPath = path.join(apiDir, 'builtin-events.json')
-      fs.writeFileSync(outPath, JSON.stringify({ seed: scheduled, fixtures }, null, 2))
-      this.info(`emitted ${outPath} (${scheduled.length} seed, ${fixtures.length} fixture events)`)
+      fs.writeFileSync(outPath, JSON.stringify({ fixtures }, null, 2))
+      this.info(`emitted ${outPath} (${fixtures.length} fixture events)`)
     },
   }
 }

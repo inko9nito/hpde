@@ -1,6 +1,6 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { buildEvent, isAdmin } from '../lib/newEvent.mjs'
-import { openStores, listEvents, ensureSeeded } from '../lib/eventsStore.mjs'
+import { openStores, listEvents, ensureCopied } from '../lib/eventsStore.mjs'
 
 // Every event (#232), kept in a Netlify Blobs store keyed by event id. GET
 // is public — the schedule is public — and lists them all; POST creates one
@@ -23,10 +23,10 @@ export default async function handler(req, context, deps = {}) {
 
   if (req.method === 'GET') {
     try {
-      await ensureSeeded(stores, req.url, deps.fetch)
+      await ensureCopied(stores)
     } catch (err) {
       // Not fatal: list what's there, and the next request tries again.
-      console.error('events: seeding failed:', err)
+      console.error('events: copying the live events failed:', err)
     }
     return json(200, { events: await listEvents(store) })
   }
