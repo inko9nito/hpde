@@ -433,8 +433,8 @@ export default function App() {
 
           {activeTab === 'notes' && authStatus === 'signed-in' && (
             <MyLapTimes
+              event={activeEvent}
               log={lapLog}
-              runGroups={activeEvent.runGroups}
               onEdit={session => setLapSlot({
                 date: session.date,
                 time: session.time,

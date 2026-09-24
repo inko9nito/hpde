@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapChips, LapStatsLine } from './LapList'
+import { LapFigures, LapTable } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
 import { lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
@@ -124,7 +124,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="sheet-up relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
+        className="sheet-up relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-t-2xl bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
       >
         <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3 pt-3">
@@ -182,7 +182,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
             />
             <p className="mt-1.5 text-xs text-gray-500">
               Paste a list, a spreadsheet column, or rows from your timing sheet (lap, start, finish,
-              time, notes). Start and finish times work too. Mark out laps with “Out”.
+              time, notes). Start and finish times work too. Mark out laps with “Out”. Laps, best and
+              average are worked out for you.
             </p>
 
             {parsed.ambiguous && (
@@ -203,8 +204,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
 
             {parsed.laps.length > 0 && (
               <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl bg-gray-50 p-3">
-                <LapStatsLine laps={parsed.laps} />
-                <LapChips laps={parsed.laps} />
+                <LapFigures laps={parsed.laps} />
+                <LapTable laps={parsed.laps} />
               </section>
             )}
 

@@ -8,7 +8,9 @@ export function fakeBlobs() {
     if (!stores.has(name)) stores.set(name, new Map())
     const data = stores.get(name)!
     return {
-      list: async () => ({ blobs: [...data.keys()].map(key => ({ key })) }),
+      list: async (o?: { prefix?: string }) => ({
+        blobs: [...data.keys()].filter(key => key.startsWith(o?.prefix ?? '')).map(key => ({ key })),
+      }),
       get: async (key: string) => data.get(key) ?? null,
       setJSON: async (key: string, value: unknown, o?: { onlyIfNew?: boolean }) => {
         if (o?.onlyIfNew && data.has(key)) return { modified: false }

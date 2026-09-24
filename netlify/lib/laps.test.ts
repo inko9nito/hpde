@@ -104,6 +104,25 @@ describe('laps function (#210)', () => {
     expect((await other.json()).sessions).toEqual([])
   })
 
+  it('sums up every event with laps — best lap and sessions — for the driver only', async () => {
+    expect((await call('GET', { query: '' })).status).toBe(401)
+    await call('PUT', { token: 'vera-token', body: { session: session1 } })
+    await call('PUT', { token: 'vera-token', body: { session: session2 } })
+    await call('PUT', { token: 'vera-token', body: { session: { ...session1, laps: [{ ms: 99_000 }] } }, query: '?event=2026-09-11_msrc-1-7' })
+    await call('PUT', { token: 'jason-token', body: { session: { ...session1, laps: [{ ms: 84_000 }] } } })
+    // An out lap alone has no best.
+    await call('PUT', { token: 'vera-token', body: { session: { ...session1, laps: [{ ms: 140_000, kind: 'out' }] } }, query: '?event=2026-06-06_msrc-1-7' })
+
+    const res = await call('GET', { token: 'vera-token', query: '' })
+    expect(res.status).toBe(200)
+    const { events } = await res.json()
+    expect(events.sort((a: { eventId: string }, b: { eventId: string }) => a.eventId.localeCompare(b.eventId))).toEqual([
+      { eventId: '2026-06-06_msrc-1-7', sessions: 1 },
+      { eventId: '2026-09-11_msrc-1-7', sessions: 1, best: 99_000 },
+      { eventId: EVENT, sessions: 2, best: 104_000 },
+    ])
+  })
+
   it('removes one session’s laps, and the record with the last one', async () => {
     await call('PUT', { token: 'vera-token', body: { session: session1 } })
     await call('PUT', { token: 'vera-token', body: { session: session2 } })
@@ -120,7 +139,7 @@ describe('laps function (#210)', () => {
     const bad = await call('PUT', { token: 'vera-token', body: { session: { ...session1, laps: [{ ms: 3 }] } } })
     expect(bad.status).toBe(400)
     expect((await call('PUT', { token: 'vera-token', body: 'not json' })).status).toBe(400)
-    expect((await call('GET', { token: 'vera-token', query: '' })).status).toBe(400)
+    expect((await call('GET', { token: 'vera-token', query: '?event=' })).status).toBe(400)
     expect((await call('GET', { token: 'vera-token', query: '?event=../../jason/x' })).status).toBe(400)
     expect((await call('POST', { token: 'vera-token' })).status).toBe(405)
     expect(store.size).toBe(0)

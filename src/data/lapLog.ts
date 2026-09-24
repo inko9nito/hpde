@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import type { SessionLaps } from '../utils/lapTimes'
+import type { EventBest } from '../utils/trackStats'
 
 // The signed-in driver's own lap times for one event (#210), from the laps
 // function. Nothing is fetched for anyone who isn't signed in.
@@ -101,4 +102,39 @@ export function useLapLog(eventId: string | null): LapLog {
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
   return { status, sessions, byKey, save, remove, reload }
+}
+
+/**
+ * Every event the driver has laps for, with its best lap — for bests across
+ * a track layout. Fetched while `active` (the My notes tab is open); null
+ * until it arrives, or if it can't be had.
+ */
+export function useLapSummary(active: boolean): EventBest[] | null {
+  const { status: authStatus, authedFetch } = useAuth()
+  const signedIn = authStatus === 'signed-in'
+  const [summary, setSummary] = useState<EventBest[] | null>(null)
+
+  useEffect(() => {
+    if (!signedIn) {
+      setSummary(null)
+      return
+    }
+    if (!active) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authedFetch(LAPS_URL)
+        if (!res.ok) return
+        const body = await res.json()
+        if (!cancelled && Array.isArray(body?.events)) setSummary(body.events)
+      } catch {
+        // Only the across-events best goes missing; this event's laps still show.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [signedIn, active, authedFetch])
+
+  return signedIn ? summary : null
 }

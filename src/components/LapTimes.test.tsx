@@ -16,6 +16,10 @@ import { LapTimesSheet } from './LapTimesSheet'
 const event: EventConfig = {
   id: '2026-03-07_lap-day',
   name: 'Lap Day',
+  track: 'Motorsport Ranch - Cresson',
+  trackId: 'msrc-1-7',
+  configuration: '1.7 mile',
+  direction: 'Clockwise',
   runGroups: [
     { id: 'red', label: 'Red', bgClass: 'bg-red-500', textClass: 'text-white' },
     { id: 'blue', label: 'Blue', bgClass: 'bg-blue-500', textClass: 'text-white' },
@@ -40,6 +44,11 @@ const SHEET_ROWS = [
   'Laps\t2\tBest\t1:44\t',
 ].join('\n')
 
+// Earlier events: one on the same layout, one run the other way round.
+const sameLayout: EventConfig = { ...event, id: '2026-02-07_earlier', name: 'Earlier', days: [{ ...event.days[0], date: '2026-02-07' }] }
+const otherWay: EventConfig = { ...sameLayout, id: '2026-01-10_ccw', name: 'CCW', direction: 'Counter-clockwise' }
+let summary: { eventId: string; best?: number; sessions: number }[] = []
+
 // identity.ts caches the first widget it loads, so every test shares one
 // fake; signedIn decides whether it reports a user.
 let signedIn = true
@@ -60,9 +69,10 @@ const json = (body: unknown, status = 200) =>
 const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   const url = String(input)
   if (url.includes('/.netlify/identity/settings')) return json({})
-  if (url.includes('api/events')) return json({ events: [event] })
+  if (url.includes('api/events')) return json({ events: [event, sameLayout, otherWay] })
   if (url.includes('api/laps')) {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
+    if (!url.includes('?')) return json({ events: summary })
     expect(url).toContain(`event=${event.id}`)
     if (init?.method === 'PUT') {
       if (failSaves) return json({ error: 'Blobs is down.' }, 503)
@@ -92,6 +102,19 @@ async function tapSession(name: string) {
   await userEvent.click(await screen.findByRole('button', { name }))
 }
 
+// The figures above a table of laps, by label.
+function figures(el: HTMLElement): Record<string, string> {
+  const dl = el.querySelector('dl[aria-label="Session figures"]')!
+  const out: Record<string, string> = {}
+  dl.querySelectorAll('dt').forEach(dt => { out[dt.textContent!] = dt.nextElementSibling!.textContent! })
+  return out
+}
+
+// A table of laps, as text, header first.
+function rows(el: HTMLElement): string[][] {
+  return within(el).getAllByRole('row').map(row => [...row.children].map(cell => cell.textContent ?? ''))
+}
+
 const lapCalls = (method: string) =>
   fetchMock.mock.calls.filter(([url, init]) => String(url).includes('api/laps') && (init?.method ?? 'GET') === method)
 
@@ -99,6 +122,7 @@ beforeEach(() => {
   localStorage.clear()
   signedIn = true
   saved = []
+  summary = []
   failSaves = false
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -130,8 +154,13 @@ describe('lap times (#210)', () => {
 
     // What was read, before saving: the out lap doesn't count.
     const read = within(sheet).getByRole('region', { name: 'Laps read' })
-    expect(read).toHaveTextContent('2 laps · Best 1:44 · Avg 1:50.0 · + 1 out/in')
-    expect(within(read).getByLabelText('Lap 2: 1:44, best')).toBeInTheDocument()
+    expect(figures(read)).toEqual({ Laps: '2+ 1 out/in', Best: '1:44', Average: '1:50.0' })
+    expect(rows(read)).toEqual([
+      ['Lap', 'Time', 'Start – finish', 'Note'],
+      ['Out', '2:19', '11:46:32 AM11:48:51 AM', 'Traffic'],
+      ['1', '1:56', '11:48:51 AM11:50:47 AM', ''],
+      ['2', '1:44Best', '11:50:47 AM11:52:31 AM', 'Best so far'],
+    ])
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
@@ -152,9 +181,11 @@ describe('lap times (#210)', () => {
     expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    expect(card).toHaveTextContent('2 laps · Best 1:44')
-    expect(card).toHaveTextContent('Best so far')
-    expect(screen.getByText(/Only visible to you/)).toBeInTheDocument()
+    expect(figures(card)).toEqual({ Laps: '2+ 1 out/in', Best: '1:44', Average: '1:50.0' })
+    // The whole table, open: no chips, nothing to expand.
+    expect(rows(card)[3]).toEqual(['2', '1:44Best', '11:50:47 AM11:52:31 AM', 'Best so far'])
+    expect(screen.getByText('Private')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
   })
 
   it('asks which group when more than one is on track', async () => {
@@ -186,10 +217,10 @@ describe('lap times (#210)', () => {
     await tapSession('Lap times: 11:45 AM, Blue')
     const sheet = screen.getByRole('dialog')
     fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '2:13, 4:09, 5:57' } })
-    expect(within(sheet).getByRole('region', { name: 'Laps read' })).toHaveTextContent('3 laps')
+    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' })).Laps).toBe('3')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Video timestamps' }))
-    expect(within(sheet).getByRole('region', { name: 'Laps read' })).toHaveTextContent('2 laps · Best 1:48 · Avg 1:52.0')
+    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' }))).toEqual({ Laps: '2', Best: '1:48', Average: '1:52.0' })
   })
 
   it('keeps the sheet open with the reason when a save fails', async () => {
@@ -210,7 +241,7 @@ describe('lap times (#210)', () => {
     }]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    expect(screen.getByText(/Best lap/)).toHaveTextContent('Best lap 1:38.91 · Session 2')
+    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91')
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit lap times for Session 2' }))
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
@@ -222,6 +253,25 @@ describe('lap times (#210)', () => {
     expect(lapCalls('DELETE')[0][0]).toContain(`session=${encodeURIComponent('2026-03-07 11:45 blue')}`)
     expect(screen.getByText('No lap times yet')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'My notes' })).toBeInTheDocument()
+  })
+
+  it('shows the best lap of the event, and on this layout across every event', async () => {
+    saved = [{
+      key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2,
+      laps: [{ ms: 99_420 }, { ms: 98_910 }],
+    }]
+    summary = [
+      { eventId: sameLayout.id, best: 98_540, sessions: 4 },
+      { eventId: otherWay.id, best: 90_000, sessions: 2 },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    expect(screen.getByText('MSRC · 1.7 CW')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91Across all recorded sessions')
+    // The counter-clockwise event doesn't count.
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Best on 1.7 CW' })).toHaveTextContent('1:38.54Across every MSRC event')
+    })
   })
 
   it('closes on Escape without saving', async () => {

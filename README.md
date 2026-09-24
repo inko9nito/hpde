@@ -154,11 +154,16 @@ Only they can see them.
 
   Anything it can't read is listed by line, and saving waits until it's
   fixed. Paste one session at a time.
-- **See / edit:** the **My notes** tab lists your laps session by
-  session: chips (best lap highlighted), then laps · best · average, then
-  *Lap details* (crossings and notes). Tap **Edit** to change or remove
-  them. The tab shows how many sessions have laps, e.g. *My notes (2)*.
-- **Where they live:** `netlify/functions/laps.mts` (`/api/laps`) in
+- **See / edit:** the **My notes** tab opens with two figures: your
+  best lap this event, and your best on this layout (e.g. *Best on 1.7
+  CW*) across every event at the track with the same configuration and
+  direction. Below, session by session: laps, best and average (worked
+  out from the laps, never typed in), then a table of every lap (time,
+  start – finish, note), best lap marked. Tap **Edit** to change or
+  remove them. The tab shows how many sessions have laps, e.g.
+  *My notes (2)*.
+- **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
+  `?event=` it sums up each event's best, for the layout best) in
   Netlify Blobs (store `laps`), one record per driver per event, keyed by
   their Identity user id. Every request needs a sign-in and only ever
   reaches the driver's own laps. A deploy preview gets an empty store of

@@ -355,9 +355,11 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await stubEvents(page)
   await signInAsAdmin(page)
   let sessions: { key: string }[] = []
-  await page.route('**/api/laps?*', async route => {
+  await page.route(/\/api\/laps(\?|$)/, async route => {
     const req = route.request()
     expect(req.headers().authorization).toBe('Bearer token')
+    // The summary across events, for the best on this layout.
+    if (!new URL(req.url()).searchParams.has('event')) return route.fulfill({ json: { events: [] } })
     expect(new URL(req.url()).searchParams.get('event')).toBe(alpha.id)
     if (req.method() === 'PUT') {
       const { session } = req.postDataJSON()
@@ -385,7 +387,9 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
     '1\t8:33:20 AM\t8:35:12 AM\t1:52\t',
     '2\t8:35:12 AM\t8:36:58 AM\t1:46\tClean lap',
   ].join('\n'))
-  await expect(sheet.getByRole('region', { name: 'Laps read' })).toContainText('2 laps · Best 1:46 · Avg 1:49.0 · + 1 out/in')
+  const read = sheet.getByRole('region', { name: 'Laps read' })
+  await expect(read.getByRole('definition')).toHaveText(['2+ 1 out/in', '1:46', '1:49.0'])
+  await expect(read.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
 
@@ -395,8 +399,8 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
-  await expect(card).toContainText('2 laps · Best 1:46')
-  await card.getByText('Lap details').click()
-  await expect(card).toContainText('Clean lap')
+  await expect(card.getByRole('definition')).toHaveText(['2+ 1 out/in', '1:46', '1:49.0'])
+  await expect(card.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
+  await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:46')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

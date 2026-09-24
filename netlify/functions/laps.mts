@@ -1,11 +1,14 @@
 import { getStore, getDeployStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
-import { cleanSessionLaps } from '../../src/utils/lapTimes.ts'
+import { cleanSessionLaps, lapStats } from '../../src/utils/lapTimes.ts'
 import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 
 // A signed-in driver's own lap times (#210), private to them: every request
 // needs their sign-in, and only ever reaches their own laps — the key is
 // made from who the token says they are, never from anything sent.
+//   GET                          a summary of every event they have laps
+//                                for — its best lap and how many sessions —
+//                                for bests across a track (My notes)
 //   GET    ?event=               their laps for the event, by session
 //   PUT    ?event=  {session}    saves one session's laps (replacing any)
 //   DELETE ?event=&session=<key> removes one session's laps
@@ -49,10 +52,23 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   if (!user) return json(401, { error: 'Please sign in to continue.' })
 
   const params = new URL(req.url).searchParams
+  const store = openStore(context, deps)
+
+  if (req.method === 'GET' && !params.has('event')) {
+    const { blobs } = await store.list({ prefix: `${user.id}/` })
+    const records = await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' }) as Promise<EventLaps | null>))
+    const events = records.flatMap(record => {
+      if (!record) return []
+      const sessions = inOrder(record)
+      const bests = sessions.map(s => lapStats(s.laps).best).filter((ms): ms is number => ms !== undefined)
+      return [{ eventId: record.eventId, sessions: sessions.length, ...(bests.length ? { best: Math.min(...bests) } : {}) }]
+    })
+    return json(200, { events })
+  }
+
   const eventId = params.get('event') ?? ''
   if (!EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
 
-  const store = openStore(context, deps)
   const key = `${user.id}/${eventId}`
   const record = (await store.get(key, { type: 'json' })) as EventLaps | null
 

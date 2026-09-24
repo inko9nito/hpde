@@ -1,16 +1,19 @@
 import { Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapChips, LapDetails, LapStatsLine } from './LapList'
+import { LapFigures, LapTable } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
+import { useLapSummary } from '../data/lapLog'
+import { useEvents } from '../data/EventsContext'
 import { formatTime, formatAmPm } from '../utils/time'
 import { formatLapTime, lapStats } from '../utils/lapTimes'
+import { bestOnLayout, layoutLabel, trackShortName } from '../utils/trackStats'
 import type { LapLog } from '../data/lapLog'
 import type { SessionLaps } from '../utils/lapTimes'
-import type { RunGroupConfig } from '../types'
+import type { EventConfig } from '../types'
 
 interface Props {
+  event: EventConfig
   log: LapLog
-  runGroups: RunGroupConfig[]
   onEdit: (session: SessionLaps) => void
 }
 
@@ -18,25 +21,38 @@ function sessionTitle(s: SessionLaps): string {
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
 }
 
-/** The fastest lap of the event, and which session it was in. */
-function eventBest(sessions: SessionLaps[]): { ms: number; session: SessionLaps } | null {
-  let best: { ms: number; session: SessionLaps } | null = null
-  for (const session of sessions) {
-    const { best: ms } = lapStats(session.laps)
-    if (ms !== undefined && (!best || ms < best.ms)) best = { ms, session }
-  }
-  return best
+/** The fastest lap of the event. */
+function eventBest(sessions: SessionLaps[]): number | undefined {
+  const bests = sessions.map(s => lapStats(s.laps).best).filter((ms): ms is number => ms !== undefined)
+  return bests.length ? Math.min(...bests) : undefined
+}
+
+function StatCard({ label, ms, caption }: { label: string; ms: number | undefined; caption: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4" role="group" aria-label={label}>
+      <p className="truncate text-[13px] font-semibold text-gray-500">{label}</p>
+      <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-gray-900">{ms !== undefined ? formatLapTime(ms) : '—'}</p>
+      <p className="mt-1 text-xs text-gray-400">{caption}</p>
+    </div>
+  )
 }
 
 /**
  * The My notes tab (#210): the driver's own lap times for this event,
  * session by session. Added from the Schedule tab; edited from here too.
  */
-export function MyLapTimes({ log, runGroups, onEdit }: Props) {
+export function MyLapTimes({ event, log, onEdit }: Props) {
+  const { allEvents } = useEvents()
+  const summary = useLapSummary(true)
+  const runGroups = event.runGroups
+  const track = trackShortName(event)
+  const layout = layoutLabel(event)
   const header = (
-    <div className="mb-3 flex items-center justify-between px-1 text-xs text-gray-500">
-      <span>Only visible to you</span>
-      <span className="flex items-center gap-1"><Lock size={12} aria-hidden="true" /> Private</span>
+    <div className="mb-3 flex items-center justify-between gap-3 px-1 text-xs text-gray-500">
+      <span className="truncate">{[track, layout].filter(Boolean).join(' · ')}</span>
+      <span className="flex shrink-0 items-center gap-1" title="Only you can see your lap times">
+        <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
+      </span>
     </div>
   )
 
@@ -77,16 +93,22 @@ export function MyLapTimes({ log, runGroups, onEdit }: Props) {
 
   const best = eventBest(log.sessions)
   const days = new Set(log.sessions.map(s => s.date))
+  // Until the summary arrives, this event's best is the best known.
+  const layoutBest = track ? bestOnLayout(event, allEvents, summary ?? [], best) : undefined
 
   return (
     <>
       {header}
-      {best && (
-        <p className="mb-4 px-1 text-sm text-gray-700">
-          Best lap <span className="font-mono font-semibold tabular-nums text-gray-900">{formatLapTime(best.ms)}</span>
-          <span className="text-gray-500"> · {sessionTitle(best.session)}</span>
-        </p>
-      )}
+      <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <StatCard label="Best lap this event" ms={best} caption="Across all recorded sessions" />
+        {track && (
+          <StatCard
+            label={layout ? `Best on ${layout}` : `Best at ${track}`}
+            ms={layoutBest}
+            caption={`Across every ${track} event`}
+          />
+        )}
+      </div>
       <div className="flex flex-col gap-5">
         {log.sessions.map(session => (
           <section key={session.key} aria-label={`${sessionTitle(session)}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
@@ -113,9 +135,8 @@ export function MyLapTimes({ log, runGroups, onEdit }: Props) {
                 <p className="flex items-center gap-1.5 text-xs text-gray-500">
                   <Timer size={13} aria-hidden="true" /> Lap times
                 </p>
-                <LapChips laps={session.laps} />
-                <LapStatsLine laps={session.laps} />
-                <LapDetails laps={session.laps} />
+                <LapFigures laps={session.laps} />
+                <LapTable laps={session.laps} />
               </div>
             </div>
           </section>
