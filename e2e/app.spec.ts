@@ -183,7 +183,7 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   const groups = page.getByRole('region', { name: 'Run groups' })
   await expect(groups.getByRole('listitem')).toHaveText([/Novice/, /Intermediate/])
   const novice = groups.getByRole('listitem', { name: 'Novice' })
-  await novice.getByRole('button', { name: 'Change color' }).click()
+  await novice.getByRole('button', { name: 'Novice' }).click()
   await novice.getByRole('radio', { name: 'Green' }).check()
   await novice.getByRole('textbox', { name: 'Novice description' }).fill('First timers')
   await expect(novice.getByRole('textbox', { name: 'Novice description' })).toHaveCSS('font-size', '16px')

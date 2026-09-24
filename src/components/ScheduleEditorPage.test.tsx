@@ -112,7 +112,7 @@ describe('schedule editor (#232)', () => {
     fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: Novice, Advanced\n' } })
     expect(groupRow('Novice').getByText('Novice')).toHaveClass('bg-runred-500')
     expect(groupRow('Advanced').getByText('Advanced')).toHaveClass('bg-runorange-500')
-    await userEvent.click(groupRow('Novice').getByRole('button', { name: 'Change color' }))
+    await userEvent.click(groupRow('Novice').getByRole('button', { name: 'Novice' }))
     await userEvent.click(groupRow('Novice').getByRole('radio', { name: 'Green' }))
     // Red is free now, but Advanced stays orange.
     expect(groupRow('Advanced').getByText('Advanced')).toHaveClass('bg-runorange-500')
@@ -138,13 +138,17 @@ describe('schedule editor (#232)', () => {
 
     const novice = groupRow('Novice')
     expect(novice.queryByRole('radio')).not.toBeInTheDocument()
-    await userEvent.click(novice.getByRole('button', { name: 'Change color' }))
+    await userEvent.click(novice.getByRole('button', { name: 'Novice' }))
     expect(novice.getByRole('radio', { name: 'Orange' })).toBeChecked()
     await userEvent.click(novice.getByRole('radio', { name: 'Green' }))
     expect(novice.getByText('Novice')).toHaveClass('bg-rungreen-500')
     // Other groups keep theirs.
     expect(groupRow('Red').getByText('Red')).toHaveClass('bg-runred-500')
     await userEvent.type(novice.getByRole('textbox', { name: 'Novice description' }), 'First timers')
+    // Closed, the card shows its description under the badge.
+    await userEvent.click(novice.getByRole('button', { name: /^Novice/ }))
+    expect(novice.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(novice.getByText('First timers')).toBeInTheDocument()
 
     // Retyping the sessions keeps what was set for the group.
     fireEvent.change(await editor(), { target: { value: SCHEDULE.replace('track: Red', 'track: novice, Red') } })

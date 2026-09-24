@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { ChevronRight, ChevronUp, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
-import { GroupBadge } from './GroupBadge'
 import { scheduleToMarkdown, readScheduleEdit, describeProblem, deriveGroups } from '../utils/scheduleEditor'
 import type { GroupInput, ScheduleProblem } from '../utils/scheduleEditor'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
@@ -335,22 +334,19 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   )
 }
 
-const textInput =
-  'block h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm'
-
 function RunGroups({ groups, problems, onChange }: {
   groups: GroupInput[]
   problems: ScheduleProblem[]
   onChange: (group: GroupInput, patch: Partial<GroupInput>) => void
 }) {
   return (
-    <section aria-labelledby="run-groups-title" className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h2 id="run-groups-title" className="text-sm font-semibold text-gray-900">Run groups</h2>
-      <p className="mt-0.5 text-xs text-gray-500">
-        From the sessions in the schedule, each with a color picked from its name.
+    <section aria-labelledby="run-groups-title">
+      <h2 id="run-groups-title" className="px-1 text-sm font-semibold text-gray-900">Run groups</h2>
+      <p className="mt-0.5 px-1 text-xs text-gray-500">
+        From the sessions in the schedule, each with a color picked from its name. Tap one to change it.
       </p>
       {groups.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
+        <p className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
           Groups named in sessions (“track: Red, Blue”) show up here.
         </p>
       ) : (
@@ -370,61 +366,77 @@ function RunGroups({ groups, problems, onChange }: {
   )
 }
 
+const fieldLabel = 'block text-xs font-medium uppercase tracking-wider text-gray-500'
+
+// One card per group: its badge, and — tapped open — its description and
+// color. Closed, it shows the description under the badge, if there is one.
 function GroupRow({ index, group, problems, onChange }: {
   index: number
   group: GroupInput
   problems: ScheduleProblem[]
   onChange: (patch: Partial<GroupInput>) => void
 }) {
-  const [picking, setPicking] = useState(false)
-  const swatchesId = `run-group-${index}-colors`
+  const [open, setOpen] = useState(false)
+  const panelId = `run-group-${index}-panel`
+  const Chevron = open ? ChevronUp : ChevronRight
   return (
-    <li id={`run-group-${index}`} aria-label={group.label} className="rounded-xl border border-gray-200 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <GroupBadge group={{ id: group.id ?? '', label: group.label, bgClass: group.bgClass, textClass: group.textClass ?? 'text-white' }} />
-        <button
-          onClick={() => setPicking(p => !p)}
-          aria-expanded={picking}
-          aria-controls={swatchesId}
-          className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-        >
-          {picking ? 'Done' : 'Change color'}
-        </button>
-      </div>
-      {picking && (
-        <fieldset id={swatchesId} className="mt-3">
-          <legend className="sr-only">{`${group.label} color`}</legend>
-          <div className="flex flex-wrap gap-2.5">
-            {RUN_GROUP_BG_CLASSES.map(c => (
-              <label key={c} className="relative block">
-                <input
-                  type="radio"
-                  name={swatchesId}
-                  value={c}
-                  checked={group.bgClass === c}
-                  onChange={() => onChange({ bgClass: c })}
-                  aria-label={colorName(c)}
-                  // Invisible, over its swatch, so a tap lands on it.
-                  className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
-                />
-                <span
-                  aria-hidden="true"
-                  className={`block h-8 w-8 rounded-full ${c} ring-gray-900 ring-offset-2 peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
-                />
-              </label>
-            ))}
-          </div>
-        </fieldset>
+    <li id={`run-group-${index}`} aria-label={group.label} className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-900/5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3.5 text-left"
+      >
+        <span className="min-w-0">
+          <span className={`inline-block max-w-full truncate rounded-full px-4 py-1.5 text-base font-medium ${group.bgClass} ${group.textClass ?? 'text-white'}`}>
+            {group.label}
+          </span>
+          {!open && group.description && (
+            <span className="mt-1.5 block truncate px-1 text-sm text-gray-500">{group.description}</span>
+          )}
+        </span>
+        <Chevron size={20} aria-hidden="true" className="shrink-0 text-gray-400" />
+      </button>
+      {open && (
+        <div id={panelId} className="px-4 pb-4">
+          <label className={fieldLabel}>
+            Description
+            <input
+              aria-label={`${group.label} description`}
+              value={group.description ?? ''}
+              onChange={e => onChange({ description: e.target.value })}
+              placeholder="Add optional description"
+              className="mt-2 block h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 text-base font-normal normal-case tracking-normal text-gray-900 focus:border-gray-400 focus:bg-white focus:outline-none sm:text-sm"
+            />
+          </label>
+          <fieldset className="mt-4 border-t border-gray-100 pt-4">
+            <legend className="sr-only">{`${group.label} color`}</legend>
+            <p aria-hidden="true" className={fieldLabel}>Color</p>
+            <div className="mt-3 grid grid-cols-[repeat(6,auto)] justify-between gap-y-3">
+              {RUN_GROUP_BG_CLASSES.map(c => (
+                <label key={c} className="relative block">
+                  <input
+                    type="radio"
+                    name={`run-group-${index}-color`}
+                    value={c}
+                    checked={group.bgClass === c}
+                    onChange={() => onChange({ bgClass: c })}
+                    aria-label={colorName(c)}
+                    // Invisible, over its swatch, so a tap lands on it.
+                    className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={`block h-9 w-9 rounded-full ${c} ring-gray-900 ring-offset-[3px] peer-checked:ring-2 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500`}
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
       )}
-      <input
-        aria-label={`${group.label} description`}
-        value={group.description ?? ''}
-        onChange={e => onChange({ description: e.target.value })}
-        placeholder="Description (optional)"
-        className={`${textInput} mt-3`}
-      />
       {problems.map((p, j) => (
-        <p key={j} className="mt-2 text-xs text-red-600">{p.message}</p>
+        <p key={j} className="px-4 pb-3 text-xs text-red-600">{p.message}</p>
       ))}
     </li>
   )
