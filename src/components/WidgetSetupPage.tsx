@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Check, Copy, X, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 import widgetSmall from '../assets/widget-small.png'
@@ -122,10 +122,6 @@ export function WidgetSetupPage() {
   const [preview, setPreview] = useState<PreviewId>('medium')
   const [showScript, setShowScript] = useState(false)
   const [scriptCopied, copyScript] = useCopy()
-
-  useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [])
 
   const current = PREVIEWS.find(p => p.id === preview)!
 

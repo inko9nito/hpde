@@ -87,13 +87,44 @@ describe('deleting an event from the header menu (#229, #216, #232)', () => {
     expect(new Headers(init!.headers).get('Authorization')).toBe('Bearer token')
   })
 
-  it('hides the menu from non-admins', async () => {
+  it('offers non-admins only Share (#273)', async () => {
     signInAs([])
     openEvent(created.id)
-    // Signed in and the created event loaded — the menu would be there by now.
+    // Signed in and the created event loaded — admin items would be there by now.
     await screen.findAllByRole('button', { name: 'Account: v@example.com' })
     await screen.findAllByRole('heading', { name: new RegExp(created.name) })
-    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual(['Share'])
+  })
+
+  it('shares the event’s own link, signed out too (#273)', async () => {
+    openEvent(created.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }))
+
+    expect(window.location.hash).toBe(`#/event/${created.id}/share`)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Share' })).toBeInTheDocument()
+    expect(screen.getByText(`https://myhpde.netlify.app/#/event/${created.id}`)).toBeInTheDocument()
+    // The event page stays open underneath, and ✕ goes back to it.
+    expect(screen.getByRole('heading', { level: 1, name: created.name })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Close' })).toHaveAttribute('href', `#/event/${created.id}`)
+  })
+
+  it('opens an event’s share page from its link, without leaving it (#273)', async () => {
+    window.location.hash = `#/event/${created.id}/share`
+    renderApp()
+    expect(await screen.findByText(`https://myhpde.netlify.app/#/event/${created.id}`)).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: created.name })
+    expect(window.location.hash).toBe(`#/event/${created.id}/share`)
+  })
+
+  it('lists Share first, then the admin items (#273)', async () => {
+    signInAs(['admin'])
+    openEvent(created.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual(
+      ['Share', 'Edit details', 'Edit schedule', 'Delete event'],
+    )
   })
 
   it('closes the menu on Escape', async () => {

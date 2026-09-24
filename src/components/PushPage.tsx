@@ -22,6 +22,12 @@ interface Props {
    * once: a later close/reopen of the same instance still animates.
    */
   skipEnterAnimation?: boolean
+  /**
+   * The page's top edge is a white header (the event page), so once in
+   * place its backdrop turns white to match. False for pages that are
+   * gray-50 all the way up — Share, iOS widget (#273).
+   */
+  whiteHeader?: boolean
 }
 
 /**
@@ -30,7 +36,7 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
   // frame never paints and the transition doesn't fire. The one
@@ -47,6 +53,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   useEffect(() => {
     onEnteredChange?.(entered)
   }, [entered])
+  const white = entered && whiteHeader
 
   useEffect(() => {
     if (isFirstRun.current) {
@@ -65,7 +72,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   return (
     <div
       ref={scrollRef}
-      className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto ${entered ? 'bg-white' : 'bg-gray-50'}`}
+      className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         // Once in place, white is what Safari 26 samples to tint the
         // status bar — this fixed page is the element at the top edge —
@@ -74,7 +81,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // content paints gray-50 over this; it only shows when
         // rubber-banding past either end, so keep it white above
         // (header) and gray-50 below (page).
-        backgroundImage: entered ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)' : undefined,
+        backgroundImage: white ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)' : undefined,
         transform: `translateX(${inPosition ? '0' : '100%'})`,
         transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         willChange: 'transform',

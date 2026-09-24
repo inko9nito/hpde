@@ -1,21 +1,49 @@
 import { useState, useEffect } from 'react'
 import { Check, Copy, X } from 'lucide-react'
 import QRCode from 'qrcode'
-import { SITE_URL } from '../utils/siteMoved'
+import { SITE_URL, newSiteUrl } from '../utils/siteMoved'
 
-// Always the live site, even when opened on a deploy preview or localhost.
-const shareUrl = SITE_URL
+export const SHARE_HASH = '#/share'
+const EVENT_HASH_PREFIX = '#/event/'
+const EVENT_SHARE_SUFFIX = '/share'
 
-export function SharePage() {
+/** Sharing one event, from its "…" menu (#273). Sits under the event's
+ *  own route, so the event page stays open beneath it. */
+export function eventShareHash(eventId: string): string {
+  return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}${EVENT_SHARE_SUFFIX}`
+}
+
+export function isEventShareHash(hash: string): boolean {
+  return hash.startsWith(EVENT_HASH_PREFIX) && hash.endsWith(EVENT_SHARE_SUFFIX)
+}
+
+/** Link to one event, always on the live site — even when opened on a
+ *  deploy preview or localhost. */
+export function eventShareUrl(eventId: string): string {
+  return newSiteUrl(`${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`)
+}
+
+interface Props {
+  /** What's shared. Defaults to the live site's home page. */
+  url?: string
+  description?: string
+  /** Where ✕ goes. */
+  closeHref?: string
+}
+
+export function SharePage({
+  url: shareUrl = SITE_URL,
+  description = 'Share this link so others can view the schedule.',
+  closeHref = '#/',
+}: Props) {
   const [copied, setCopied] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    window.scrollTo(0, 0)
     QRCode.toDataURL(shareUrl, { margin: 1, width: 240 })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null))
-  }, [])
+  }, [shareUrl])
 
   async function handleCopy() {
     await navigator.clipboard.writeText(shareUrl)
@@ -29,7 +57,7 @@ export function SharePage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-gray-900">Share</h1>
           <a
-            href="#/"
+            href={closeHref}
             aria-label="Close"
             className="flex shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition-colors hover:border-gray-400 hover:text-gray-700"
             style={{ minWidth: 36, minHeight: 36 }}
@@ -39,7 +67,7 @@ export function SharePage() {
         </div>
 
         <p className="mb-3 text-sm text-gray-500">
-          Share this link so others can view the schedule.
+          {description}
         </p>
 
         <button

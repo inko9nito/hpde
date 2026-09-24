@@ -123,8 +123,8 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
               </div>
             </div>
           </div>
-          {/* Same 36px footprint as the back button when there's no
-              menu, so the compact title stays centred. */}
+          {/* Same 36px footprint as the back button, so the compact
+              title stays centred. */}
           <div className="flex h-9 w-9 shrink-0 justify-end">
             <EventOverflowMenu event={event} onDeleted={onDeleted} />
           </div>

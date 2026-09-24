@@ -234,6 +234,31 @@ test('share page shares the live address with a QR code', async ({ page }) => {
   await expect(qr).toBeVisible()
 })
 
+test('the landing menu slides up, and Share slides in over the list (#273)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto('/#/')
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: 'Share' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toBeInViewport()
+  await expect(page.getByText('https://myhpde.netlify.app/')).toBeVisible()
+  await page.getByRole('link', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+})
+
+test('anyone can share an event’s own link from its menu (#273)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${upcoming.id}`)
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Share' }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}/share$`))
+  await expect(page.getByText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)).toBeVisible()
+  await expect(page.locator('img[src^="data:image/png"]')).toBeVisible()
+  await page.getByRole('link', { name: 'Close' }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
+  await expect(page.getByText('Schedule coming soon')).toBeInViewport()
+})
+
 // Signed in as an admin: a stand-in for the Netlify Identity widget, which
 // the app uses when it's already on the page.
 async function signInAsAdmin(page: Page) {
