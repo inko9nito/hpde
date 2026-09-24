@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 import { TEST_EVENTS } from '../src/test/events'
+import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../src/theme/runGroupColors'
+import { resolveTailwindBgColor } from '../src/utils/eventsJson'
 import type { EventConfig } from '../src/types'
 
 // The built app (vite preview of dist/) in real browsers, with the events
@@ -23,6 +25,28 @@ const upcoming: EventConfig = {
   days: [{ id: 'saturday', label: 'Saturday', date: isoInDays(10), activities: [] }],
 }
 const [alpha] = TEST_EVENTS
+
+// One run group per allowed color, alternating the allowed text colors.
+const TEXT_RGB: Record<string, string> = { 'text-white': 'rgb(255, 255, 255)', 'text-gray-900': 'rgb(17, 24, 39)' }
+const palette: EventConfig = {
+  id: '2026-03-14_palette',
+  name: 'Palette Day',
+  runGroups: RUN_GROUP_BG_CLASSES.map((bgClass, i) => ({
+    id: `g${i}`,
+    label: `Group ${i}`,
+    bgClass,
+    textClass: RUN_GROUP_TEXT_CLASSES[i % RUN_GROUP_TEXT_CLASSES.length],
+  })),
+  days: [{
+    id: 'saturday', label: 'Saturday', date: '2026-03-14',
+    activities: [{ time: '08:00', type: 'session', sessionNumber: 1, onTrack: RUN_GROUP_BG_CLASSES.map((_, i) => `g${i}`) }],
+  }],
+}
+
+function hexToRgb(hex: string): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`
+}
 
 async function stubEvents(page: Page, events: EventConfig[] | 'down' = [upcoming, ...TEST_EVENTS]) {
   await page.route('**/api/events', route =>
@@ -63,6 +87,20 @@ test('shows today’s schedule with the now-line, scrolled into view', async ({ 
   // the call jsdom doesn't have. test-live runs from midnight to midnight,
   // so wherever "now" is, the line ends up on screen.
   await expect(page.locator('[data-time-indicator]')).toBeInViewport()
+})
+
+// Groups come from the events store, not source files Tailwind scans, so
+// every color a group may use has to be safelisted into the CSS — pink and
+// yellow drew no color at all once the event files left the repo.
+test('every run-group color and text color is in the CSS', async ({ page }) => {
+  await stubEvents(page, [palette, ...TEST_EVENTS])
+  await page.goto(`/#/event/${palette.id}`)
+  await page.getByRole('button', { name: 'All run groups' }).click()
+  for (const g of palette.runGroups) {
+    const badge = page.getByRole('button').getByText(g.label, { exact: true })
+    await expect(badge, g.bgClass).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor(g.bgClass)))
+    await expect(badge, g.textClass).toHaveCSS('color', TEXT_RGB[g.textClass])
+  }
 })
 
 test('says "Schedule coming soon" for an event with no schedule', async ({ page }) => {

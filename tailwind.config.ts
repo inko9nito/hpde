@@ -1,14 +1,16 @@
 import type { Config } from 'tailwindcss'
-import { runGroupColors } from './src/theme/runGroupColors'
+import { runGroupColors, RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from './src/theme/runGroupColors'
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx,md}'],
+  // Run groups come from the events store, not from files scanned above.
+  safelist: [...RUN_GROUP_BG_CLASSES, ...RUN_GROUP_TEXT_CLASSES],
   theme: {
     extend: {
       colors: {
         // Run group colors — see src/theme/runGroupColors.ts. Each key
-        // becomes a `bg-<key>-500` class referenced from schedule MD
-        // files' `## groups` tables.
+        // becomes a `bg-<key>-500` class, used by the `## groups` table of
+        // an event's schedule.
         ...Object.fromEntries(
           Object.entries(runGroupColors).map(([name, hex]) => [name, { 500: hex }])
         ),

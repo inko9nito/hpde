@@ -35,3 +35,15 @@ export const runGroupColors: Record<string, string> = {
   rungray: '#5C6D7A',
   runtan: '#C4988D',
 }
+
+// Every class a run group may use: each palette color, plus zinc-900 for
+// instructors, and white or near-black text on top. Groups live in the
+// events store now (#232), not in source files Tailwind scans, so
+// tailwind.config.ts safelists exactly these — a class not listed here
+// would ship with no CSS rule and draw no color (it happened to pink and
+// yellow when the event files left the repo).
+export const RUN_GROUP_BG_CLASSES = [
+  ...Object.keys(runGroupColors).map(name => `bg-${name}-500`),
+  'bg-zinc-900',
+]
+export const RUN_GROUP_TEXT_CLASSES = ['text-white', 'text-gray-900']
