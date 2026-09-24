@@ -102,10 +102,11 @@ export function TrackIcon({
           height: size,
           WebkitMaskImage: mask,
           maskImage: mask,
-          // The flag's shapes run to the edges of its viewBox, unlike the
-          // track outlines, so inset it to sit in the tile the same way.
-          WebkitMaskSize: src ? 'contain' : '75%',
-          maskSize: src ? 'contain' : '75%',
+          // The flag is a quiet watermark, not a stand-in shape: small and
+          // at the same 2% as the timeline's "No more events today" art.
+          WebkitMaskSize: src ? 'contain' : '37.5%',
+          maskSize: src ? 'contain' : '37.5%',
+          opacity: src ? undefined : 0.02,
           WebkitMaskRepeat: 'no-repeat',
           maskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
