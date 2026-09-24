@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, Ellipsis, Pencil, Trash2 } from 'lucide-react'
+import { CalendarClock, Ellipsis, Pencil, Share, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { editScheduleHash } from './ScheduleEditorPage'
 import { editEventHash } from './EditEventPage'
+import { eventShareHash } from './SharePage'
 import { ICON_BUTTON } from './iconButton'
 import type { EventConfig } from '../types'
 
@@ -15,8 +16,9 @@ interface Props {
 }
 
 /**
- * The "…" button at the right of the event header (#216). Admins only.
- * Edit details, Edit schedule and Delete (#232). Every stored event can be edited and
+ * The "…" button at the right of the event header (#216). Share, for
+ * everyone, signed in or not (#273); then, for admins, Edit details, Edit
+ * schedule and Delete (#232). Every stored event can be edited and
  * deleted; the test fixtures that ship with the app can't, so on those the
  * items are shown disabled with the reason, rather than leaving an admin
  * wondering where they went.
@@ -34,7 +36,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
-  if (!user?.roles.includes(ADMIN_ROLE)) return null
+  const isAdmin = !!user?.roles.includes(ADMIN_ROLE)
   const stored = isStored(event.id)
 
   return (
@@ -57,6 +59,19 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
             aria-label="Event actions"
             className="absolute right-0 top-full z-40 mt-2 min-w-[220px] rounded-xl border border-gray-200 bg-white p-1 shadow-xl"
           >
+            <button
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                window.location.hash = eventShareHash(event.id)
+              }}
+              className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-900 hover:bg-gray-50"
+            >
+              <Share size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              <span>Share</span>
+            </button>
+            {isAdmin && (<>
+            <div role="separator" className="mx-3 my-1 h-px bg-gray-100" />
             <button
               role="menuitem"
               disabled={!stored}
@@ -114,6 +129,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
                 )}
               </span>
             </button>
+            </>)}
           </div>
         </>
       )}

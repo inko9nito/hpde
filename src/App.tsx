@@ -10,10 +10,9 @@ import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
-import { SharePage } from './components/SharePage'
+import { SharePage, SHARE_HASH, isEventShareHash, eventShareUrl } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
-import { Footer } from './components/Footer'
 import { EventHeader, BackButton } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
@@ -83,9 +82,24 @@ function eventHash(eventId: string): string {
   return `${EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
 }
 
+// Also matches the event's sub-pages (`#/event/<id>/share`), which open
+// over its page. The id itself is encoded, so it never holds a `/`.
 function eventIdFromHash(hash: string): string | null {
   if (!hash.startsWith(EVENT_HASH_PREFIX)) return null
-  return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length))
+  return decodeURIComponent(hash.slice(EVENT_HASH_PREFIX.length).split('/')[0])
+}
+
+/** A page that slides in from the right over the landing or event page
+ *  (#273): Share (the site, or one event) or the iOS widget setup. */
+type Overlay = { kind: 'widget' } | { kind: 'share'; eventId?: string }
+
+function overlayFromHash(hash: string): Overlay | null {
+  // '#/widget-script' is the old name for the widget page (pre-#213) —
+  // keep it working in case anyone bookmarked or shared it.
+  if (hash === '#/widget-setup' || hash === '#/widget-script') return { kind: 'widget' }
+  if (hash === SHARE_HASH) return { kind: 'share' }
+  if (isEventShareHash(hash)) return { kind: 'share', eventId: eventIdFromHash(hash)! }
+  return null
 }
 
 // Same header and tab-bar footprint as the loaded page, so the event
@@ -187,6 +201,20 @@ export default function App() {
     if (isOnEventRoute) setPushMounted(true)
   }, [isOnEventRoute])
 
+  // Same for Share / iOS widget: the last one opened stays mounted
+  // through its slide-out.
+  const overlay = overlayFromHash(hash)
+  const [lastOverlay, setLastOverlay] = useState(overlay)
+  useEffect(() => {
+    if (overlay) setLastOverlay(overlay)
+  }, [hash])
+  const shownOverlay = overlay ?? lastOverlay
+  const [overlayEntered, setOverlayEntered] = useState(false)
+  // Opened by loading its URL, not by tapping through to it: show it in
+  // place instead of sliding it in (as with the event page, below).
+  const bootHashRef = useRef<string | null>(hash)
+  if (hash !== bootHashRef.current) bootHashRef.current = null
+
   // ALL_EVENTS always has at least the test fixture, even before the
   // events load or when there are none (#232).
   const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? ALL_EVENTS[0]
@@ -205,9 +233,10 @@ export default function App() {
   useTrackFavicon(routeEvent?.trackId)
   useDocumentTitle(routeEvent?.name)
   // …and the status bar above it matches its white header (#245) — once
-  // the page has slid in, not while it's still on its way.
+  // the page has slid in, not while it's still on its way — until a
+  // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
-  useChromeColor(isOnEventRoute && pushEntered ? HEADER_CHROME_COLOR : null)
+  useChromeColor(isOnEventRoute && pushEntered && !overlayEntered ? HEADER_CHROME_COLOR : null)
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -231,13 +260,17 @@ export default function App() {
   const hasPastActivities = isToday
     && activeDay.activities.some(a => a.type !== 'break' && parseMinutes(a.time) < nowMinutes())
 
-  function switchEvent(event: EventConfig) {
+  function selectEvent(event: EventConfig) {
     skipPushEnterAnimationRef.current = false
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
     setSelectedGroups([])
     setActiveTab('schedule')
     setLapSlot(null)
+  }
+
+  function switchEvent(event: EventConfig) {
+    selectEvent(event)
     setHash(eventHash(event.id))
   }
 
@@ -254,7 +287,9 @@ export default function App() {
     const hashEventId = eventIdFromHash(hash)
     if (hashEventId) {
       const matched = ALL_EVENTS.find(e => e.id === hashEventId)
-      if (matched && matched.id !== activeEventId) switchEvent(matched)
+      // The URL already names it — and may be one of its sub-pages, so
+      // leave the hash alone.
+      if (matched && matched.id !== activeEventId) selectEvent(matched)
       return
     }
     if (isEmptyHash(hash)) {
@@ -264,16 +299,6 @@ export default function App() {
     // ALL_EVENTS too: events arrive from the store after load, so a
     // direct link to one only resolves once the fetch lands.
   }, [hash, ALL_EVENTS])
-
-  // '#/widget-script' is the old name for this page (pre-#213) — keep it
-  // working in case anyone bookmarked or shared it.
-  if (hash === '#/widget-setup' || hash === '#/widget-script') {
-    return <WidgetSetupPage />
-  }
-
-  if (hash === '#/share') {
-    return <SharePage />
-  }
 
   // Back where an editor was opened from, without replaying the event
   // page's slide-in.
@@ -326,7 +351,7 @@ export default function App() {
 
   return (
     <>
-    <PullToRefresh disabled={pushMounted}>
+    <PullToRefresh disabled={pushMounted || !!shownOverlay}>
       <LandingPage onOpenEvent={switchEvent} />
     </PullToRefresh>
     {pushMounted && (
@@ -337,7 +362,7 @@ export default function App() {
       scrollRef={pushScrollRef}
       skipEnterAnimation={skipPushEnterAnimationRef.current}
     >
-    <PullToRefresh disabled={!isOnEventRoute} scrollContainerRef={pushScrollRef}>
+    <PullToRefresh disabled={!isOnEventRoute || !!shownOverlay} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50">
         {routeMissing ? (
           <MissingEvent loading={!eventsLoaded} onHome={goHome} />
@@ -456,10 +481,31 @@ export default function App() {
         </div>
       </div>
         </>)}
-      <Footer />
     </div>
     </PullToRefresh>
     </PushPage>
+    )}
+    {shownOverlay && (
+      <PushPage
+        key={shownOverlay.kind === 'share' ? `share ${shownOverlay.eventId ?? ''}` : 'widget'}
+        open={overlay !== null}
+        onExited={() => setLastOverlay(null)}
+        onEnteredChange={setOverlayEntered}
+        skipEnterAnimation={bootHashRef.current !== null}
+        whiteHeader={false}
+      >
+        {shownOverlay.kind === 'widget' ? (
+          <WidgetSetupPage />
+        ) : shownOverlay.eventId !== undefined ? (
+          <SharePage
+            url={eventShareUrl(shownOverlay.eventId)}
+            description="Share this link so others can view this event’s schedule."
+            closeHref={eventHash(shownOverlay.eventId)}
+          />
+        ) : (
+          <SharePage />
+        )}
+      </PushPage>
     )}
     {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
       <LapTimesSheet

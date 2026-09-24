@@ -9,6 +9,7 @@ import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { TrackIcon } from './TrackIcon'
 import { AccountButton } from './AccountButton'
+import { AppMenu } from './AppMenu'
 import { StatusBadge } from './EventHeader'
 import type { EventConfig } from '../types'
 
@@ -142,11 +143,12 @@ function FeaturedEventCard({
   )
 }
 
+// Its hover pill ends at the cards' right edge, not past it (#273).
 function AddEventLink() {
   return (
     <a
       href="#/new-event"
-      className="-my-1 -mr-2 inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+      className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
     >
       <Plus size={16} aria-hidden="true" />
       Add event
@@ -187,10 +189,16 @@ export function LandingPage({ onOpenEvent }: Props) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">HPDE Events</h1>
-          <div className="flex shrink-0 items-center gap-2">
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1 shrink-0 self-start">
+        <div className="mb-8">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">HPDE Events</h1>
+            <div className="flex shrink-0 items-center gap-1">
+              <AppMenu />
+              <AccountButton reserveSpace={false} />
+            </div>
+          </div>
+          {/* List / calendar, under the title (#273). */}
+          <div className="mt-4 inline-flex gap-1 rounded-lg bg-gray-100 p-1">
             <button
               onClick={() => setView('list')}
               className={`rounded-md p-2 transition-colors ${
@@ -211,8 +219,6 @@ export function LandingPage({ onOpenEvent }: Props) {
             >
               <CalendarIcon size={18} />
             </button>
-          </div>
-          <AccountButton reserveSpace={false} />
           </div>
         </div>
 
