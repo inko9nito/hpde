@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
@@ -109,18 +109,17 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-1 pb-4 pt-2">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-gray-900">Edit schedule</h1>
-            {event && <p className="truncate text-sm text-gray-500">{event.name}</p>}
+            <h1 className="text-2xl font-bold text-gray-900">Edit schedule</h1>
+            {event && <p className="mt-1 truncate text-sm text-gray-500">{event.name}</p>}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="flex shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition-colors hover:border-gray-400 hover:text-gray-700"
-            style={{ minWidth: 36, minHeight: 36 }}
+            className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
         {content}
@@ -260,8 +259,8 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   }
 
   const tabClass = (t: Tab) =>
-    `flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-      tab === t ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-800'
+    `-mb-px border-b-[3px] pb-2.5 pt-3 text-base transition-colors ${
+      tab === t ? 'border-gray-900 font-semibold text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-800'
     }`
 
   return (
@@ -276,7 +275,7 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
         </div>
       )}
 
-      <div role="tablist" aria-label="Editor view" className="mb-3 flex gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+      <div role="tablist" aria-label="Editor view" className="mb-5 flex gap-8 border-b border-gray-200 px-1">
         <button role="tab" aria-selected={tab === 'edit'} onClick={() => setTab('edit')} className={tabClass('edit')}>
           Edit
         </button>
@@ -286,21 +285,22 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
       </div>
 
       {tab === 'edit' ? (
-        <div className="space-y-4">
+        <div className="space-y-7">
           <section aria-labelledby="schedule-title">
-            <h2 id="schedule-title" className="sr-only">Schedule</h2>
+            <h2 id="schedule-title" className="px-1 text-base font-bold text-gray-900">Schedule source</h2>
+            <p className="mb-3 mt-0.5 px-1 text-sm text-gray-500">Paste or edit the event schedule below.</p>
             <textarea
               ref={textareaRef}
-              aria-labelledby="schedule-title"
+              aria-label="Schedule"
               value={text}
               onChange={e => setText(e.target.value)}
-              rows={16}
+              rows={5}
               autoCapitalize="off"
               autoCorrect="off"
               autoComplete="off"
               spellCheck={false}
               // 16px on phones: iOS zooms into anything smaller on focus.
-              className="block w-full resize-none overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 font-mono text-base leading-6 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-[13px] sm:leading-5"
+              className="block w-full resize-none overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 py-3.5 text-base leading-7 text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm sm:leading-6"
             />
             <FormatHelp />
           </section>
@@ -338,9 +338,9 @@ function RunGroups({ groups, problems, onChange }: {
 }) {
   return (
     <section aria-labelledby="run-groups-title">
-      <h2 id="run-groups-title" className="px-1 text-sm font-semibold text-gray-900">Run groups</h2>
-      <p className="mt-0.5 px-1 text-xs text-gray-500">
-        From the sessions in the schedule, each with a color picked from its name. Tap one to change it.
+      <h2 id="run-groups-title" className="px-1 text-base font-bold text-gray-900">Run groups</h2>
+      <p className="mt-0.5 px-1 text-sm text-gray-500">
+        Choose how each group appears in the schedule.
       </p>
       {groups.length === 0 ? (
         <p className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
@@ -378,13 +378,13 @@ function GroupRow({ index, group, problems, onChange }: {
   const [open, setOpen] = useState(false)
   const panelId = `run-group-${index}-panel`
   return (
-    <li id={`run-group-${index}`} aria-label={group.label} className="pl-4">
+    <li id={`run-group-${index}`} aria-label={group.label} className="px-4">
       <div className={index > 0 ? 'border-t border-gray-200' : ''}>
         <button
           onClick={() => setOpen(o => !o)}
           aria-expanded={open}
           aria-controls={panelId}
-          className="flex min-h-[52px] w-full items-center gap-3 py-2.5 pr-4 text-left"
+          className="flex min-h-[52px] w-full items-center gap-3 py-2.5 text-left"
         >
           <span className={`max-w-[60%] shrink-0 truncate rounded-full px-3 py-1 text-sm font-semibold ${group.bgClass} ${group.textClass ?? 'text-white'}`}>
             {group.label}
@@ -397,7 +397,7 @@ function GroupRow({ index, group, problems, onChange }: {
           />
         </button>
         {open && (
-          <div id={panelId} className="pb-4 pr-4">
+          <div id={panelId} className="pb-4">
             <label className={fieldLabel}>
               Description
               <input
@@ -435,7 +435,7 @@ function GroupRow({ index, group, problems, onChange }: {
           </div>
         )}
         {problems.map((p, j) => (
-          <p key={j} className="pb-3 pr-4 text-xs text-red-600">{p.message}</p>
+          <p key={j} className="pb-3 text-xs text-red-600">{p.message}</p>
         ))}
       </div>
     </li>
@@ -510,9 +510,12 @@ function Preview({ event }: { event: EventConfig }) {
 function FormatHelp() {
   const code = 'rounded bg-gray-100 px-1 font-mono text-[12px] text-gray-800'
   return (
-    <details className="mt-3 rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
-      <summary className="cursor-pointer font-medium text-gray-900">Format help</summary>
-      <div className="mt-3 space-y-3">
+    <details className="group mt-3 rounded-2xl border border-gray-200 bg-white text-sm text-gray-700 shadow-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3.5 text-base text-gray-900 [&::-webkit-details-marker]:hidden">
+        Format help
+        <ChevronDown size={18} aria-hidden="true" className="text-gray-500 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-3 px-4 pb-4">
         <p>
           A line starting with <code className={code}>//</code> is an example or note and isn’t saved. Remove the{' '}
           <code className={code}>//</code> to use it.
