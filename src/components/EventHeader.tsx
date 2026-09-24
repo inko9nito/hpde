@@ -57,6 +57,8 @@ interface Props {
   status: EventStatus
   activeTab: EventTabId
   onTabChange: (id: EventTabId) => void
+  /** Sessions with lap times saved, shown on the My notes tab (#210). */
+  notesCount?: number
   onBack: () => void
   onDeleted: () => void
   /** The page's scroll container — drives the collapse. */
@@ -82,7 +84,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, onBack, onDeleted, scrollRef }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onBack, onDeleted, scrollRef }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -145,7 +147,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, onBack, onD
       </div>
 
       <div className="mx-auto max-w-lg">
-        <EventTabs active={activeTab} onChange={onTabChange} />
+        <EventTabs active={activeTab} onChange={onTabChange} notesCount={notesCount} />
       </div>
     </div>
   )

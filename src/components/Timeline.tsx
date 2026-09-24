@@ -3,7 +3,8 @@ import { SessionCard } from './SessionCard'
 import { ActivityCard } from './ActivityCard'
 import { TimeIndicator } from './TimeIndicator'
 import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
-import type { ScheduleActivity, RunGroupConfig } from '../types'
+import { sessionKey } from '../utils/lapTimes'
+import type { ScheduleActivity, SessionActivity, RunGroupConfig } from '../types'
 import checkeredFlag from '../assets/checkered-flag.svg'
 
 interface Props {
@@ -12,6 +13,11 @@ interface Props {
   isToday: boolean
   selectedGroups: string[]
   hidePast: boolean
+  /**
+   * Signed in: sessions open their lap times (#210). `saved` holds the
+   * session keys (see sessionKey) that have laps.
+   */
+  lapTimes?: { date: string; saved: Set<string>; onOpen: (session: SessionActivity) => void }
 }
 
 // Animates an item sliding away instead of vanishing instantly. Stays
@@ -31,7 +37,7 @@ function Collapse({ collapsed, children }: { collapsed: boolean; children: React
   )
 }
 
-export function Timeline({ activities, runGroups, isToday, selectedGroups, hidePast }: Props) {
+export function Timeline({ activities, runGroups, isToday, selectedGroups, hidePast, lapTimes }: Props) {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
 
@@ -135,7 +141,15 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
             </div>
           )
           : activity.type === 'session'
-            ? <SessionCard activity={activity} runGroups={runGroups} past={past} />
+            ? (
+              <SessionCard
+                activity={activity}
+                runGroups={runGroups}
+                past={past}
+                onOpenLaps={lapTimes && (() => lapTimes.onOpen(activity))}
+                hasLaps={lapTimes && activity.onTrack.some(g => lapTimes.saved.has(sessionKey(lapTimes.date, activity.time, g)))}
+              />
+            )
             : <ActivityCard activity={activity} past={past} />
 
         return (

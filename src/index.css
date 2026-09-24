@@ -33,3 +33,34 @@ html.finishing-sign-in #netlify-identity-widget {
 .tab-fade {
   animation: tab-fade 10ms linear;
 }
+
+/* The lap-times sheet (#210) rises from the bottom, like an iOS sheet. */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.sheet-up {
+  animation: sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-up { animation: none; }
+}
+
+/* Loading skeletons fade in, then out as the content fades in (#210). */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+.fade-out {
+  animation: fade-out 150ms ease-in both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .fade-out { animation: none; }
+}

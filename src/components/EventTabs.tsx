@@ -22,6 +22,8 @@ export function isEventTabId(value: unknown): value is EventTabId {
 interface Props {
   active: EventTabId
   onChange: (id: EventTabId) => void
+  /** How many sessions have lap times saved: "My notes (1)" (#210). */
+  notesCount?: number
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * columns, the active one marked by a heavier label and a dark bar
  * underneath.
  */
-export function EventTabs({ active, onChange }: Props) {
+export function EventTabs({ active, onChange, notesCount }: Props) {
   return (
     <div role="tablist" aria-label="Event section" className="flex pl-2 pr-0.5 pt-4">
       {TABS.map(tab => {
@@ -47,7 +49,10 @@ export function EventTabs({ active, onChange }: Props) {
               isActive ? 'font-medium' : 'font-normal hover:text-gray-600'
             }`}
           >
-            <span className="truncate px-4 leading-none">{tab.label}</span>
+            <span className="truncate px-4 leading-none">
+              {tab.label}
+              {tab.id === 'notes' && !!notesCount && ` (${notesCount})`}
+            </span>
             <span
               aria-hidden="true"
               className={`h-1 w-full rounded-t-sm ${isActive ? 'bg-gray-900' : ''}`}
