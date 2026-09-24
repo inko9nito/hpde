@@ -293,9 +293,7 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
 
       {tab === 'edit' ? (
         <div className="space-y-7">
-          <section aria-labelledby="schedule-title">
-            <h2 id="schedule-title" className="px-1 text-base font-bold text-gray-900">Schedule source</h2>
-            <p className="mb-3 mt-0.5 px-1 text-sm text-gray-500">Paste or edit the event schedule below.</p>
+          <section aria-label="Schedule">
             <textarea
               ref={textareaRef}
               aria-label="Schedule"
