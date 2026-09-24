@@ -26,3 +26,28 @@ describe('default app icon (#237)', () => {
     expect(pngSize(match![1])).toBe(sizes)
   })
 })
+
+// Safari's tab overview on iOS reads /favicon.ico, not the <link>s above;
+// without the file, Netlify serves its own logo there (#270).
+describe('favicon.ico (#270)', () => {
+  const ico = readFileSync(resolve(root, 'public', 'favicon.ico'))
+  const count = ico.readUInt16LE(4)
+
+  it('is an icon file with a frame for each tab size', () => {
+    expect(ico.readUInt16LE(0)).toBe(0)
+    expect(ico.readUInt16LE(2)).toBe(1)
+    const sizes = Array.from({ length: count }, (_, i) => ico.readUInt8(6 + 16 * i))
+    expect(sizes).toEqual([16, 32, 48])
+  })
+
+  it('holds a PNG of the stated size in every frame', () => {
+    for (let i = 0; i < count; i++) {
+      const entry = 6 + 16 * i
+      const size = ico.readUInt8(entry)
+      const start = ico.readUInt32LE(entry + 12)
+      const png = ico.subarray(start, start + ico.readUInt32LE(entry + 8))
+      expect(png.subarray(1, 4).toString('latin1')).toBe('PNG')
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`).toBe(`${size}x${size}`)
+    }
+  })
+})
