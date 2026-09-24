@@ -40,6 +40,8 @@ export interface SessionLaps {
   /** Kept so the laps still read "Session 3" if the schedule changes later. */
   sessionNumber?: number
   laps: Lap[]
+  /** How the session went overall, in the driver's words. */
+  summary?: string
   updatedAt?: string
 }
 
@@ -58,6 +60,7 @@ export const MIN_LAP_MS = 10_000
 export const MAX_LAP_MS = 10 * 60_000
 export const MAX_LAPS = 200
 export const MAX_NOTE = 500
+export const MAX_SUMMARY = 1000
 const MAX_CROSSING = 24
 
 /** "1:56", "1:39.42", "0:58.3". Whole seconds unless the time has more. */
@@ -148,6 +151,11 @@ export interface ParsedLaps {
    */
   ambiguous: boolean
   readAs: ReadAs
+  /**
+   * The words under a timing sheet's session title, before its laps
+   * ("Tires were complaining as heat built…"): the session's summary.
+   */
+  summary?: string
 }
 
 type Cell =
@@ -247,6 +255,7 @@ interface Reading {
   plainList: boolean
   /** …each one longer than the one before. */
   plainIncreasing: boolean
+  summary?: string
 }
 
 function read(text: string, readAs: ReadAs): Reading {
@@ -260,6 +269,10 @@ function read(text: string, readAs: ReadAs): Reading {
   let rows = 0
   const listed: number[] = []
   let sessionTitles = 0
+  // Words before the laps start (and before the column headers) are the
+  // session's summary; the session title isn't.
+  let beforeLaps = true
+  const summary: string[] = []
 
   const lines = text.split(/\r?\n/)
   lines.forEach((rawLine, i) => {
@@ -285,10 +298,18 @@ function read(text: string, readAs: ReadAs): Reading {
     // Titles, headers and totals start with a word. A line that starts
     // with something else, like a mistyped time, is flagged, not passed over.
     if (!isRow && first.type === 'text' && /^\p{L}/u.test(first.raw)) {
-      if (/^session\b/i.test(first.raw)) sessionTitles++
+      const title = /^session\b/i.test(first.raw)
+      const header = /^laps?\b/i.test(first.raw)
+      if (title) sessionTitles++
+      if (header) beforeLaps = false
+      if (beforeLaps && !title) {
+        summary.push(lineText.replace(/\s+/g, ' '))
+        return
+      }
       skipped.push({ line, text: lineText, message: 'Not a lap' })
       return
     }
+    beforeLaps = false
 
     if (isRow) {
       rows++
@@ -358,7 +379,7 @@ function read(text: string, readAs: ReadAs): Reading {
 
   const plainList = rows === 0 && crossingsAt === -1
   const plainIncreasing = plainList && listed.length >= 2 && listed.every((ms, i) => i === 0 || ms > listed[i - 1])
-  return { laps, errors, skipped, plainList, plainIncreasing }
+  return { laps, errors, skipped, plainList, plainIncreasing, ...(summary.length ? { summary: summary.join(' ') } : {}) }
 }
 
 /**
@@ -372,7 +393,10 @@ export function parseLapTimes(text: string, readAs?: ReadAs): ParsedLaps {
     // Only a plain list can be read either way; anything else reads as laps.
     const ambiguous = asLaps.plainIncreasing || isTimestampList(text)
     const result = readAs === 'timestamps' && ambiguous ? read(text, 'timestamps') : asLaps
-    return { laps: result.laps, errors: result.errors, skipped: result.skipped, ambiguous, readAs: ambiguous ? readAs : 'laps' }
+    return {
+      laps: result.laps, errors: result.errors, skipped: result.skipped, ambiguous, readAs: ambiguous ? readAs : 'laps',
+      ...(result.summary ? { summary: result.summary } : {}),
+    }
   }
   if (isTimestampList(text)) return parseLapTimes(text, 'timestamps')
   return parseLapTimes(text, 'laps')
@@ -454,5 +478,9 @@ export function cleanSessionLaps(value: unknown): { session: SessionLaps } | { e
   }
   const session: SessionLaps = { key: sessionKey(s.date, s.time, s.group), date: s.date, time: s.time, group: s.group, laps }
   if (s.sessionNumber !== undefined) session.sessionNumber = s.sessionNumber
+  if (s.summary !== undefined) {
+    if (typeof s.summary !== 'string' || s.summary.length > MAX_SUMMARY) return { error: `The summary can be up to ${MAX_SUMMARY} characters.` }
+    if (s.summary.trim()) session.summary = s.summary.trim()
+  }
   return { session }
 }

@@ -1,13 +1,11 @@
 import { useState } from 'react'
-import { ChevronRight, Lock, Timer } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapFigures, LapTable } from './LapList'
+import { LapFigures, LapTable, lapColumns } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
-import { useLapSummary } from '../data/lapLog'
-import { useEvents } from '../data/EventsContext'
 import { formatTime, formatAmPm } from '../utils/time'
-import { formatLapTime, lapStats } from '../utils/lapTimes'
-import { bestOnLayout, trackShortName } from '../utils/trackStats'
+import { formatLapTime } from '../utils/lapTimes'
+import { eventBest, trackShortName } from '../utils/trackStats'
 import type { LapLog } from '../data/lapLog'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventConfig } from '../types'
@@ -15,17 +13,15 @@ import type { EventConfig } from '../types'
 interface Props {
   event: EventConfig
   log: LapLog
+  /** The best on this track layout across every event, and how many events that is. */
+  layoutBest: { best?: number; events: number }
+  /** The same best, once every event's is known — marks the lap that set it. */
+  allTimeBest?: number
   onEdit: (session: SessionLaps) => void
 }
 
 function sessionTitle(s: SessionLaps): string {
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
-}
-
-/** The fastest lap of the event. */
-function eventBest(sessions: SessionLaps[]): number | undefined {
-  const bests = sessions.map(s => lapStats(s.laps).best).filter((ms): ms is number => ms !== undefined)
-  return bests.length ? Math.min(...bests) : undefined
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -46,9 +42,7 @@ function StatCard({ label, ms, caption }: { label: string; ms: number | undefine
  * The My notes tab (#210): the driver's own lap times for this event,
  * session by session. Added from the Schedule tab; edited from here too.
  */
-export function MyLapTimes({ event, log, onEdit }: Props) {
-  const { allEvents } = useEvents()
-  const summary = useLapSummary(true)
+export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Props) {
   // Sessions whose lap table is open. All closed to start, so the figures
   // for every session fit on screen at once.
   const [open, setOpen] = useState<Set<string>>(() => new Set())
@@ -67,11 +61,14 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
 
   const header = (
     <div className="mb-3 flex min-h-[20px] items-center justify-between gap-3 px-1 text-xs text-gray-500">
-      {log.sessions.length > 0 ? (
+      {log.status === 'ready' && log.sessions.length > 0 ? (
         <button
           onClick={() => setOpen(allOpen ? new Set() : new Set(log.sessions.map(s => s.key)))}
-          className="font-medium text-blue-600 hover:text-blue-700"
+          className="flex items-center gap-1 text-gray-500 transition-colors hover:text-gray-800"
         >
+          {allOpen
+            ? <ChevronsDownUp size={14} aria-hidden="true" />
+            : <ChevronsUpDown size={14} aria-hidden="true" />}
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
@@ -116,10 +113,9 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
     )
   }
 
-  const best = eventBest(log.sessions)
   const days = new Set(log.sessions.map(s => s.date))
-  // Until the summary arrives, this event's best is the best known.
-  const layoutBest = bestOnLayout(event, allEvents, summary ?? [], best)
+  // One set of columns for every session's table, so they line up.
+  const columns = lapColumns(log.sessions.flatMap(s => s.laps))
 
   return (
     <>
@@ -127,7 +123,7 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
       <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
         <StatCard
           label="Best lap this event"
-          ms={best}
+          ms={eventBest(log.sessions)}
           caption={`Across ${plural(log.sessions.length, 'recorded session', 'recorded sessions')}`}
         />
         {track && (
@@ -143,51 +139,60 @@ export function MyLapTimes({ event, log, onEdit }: Props) {
           const expanded = open.has(session.key)
           const tableId = `laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`
           return (
-          <section key={session.key} aria-label={`${sessionTitle(session)}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
-            <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-widest text-gray-400">
-              {sessionTitle(session)}
-              {days.size > 1 && <span className="ml-2 font-medium normal-case tracking-normal">{shortDate(session.date)}</span>}
-            </h3>
-            <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
-                  {formatTime(session.time)}
-                  <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(session.time)}</span>
+            <section key={session.key} aria-label={`${sessionTitle(session)}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
+              <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+                {sessionTitle(session)}
+                {days.size > 1 && <span className="ml-2 font-medium normal-case tracking-normal">{shortDate(session.date)}</span>}
+              </h3>
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
+                    {formatTime(session.time)}
+                    <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(session.time)}</span>
+                  </div>
+                  <GroupBadge group={groupFor(session.group, runGroups)} size="sm" />
                 </div>
-                <GroupBadge group={groupFor(session.group, runGroups)} size="sm" />
-                <button
-                  onClick={() => onEdit(session)}
-                  className="ml-auto text-sm font-medium text-blue-600 hover:text-blue-700"
-                  aria-label={`Edit lap times for ${sessionTitle(session)}`}
-                >
-                  Edit
-                </button>
-              </div>
-              <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-                <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                  <Timer size={13} aria-hidden="true" /> Lap times
-                </p>
-                {/* The whole row opens the table: the chevron's button stretches over it. */}
-                <div className="relative flex items-center gap-2">
-                  <LapFigures laps={session.laps} />
-                  <button
-                    onClick={() => toggle(session.key)}
-                    aria-expanded={expanded}
-                    aria-controls={tableId}
-                    aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${sessionTitle(session)}`}
-                    className="shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
-                  >
-                    <ChevronRight
-                      size={18}
-                      className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </button>
+                {session.summary && (
+                  <p className="text-sm text-gray-700" data-session-summary>{session.summary}</p>
+                )}
+                <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Timer size={13} aria-hidden="true" /> Lap times
+                    </p>
+                    <button
+                      onClick={() => onEdit(session)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                      aria-label={`Edit lap times for ${sessionTitle(session)}`}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  {/* The whole row opens the table: the chevron's button stretches over it. */}
+                  <div className="relative flex items-center gap-2">
+                    <LapFigures laps={session.laps} allTimeBest={allTimeBest} />
+                    <button
+                      onClick={() => toggle(session.key)}
+                      aria-expanded={expanded}
+                      aria-controls={tableId}
+                      aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${sessionTitle(session)}`}
+                      className="shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+                    >
+                      <ChevronRight
+                        size={18}
+                        className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div id={tableId}>
+                      <LapTable laps={session.laps} columns={columns} allTimeBest={allTimeBest} />
+                    </div>
+                  )}
                 </div>
-                {expanded && <div id={tableId}><LapTable laps={session.laps} /></div>}
               </div>
-            </div>
-          </section>
+            </section>
           )
         })}
       </div>

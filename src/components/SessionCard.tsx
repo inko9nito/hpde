@@ -48,7 +48,11 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps }: 
             <button
               onClick={onOpenLaps}
               aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}`}
-              className="-my-2 -mr-2 flex items-center gap-3 rounded-lg py-2 pr-2 text-left transition-colors hover:bg-gray-50"
+              // The highlight reaches 6px past the row on every side, 10px
+              // short of the card's edge. A divider or note below sits only
+              // 12px away, not 16, so there the row keeps 4px more room. On its
+              // own, the row grows to the time's height, so it stays centred.
+              className={`-mx-1.5 ${inClass.length > 0 || activity.note ? '-mb-0.5 -mt-1.5' : '-my-1.5 grow'} flex items-center gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-gray-50`}
             >
               {onTrackRow}
               {hasLaps && <Timer size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-laps />}

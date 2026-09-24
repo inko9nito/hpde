@@ -4,7 +4,7 @@ import { Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { LapFigures, LapTable } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
-import { lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
+import { MAX_SUMMARY, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
 import type { RunGroupConfig } from '../types'
 
@@ -23,6 +23,8 @@ interface Props {
   /** Show the day too — for an event that runs more than one. */
   showDate: boolean
   saved: (key: string) => SessionLaps | undefined
+  /** The best on this track layout across every event, to mark a lap that set it. */
+  allTimeBest?: number
   onSave: (session: Omit<SessionLaps, 'key' | 'updatedAt'>) => Promise<void>
   onRemove: (key: string) => Promise<void>
   onClose: () => void
@@ -42,7 +44,7 @@ export function shortDate(iso: string): string {
  * session you drove, paste your times, check what was read, save. Opens
  * from the bottom like an iOS sheet.
  */
-export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemove, onClose }: Props) {
+export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, onSave, onRemove, onClose }: Props) {
   // With more than one group on track, start from the one that already has
   // laps; failing that, ask — laps saved under the wrong group would be lost.
   const [group, setGroup] = useState<string | null>(() =>
@@ -52,6 +54,11 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
   const existing = group ? saved(sessionKey(slot.date, slot.time, group)) : undefined
   const [text, setText] = useState(() => (existing ? lapsToText(existing.laps) : ''))
   const [readAs, setReadAs] = useState<ReadAs | undefined>(undefined)
+  // The session's summary. Until it's typed in, a summary found in the
+  // paste (the words under a timing sheet's session title) fills it.
+  const [summaryText, setSummaryText] = useState(() => existing?.summary ?? '')
+  const [summaryTouched, setSummaryTouched] = useState(false)
+  const summaryId = useId()
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
@@ -62,11 +69,15 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
 
   const parsed = useMemo(() => parseLapTimes(text, readAs), [text, readAs])
   const canSave = group !== null && parsed.laps.length > 0 && parsed.errors.length === 0 && !busy
+  const summaryFromPaste = !summaryTouched && !summaryText && !!parsed.summary
+  const summary = summaryFromPaste ? parsed.summary! : summaryText
 
   function pickGroup(next: string) {
     setGroup(next)
     const laps = saved(sessionKey(slot.date, slot.time, next))
     setText(laps ? lapsToText(laps.laps) : '')
+    setSummaryText(laps?.summary ?? '')
+    setSummaryTouched(false)
     setEditing(!laps)
     setReadAs(undefined)
     setConfirmingRemove(false)
@@ -93,7 +104,10 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
     setBusy('saving')
     setFailure(null)
     try {
-      await onSave({ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, laps: parsed.laps })
+      await onSave({
+        date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, laps: parsed.laps,
+        ...(summary.trim() ? { summary: summary.trim() } : {}),
+      })
     } catch (err) {
       setFailure((err as Error).message)
       setBusy(null)
@@ -121,6 +135,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
   function cancelEdit() {
     if (!existing) return
     setText(lapsToText(existing.laps))
+    setSummaryText(existing.summary ?? '')
+    setSummaryTouched(false)
     setReadAs(undefined)
     setFailure(null)
     setEditing(false)
@@ -179,8 +195,9 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
 
         {group !== null && existing && !editing && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
+            {existing.summary && <p className="text-sm text-gray-700" data-session-summary>{existing.summary}</p>}
             <div className="flex items-start gap-3">
-              <LapFigures laps={existing.laps} />
+              <LapFigures laps={existing.laps} allTimeBest={allTimeBest} />
               <button
                 onClick={() => setEditing(true)}
                 className="shrink-0 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
@@ -188,7 +205,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
                 Edit
               </button>
             </div>
-            <LapTable laps={existing.laps} />
+            <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
           </section>
         )}
 
@@ -235,8 +252,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
 
             {parsed.laps.length > 0 && (
               <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-                <LapFigures laps={parsed.laps} />
-                <LapTable laps={parsed.laps} />
+                <LapFigures laps={parsed.laps} allTimeBest={allTimeBest} />
+                <LapTable laps={parsed.laps} allTimeBest={allTimeBest} />
               </section>
             )}
 
@@ -256,6 +273,23 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, onSave, onRemo
                 {parsed.skipped.map(s => s.line).join(', ')}: not laps (titles, headers or totals).
               </p>
             )}
+
+            <label htmlFor={summaryId} className="mt-4 flex items-baseline justify-between text-xs font-medium text-gray-700">
+              Session summary
+              <span className="font-normal text-gray-400">{summaryFromPaste ? 'From your paste' : 'Optional'}</span>
+            </label>
+            <textarea
+              id={summaryId}
+              value={summary}
+              onChange={e => {
+                setSummaryText(e.target.value)
+                setSummaryTouched(true)
+              }}
+              rows={3}
+              maxLength={MAX_SUMMARY}
+              placeholder="How did it go? Traffic, flags, tires…"
+              className="mt-1.5 w-full resize-y rounded-xl border border-gray-300 px-3 py-2 text-base leading-snug text-gray-900 placeholder:text-gray-400 focus:border-gray-900 focus:outline-none sm:text-sm"
+            />
           </>
         )}
 

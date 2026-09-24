@@ -22,7 +22,8 @@ import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventP
 import { LapTimesSheet } from './components/LapTimesSheet'
 import type { SessionSlot } from './components/LapTimesSheet'
 import { MyLapTimes } from './components/MyLapTimes'
-import { useLapLog } from './data/lapLog'
+import { useLapLog, useLapSummary } from './data/lapLog'
+import { bestOnLayout, eventBest } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -214,6 +215,11 @@ export default function App() {
   // Fetched only while this event's page is open.
   const lapLog = useLapLog(routeEventId !== null && routeEventId === activeEvent.id ? activeEvent.id : null)
   const savedLapKeys = new Set(lapLog.byKey.keys())
+  // Their best on this track layout across every event — so a lap that's
+  // the all-time best can say so. Only once the other events' bests are in.
+  const lapSummary = useLapSummary(lapLog.status !== 'off')
+  const layoutBest = bestOnLayout(activeEvent, ALL_EVENTS, lapSummary ?? [], eventBest(lapLog.sessions))
+  const allTimeBest = lapSummary ? layoutBest.best : undefined
 
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -435,6 +441,8 @@ export default function App() {
             <MyLapTimes
               event={activeEvent}
               log={lapLog}
+              layoutBest={layoutBest}
+              allTimeBest={allTimeBest}
               onEdit={session => setLapSlot({
                 date: session.date,
                 time: session.time,
@@ -461,6 +469,7 @@ export default function App() {
         runGroups={activeEvent.runGroups}
         showDate={multiDay}
         saved={key => lapLog.byKey.get(key)}
+        allTimeBest={allTimeBest}
         onSave={async session => {
           await lapLog.save(session)
           setLapSlot(null)

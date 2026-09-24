@@ -47,7 +47,7 @@ describe('parseLapTimes (#210)', () => {
   })
 
   it('reads a whole session copied from a timing sheet, passing over its title, header and summary', () => {
-    const { laps, errors, skipped } = parseLapTimes(SHEET_SESSION)
+    const { laps, errors, skipped, summary } = parseLapTimes(SHEET_SESSION)
     expect(errors).toEqual([])
     expect(laps).toEqual([
       { ms: 139_000, kind: 'out', start: '11:46:32 AM', end: '11:48:51 AM', note: 'Outlap — traffic the whole lap' },
@@ -55,7 +55,19 @@ describe('parseLapTimes (#210)', () => {
       { ms: 104_000, start: '11:50:47 AM', end: '11:52:31 AM' },
       { ms: 105_000, start: '11:52:31 AM', end: '11:54:16 AM', note: 'Traffic' },
     ])
-    expect(skipped.map(s => s.line)).toEqual([1, 2, 3, 8, 9])
+    expect(skipped.map(s => s.line)).toEqual([1, 3, 8, 9])
+    // The words under the title are the session's summary.
+    expect(summary).toBe('Outlap began behind a slow car; passed it on the back straight.')
+  })
+
+  it('takes every line of words before the laps as the summary', () => {
+    const text = 'SESSION 3 — Started ~2:30 PM\nNo outlap included;\tsome laps had traffic.\nTires were hot.\nLap  Start  Finish  Lap Time  Notes\n1  1:42\nLaps  1  Best  1:42'
+    expect(parseLapTimes(text).summary).toBe('No outlap included; some laps had traffic. Tires were hot.')
+  })
+
+  it('has no summary without words before the laps', () => {
+    expect(parseLapTimes('Lap\tTime\n1\t1:42\nGreat session').summary).toBeUndefined()
+    expect(parseLapTimes('1:42, 1:44').summary).toBeUndefined()
   })
 
   it('keeps approximate (~) crossing times as written', () => {
@@ -248,6 +260,11 @@ describe('cleanSessionLaps', () => {
     })
   })
 
+  it('keeps a summary, trimmed, and drops a blank one', () => {
+    expect(cleanSessionLaps({ ...valid, summary: ' Hot tires. ' })).toMatchObject({ session: { summary: 'Hot tires.' } })
+    expect(cleanSessionLaps({ ...valid, summary: '  ' })).not.toHaveProperty('session.summary')
+  })
+
   it('refuses anything that isn’t a session of laps', () => {
     const bad = [
       null,
@@ -261,6 +278,8 @@ describe('cleanSessionLaps', () => {
       { ...valid, laps: [{ ms: 116_000, kind: 'warmup' }] },
       { ...valid, laps: [{ ms: 116_000, note: 'x'.repeat(501) }] },
       { ...valid, laps: Array(201).fill({ ms: 116_000 }) },
+      { ...valid, summary: 'x'.repeat(1001) },
+      { ...valid, summary: 5 },
     ]
     for (const b of bad) expect(cleanSessionLaps(b)).toHaveProperty('error')
   })

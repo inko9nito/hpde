@@ -1,4 +1,6 @@
 import { normalizeKey } from './fieldOptions'
+import { lapStats } from './lapTimes'
+import type { SessionLaps } from './lapTimes'
 import type { EventConfig } from '../types'
 
 // Lap-time bests across events on the same track layout (#210): "Best on
@@ -65,4 +67,10 @@ export function bestOnLayout(
     .map(s => s.best!)
   if (thisBest !== undefined) bests.push(thisBest)
   return bests.length ? { best: Math.min(...bests), events: bests.length } : { events: 0 }
+}
+
+/** The fastest lap across these sessions. */
+export function eventBest(sessions: SessionLaps[]): number | undefined {
+  const bests = sessions.map(s => lapStats(s.laps).best).filter((ms): ms is number => ms !== undefined)
+  return bests.length ? Math.min(...bests) : undefined
 }

@@ -296,6 +296,57 @@ describe('lap times (#210)', () => {
     })
   })
 
+  it('takes the session summary from the paste, and saves and shows it', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue')
+    const sheet = screen.getByRole('dialog')
+    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), {
+      target: { value: `SESSION 2 — Started 11:46 AM\nTires were complaining as heat built.\n${SHEET_ROWS}` },
+    })
+    const summaryBox = within(sheet).getByLabelText(/Session summary/)
+    expect(summaryBox).toHaveValue('Tires were complaining as heat built.')
+    expect(sheet).toHaveTextContent('From your paste')
+    // Passed over: the title, the header and the totals — not the summary.
+    expect(sheet).toHaveTextContent('Passed over lines 1, 3, 7')
+
+    // Typed over, the typed words win.
+    fireEvent.change(summaryBox, { target: { value: 'Hot tires by lap 3.' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
+    await waitFor(() => expect(lapCalls('PUT')).toHaveLength(1))
+    expect(JSON.parse(String(lapCalls('PUT')[0][1]!.body)).session.summary).toBe('Hot tires by lap 3.')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
+    expect(screen.getByRole('region', { name: 'Session 2, 11:45 AM' })).toHaveTextContent('Hot tires by lap 3.')
+  })
+
+  it('marks the lap that’s the all-time best on this layout, once every event’s best is in', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }, { ms: 98_540 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 99_000 }] },
+    ]
+    summary = [{ eventId: sameLayout.id, best: 98_910, sessions: 3 }]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    const first = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    const second = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    await waitFor(() => expect(first.querySelector('[data-all-time-best]')).not.toBeNull())
+    // Session 2's best is its own best, not the all-time one.
+    expect(second.querySelector('[data-best-lap]')).not.toBeNull()
+    expect(second.querySelector('[data-all-time-best]')).toBeNull()
+  })
+
+  it('gives every session’s table the same columns, so they line up', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910, start: '~2:32:44 PM', end: '~2:34:26 PM' }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    const headers = screen.getAllByRole('table').map(t => rows(t)[0])
+    expect(headers).toEqual([['Lap', 'Start', 'Finish', 'Lap time'], ['Lap', 'Start', 'Finish', 'Lap time']])
+  })
+
   it('opens and closes every session’s laps at once', async () => {
     saved = [
       { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] },
