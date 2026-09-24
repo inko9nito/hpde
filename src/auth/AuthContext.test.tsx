@@ -3,7 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { AuthProvider } from './AuthContext'
-import { EVENTS } from '../data'
+import { EventsProvider } from '../data/EventsContext'
+import { TEST_EVENTS as EVENTS } from '../test/events'
 import type { IdentityUser, IdentityWidget } from './identity'
 import * as identity from './identity'
 
@@ -41,7 +42,9 @@ function renderApp() {
   localStorage.setItem('hpde:activeTab', JSON.stringify('notes'))
   render(
     <AuthProvider>
-      <App />
+      <EventsProvider initialEvents={EVENTS}>
+        <App />
+      </EventsProvider>
     </AuthProvider>,
   )
 }
@@ -107,7 +110,7 @@ describe('coming back from Google (#231)', () => {
     // The widget clears the token hash; sign-in started on an event page.
     window.location.hash = ''
     sessionStorage.setItem(identity.RETURN_TO_KEY, `#/event/${encodeURIComponent(EVENTS[0].id)}`)
-    render(<AuthProvider><App /></AuthProvider>)
+    render(<AuthProvider><EventsProvider initialEvents={EVENTS}><App /></EventsProvider></AuthProvider>)
     await new Promise(r => setTimeout(r, 0))
 
     widget.completeLogin(driver)
@@ -163,7 +166,7 @@ describe('coming back from Google (#231)', () => {
   it('holds the account spot with a person icon while sign-in loads', async () => {
     vi.spyOn(identity, 'loadIdentityWidget').mockReturnValue(new Promise(() => {}))
     window.location.hash = '#/'
-    const { container } = render(<AuthProvider><App /></AuthProvider>)
+    const { container } = render(<AuthProvider><EventsProvider initialEvents={EVENTS}><App /></EventsProvider></AuthProvider>)
     await new Promise(r => setTimeout(r, 0))
     // Same 36px box the avatar will fill, so nothing shifts when it arrives.
     expect(container.querySelector('div[aria-hidden="true"].h-9.w-9 svg')).toBeInTheDocument()

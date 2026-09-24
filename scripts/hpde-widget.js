@@ -77,6 +77,11 @@ async function loadManifest() {
     const req = new Request(DATA_URL)
     req.timeoutInterval = 8
     const manifest = await req.loadJSON()
+    // The feed is a Netlify function (#232); an error page or anything
+    // that isn't the events list must not replace the good cached copy.
+    if (req.response.statusCode !== 200 || !manifest || !Array.isArray(manifest.events)) {
+      throw new Error("Events feed unavailable")
+    }
     try { fm.writeString(path, JSON.stringify(manifest)) } catch (_) {}
     return { manifest, stale: false }
   } catch (e) {
@@ -497,6 +502,15 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   }).filter(e => e.type !== "break")
 
   renderHeader(w, event, day, p, stale)
+
+  // An event created in the app (#229) has no schedule until one is added.
+  // Say so, as the app does, instead of drawing an empty timeline.
+  if (day.activities.length === 0) {
+    renderCenteredMessage(w, p, "Schedule coming soon")
+    drawStatusFooter(w, p, stale, parsed, notifStatus)
+    w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000)
+    return w
+  }
 
   const now = nowMinutes()
 
@@ -1420,17 +1434,20 @@ function renderNoEvents(w, p, stale, upcoming) {
 // matching the AA/Podcasts/Umami-style empty states this was designed
 // against.
 function renderZeroState(w, p) {
-  const family = config.widgetFamily || "medium"
-  renderUpcomingHeader(w, p, family)
+  renderUpcomingHeader(w, p, config.widgetFamily || "medium")
+  renderCenteredMessage(w, p, "No upcoming events")
+}
 
-  // Center the message vertically in the interior below the header:
-  // one flex spacer above, one flex spacer below, message in the
-  // middle. Horizontally centered inside its own row via left+right
-  // flex spacers, since there's no card underneath to line it up with.
+// Center the message vertically in the interior below the header:
+// one flex spacer above, one flex spacer below, message in the
+// middle. Horizontally centered inside its own row via left+right
+// flex spacers, since there's no card underneath to line it up with.
+function renderCenteredMessage(w, p, text) {
+  const family = config.widgetFamily || "medium"
   w.addSpacer()
   const row = w.addStack()
   row.addSpacer()
-  const msg = row.addText("No upcoming events")
+  const msg = row.addText(text)
   msg.font = rFont(family === "small" ? 12 : 14)
   msg.textColor = p.muted
   msg.lineLimit = 1

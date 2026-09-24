@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
-import { EVENTS, ALL_EVENTS } from './data'
+import { EventsProvider } from './data/EventsContext'
+import { FIXTURE_EVENTS } from './data'
+import { TEST_EVENTS as EVENTS } from './test/events'
+
+function renderApp() {
+  return render(<EventsProvider initialEvents={EVENTS}><App /></EventsProvider>)
+}
 
 function gotoEvent(eventId: string) {
   window.location.hash = `#/event/${encodeURIComponent(eventId)}`
@@ -21,7 +27,7 @@ describe('event page tab selection (#219)', () => {
   it('resets to Schedule when you switch to another event', async () => {
     const [first, second] = EVENTS
     gotoEvent(first.id)
-    render(<App />)
+    renderApp()
 
     await userEvent.click(tab('My notes'))
     expect(tab('My notes')).toHaveAttribute('aria-selected', 'true')
@@ -39,7 +45,7 @@ describe('event page tab selection (#219)', () => {
 
   it('keeps the selected tab across a reload (what pull-to-refresh does)', async () => {
     gotoEvent(EVENTS[0].id)
-    render(<App />)
+    renderApp()
 
     await userEvent.click(tab('My notes'))
     expect(tab('My notes')).toHaveAttribute('aria-selected', 'true')
@@ -47,7 +53,7 @@ describe('event page tab selection (#219)', () => {
     // A reload remounts the app from scratch with the same URL; only
     // persisted state survives.
     cleanup()
-    render(<App />)
+    renderApp()
 
     expect(tab('My notes')).toHaveAttribute('aria-selected', 'true')
   })
@@ -64,7 +70,7 @@ describe('event page header (#216)', () => {
 
   it('goes back to the event list from the back chevron', async () => {
     gotoEvent(EVENTS[0].id)
-    render(<App />)
+    renderApp()
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe('#/')
   })
@@ -73,7 +79,7 @@ describe('event page header (#216)', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2100-01-01T12:00:00'))
     gotoEvent(EVENTS[0].id)
-    render(<App />)
+    renderApp()
     const heading = screen.getByRole('heading', { level: 1, name: EVENTS[0].name })
     const titleBlock = heading.parentElement!
     expect(titleBlock).toHaveTextContent(/Past$/)
@@ -83,15 +89,15 @@ describe('event page header (#216)', () => {
   it('shows a LIVE badge on the date line of a live event', () => {
     // test-live's single day is always today.
     gotoEvent('test-live')
-    render(<App />)
-    const heading = screen.getByRole('heading', { level: 1, name: ALL_EVENTS.find(e => e.id === 'test-live')!.name })
+    renderApp()
+    const heading = screen.getByRole('heading', { level: 1, name: FIXTURE_EVENTS.find(e => e.id === 'test-live')!.name })
     expect(heading).not.toHaveTextContent(/Live/)
     expect(heading.nextElementSibling).toHaveTextContent(/Live$/)
   })
 
   it('labels the info tab "Details"', () => {
     gotoEvent(EVENTS[0].id)
-    render(<App />)
+    renderApp()
     expect(screen.getByRole('tab', { name: 'Details' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
   })

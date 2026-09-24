@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Ellipsis, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { useEvents, CREATED_EVENTS_URL } from '../data/EventsContext'
+import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import type { EventConfig } from '../types'
 
@@ -13,14 +13,14 @@ interface Props {
 
 /**
  * The "…" button at the right of the event header (#216). Admins only.
- * Holds Delete for now (Edit comes later). Only events created in the
- * app can be deleted — built-in ones live in src/data — so on those the
- * item is shown disabled with the reason, rather than leaving an admin
- * wondering where it went.
+ * Holds Delete for now (Edit comes later). Every stored event can be
+ * deleted (#232); the test fixtures that ship with the app can't, so on
+ * those the item is shown disabled with the reason, rather than leaving an
+ * admin wondering where it went.
  */
 export function EventOverflowMenu({ event, onDeleted }: Props) {
   const { user } = useAuth()
-  const { isCreated } = useEvents()
+  const { isStored } = useEvents()
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
@@ -32,7 +32,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
   }, [open])
 
   if (!user?.roles.includes(ADMIN_ROLE)) return null
-  const deletable = isCreated(event.id)
+  const deletable = isStored(event.id)
 
   return (
     <div className="relative shrink-0">
@@ -68,7 +68,7 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
                 Delete event
                 {!deletable && (
                   <span className="block text-xs font-normal text-gray-400">
-                    Only events created in the app can be deleted
+                    Test events can’t be deleted
                   </span>
                 )}
               </span>
@@ -106,7 +106,7 @@ function DeleteEventDialog({
     setError(null)
     setDeleting(true)
     try {
-      const res = await authedFetch(`${CREATED_EVENTS_URL}?id=${encodeURIComponent(event.id)}`, {
+      const res = await authedFetch(`${EVENTS_URL}?id=${encodeURIComponent(event.id)}`, {
         method: 'DELETE',
       })
       // 404: already gone (e.g. deleted from another device) — same outcome.

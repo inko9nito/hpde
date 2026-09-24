@@ -57,14 +57,27 @@ title, start/end date, organizer, location, city, track configuration,
 direction and event page. A new event starts with no schedule — its
 Schedule tab says "Schedule coming soon" until one is added.
 
-Admins can also delete an event created this way: *Info* tab → **Delete
-event** → confirm. Built-in events (the ones in `src/data`) can't be
-deleted from the app.
+Admins can also delete any event: event page → **…** → **Delete event** →
+confirm. (Only the `test-live` test event, which ships with the app, can't
+be deleted.)
 
-Created events are stored in **Netlify Blobs** (store `events`) by the
-`created-events` function (`/api/created-events`: public `GET`, admin-only
-`POST` and `DELETE ?id=`). No extra Netlify setup is needed for Blobs. They show up in the
-app but not in the iOS widget yet (#232).
+**Where events live (#232).** Every event is stored in **Netlify Blobs**
+(store `events`), not in the repo, so anyone deploying this app starts with
+their own events. No extra Netlify setup is needed for Blobs.
+- `netlify/functions/events.mjs` — `/api/events`: public `GET`, admin-only
+  `POST` and `DELETE ?id=`. The app loads every event from here.
+- `netlify/functions/events-json.mts` — `/api/events.json`, the iOS
+  widget's feed: the same events in the widget's format, cached for a
+  minute.
+- Each deploy preview gets its own store, which starts as a copy of the
+  live events (taken the first time that deploy is loaded). You see real
+  data on a preview, but creating or deleting events there never touches
+  the live ones. A later push makes a new deploy with a fresh copy.
+- The events that used to live in `src/data/schedules/*.md` are imported
+  into the store once, the first time it's read after a deploy (the build
+  writes them to `api/builtin-events.json`). An event deleted after that
+  stays deleted. Those files go away once the import has run on the live
+  site.
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.

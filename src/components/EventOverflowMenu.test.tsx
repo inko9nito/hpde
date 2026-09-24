@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { AuthProvider } from '../auth/AuthContext'
 import { EventsProvider } from '../data/EventsContext'
-import { EVENTS } from '../data'
+import { FIXTURE_EVENTS } from '../data'
 import type { EventConfig } from '../types'
 
 const created: EventConfig = {
@@ -35,7 +35,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
   if (String(url).includes('/.netlify/identity/settings')) return json({})
-  if (String(url).includes('api/created-events')) {
+  if (String(url).includes('api/events')) {
     if (init?.method === 'DELETE') return json({ deleted: created.id })
     if (init?.method === 'POST') return json({ event: { ...created, id: '2099-11-11_fresh', name: 'Fresh Event' } }, 201)
     return json({ events: [created] })
@@ -52,7 +52,7 @@ function openEvent(eventId: string) {
   renderApp()
 }
 
-describe('deleting a created event from the header menu (#229, #216)', () => {
+describe('deleting an event from the header menu (#229, #216, #232)', () => {
   beforeEach(() => {
     localStorage.clear()
     fetchMock.mockClear()
@@ -105,13 +105,13 @@ describe('deleting a created event from the header menu (#229, #216)', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('shows Delete disabled on built-in events, even for admins', async () => {
+  it('shows Delete disabled on test events, even for admins', async () => {
     signInAs(['admin'])
-    openEvent(EVENTS[0].id)
+    openEvent(FIXTURE_EVENTS[0].id)
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     const item = screen.getByRole('menuitem', { name: /Delete event/ })
     expect(item).toBeDisabled()
-    expect(item).toHaveTextContent('Only events created in the app can be deleted')
+    expect(item).toHaveTextContent('Test events can’t be deleted')
   })
 
   it('confirms a new event with a toast on its page', async () => {

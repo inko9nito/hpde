@@ -139,7 +139,7 @@ export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded } = useEvents()
-  const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', EVENTS[0].id)
+  const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
@@ -177,7 +177,9 @@ export default function App() {
     if (isOnEventRoute) setPushMounted(true)
   }, [isOnEventRoute])
 
-  const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? EVENTS[0]
+  // ALL_EVENTS always has at least the test fixture, even before the
+  // events load or when there are none (#232).
+  const activeEvent = ALL_EVENTS.find(e => e.id === activeEventId) ?? ALL_EVENTS[0]
   const activeDay = activeEvent.days.find(d => d.id === activeDayId) ?? defaultDay(activeEvent)
 
   const todayDay = findTodayDay(activeEvent)
@@ -238,7 +240,7 @@ export default function App() {
       const { live } = partitionEvents(EVENTS)
       setHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
     }
-    // ALL_EVENTS too: an event created in the app arrives after load, so a
+    // ALL_EVENTS too: events arrive from the store after load, so a
     // direct link to one only resolves once the fetch lands.
   }, [hash, ALL_EVENTS])
 

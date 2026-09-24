@@ -546,6 +546,16 @@ const UPCOMING_ONE = {
   ],
 }
 
+// Today is an event created in the app (#229) whose schedule hasn't been
+// added yet: no run groups, no activities. The iOS widget sees these
+// since #232.
+const TODAY_NO_SCHEDULE = {
+  events: [
+    { id: 'c', name: 'TDE at ECR 2.7 CW', organizer: 'The Drivers Edge', track: 'Eagles Canyon Raceway',
+      city: 'Decatur, TX', runGroups: [], days: [{ id: 'saturday', date: isoDate(0), label: 'Saturday', activities: [] }] },
+  ],
+}
+
 // True zero state: nothing scheduled at all, no upcoming events.
 // The countdown-view header still renders (per-family, same as the
 // populated countdown) with "No upcoming events" centered in the
@@ -566,6 +576,8 @@ const SCENARIOS = [
   { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (2 upcoming, stacked)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
+  { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },
+  { family: 'large', manifest: TODAY_NO_SCHEDULE, label: 'Large — today, no schedule yet' },
 ]
 
 function installMocks(g, manifest, widgetFamily, widgetParameter = null) {
@@ -589,8 +601,10 @@ function installMocks(g, manifest, widgetFamily, widgetParameter = null) {
   g.Request = class {
     timeoutInterval = 0
     async loadJSON() {
-      if (g.__online) return manifest
-      throw new Error('offline → cache')
+      if (!g.__online) throw new Error('offline → cache')
+      // Scriptable fills in `response` once a load completes.
+      this.response = { statusCode: 200 }
+      return manifest
     }
   }
   g.SFSymbol = { named: name => ({ image: { name } }) }

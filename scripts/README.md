@@ -60,8 +60,8 @@ Examples:
 - `15m` — no filter, 15-min lead.
 - (blank) — no filter, 10-min lead.
 
-Run-group ids are the ones used in the schedule Markdown files (see
-`../src/data/schedules/*.md`). Unknown tokens surface as a `⚠ invalid: …`
+Run-group ids are the ones in each event's schedule (the `## groups`
+section of its Markdown). Unknown tokens surface as a `⚠ invalid: …`
 footer on the widget so you can see typos at a glance.
 
 ### Notifications

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { useEvents, CREATED_EVENTS_URL } from '../data/EventsContext'
+import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { SignInPrompt } from './SignInPrompt'
 import { SuggestInput } from './SuggestInput'
 import { TrackIcon, TRACK_ICON_IDS } from './TrackIcon'
@@ -76,7 +76,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 /**
  * "New event" form (#229): the event's details only — the schedule is
- * added separately. Admins only; the created-events function enforces it.
+ * added separately. Admins only; the events function enforces it.
  */
 export function NewEventPage({ onCreated }: Props) {
   const { status, user, authedFetch } = useAuth()
@@ -147,7 +147,7 @@ export function NewEventPage({ onCreated }: Props) {
     setError(null)
     setSaving(true)
     try {
-      const res = await authedFetch(CREATED_EVENTS_URL, {
+      const res = await authedFetch(EVENTS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event: { ...canonical(form), trackId }, takenIds: allEvents.map(ev => ev.id) }),

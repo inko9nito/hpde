@@ -20,7 +20,7 @@ export interface AuthUser {
   name: string | null
   avatarUrl: string | null
   // Identity roles (set in the Netlify UI). "admin" can create events
-  // (#229); the created-events function enforces it server-side.
+  // (#229); the events function enforces it server-side.
   roles: string[]
 }
 

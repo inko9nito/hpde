@@ -5,8 +5,8 @@ import { parseScheduleMD } from '../src/utils/parseSchedule'
 import { serializeEvents } from '../src/utils/eventsJson'
 import type { EventConfig } from '../src/types'
 
-// Fixtures that carry a fixed-date schedule on disk and ship in
-// events.json alongside real events. The widget doesn't treat these as
+// Fixtures that carry a fixed-date schedule on disk and ship in the
+// widget feed alongside real events. The widget doesn't treat these as
 // today's event unless the user opts in via the `test` flag on the
 // widget parameter, at which point the widget rewrites their days to
 // "today" client-side. Real users' widgets never see them as active.
@@ -36,18 +36,20 @@ export function eventsJsonPlugin(): Plugin {
         return parseScheduleMD(id, src)
       })
 
-      const events = [...scheduled, ...fixtures].sort((a, b) => {
-        const da = a.days[0]?.date ?? ''
-        const db = b.days[0]?.date ?? ''
-        return db.localeCompare(da)
-      })
+      // Fails the build on a run-group color the widget couldn't resolve,
+      // the same check the widget feed runs at request time.
+      serializeEvents([...scheduled, ...fixtures])
 
-      const manifest = serializeEvents(events)
+      // Not events.json: on Netlify that path is a function
+      // (netlify/functions/events-json.mts) that serves every stored event
+      // to the iOS widget (#232). This file is what the functions read:
+      //   seed     — imported into the Blobs store once, on first use
+      //   fixtures — test events that ship with the app, never stored
       const apiDir = path.join(outDir, 'api')
       fs.mkdirSync(apiDir, { recursive: true })
-      const outPath = path.join(apiDir, 'events.json')
-      fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2))
-      this.info(`emitted ${outPath} (${events.length} events)`)
+      const outPath = path.join(apiDir, 'builtin-events.json')
+      fs.writeFileSync(outPath, JSON.stringify({ seed: scheduled, fixtures }, null, 2))
+      this.info(`emitted ${outPath} (${scheduled.length} seed, ${fixtures.length} fixture events)`)
     },
   }
 }
