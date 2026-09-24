@@ -1,4 +1,7 @@
-import tailwindColors from 'tailwindcss/colors'
+// With the extension: the widget feed function (netlify/functions/
+// events-json.mts) imports this file, and Netlify runs it as plain Node ESM
+// with packages left unbundled, where 'tailwindcss/colors' doesn't resolve.
+import tailwindColors from 'tailwindcss/colors.js'
 import { runGroupColors } from '../theme/runGroupColors'
 import type { EventConfig, ScheduleActivity } from '../types'
 
