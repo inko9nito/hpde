@@ -63,7 +63,7 @@ function DateBlock({ event, muted }: { event: EventConfig; muted: boolean }) {
       </span>
       <span className="mt-1 text-2xl font-bold text-gray-900">{d}</span>
       {y !== thisYear && (
-        <span className="mt-1 text-[11px] font-medium tracking-wider text-gray-500">{y}</span>
+        <span className="mt-0.5 text-[11px] font-normal tracking-wider text-gray-400">{y}</span>
       )}
     </div>
   )
