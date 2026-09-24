@@ -64,7 +64,9 @@ deleted from the app.
 Created events are stored in **Netlify Blobs** (store `events`) by the
 `created-events` function (`/api/created-events`: public `GET`, admin-only
 `POST` and `DELETE ?id=`). No extra Netlify setup is needed for Blobs. They show up in the
-app but not in the iOS widget yet (#232).
+app and, within about a minute, in the iOS widget: `/api/events.json` is
+a function (`netlify/functions/events-json.mts`) that adds them to the
+built-in events, which the build writes to `api/builtin-events.json`.
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.

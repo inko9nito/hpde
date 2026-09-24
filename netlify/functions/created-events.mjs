@@ -1,6 +1,7 @@
 import { getStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { buildEvent, isAdmin } from '../lib/newEvent.mjs'
+import { STORE, listEvents } from '../lib/eventsStore.mjs'
 
 // Events created in the app (#229), kept in a Netlify Blobs store keyed by
 // event id. GET is public — the schedule is public — and lists them all;
@@ -13,15 +14,7 @@ import { buildEvent, isAdmin } from '../lib/newEvent.mjs'
 // `handler`) because only it can read Blobs with strong consistency.
 // Eventual reads can lag a write by up to a minute, so an event created
 // and then refreshed right away was missing from the list.
-const STORE = 'events'
-
 export const config = { path: '/api/created-events' }
-
-async function listEvents(store) {
-  const { blobs } = await store.list()
-  const events = await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' })))
-  return events.filter(Boolean)
-}
 
 export default async function handler(req, _context, deps = {}) {
   const store = (deps.getStore ?? getStore)({ name: STORE, consistency: 'strong' })

@@ -4,7 +4,7 @@
 //
 // Uses the same simulator as `npm run widget:preview` — the real
 // hpde-widget.js rendered through the Scriptable mock — against real
-// events from the built events.json, with the clock frozen: small and
+// events from the built builtin-events.json, with the clock frozen: small and
 // medium show the countdown ahead of an event, large shows a busy event
 // day mid-morning. notifications.png shows alerts the widget actually
 // schedules for that day with an `orange` filter. Re-run after a visible
@@ -25,14 +25,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '..', 'src', 'assets')
 mkdirSync(outDir, { recursive: true })
 
-const eventsJson = JSON.parse(readFileSync(join(__dirname, '..', 'dist', 'api', 'events.json'), 'utf8'))
+const eventsJson = JSON.parse(readFileSync(join(__dirname, '..', 'dist', 'api', 'builtin-events.json'), 'utf8'))
 const realEvents = eventsJson.events.filter(e => e.id !== 'test-live')
 
 // Large: a full on-track day (TDE at MSRC 1.7, day 2) mid-morning, so
 // the populated view has past, current and upcoming rows.
 const EVENT_DAY = '2026-09-12'
 const eventDay = realEvents.find(e => e.id === '2026-09-11_msrc-1-7')
-if (!eventDay) throw new Error('2026-09-11_msrc-1-7 not in dist/api/events.json — run `npm run build` first')
+if (!eventDay) throw new Error('2026-09-11_msrc-1-7 not in dist/api/builtin-events.json — run `npm run build` first')
 
 // Small / medium: the countdown view ahead of that event. Those sizes
 // are laid out for the countdown; the event-day view is designed for

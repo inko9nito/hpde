@@ -45,7 +45,10 @@ export function eventsJsonPlugin(): Plugin {
       const manifest = serializeEvents(events)
       const apiDir = path.join(outDir, 'api')
       fs.mkdirSync(apiDir, { recursive: true })
-      const outPath = path.join(apiDir, 'events.json')
+      // Not events.json: on Netlify that path is a function
+      // (netlify/functions/events-json.mts) that adds the events created in
+      // the app to these built-in ones for the iOS widget (#232).
+      const outPath = path.join(apiDir, 'builtin-events.json')
       fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2))
       this.info(`emitted ${outPath} (${events.length} events)`)
     },
