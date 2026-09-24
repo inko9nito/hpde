@@ -63,6 +63,8 @@ const fakeWidget = {
 // The laps function, in memory.
 let saved: SessionLaps[] = []
 let failSaves = false
+// While set, reading the laps waits for it.
+let holdLaps: Promise<void> | null = null
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -86,6 +88,7 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       saved = saved.filter(s => s.key !== key)
       return json({ deleted: key })
     }
+    if (holdLaps) await holdLaps
     return json({ sessions: saved })
   }
   return new Response('not found', { status: 404 })
@@ -125,6 +128,7 @@ beforeEach(() => {
   signedIn = true
   saved = []
   summary = []
+  holdLaps = null
   failSaves = false
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -161,7 +165,7 @@ describe('lap times (#210)', () => {
     expect(figures(read)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
     // Columns in the order they're entered; the best lap in a chip.
     expect(rows(read)).toEqual([
-      ['Lap', 'Start – Finish', 'Lap time', 'Note'],
+      ['Lap', 'From / To', 'Lap time', 'Note'],
       ['Out', '11:46:32 AM – 11:48:51 AM', '2:19', 'Traffic'],
       ['1', '11:48:51 AM – 11:50:47 AM', '1:56', ''],
       ['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'],
@@ -350,7 +354,23 @@ describe('lap times (#210)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     const headers = screen.getAllByRole('table').map(t => rows(t)[0])
-    expect(headers).toEqual([['Lap', 'Start – Finish', 'Lap time'], ['Lap', 'Start – Finish', 'Lap time']])
+    expect(headers).toEqual([['Lap', 'From / To', 'Lap time'], ['Lap', 'From / To', 'Lap time']])
+  })
+
+  it('fades a skeleton in while the laps load, then out as they fade in', async () => {
+    saved = [{ key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] }]
+    let release!: () => void
+    holdLaps = new Promise(resolve => { release = resolve })
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    const skeleton = screen.getByLabelText('Loading your lap times')
+    expect(skeleton).toHaveClass('fade-in')
+
+    release()
+    await waitFor(() => expect(skeleton).toHaveClass('fade-out'))
+    expect(screen.queryByRole('group', { name: 'Best lap this event' })).toBeNull()
+    await waitFor(() => expect(screen.queryByLabelText('Loading your lap times')).toBeNull())
+    expect(screen.getByRole('group', { name: 'Best lap this event' }).closest('.fade-in')).not.toBeNull()
   })
 
   it('opens and closes every session’s laps at once', async () => {

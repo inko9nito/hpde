@@ -161,13 +161,15 @@ Only they can see them.
 - **See / edit:** tap a session that has laps to see them read-only: the
   laps, average and best (worked out from the laps, never typed in), the
   lap time summary and a table of every lap in the order they're entered
-  (lap, start and finish stacked in one column, lap time, note). The best lap is in a dark chip, with a timer
+  (lap, *From / To* with the start and finish crossings stacked, lap
+  time, note). The best lap is in a dark chip, with a timer
   when it's also the all-time best on this layout. **Edit** brings up the
   text box. The **My notes** tab opens with *Best lap this event* and
   *All time best* (across every event at the track with the same
   configuration and direction), then each session's figures and lap time summary;
   tap the figures to open its lap table, or use *Expand all*. The tables'
-  columns line up from session to session. The tab shows how many
+  columns line up from session to session. While the laps load, a
+  skeleton of the cards fades in and out. The tab shows how many
   sessions have laps, e.g. *My notes (2)*.
 - **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
   `?event=` it sums up each event's best, for the layout best) in

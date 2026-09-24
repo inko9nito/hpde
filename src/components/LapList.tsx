@@ -67,8 +67,8 @@ export function lapColumns(laps: Lap[]): LapColumns {
 
 /**
  * A session's laps, one row each, in the order a timing sheet has them
- * (#210): lap, start and finish (stacked in one column, leaving room for
- * notes), lap time, note. Every column has a fixed width, so tables for
+ * (#210): lap, from and to (the start and finish crossings, stacked in one
+ * column, leaving room for notes), lap time, note. Every column has a fixed width, so tables for
  * different sessions line up down the page, and there's a gap before the
  * lap time so it stands apart from the crossings. The best lap's time is
  * in a chip; out and in laps are dimmed, since they don't count.
@@ -81,19 +81,20 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
   const labels = lapLabels(laps)
   const { bestIndex } = lapStats(laps)
   const crossings = columns.start || columns.finish
-  const crossingsLabel = columns.start && columns.finish ? 'Start – Finish' : columns.start ? 'Start' : 'Finish'
+  const crossingsLabel = columns.start && columns.finish ? 'From / To' : columns.start ? 'From' : 'To'
   return (
     <table className="w-full table-fixed border-collapse text-left text-xs" aria-label="Laps">
       <colgroup>
         <col className="w-8" />
-        {crossings && <col className="w-20" />}
+        {/* Wider screens spread the from/to times away from the lap time. */}
+        {crossings && <col className="w-20 min-[480px]:w-36" />}
         <col className={crossings ? 'w-[5.75rem]' : 'w-[4.75rem]'} />
         {columns.note && <col />}
       </colgroup>
       <thead className="text-[10px] uppercase tracking-wide text-gray-400">
         <tr>
           <th scope="col" className="whitespace-nowrap py-1 pr-2 align-bottom font-medium">Lap</th>
-          {crossings && <th scope="col" className="py-1 pr-2 align-bottom font-medium">{crossingsLabel}</th>}
+          {crossings && <th scope="col" className="whitespace-nowrap py-1 pr-2 align-bottom font-medium">{crossingsLabel}</th>}
           <th scope="col" className={`whitespace-nowrap py-1 pr-2 align-bottom font-medium ${crossings ? 'pl-4' : ''}`}>Lap time</th>
           {columns.note && <th scope="col" className="py-1 align-bottom font-medium">Note</th>}
         </tr>

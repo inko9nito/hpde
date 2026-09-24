@@ -45,3 +45,22 @@ html.finishing-sign-in #netlify-identity-widget {
 @media (prefers-reduced-motion: reduce) {
   .sheet-up { animation: none; }
 }
+
+/* Loading skeletons fade in, then out as the content fades in (#210). */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+.fade-out {
+  animation: fade-out 150ms ease-in both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .fade-out { animation: none; }
+}
