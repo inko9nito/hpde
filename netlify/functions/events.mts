@@ -1,5 +1,5 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
-import { buildEvent, isAdmin } from '../lib/newEvent.mjs'
+import { buildEvent, editDetails, isAdmin } from '../lib/newEvent.mjs'
 import { openStores, listEvents, ensureCopied } from '../lib/eventsStore.mjs'
 import { applySchedule } from '../../src/utils/scheduleEditor.ts'
 
@@ -9,11 +9,14 @@ import { applySchedule } from '../../src/utils/scheduleEditor.ts'
 //   POST              creates an event (the New event form). The client
 //                     sends the ids it knows about (the test-live fixture
 //                     ships with the app) so a new id never collides.
-//   PUT ?id=          replaces an event's run groups and schedule: the
-//                     editor's `runGroups` (its form) and `schedule` (its
-//                     markdown), checked here with the same code the editor
-//                     previews with. The event as it was is kept in the
-//                     history store first.
+//   PUT ?id=          edits an event, keeping the event as it was in the
+//                     history store first. Either:
+//                     - `details`: the details form's fields, dates
+//                       included; the days move to the new dates with
+//                       their schedules (src/utils/eventDetails.ts)
+//                     - `runGroups` and `schedule`: the schedule editor's
+//                       form and markdown, checked here with the same code
+//                       the editor previews with
 //   DELETE ?id=       removes an event.
 //
 // Also answers at /api/created-events, its name before #232, for app pages
@@ -72,19 +75,27 @@ export default async function handler(req: Request, context: unknown, deps: Reco
   if (req.method === 'PUT') {
     const id = new URL(req.url).searchParams.get('id')
     if (!id) return json(400, { error: 'Missing event id.' })
-    const schedule = body?.schedule
-    if (typeof schedule !== 'string') return json(400, { error: 'Missing the schedule.' })
-    if (schedule.length > MAX_SCHEDULE_LENGTH) return json(400, { error: 'That schedule is too long.' })
-
     const current = await store.get(id, { type: 'json' })
     if (!current) return json(404, { error: 'That event doesn’t exist.' })
-    if (!Array.isArray(body?.runGroups)) return json(400, { error: 'Missing the run groups.' })
-    const result = applySchedule(current, body.runGroups, schedule)
-    if ('error' in result) return json(400, { error: result.error, problems: result.problems })
+
+    let edited
+    if (body?.details !== undefined) {
+      const result = editDetails(current, body.details)
+      if (result.error) return json(400, { error: result.error })
+      edited = result.event
+    } else {
+      const schedule = body?.schedule
+      if (typeof schedule !== 'string') return json(400, { error: 'Missing the schedule.' })
+      if (schedule.length > MAX_SCHEDULE_LENGTH) return json(400, { error: 'That schedule is too long.' })
+      if (!Array.isArray(body?.runGroups)) return json(400, { error: 'Missing the run groups.' })
+      const result = applySchedule(current, body.runGroups, schedule)
+      if ('error' in result) return json(400, { error: result.error, problems: result.problems })
+      edited = result.event
+    }
 
     const savedAt = new Date().toISOString()
     await stores.history.setJSON(`${id}/${savedAt}`, current)
-    const updated = { ...result.event, updatedBy: user.email, updatedAt: savedAt }
+    const updated = { ...edited, updatedBy: user.email, updatedAt: savedAt }
     await store.setJSON(id, updated)
     return json(200, { event: updated })
   }

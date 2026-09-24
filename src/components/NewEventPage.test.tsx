@@ -25,7 +25,7 @@ describe('NewEventPage', () => {
       return json({ events: [] })
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<AuthProvider><EventsProvider><NewEventPage onCreated={() => {}} /></EventsProvider></AuthProvider>)
+    render(<AuthProvider><EventsProvider><NewEventPage onCreated={() => {}} onClose={() => {}} /></EventsProvider></AuthProvider>)
     const posted = async () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' })))
       const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')!

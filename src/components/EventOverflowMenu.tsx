@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, Ellipsis, Trash2 } from 'lucide-react'
+import { CalendarClock, Ellipsis, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { editScheduleHash } from './ScheduleEditorPage'
+import { editEventHash } from './EditEventPage'
 import { ICON_BUTTON } from './iconButton'
 import type { EventConfig } from '../types'
 
@@ -15,7 +16,7 @@ interface Props {
 
 /**
  * The "…" button at the right of the event header (#216). Admins only.
- * Edit schedule and Delete (#232). Every stored event can be edited and
+ * Edit details, Edit schedule and Delete (#232). Every stored event can be edited and
  * deleted; the test fixtures that ship with the app can't, so on those the
  * items are shown disabled with the reason, rather than leaving an admin
  * wondering where they went.
@@ -56,6 +57,25 @@ export function EventOverflowMenu({ event, onDeleted }: Props) {
             aria-label="Event actions"
             className="absolute right-0 top-full z-40 mt-2 min-w-[220px] rounded-xl border border-gray-200 bg-white p-1 shadow-xl"
           >
+            <button
+              role="menuitem"
+              disabled={!stored}
+              onClick={() => {
+                setOpen(false)
+                window.location.hash = editEventHash(event.id)
+              }}
+              className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:cursor-default disabled:text-gray-400 disabled:hover:bg-transparent"
+            >
+              <Pencil size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              <span>
+                Edit details
+                {!stored && (
+                  <span className="block text-xs font-normal text-gray-400">
+                    Test events can’t be edited
+                  </span>
+                )}
+              </span>
+            </button>
             <button
               role="menuitem"
               disabled={!stored}
