@@ -2,11 +2,12 @@ import msrc31 from '../data/track-icons/msrc-3-1.svg'
 import msrc17 from '../data/track-icons/msrc-1-7.svg'
 import msrc13 from '../data/track-icons/msrc-1-3.svg'
 import ecr27 from '../data/track-icons/ecr-2-7.svg'
+import checkeredFlag from '../assets/checkered-flag.svg'
 
 // Stylized track-shape icons keyed by the schedule's `trackId` field.
 // New tracks add a file under `src/data/track-icons/` and a row here.
 // A row that isn't listed here (or a missing trackId) renders the
-// placeholder loop below.
+// checkered-flag placeholder below.
 const TRACK_ICONS: Record<string, string> = {
   'msrc-3-1': msrc31,
   'msrc-1-7': msrc17,
@@ -49,9 +50,10 @@ interface Props {
 /**
  * Small square icon that shows an event's track, wrapped in a tinted
  * rounded container so the shape doesn't hover in negative space.
- * Falls back to a neutral dashed loop for unknown / unset trackIds so
- * a brand-new event still slots into the layout while its real icon
- * is being added.
+ * Falls back to the checkered flag (the same glyph as the timeline's
+ * "No more events today" state) for unknown / unset trackIds, so a
+ * brand-new event still slots into the layout while its real icon is
+ * being added.
  *
  * The real SVGs ship with a fixed black fill, so the shape is
  * recoloured with a CSS mask instead of an <img>: the `<span>` paints
@@ -60,9 +62,9 @@ interface Props {
  * text color.
  */
 const TONE_CLASSES: Record<TrackIconTone, { container: string; placeholder: string }> = {
-  default:  { container: 'bg-gray-100 text-gray-700', placeholder: 'text-gray-300' },
-  selected: { container: 'bg-blue-100 text-blue-600', placeholder: 'text-blue-300' },
-  dark:     { container: 'bg-gray-900 text-white',    placeholder: 'text-gray-500' },
+  default:  { container: 'bg-gray-100 text-gray-700', placeholder: 'text-black' },
+  selected: { container: 'bg-blue-100 text-blue-600', placeholder: 'text-black' },
+  dark:     { container: 'bg-gray-900 text-white',    placeholder: 'text-white' },
 }
 
 export function TrackIcon({
@@ -80,6 +82,9 @@ export function TrackIcon({
     muted ? 'opacity-70' : ''
   } ${className ?? ''}`.trim()
   const boxSize = size + padding * 2
+  // Quoted: Vite inlines small SVGs as data URIs with single quotes in
+  // them, which an unquoted url() doesn't allow.
+  const mask = `url("${src ?? checkeredFlag}")`
 
   return (
     <span
@@ -87,41 +92,28 @@ export function TrackIcon({
       style={{ width: boxSize, height: boxSize }}
       aria-hidden="true"
     >
-      {src ? (
-        <span
-          className="block bg-current"
-          style={{
-            width: size,
-            height: size,
-            WebkitMaskImage: `url(${src})`,
-            maskImage: `url(${src})`,
-            WebkitMaskSize: 'contain',
-            maskSize: 'contain',
-            WebkitMaskRepeat: 'no-repeat',
-            maskRepeat: 'no-repeat',
-            WebkitMaskPosition: 'center',
-            maskPosition: 'center',
-          }}
-        />
-      ) : (
-        // Placeholder loop uses its own lighter tone so it clearly
-        // reads as "not yet added" rather than as a real track.
-        <svg
-          viewBox="0 0 32 32"
-          width={size}
-          height={size}
-          className={`block ${toneCls.placeholder}`}
-          fill="none"
-        >
-          <path
-            d="M6 16 C6 9 12 5 17 6 C24 7 27 12 27 17 C27 23 22 27 15 27 C9 27 6 22 6 16 Z"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeDasharray="3 3"
-          />
-        </svg>
-      )}
+      {/* The placeholder flag is a 7% watermark in the tile's contrasting
+          color (white on dark, black on light), so it reads as "not yet
+          added" rather than as a real track. */}
+      <span
+        data-track-icon={src ? trackId : 'placeholder'}
+        className={`block bg-current ${src ? '' : toneCls.placeholder}`.trim()}
+        style={{
+          width: size,
+          height: size,
+          WebkitMaskImage: mask,
+          maskImage: mask,
+          // The flag is a quiet watermark, not a stand-in shape: small and
+          // faint (7%).
+          WebkitMaskSize: src ? 'contain' : '37.5%',
+          maskSize: src ? 'contain' : '37.5%',
+          opacity: src ? undefined : 0.07,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'center',
+          maskPosition: 'center',
+        }}
+      />
     </span>
   )
 }
