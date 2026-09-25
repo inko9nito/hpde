@@ -564,7 +564,20 @@ class DrawContextMock {
     const body = this.fills.map(f => f.rect
       ? `<rect shape-rendering="crispEdges" fill="${f.color}" x="${f.rect.x}" y="${f.rect.y}" width="${f.rect.width}" height="${f.rect.height}"/>`
       : `<path fill="${f.color}" d="${f.segments}"/>`).join('')
-    return { svg: `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">${body}</svg>` }
+    return { svg: `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">${body}</svg>`, width: w, height: h }
+  }
+}
+
+// Scriptable's LinearGradient: colors at locations (0–1), from
+// startPoint to endPoint in the widget's unit square.
+class LinearGradientMock {
+  constructor() { this.colors = []; this.locations = []; this.startPoint = new PointMock(0, 0); this.endPoint = new PointMock(0, 1) }
+  toCss() {
+    const dx = this.endPoint.x - this.startPoint.x
+    const dy = this.endPoint.y - this.startPoint.y
+    const angle = Math.round(Math.atan2(dx, -dy) * 180 / Math.PI)
+    const stops = this.colors.map((c, i) => `${colorCss(c)} ${num(this.locations[i]) * 100}%`)
+    return `linear-gradient(${angle}deg, ${stops.join(', ')})`
   }
 }
 
@@ -691,6 +704,16 @@ class ListWidgetMock extends StackMock {
     this.node.style['justify-content'] = 'center'
   }
   set refreshAfterDate(_v) {}
+  set backgroundGradient(g) { this.node.style['background-image'] = g.toCss() }
+  // A widget's background image fills the widget (aspect fill, centered).
+  set backgroundImage(img) {
+    // As an image (not inline), an SVG needs its namespace.
+    const svg = img.svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')
+      .replace('width="100%" height="100%"', `width="${img.width}" height="${img.height}"`)
+    this.node.style['background-image'] = `url('data:image/svg+xml,${encodeURIComponent(svg)}')`
+    this.node.style['background-size'] = 'cover'
+    this.node.style['background-position'] = 'center'
+  }
 }
 
 function isoDate(offsetDays) {
@@ -777,7 +800,7 @@ const SWEEP_DEVICES = ['375x667', '430x932']
 const SWEEP = [
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (long names)' },
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
-  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
+  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (4 upcoming, long names)' },
 ]
 const SCENARIOS = [
@@ -785,9 +808,15 @@ const SCENARIOS = [
   { family: 'medium', manifest: NO_EVENTS, label: 'Medium — zero state' },
   { family: 'large', manifest: NO_EVENTS, label: 'Large — zero state' },
   { family: 'small', manifest: UPCOMING_ONE, label: 'Small — countdown (1 upcoming)' },
+  // Online: no "Cached schedule" line, so the featured cards keep their
+  // designs' 16pt padding top and bottom.
+  { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (online)', online: true },
+  { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (online)', online: true },
+  { family: 'large', manifest: { events: UPCOMING_LONG.events.slice(0, 1) }, label: 'Large — countdown (online, 1 upcoming)', online: true },
+  { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (online, 4 upcoming)', online: true },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
-  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
-  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming, stacked)' },
+  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
+  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming: 2 + footer)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
   { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },
@@ -808,6 +837,7 @@ function installMocks(g, manifest, widgetFamily, widgetParameter = null, device 
   g.Rect = RectMock
   g.Path = PathMock
   g.DrawContext = DrawContextMock
+  g.LinearGradient = LinearGradientMock
   g.Font = Font
   g.Device = { isUsingDarkAppearance: () => g.__dark, screenSize: () => screenSizeOf(device) }
   g.FileManager = {
