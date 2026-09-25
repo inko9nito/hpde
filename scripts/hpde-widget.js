@@ -393,11 +393,11 @@ const FEATURED_PALETTE = {
   badgeBg: new Color("#dc2626"),
   badgeFg: new Color("#ffffff"),
   flag: new Color("#ffffff", 0.35),
-  // Softer than the app's full white, which reads too stark on a
-  // widget; the other configuration (the SVGs' 0.3-opacity paths) is
-  // fainter still.
-  track: new Color("#ffffff", 0.55),
-  trackGhost: new Color("#ffffff", 0.12),
+  // Much softer than the app's full white, which reads too stark on a
+  // widget: the configuration at 30%, the rest of the track (the SVGs'
+  // 0.3-opacity paths) at 5%.
+  track: new Color("#ffffff", 0.3),
+  trackGhost: new Color("#ffffff", 0.05),
   placeholder: new Color("#ffffff", 0.15),
   fade: Array.from({ length: FEATURED_FADE_STEPS }, (_, i) => new Color("#111827", (i + 1) / FEATURED_FADE_STEPS)),
 }
