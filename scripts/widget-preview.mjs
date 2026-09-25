@@ -764,7 +764,7 @@ const SWEEP = [
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (long names)' },
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
-  { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (2 upcoming, long names)' },
+  { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (4 upcoming, long names)' },
 ]
 const SCENARIOS = [
   { family: 'small', manifest: NO_EVENTS, label: 'Small — zero state' },
@@ -773,7 +773,7 @@ const SCENARIOS = [
   { family: 'small', manifest: UPCOMING_ONE, label: 'Small — countdown (1 upcoming)' },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
-  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (2 upcoming, stacked)' },
+  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming, stacked)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
   { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },

@@ -106,7 +106,7 @@ const TEST_UPCOMING_DEFAULT_DAYS = 10
 // The fixture ships 3 days (see test-live.md) purely so `test-upcoming`
 // has more than one future day to work with — spreading them a week
 // apart lets one `test-upcoming[-N]` flag exercise the countdown
-// card's 2-card stack on Large AND the "N more upcoming" footer,
+// card's 3-card stack on Large AND the "N more upcoming" footer on Medium,
 // without a separate flag for each.
 const TEST_UPCOMING_SPREAD_DAYS = 7
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -486,10 +486,10 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
 
   const picked = pickToday(manifest)
   if (!picked) {
-    // Medium only has room for one countdown card; Large can stack two.
+    // Medium only has room for one countdown card; Large stacks three.
     const family = config.widgetFamily || "medium"
     const isLarge = family === "large" || family === "extraLarge"
-    const upcoming = pickUpcoming(manifest, isLarge ? 2 : 1)
+    const upcoming = pickUpcoming(manifest, isLarge ? 3 : 1)
     renderNoEvents(w, p, stale, upcoming)
     drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 60 * 60 * 1000)
@@ -1540,7 +1540,7 @@ const COUNTDOWN_CARD_GAP = 10
 // Tiers, in increasing available space:
 //   small   — the Small widget family: no card container; the date
 //             column and info sit above a full-width countdown well.
-//   regular — Medium, and Large when it's stacking 2 cards.
+//   regular — Medium, and Large when it's stacking 2–3 cards.
 //   rich    — Large showing exactly one card: bigger type, and the
 //             track configuration row.
 //
@@ -1710,8 +1710,8 @@ function renderUpcomingHeader(w, p, family) {
   w.addSpacer(h.gap)
 }
 
-// One or two countdown cards (Medium always gets one; Large can stack
-// two), plus a "N more upcoming" footer for whatever didn't fit —
+// One to three countdown cards (Medium always gets one; Large stacks
+// up to three), plus a "N more upcoming" footer for whatever didn't fit —
 // same convention as drawMoreActivitiesFooter for a day's activities.
 function renderCountdownState(w, p, upcoming) {
   const { items, total } = upcoming
@@ -1726,7 +1726,7 @@ function renderCountdownState(w, p, upcoming) {
   renderUpcomingHeader(w, p, family)
 
   // A single upcoming event gets the rich card on Large; stacking a
-  // second card puts both into the denser regular layout.
+  // second card puts them all into the denser regular layout.
   const rich = isLarge && items.length === 1
 
   // Cards size to their own content; real leftover space collects in

@@ -249,7 +249,7 @@ const FUTURE_MANIFEST = {
 
 // Three future days a week+ apart, across two events, so the
 // upcoming/countdown path can be exercised with: a big days-only
-// count, a 2-card stack on Large, a full-width well on Small, and a
+// count, a 3-card stack on Large, a full-width well on Small, and a
 // "more upcoming" footer for whatever doesn't fit.
 const UPCOMING_MULTI_MANIFEST = {
   events: [
@@ -449,8 +449,12 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('more upcoming'))).toBe(true)
   })
 
-  it('renders a 2-card upcoming stack plus a "more upcoming" footer on Large', async () => {
-    await expect(runWidget('large', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
+  it('stacks up to three upcoming cards on Large', async () => {
+    await runWidget('large', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    for (const name of ['Upcoming A', 'Upcoming B', 'Upcoming C']) expect(texts).toContain(name)
+    // All three fit, so nothing is left for a "more upcoming" footer.
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
   it('renders a single upcoming card plus a "more upcoming" footer on Medium', async () => {
