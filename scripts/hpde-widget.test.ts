@@ -22,14 +22,26 @@ import { dirname, join } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const widgetSrc = readFileSync(join(__dirname, 'hpde-widget.js'), 'utf8')
 
+// Scriptable rejects anything but a number where it expects one, and the
+// widget shows its error screen instead (Small's name row set its spacing
+// from a size it didn't have: "Expected value of type number but got
+// value of type undefined"). The stubs below check every number the same
+// way, so a render that would fail on the phone fails here.
+function num(v: unknown): number {
+  if (typeof v !== 'number' || Number.isNaN(v)) {
+    throw new Error(`Expected value of type number but got value of type ${Number.isNaN(v) ? 'NaN' : typeof v}.`)
+  }
+  return v
+}
+
 function installScriptableMocks(manifest: unknown, widgetParameter: string | null = null) {
   const g = globalThis as any
   g.Color = class { constructor(_hex?: string, _alpha?: number) {} }
   g.Size = class {
     width: number; height: number
-    constructor(w: number, h: number) { this.width = w; this.height = h }
+    constructor(w: number, h: number) { this.width = num(w); this.height = num(h) }
   }
-  const fontStub = () => ({})
+  const fontStub = (size: number) => { num(size); return {} }
   g.Font = {
     systemFont: fontStub, mediumSystemFont: fontStub,
     semiboldSystemFont: fontStub, boldSystemFont: fontStub,
@@ -63,7 +75,10 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.__texts = [] as string[]
   const textStub = (text: string) => {
     g.__texts.push(text)
-    return { font: null, textColor: null, lineLimit: 0, textOpacity: 1 }
+    return {
+      font: null, textColor: null, textOpacity: 1,
+      set lineLimit(v: number) { num(v) },
+    }
   }
   const imageStub = () => ({ imageSize: null, tintColor: null, imageOpacity: 1 })
   // Records every cornerRadius/height a stack is given, so tests can
@@ -87,20 +102,20 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     addText(text: string) { return textStub(text) }
     addImage() { return imageStub() }
     addSpacer(_n?: number) {}
-    setPadding() {}
+    setPadding(t: number, l: number, b: number, r: number) { [t, l, b, r].forEach(num) }
     layoutVertically() {}
     centerAlignContent() {}
     topAlignContent() {}
     bottomAlignContent() {}
     set backgroundColor(_v) {}
     set borderColor(_v) {}
-    set borderWidth(_v) {}
-    set cornerRadius(v: number) { this._cornerRadius = v; g.__cornerRadii.push(v) }
+    set borderWidth(v: number) { num(v) }
+    set cornerRadius(v: number) { this._cornerRadius = num(v); g.__cornerRadii.push(v) }
     set size(v: { width: number; height: number }) {
       g.__sizeHeights.push(v.height)
       g.__stackSizes.push({ cornerRadius: this._cornerRadius, width: v.width, height: v.height })
     }
-    set spacing(_v) {}
+    set spacing(v: number) { num(v) }
     set url(_v) {}
   }
   g.WidgetStack = StackStub
@@ -108,7 +123,7 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     addStack() { return new StackStub() }
     addText(text: string) { return textStub(text) }
     addSpacer(_n?: number) {}
-    setPadding() {}
+    setPadding(t: number, l: number, b: number, r: number) { [t, l, b, r].forEach(num) }
     set backgroundColor(_v) {}
     set refreshAfterDate(_v) {}
     set url(_v) {}
@@ -118,8 +133,10 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.SFSymbol = { named: () => ({ image: {} }) }
   // Records what the widget draws (the header's checkered flag).
   g.__drawn = [] as Array<{ fills: number; rects?: number; opaque: boolean; respectScreenScale: boolean }>
-  g.Point = class { constructor(public x: number, public y: number) {} }
-  g.Rect = class { constructor(public x: number, public y: number, public width: number, public height: number) {} }
+  g.Point = class { constructor(public x: number, public y: number) { num(x); num(y) } }
+  g.Rect = class {
+    constructor(public x: number, public y: number, public width: number, public height: number) { [x, y, width, height].forEach(num) }
+  }
   g.Path = class {
     move() {}
     addLine() {}
@@ -190,6 +207,11 @@ async function runWidget(widgetFamily: string, manifest: unknown, widgetParamete
   const wrapped = `(async () => { ${widgetSrc} })()`
   // eslint-disable-next-line no-eval
   await eval(wrapped)
+  // The widget catches its own errors and shows them as a widget, so a
+  // render that failed still "resolves" — fail the test instead.
+  const texts = (globalThis as any).__texts as string[]
+  const at = texts.indexOf('HPDE widget error')
+  if (at >= 0) throw new Error(`${widgetFamily} widget rendered its error screen: ${texts[at + 1]}`)
 }
 
 function isoDate(offsetDays: number): string {

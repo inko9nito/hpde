@@ -2026,14 +2026,18 @@ function addCountdownInfo(row, p, next, t, rich) {
   // Name, then the pill. Of the two, the pill is the less flexible (a
   // few characters), so the row offers it its width first and the name
   // truncates if anything has to.
+  // Small has no pill, so its tokens have no pill sizes — and Scriptable
+  // throws on an undefined number, so the spacing is set only with one.
   const titleRow = col.addStack()
   titleRow.centerAlignContent()
-  titleRow.spacing = t.pillGap
   const title = titleRow.addText(next.event.name)
   title.font = rBoldFont(t.titleFont)
   title.textColor = p.fg
   title.lineLimit = t.titleLines
-  if (!small) addCountdownPill(titleRow, daysUntil(next.day.date), p.brandTint, p.brand, t)
+  if (!small) {
+    titleRow.spacing = t.pillGap
+    addCountdownPill(titleRow, daysUntil(next.day.date), p.brandTint, p.brand, t)
+  }
 
   // Same fields and icons as the app's event details (EventInfo):
   // Users for the organizer, MapPin for the track. The app shows the
