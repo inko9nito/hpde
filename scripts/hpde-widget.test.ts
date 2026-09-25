@@ -36,7 +36,12 @@ function num(v: unknown): number {
 
 function installScriptableMocks(manifest: unknown, widgetParameter: string | null = null) {
   const g = globalThis as any
-  g.Color = class { constructor(_hex?: string, _alpha?: number) {} }
+  g.Color = class { constructor(public hex?: string, public alpha?: number) {} }
+  g.LinearGradient = class {
+    colors: unknown[] = []; locations: number[] = []; startPoint: unknown = null; endPoint: unknown = null
+  }
+  // The widget's ground: what renderers set as its background.
+  g.__background = {} as { color?: unknown; gradient?: unknown; image?: unknown }
   g.Size = class {
     width: number; height: number
     constructor(w: number, h: number) { this.width = num(w); this.height = num(h) }
@@ -124,7 +129,9 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     addText(text: string) { return textStub(text) }
     addSpacer(_n?: number) {}
     setPadding(t: number, l: number, b: number, r: number) { [t, l, b, r].forEach(num) }
-    set backgroundColor(_v) {}
+    set backgroundColor(v: unknown) { g.__background.color = v }
+    set backgroundGradient(v: unknown) { g.__background.gradient = v }
+    set backgroundImage(v: unknown) { g.__background.image = v }
     set refreshAfterDate(_v) {}
     set url(_v) {}
     async presentMedium() {}
@@ -132,7 +139,10 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   }
   g.SFSymbol = { named: () => ({ image: {} }) }
   // Records what the widget draws (the header's checkered flag).
-  g.__drawn = [] as Array<{ fills: number; rects?: number; opaque: boolean; respectScreenScale: boolean }>
+  g.__drawn = [] as Array<{
+    fills: number; rects?: number; rectColors?: Array<{ hex: string; alpha: number }>
+    opaque: boolean; respectScreenScale: boolean
+  }>
   g.Point = class { constructor(public x: number, public y: number) { num(x); num(y) } }
   g.Rect = class {
     constructor(public x: number, public y: number, public width: number, public height: number) { [x, y, width, height].forEach(num) }
@@ -149,14 +159,16 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     respectScreenScale = false
     fills = 0
     rects = 0
-    setFillColor() {}
+    color: { hex: string; alpha: number } | null = null
+    rectColors: Array<{ hex: string; alpha: number }> = []
+    setFillColor(c: { hex: string; alpha?: number }) { this.color = { hex: c.hex, alpha: c.alpha ?? 1 } }
     addPath() {}
     fillPath() { this.fills++ }
-    fillRect() { this.rects++ }
+    fillRect() { this.rects++; this.rectColors.push(this.color!) }
     getImage() {
       g.__drawn.push({
         fills: this.fills,
-        ...(this.rects ? { rects: this.rects } : {}),
+        ...(this.rects ? { rects: this.rects, rectColors: this.rectColors } : {}),
         opaque: this.opaque,
         respectScreenScale: this.respectScreenScale,
       })
@@ -346,7 +358,7 @@ describe('scriptable widget loads and renders', () => {
     await expect(runWidget('medium', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })
 
-  it('renders the upcoming-events countdown header + card on Small', async () => {
+  it('renders the countdown card on Small', async () => {
     await expect(runWidget('small', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })
 
@@ -370,7 +382,7 @@ describe('scriptable widget loads and renders', () => {
     }
   })
 
-  it('drops the organizer row on Small so title + rows + well fit the real interior height', async () => {
+  it('leaves the organizer off Small, as its design does', async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
     expect(texts).not.toContain('Org A')
@@ -386,9 +398,7 @@ describe('scriptable widget loads and renders', () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const radii = (globalThis as any).__cornerRadii as number[]
     // COUNTDOWN_CARD_RADIUS (20) is only ever applied by drawCountdownCard's
-    // container — COUNTDOWN_WELL_RADIUS (16) and COUNTDOWN_BADGE_RADIUS (12)
-    // still legitimately appear (the well and the header badge are real,
-    // deliberate visual elements, not the removed wrapper).
+    // container — the badge's and the bar's radii are Small's own.
     expect(radii).not.toContain(20)
   })
 
@@ -405,7 +415,8 @@ describe('scriptable widget loads and renders', () => {
     // padding above/below the rows. Cards should size to their own
     // content now. Small, fixed decorative heights legitimately remain
     // (the week/day divider line tops out at 28; the Large header's
-    // square icon badge is COUNTDOWN_BADGE_SIZE, 40) — a forced card
+    // square icon badge is COUNTDOWN_BADGE_SIZE, 40, as is Small's red
+    // bar beside the name) — a forced card
     // height would be far larger (the old code divided most of a
     // ~130-345pt interior across 1-2 cards), so a ceiling just above
     // the badge still catches the regression without flagging those.
@@ -450,18 +461,63 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('Monday'))).toBe(false)
   })
 
-  it('keeps the countdown in the well on Small, with no pill beside the name', async () => {
+  it("lays Small out as its design: month over day, name over track, then the badge", async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
-    expect(texts).toContain('DAYS AWAY')
-    expect(texts.some(t => t.startsWith('IN '))).toBe(false)
+    const [, m, d] = isoDate(10).split('-').map(Number)
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    // Nothing else — no header, organizer or countdown well — but the
+    // status line (these mocks are offline, so the schedule is cached).
+    expect(texts).toEqual([months[m - 1], String(d), 'Upcoming A', 'Track A', 'in 10 days', 'Cached schedule'])
   })
 
-  it('draws the checkered flag in the corner on every family', async () => {
+  it("draws Small's ground and track into its background, faded like Medium's", async () => {
+    const withTrack = (trackId?: string) => ({
+      events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], ...(trackId ? { trackId } : {}) }],
+    })
+    const ground = async (trackId?: string) => {
+      await runWidget('small', withTrack(trackId))
+      const drawn = (globalThis as any).__drawn as Array<{
+        fills: number; rects: number; rectColors: Array<{ hex: string; alpha: number }>; opaque: boolean
+      }>
+      // One image, and it is the widget's background.
+      expect(drawn).toHaveLength(1)
+      expect((globalThis as any).__background.image).toBeDefined()
+      return drawn[0]
+    }
+    // The track's own paths, or the app's placeholder flag (four shapes).
+    expect((await ground('ecr-2-7')).fills).toBe(1)
+    expect((await ground('msrc-1-7')).fills).toBe(2)
+    expect((await ground()).fills).toBe(4)
+    const g = await ground('ecr-2-7')
+    // Opaque: the ground covers it, 1pt strips from the design's top
+    // color to its bottom one...
+    expect(g.opaque).toBe(true)
+    expect(g.rectColors[0]).toEqual({ hex: '#262626', alpha: 1 })
+    expect(g.rectColors[169]).toEqual({ hex: '#1b1b1b', alpha: 1 })
+    // ...then the fade: strips of the ground's color, more opaque going
+    // down, ending fully opaque.
+    const fade = g.rectColors.slice(170)
+    expect(fade.length).toBeGreaterThan(30)
+    for (let i = 1; i < fade.length; i++) expect(fade[i].alpha).toBeGreaterThanOrEqual(fade[i - 1].alpha)
+    expect(fade[fade.length - 1].alpha).toBe(1)
+  })
+
+  it("gives Medium the same ground as Small: the design's gradient, top to bottom", async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const gradient = (globalThis as any).__background.gradient as {
+      colors: Array<{ hex: string }>; locations: number[]; startPoint: { x: number; y: number }; endPoint: { x: number; y: number }
+    }
+    expect(gradient.colors.map(c => c.hex)).toEqual(['#262626', '#262626', '#222222', '#1c1c1c', '#1b1b1b'])
+    expect(gradient.locations).toEqual([0, 0.149, 0.418, 0.817, 1])
+    expect([gradient.startPoint, gradient.endPoint]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 1 }])
+  })
+
+  it('draws the checkered flag in the corner on Medium and Large (Small\'s design has none)', async () => {
     // One flag: four filled shapes, on a transparent background (a
     // DrawContext is opaque — black — by default), at screen scale.
     const flag = { fills: 4, opaque: false, respectScreenScale: true }
-    for (const family of ['small', 'large']) {
+    for (const family of ['large']) {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
       expect((globalThis as any).__drawn).toEqual([flag])
     }
@@ -831,30 +887,27 @@ describe('design guardrails (static source checks)', () => {
     expect(offenders).toEqual([])
   })
 
-  it('gives both countdown-well texts an explicit lineLimit', () => {
-    // Real on-device bug: addCountUnit's `num` and `lbl` texts never
-    // got `.lineLimit = 1` (every OTHER addText() call site in the
-    // file that needs single-line text sets it explicitly). Without
-    // it, Text is free to wrap — and a wrappable Text reports a much
-    // smaller "ideal width" to SwiftUI's layout engine than a
-    // single-line one, since it can always break onto more lines
-    // instead of demanding a wider box. Once drawCountdownWell's
-    // `well` stack lost its explicit .size (a separate, deliberate
-    // fix), nothing stopped the well from being squeezed down to an
-    // unreadable sliver: "17" wrapped into "1" / "7" on separate
-    // lines, "DAYS AWAY" wrapped into "DAYS" / "AWAY", on a real
-    // device — invisible in this repo's simulator because Chromium's
-    // flexbox sizing doesn't collapse the same way. Scoped narrowly
-    // to addCountUnit's body (not every addText() in the file) since
-    // some texts elsewhere legitimately want wrapping (e.g. the
-    // top-level error message) — this guards the one function where
-    // it caused a real, confirmed regression.
-    const start = widgetSrc.indexOf('function addCountUnit(')
-    expect(start).toBeGreaterThan(-1)
-    const end = widgetSrc.indexOf('\n}', start)
-    const body = widgetSrc.slice(start, end)
-    expect(body).toMatch(/num\.lineLimit\s*=\s*1/)
-    expect(body).toMatch(/lbl\.lineLimit\s*=\s*1/)
+  it('gives every text on the Small card, and its badge, an explicit lineLimit', () => {
+    // Real on-device bug (#203): Small's old countdown well set no
+    // `.lineLimit = 1` on its texts. Without it, Text is free to wrap —
+    // and a wrappable Text reports a much smaller "ideal width" to
+    // SwiftUI's layout than a single-line one, since it can always
+    // break onto more lines instead of demanding a wider box. The well
+    // got squeezed to a sliver: "17" wrapped into "1" / "7", "DAYS
+    // AWAY" into "DAYS" / "AWAY", on a real device — invisible in this
+    // repo's simulator because Chromium's flexbox doesn't collapse the
+    // same way. Small's card is just as narrow, so every text on it
+    // (month, day, name, track) and the badge's label must be one line.
+    const bodyOf = (name: string) => {
+      const start = widgetSrc.indexOf(`function ${name}(`)
+      expect(start).toBeGreaterThan(-1)
+      return widgetSrc.slice(start, widgetSrc.indexOf('\n}', start))
+    }
+    const small = bodyOf('renderSmallCountdown')
+    const texts = small.match(/const (\w+) = \w+\.addText\(/g)!.map(m => m.split(' ')[1])
+    expect(texts).toEqual(['month', 'day', 'title', 'track'])
+    for (const t of texts) expect(small).toMatch(new RegExp(`${t}\\.lineLimit\\s*=\\s*1\\b`))
+    expect(bodyOf('addCountdownPill')).toMatch(/label\.lineLimit\s*=\s*1/)
   })
 })
 
