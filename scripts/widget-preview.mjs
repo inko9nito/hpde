@@ -401,9 +401,19 @@ class ColorMock {
 }
 function colorCss(c) { return c instanceof ColorMock ? c.toCss() : String(c ?? 'inherit') }
 
-class SizeMock { constructor(w, h) { this.width = w; this.height = h } }
+// Scriptable throws on anything but a number where it expects one, and
+// the widget then shows its error screen — so do the mocks, or the
+// preview draws a layout the phone never shows (Small's pill gap).
+function num(v) {
+  if (typeof v !== 'number' || Number.isNaN(v)) {
+    throw new Error(`Expected value of type number but got value of type ${Number.isNaN(v) ? 'NaN' : typeof v}.`)
+  }
+  return v
+}
 
-function fontMock(size, weight) { return { size, weight } }
+class SizeMock { constructor(w, h) { this.width = num(w); this.height = num(h) } }
+
+function fontMock(size, weight) { return { size: num(size), weight } }
 const Font = {
   systemFont: s => fontMock(s, 'normal'),
   mediumSystemFont: s => fontMock(s, '500'),
@@ -509,7 +519,7 @@ class TextWrapper {
   set font(f) { if (f) { this.node.style['font-size'] = f.size + 'px'; this.node.style['font-weight'] = f.weight } }
   set textColor(c) { this.node.style.color = colorCss(c) }
   set lineLimit(n) {
-    this.node.data.ll = String(n)
+    this.node.data.ll = String(num(n))
     if (n === 1) {
       this.node.style['white-space'] = 'pre'
       this.node.style.overflow = 'hidden'
@@ -534,8 +544,8 @@ class TextWrapper {
 // DrawContext / Path / Point — enough of Scriptable's drawing API to
 // replay what the widget draws (its checkered flag) as an inline SVG,
 // from the widget's OWN path data: nothing here is a stand-in shape.
-class PointMock { constructor(x, y) { this.x = x; this.y = y } }
-class RectMock { constructor(x, y, w, h) { this.x = x; this.y = y; this.width = w; this.height = h } }
+class PointMock { constructor(x, y) { this.x = num(x); this.y = num(y) } }
+class RectMock { constructor(x, y, w, h) { this.x = num(x); this.y = num(y); this.width = num(w); this.height = num(h) } }
 class PathMock {
   constructor() { this.segments = [] }
   move(p) { this.segments.push(`M${p.x} ${p.y}`) }
@@ -647,7 +657,7 @@ class StackMock {
     }
     this.node.children.push(sp)
   }
-  setPadding(t, l, b, r) { this.node.style.padding = `${t}px ${r}px ${b}px ${l}px` }
+  setPadding(t, l, b, r) { [t, l, b, r].forEach(num); this.node.style.padding = `${t}px ${r}px ${b}px ${l}px` }
   // topAlignContent / centerAlignContent / bottomAlignContent set the
   // stack's CROSS-axis alignment: on a row, top / center / bottom; on a
   // column, leading / center / trailing. Widths come from the SwiftUI
@@ -657,15 +667,15 @@ class StackMock {
   topAlignContent() { this.node.style['align-items'] = 'flex-start' }
   bottomAlignContent() { this.node.style['align-items'] = 'flex-end' }
   set backgroundColor(c) { this.node.style['background-color'] = colorCss(c) }
-  set cornerRadius(v) { this.node.style['border-radius'] = v + 'px' }
+  set cornerRadius(v) { this.node.style['border-radius'] = num(v) + 'px' }
   set size(s) {
     if (s.width > 0) { this.node.data.w = String(s.width); this.node.style.width = s.width + 'px'; this.node.style['flex-shrink'] = '0' }
     if (s.height > 0) { this.node.style.height = s.height + 'px'; this.node.style['flex-shrink'] = '0' }
   }
-  set spacing(n) { this.node.style.gap = n + 'px' }
+  set spacing(n) { this.node.style.gap = num(n) + 'px' }
   set url(_v) {}
   set borderColor(_v) {}
-  set borderWidth(_v) {}
+  set borderWidth(v) { num(v) }
 }
 
 // A ListWidget is a VStack in a fixed frame: SwiftUI centers its
