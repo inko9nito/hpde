@@ -117,8 +117,9 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   }
   g.SFSymbol = { named: () => ({ image: {} }) }
   // Records what the widget draws (the header's checkered flag).
-  g.__drawn = [] as Array<{ fills: number; opaque: boolean; respectScreenScale: boolean }>
+  g.__drawn = [] as Array<{ fills: number; rects?: number; opaque: boolean; respectScreenScale: boolean }>
   g.Point = class { constructor(public x: number, public y: number) {} }
+  g.Rect = class { constructor(public x: number, public y: number, public width: number, public height: number) {} }
   g.Path = class {
     move() {}
     addLine() {}
@@ -130,11 +131,18 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     opaque = true
     respectScreenScale = false
     fills = 0
+    rects = 0
     setFillColor() {}
     addPath() {}
     fillPath() { this.fills++ }
+    fillRect() { this.rects++ }
     getImage() {
-      g.__drawn.push({ fills: this.fills, opaque: this.opaque, respectScreenScale: this.respectScreenScale })
+      g.__drawn.push({
+        fills: this.fills,
+        ...(this.rects ? { rects: this.rects } : {}),
+        opaque: this.opaque,
+        respectScreenScale: this.respectScreenScale,
+      })
       return {}
     }
   }
@@ -331,8 +339,8 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).not.toContain('Track A, City A')
   })
 
-  it('shows the track alone on Medium/Large, like the app\'s Location row (city is only its subtitle there)', async () => {
-    for (const family of ['medium', 'large']) {
+  it('shows the track alone on Large, like the app\'s Location row (city is only its subtitle there)', async () => {
+    for (const family of ['large']) {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
       const texts = (globalThis as any).__texts as string[]
       expect(texts).toContain('Track A')
@@ -362,8 +370,8 @@ describe('scriptable widget loads and renders', () => {
     expect(radii).not.toContain(20)
   })
 
-  it('keeps the card container around a countdown event on Medium/Large', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+  it('keeps the card container around a countdown event on Large (Medium is itself the card)', async () => {
+    await runWidget('large', UPCOMING_MULTI_MANIFEST)
     const radii = (globalThis as any).__cornerRadii as number[]
     expect(radii).toContain(20)
   })
@@ -427,14 +435,52 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.startsWith('IN '))).toBe(false)
   })
 
-  it('draws the checkered flag in the header on every family', async () => {
-    for (const family of ['small', 'medium', 'large']) {
+  it('draws the checkered flag in the corner on every family', async () => {
+    // One flag: four filled shapes, on a transparent background (a
+    // DrawContext is opaque — black — by default), at screen scale.
+    const flag = { fills: 4, opaque: false, respectScreenScale: true }
+    for (const family of ['small', 'large']) {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
-      const drawn = (globalThis as any).__drawn as Array<{ fills: number; opaque: boolean; respectScreenScale: boolean }>
-      // One flag: four filled shapes, on a transparent background (a
-      // DrawContext is opaque — black — by default), at screen scale.
-      expect(drawn).toEqual([{ fills: 4, opaque: false, respectScreenScale: true }])
+      expect((globalThis as any).__drawn).toEqual([flag])
     }
+    // Medium draws its track banner first, then the flag.
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const drawn = (globalThis as any).__drawn as Array<{ fills: number }>
+    expect(drawn).toHaveLength(2)
+    expect(drawn[1]).toEqual(flag)
+  })
+
+  it("draws the event's track shape across the top of the Medium card, faded like the app's", async () => {
+    const withTrack = (trackId?: string) => ({
+      events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], ...(trackId ? { trackId } : {}) }],
+    })
+    const banner = async (trackId?: string) => {
+      await runWidget('medium', withTrack(trackId))
+      return ((globalThis as any).__drawn as Array<{ fills: number; rects?: number; opaque: boolean }>)[0]
+    }
+    // One filled path per path in the app's SVG: Eagles Canyon has one;
+    // MSRC 1.7 has two (the other configuration, ghosted).
+    expect((await banner('ecr-2-7')).fills).toBe(1)
+    expect((await banner('msrc-1-7')).fills).toBe(2)
+    // No trackId, or one the app has no icon for: the app's placeholder
+    // flag (four shapes).
+    expect((await banner()).fills).toBe(4)
+    expect((await banner('nowhere-1-0')).fills).toBe(4)
+    // The fade: 1pt strips over the bottom three quarters.
+    const b = await banner('ecr-2-7')
+    expect(b.opaque).toBe(false)
+    expect(b.rects).toBeGreaterThan(40)
+  })
+
+  it('makes the Medium countdown the app\'s featured card: name + badge over organizer, one event', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    const name = texts.indexOf('Upcoming A')
+    expect(texts.slice(name, name + 3)).toEqual(['Upcoming A', 'IN 10 DAYS', 'Org A'])
+    // No header, location or "more upcoming" footer — the app's card has none.
+    expect(texts).not.toContain('Upcoming HPDE events')
+    expect(texts).not.toContain('Track A')
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
@@ -443,8 +489,10 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
-  it('still shows the "more upcoming" footer on Medium/Large', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+  it('still shows the "more upcoming" footer on Large once more than three are coming', async () => {
+    const fourth = { ...UPCOMING_MULTI_MANIFEST.events[2], id: 'upcoming-d', name: 'Upcoming D',
+      days: [{ date: isoDate(31), label: 'Monday', activities: [] }] }
+    await runWidget('large', { events: [...UPCOMING_MULTI_MANIFEST.events, fourth] })
     const texts = (globalThis as any).__texts as string[]
     expect(texts.some(t => t.includes('more upcoming'))).toBe(true)
   })
@@ -661,6 +709,33 @@ describe('design guardrails (static source checks)', () => {
     expect(widgetSrc).toContain(`const CHECKERED_FLAG_VIEWBOX = [${viewBox[1]}, ${viewBox[2]}]`)
     // svgPathToPath reads absolute M / L / C / Z only.
     for (const d of assetPaths) expect(d).toMatch(/^[MLCZ\d\s.-]+$/)
+  })
+
+  it("draws the app's own track shapes, path for path, for every track the app has", () => {
+    // Same arrangement as the flag: the widget's copy of each
+    // src/data/track-icons/<id>.svg must match the file (path data and
+    // fill-opacity), and every track the app can show needs one.
+    const iconsDir = join(__dirname, '..', 'src', 'data', 'track-icons')
+    const trackIconSrc = readFileSync(join(__dirname, '..', 'src', 'components', 'TrackIcon.tsx'), 'utf8')
+    const appIds = [...trackIconSrc.slice(trackIconSrc.indexOf('const TRACK_ICONS'))
+      .slice(0, trackIconSrc.slice(trackIconSrc.indexOf('const TRACK_ICONS')).indexOf('}'))
+      .matchAll(/'([a-z0-9-]+)':/g)].map(m => m[1])
+    expect(appIds.length).toBeGreaterThan(0)
+    const block = widgetSrc.slice(widgetSrc.indexOf('const TRACK_SHAPES = {'))
+    const body = block.slice(0, block.indexOf('\n}\n'))
+    const widgetIds = [...body.matchAll(/^ {2}"([a-z0-9-]+)": \[/gm)].map(m => m[1])
+    expect(widgetIds.sort()).toEqual([...appIds].sort())
+    for (const id of appIds) {
+      const svg = readFileSync(join(iconsDir, `${id}.svg`), 'utf8')
+      const assetPaths = [...svg.matchAll(/<path d="([^"]+)"([^>]*)\/>/g)]
+        .map(m => [Number(m[2].match(/fill-opacity="([\d.]+)"/)?.[1] ?? 1), m[1]])
+      const entry = body.slice(body.indexOf(`"${id}": [`))
+      const widgetPaths = [...entry.slice(0, entry.indexOf('\n  ],')).matchAll(/\[([\d.]+), "([^"]+)"\]/g)]
+        .map(m => [Number(m[1]), m[2]])
+      expect(widgetPaths).toEqual(assetPaths)
+      // svgPathToPath reads absolute M / L / C / H / V / Z only.
+      for (const [, d] of assetPaths) expect(d).toMatch(/^[MLCHVZ\d\s.-]+$/)
+    }
   })
 
   it('keeps the widget-preview simulator constants pinned to cited iOS values', async () => {

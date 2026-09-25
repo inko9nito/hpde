@@ -29,6 +29,8 @@ export interface SerializedEvent {
   city?: string
   configuration?: string
   direction?: string
+  /** Which track shape to draw (the widget's Medium card, #204). */
+  trackId?: string
   runGroups: SerializedRunGroup[]
   days: SerializedDay[]
 }
@@ -83,6 +85,7 @@ export function serializeEvents(events: EventConfig[], now: Date = new Date()): 
       ...(e.city ? { city: e.city } : {}),
       ...(e.configuration ? { configuration: e.configuration } : {}),
       ...(e.direction ? { direction: e.direction } : {}),
+      ...(e.trackId ? { trackId: e.trackId } : {}),
       runGroups: e.runGroups.map(g => ({
         id: g.id,
         label: g.label,
