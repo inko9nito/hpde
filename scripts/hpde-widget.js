@@ -1967,7 +1967,9 @@ function renderLargeCountdown(w, upcoming, footer) {
   title.textColor = F.subtle
   title.lineLimit = 1
   head.addSpacer()
-  if (!one) addCheckeredFlag(head, F.flag, t.flagWidth)
+  // Both versions have the flag (the one-event design left it out; the
+  // owner asked for it back).
+  addCheckeredFlag(head, F.flag, t.flagWidth)
 
   if (one) {
     w.addSpacer(t.headerGap)

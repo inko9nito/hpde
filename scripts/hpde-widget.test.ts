@@ -530,7 +530,7 @@ describe('scriptable widget loads and renders', () => {
     }
   })
 
-  it('draws the checkered flag in the corner on Large with more than one event, as its design has it', async () => {
+  it('draws the checkered flag in the corner on Large, with one event or more', async () => {
     // One flag: four filled shapes, on a transparent background (a
     // DrawContext is opaque — black — by default), at screen scale —
     // after the background.
@@ -539,9 +539,11 @@ describe('scriptable widget loads and renders', () => {
     const drawn = (globalThis as any).__drawn as unknown[]
     expect(drawn).toHaveLength(2)
     expect(drawn[1]).toEqual(flag)
-    // With one event, the design has no flag: just the background.
+    // With one event too (its design left it out; asked for in #204).
     await runWidget('large', FUTURE_MANIFEST)
-    expect((globalThis as any).__drawn).toHaveLength(1)
+    const one = (globalThis as any).__drawn as unknown[]
+    expect(one).toHaveLength(2)
+    expect(one[1]).toEqual(flag)
   })
 
   it("lays Large out as its designs: one event, with its badge above it", async () => {
@@ -556,7 +558,7 @@ describe('scriptable widget loads and renders', () => {
     // this event has no trackId, so the placeholder flag, over the 382
     // strips of Large's ground.
     const drawn = (globalThis as any).__drawn as Array<{ fills: number; rectColors: Array<{ hex: string }> }>
-    expect(drawn).toHaveLength(1)
+    expect(drawn).toHaveLength(2) // the background, then the header flag
     expect(drawn[0].fills).toBe(4)
     expect(drawn[0].rectColors[381]).toEqual({ hex: '#1b1b1b', alpha: 1 })
   })
