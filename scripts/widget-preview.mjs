@@ -39,13 +39,18 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { chromium } from 'playwright'
 import { faFlagCheckered } from '@fortawesome/free-solid-svg-icons'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const widgetSrc = readFileSync(join(__dirname, 'hpde-widget.js'), 'utf8')
-const outDir = join(__dirname, '.widget-preview')
+// WIDGET_SCRIPT renders a variant copy of the widget instead (e.g. a
+// design option to compare), into .widget-preview/<its file name>/.
+const variant = process.env.WIDGET_SCRIPT
+const widgetSrc = readFileSync(variant || join(__dirname, 'hpde-widget.js'), 'utf8')
+const outDir = variant
+  ? join(__dirname, '.widget-preview', basename(variant, '.js'))
+  : join(__dirname, '.widget-preview')
 mkdirSync(outDir, { recursive: true })
 
 // ---------- WIDGET ENVIRONMENT CONSTANTS ----------

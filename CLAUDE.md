@@ -130,7 +130,9 @@ task that touches this file:
    tool to see it. It renders at the owner's phone's widget sizes
    (375×812: 155 / 329×155 / 329×345) and sweeps the countdown layouts
    across the narrowest (SE) and widest (Pro Max) phones too — check
-   those, not just one size. If Chromium's default binary isn't
+   those, not just one size. To compare a design option, render a
+   variant copy with `WIDGET_SCRIPT=path/to/copy.js npm run
+   widget:preview` (it writes to `.widget-preview/<copy name>/`). If Chromium's default binary isn't
    available, pass `PLAYWRIGHT_EXECUTABLE_PATH=/opt/pw-browsers/chromium`.
    Do NOT report a layout as fixed on the strength of arithmetic
    or "the code looks right" — read the render.

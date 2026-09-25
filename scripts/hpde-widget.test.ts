@@ -331,10 +331,13 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).not.toContain('Track A, City A')
   })
 
-  it('keeps the city in the location row on Medium/Large, where there is room for it', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
-    const texts = (globalThis as any).__texts as string[]
-    expect(texts).toContain('Track A, City A')
+  it('shows the track alone on Medium/Large, like the app\'s Location row (city is only its subtitle there)', async () => {
+    for (const family of ['medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const texts = (globalThis as any).__texts as string[]
+      expect(texts).toContain('Track A')
+      expect(texts.some(t => t.includes('City A'))).toBe(false)
+    }
   })
 
   it('drops the organizer row on Small so title + rows + well fit the real interior height', async () => {

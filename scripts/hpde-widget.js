@@ -343,7 +343,7 @@ function validateWidgetParameter(parsed, manifest) {
 // `accent` (blue) is the today view's now-marker, as the app's
 // TimeIndicator. `brand` (red) is the upcoming-events view's accent —
 // the app's DateBlock month (red-600 light / red-400 dark) — for the
-// month, the countdown pill, the Small well and the checkered flag;
+// month, the countdown pill and the Small well;
 // `brandTint` (the app's LIVE badge background, red-500 at 10%) is the
 // pill's and the Small well's background.
 function palette(dark) {
@@ -1497,7 +1497,7 @@ function daysUntil(iso) {
 // There's no event today, but a future one is scheduled — show a
 // countdown card instead of a plain "Next: <name>" line. Laid out like
 // the app's event cards (#204): the date stacked on the left (red month
-// over a big day number, as the app's DateBlock), a hairline, then the
+// over a big day number, as the app's DateBlock), then the
 // name with a red "IN 9 DAYS" pill beside it (where the app puts its
 // LIVE badge), over the organizer and the location.
 const COUNTDOWN_CARD_GAP = 10
@@ -1517,7 +1517,7 @@ const COUNTDOWN_CARD_GAP = 10
 //      228pt "because the card is 332pt wide" left the countdown well
 //      25pt on the owner's phone, so it read "•••" / "DAY…". Explicit
 //      widths here are only small, content-sized constants (the date
-//      column, the hairline, the footer's short rules).
+//      column, the footer's short rules).
 //   2. At most one child in a row can truncate. The info column is the
 //      only flexible child of a card row (the date column is pinned to
 //      a fixed width by a strut, see addDateColumn), so it gets all the
@@ -1553,25 +1553,24 @@ const COUNTDOWN_FOOTER_RULE_WIDTH = 20
 
 // `dateColW` is the date column's fixed width — wide enough for the
 // widest month ("MAY") and a two-digit day at that tier's sizes, so the
-// hairline and the info column line up across stacked cards whatever
-// the date. `dateGap` sits either side of the hairline. Small's info
-// column is under 90pt wide, so it skips the hairline (`dividerH: 0`)
-// and the row icons (`rowIconSize: 0`) — together they cost ~30pt,
-// enough to truncate even "Test Raceway".
+// info column lines up across stacked cards whatever
+// the date. `dateGap` is the gap between the date and the info column.
+// Small's info column is under 90pt wide, so it skips the row icons
+// (`rowIconSize: 0`), which would truncate even "Test Raceway".
 const COUNTDOWN_TOKENS = {
   small: {
     titleFont: 11, titleLines: 2, titleGap: 2, rowFont: 11, rowIconSize: 0, rowIconGap: 4, rowSpacing: 2,
-    monthFont: 10, dayFont: 22, yearFont: 9, dateColW: 30, dateGap: 8, dividerH: 0,
+    monthFont: 10, dayFont: 22, yearFont: 9, dateColW: 30, dateGap: 8,
     wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 7,
   },
   regular: {
     cardPad: 10, titleFont: 15, titleLines: 1, titleGap: 2, rowFont: 11, rowIconSize: 11, rowIconGap: 5, rowSpacing: 3,
-    monthFont: 11, dayFont: 26, yearFont: 10, dateColW: 36, dateGap: 12, dividerH: 36,
+    monthFont: 11, dayFont: 26, yearFont: 10, dateColW: 36, dateGap: 12,
     pillFont: 9, pillPadV: 3, pillPadH: 6, pillGap: 6,
   },
   rich: {
     cardPad: 16, titleFont: 18, titleLines: 1, titleGap: 4, rowFont: 13, rowIconSize: 13, rowIconGap: 6, rowSpacing: 6,
-    monthFont: 13, dayFont: 34, yearFont: 11, dateColW: 46, dateGap: 16, dividerH: 40,
+    monthFont: 13, dayFont: 34, yearFont: 11, dateColW: 46, dateGap: 16,
     pillFont: 10, pillPadV: 4, pillPadH: 7, pillGap: 8,
   },
 }
@@ -1585,7 +1584,7 @@ function countdownTier(rich, isSmall) {
 // src/assets/checkered-flag.svg — the flag the app shows for "No more
 // events today" and for a track with no icon — path for path (a test
 // keeps the two identical). A widget can't show an SVG, so it's drawn
-// with Scriptable's DrawContext, in the view's red.
+// with Scriptable's DrawContext, in the text color (black on light).
 const CHECKERED_FLAG_VIEWBOX = [430, 373]
 const CHECKERED_FLAG_PATHS = [
   "M108 43 208 42 C216 42 220 46 217 53 L192 118 C185 134 172 139 153 140 L65 144 C55 145 52 141 55 135 L87 57 C92 47 99 43 108 43 Z",
@@ -1633,7 +1632,7 @@ function addCheckeredFlag(stack, p, width) {
   // transparent background (a DrawContext is opaque by default).
   ctx.respectScreenScale = true
   ctx.opaque = false
-  ctx.setFillColor(p.brand)
+  ctx.setFillColor(p.fg)
   for (const d of CHECKERED_FLAG_PATHS) {
     ctx.addPath(svgPathToPath(d, scale))
     ctx.fillPath()
@@ -1645,7 +1644,7 @@ function addCheckeredFlag(stack, p, width) {
 // ----- upcoming-events header -----
 //
 // Title on the left (with a "Track days ahead" subtitle on Large), the
-// red checkered flag in the top right corner.
+// checkered flag in the top right corner.
 const UPCOMING_HEADER_FLAG_WIDTH = { large: 30, medium: 24, small: 22 }
 
 // `topPad` is extra top clearance ADDED to the widget's own root 10pt
@@ -1780,7 +1779,7 @@ function drawCountdownCard(w, p, next, rich, family) {
   outer.addSpacer(COUNTDOWN_MARGIN)
 }
 
-// [date column] hairline [info column] — then a trailing flex spacer,
+// [date column] [info column] — then a trailing flex spacer,
 // which stretches the row (and the card around it) to the full width
 // without competing with the info column for it (see the layout rules
 // above).
@@ -1788,12 +1787,6 @@ function drawCountdownRow(row, p, next, t, rich) {
   row.centerAlignContent()
   addDateColumn(row, next.day.date, p, t)
   row.addSpacer(t.dateGap)
-  if (t.dividerH > 0) {
-    const hairline = row.addStack()
-    hairline.size = new Size(1, t.dividerH)
-    hairline.backgroundColor = p.divider
-    row.addSpacer(t.dateGap)
-  }
   addCountdownInfo(row, p, next, t, rich)
   row.addSpacer()
 }
@@ -1804,7 +1797,7 @@ function drawCountdownRow(row, p, next, t, rich) {
 // child and centers the rest on it (centerAlignContent, the same
 // cross-axis centering the well's number relies on), so the column is
 // exactly dateColW wide with the date centered in it, whatever the
-// month and day. That keeps the hairline and info column in the same
+// month and day. That keeps the info column in the same
 // place on stacked cards, without asking a fixed-size stack to center
 // its own content (which mis-centered on-device, #202).
 const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
@@ -1856,14 +1849,12 @@ function addCountdownInfo(row, p, next, t, rich) {
   title.lineLimit = t.titleLines
   if (!small) addCountdownPill(titleRow, daysUntil(next.day.date), p, t)
 
+  // Same fields and icons as the app's event details (EventInfo):
+  // Users for the organizer, MapPin for the track. The app shows the
+  // city only as the track's subtitle, so the widget leaves it out.
   const lines = []
-  if (next.event.organizer && !small) lines.push({ text: next.event.organizer })
-  if (next.event.track) {
-    // Small has no width to spare for the city: appending it truncated
-    // the track name itself, so Small never appends it.
-    const withCity = next.event.city && !small
-    lines.push({ icon: "mappin", text: withCity ? `${next.event.track}, ${next.event.city}` : next.event.track })
-  }
+  if (next.event.organizer && !small) lines.push({ icon: "person.2", text: next.event.organizer })
+  if (next.event.track) lines.push({ icon: "mappin", text: next.event.track })
   const trackConfig = formatTrackConfig(next.event.configuration, next.event.direction)
   if (rich && trackConfig) {
     lines.push({ icon: "point.topleft.down.curvedto.point.bottomright.up", text: trackConfig })
@@ -1906,9 +1897,8 @@ function drawCountdownWell(container, next, p, t) {
   well.addSpacer()
 }
 
-// One info line: an optional SF Symbol, then the text. A line without
-// an icon (the organizer) sits flush with the title, like the app's
-// name-over-organizer.
+// One info line: an SF Symbol (skipped on Small, see rowIconSize), then
+// the text.
 function addInfoRow(col, row, p, t) {
   const stack = col.addStack()
   stack.centerAlignContent()
