@@ -380,8 +380,8 @@ function palette(dark) {
 // The Medium countdown is the app's featured event card (#204), which
 // is near-black whatever the phone's appearance: Tailwind gray-900
 // ground, white text, gray-400 organizer, gray-700 hairline, red-400
-// month. The countdown badge is solid red with white text, and the
-// corner flag a semi-transparent white.
+// month. The countdown badge is solid red with white text, the corner
+// flag a semi-transparent white, and the track shape toned down.
 const FEATURED_FADE_STEPS = 64
 const FEATURED_PALETTE = {
   bg: new Color("#111827"),
@@ -393,8 +393,11 @@ const FEATURED_PALETTE = {
   badgeBg: new Color("#dc2626"),
   badgeFg: new Color("#ffffff"),
   flag: new Color("#ffffff", 0.35),
-  track: new Color("#ffffff"),
-  trackGhost: new Color("#ffffff", 0.3),
+  // Softer than the app's full white, which reads too stark on a
+  // widget; the other configuration (the SVGs' 0.3-opacity paths) is
+  // fainter still.
+  track: new Color("#ffffff", 0.55),
+  trackGhost: new Color("#ffffff", 0.12),
   placeholder: new Color("#ffffff", 0.15),
   fade: Array.from({ length: FEATURED_FADE_STEPS }, (_, i) => new Color("#111827", (i + 1) / FEATURED_FADE_STEPS)),
 }
