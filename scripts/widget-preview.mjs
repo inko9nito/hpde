@@ -535,6 +535,7 @@ class TextWrapper {
 // replay what the widget draws (its checkered flag) as an inline SVG,
 // from the widget's OWN path data: nothing here is a stand-in shape.
 class PointMock { constructor(x, y) { this.x = x; this.y = y } }
+class RectMock { constructor(x, y, w, h) { this.x = x; this.y = y; this.width = w; this.height = h } }
 class PathMock {
   constructor() { this.segments = [] }
   move(p) { this.segments.push(`M${p.x} ${p.y}`) }
@@ -547,9 +548,12 @@ class DrawContextMock {
   setFillColor(c) { this.fill = c }
   addPath(path) { this.path = path }
   fillPath() { if (this.path) this.fills.push({ segments: this.path.segments.join(''), color: colorCss(this.fill) }) }
+  fillRect(r) { this.fills.push({ rect: r, color: colorCss(this.fill) }) }
   getImage() {
     const { width: w, height: h } = this.size
-    const body = this.fills.map(f => `<path fill="${f.color}" d="${f.segments}"/>`).join('')
+    const body = this.fills.map(f => f.rect
+      ? `<rect shape-rendering="crispEdges" fill="${f.color}" x="${f.rect.x}" y="${f.rect.y}" width="${f.rect.width}" height="${f.rect.height}"/>`
+      : `<path fill="${f.color}" d="${f.segments}"/>`).join('')
     return { svg: `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">${body}</svg>` }
   }
 }
@@ -750,7 +754,7 @@ const NO_EVENTS = { events: [] }
 const UPCOMING_LONG = {
   events: [
     { id: 'e', name: 'TDE at ECR 2.7 CW', organizer: 'The Drivers Edge', track: 'Eagles Canyon Raceway',
-      city: 'Decatur, TX', configuration: '2.7', direction: 'Clockwise',
+      city: 'Decatur, TX', configuration: '2.7', direction: 'Clockwise', trackId: 'ecr-2-7',
       runGroups: [], days: [{ date: isoDate(9), label: 'Saturday', activities: [] }] },
     ...UPCOMING_MULTI.events,
   ],
@@ -791,6 +795,7 @@ function installMocks(g, manifest, widgetFamily, widgetParameter = null, device 
   g.Color = ColorMock
   g.Size = SizeMock
   g.Point = PointMock
+  g.Rect = RectMock
   g.Path = PathMock
   g.DrawContext = DrawContextMock
   g.Font = Font

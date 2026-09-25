@@ -51,13 +51,14 @@ describe('events.json feed', () => {
     expect(await idsOf(res)).toEqual([created.id, pastEvent.id, 'test-live'])
   })
 
-  it('uses the widget format: colors resolved, no app-only fields', async () => {
+  it('uses the widget format: colors resolved, track id kept, no app-only fields', async () => {
     store.set(created.id, created)
     const body = await (await call()).json()
     expect(body.events[0]).toEqual({
       id: created.id,
       name: created.name,
       track: created.track,
+      trackId: created.trackId,
       runGroups: [{ id: 'orange', label: 'Orange', color: expect.stringMatching(/^#[0-9a-f]{6}$/i) }],
       days: created.days,
     })

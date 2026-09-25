@@ -158,7 +158,10 @@ task that touches this file:
    checkered flag is not an SF Symbol: the widget draws the app's own
    `src/assets/checkered-flag.svg` with `DrawContext` (a test keeps
    its path data identical to the asset), and the simulator replays
-   those same drawing calls.
+   those same drawing calls. The Medium countdown card's track banner
+   works the same way: `TRACK_SHAPES` copies
+   `src/data/track-icons/<id>.svg`. When a track icon is added to
+   the app, add its paths there too; a test fails until you do.
 4. **The static guardrail tests are load-bearing.** The
    `describe('design guardrails (static source checks)')` block in
    `scripts/hpde-widget.test.ts` catches known regression classes:
