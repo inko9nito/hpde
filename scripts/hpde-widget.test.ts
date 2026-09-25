@@ -116,6 +116,28 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     async presentLarge() {}
   }
   g.SFSymbol = { named: () => ({ image: {} }) }
+  // Records what the widget draws (the header's checkered flag).
+  g.__drawn = [] as Array<{ fills: number; opaque: boolean; respectScreenScale: boolean }>
+  g.Point = class { constructor(public x: number, public y: number) {} }
+  g.Path = class {
+    move() {}
+    addLine() {}
+    addCurve() {}
+    closeSubpath() {}
+  }
+  g.DrawContext = class {
+    size: unknown = null
+    opaque = true
+    respectScreenScale = false
+    fills = 0
+    setFillColor() {}
+    addPath() {}
+    fillPath() { this.fills++ }
+    getImage() {
+      g.__drawn.push({ fills: this.fills, opaque: this.opaque, respectScreenScale: this.respectScreenScale })
+      return {}
+    }
+  }
   g.Script = { setWidget: () => {}, complete: () => {} }
   g.args = { widgetParameter }
   class NotificationStub {
@@ -227,7 +249,7 @@ const FUTURE_MANIFEST = {
 
 // Three future days a week+ apart, across two events, so the
 // upcoming/countdown path can be exercised with: a big days-only
-// count, a 2-card stack on Large, a full-width well on Small, and a
+// count, a 3-card stack on Large, a full-width well on Small, and a
 // "more upcoming" footer for whatever doesn't fit.
 const UPCOMING_MULTI_MANIFEST = {
   events: [
@@ -309,10 +331,13 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).not.toContain('Track A, City A')
   })
 
-  it('keeps the city in the location row on Medium/Large, where there is room for it', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
-    const texts = (globalThis as any).__texts as string[]
-    expect(texts).toContain('Track A, City A')
+  it('shows the track alone on Medium/Large, like the app\'s Location row (city is only its subtitle there)', async () => {
+    for (const family of ['medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const texts = (globalThis as any).__texts as string[]
+      expect(texts).toContain('Track A')
+      expect(texts.some(t => t.includes('City A'))).toBe(false)
+    }
   })
 
   it('drops the organizer row on Small so title + rows + well fit the real interior height', async () => {
@@ -361,24 +386,54 @@ describe('scriptable widget loads and renders', () => {
     }
   })
 
-  it('never gives the countdown well an explicit width', async () => {
-    // Regression guard for a real on-device bug: an earlier attempt
-    // gave the well (cornerRadius COUNTDOWN_WELL_RADIUS === 16) an
-    // explicit .size width plus leading/trailing addSpacer() to
-    // center its content. That looked centered in this repo's CSS-
-    // flexbox simulator, but on real Scriptable/SwiftUI the count
-    // text hugged the well's left edge instead — Spacer()-based
-    // main-axis centering inside an explicitly-sized stack isn't
-    // proven reliable here, unlike stretching a stack to fill its
-    // own parent (used everywhere else in this file). The fix moved
-    // the explicit width to infoCol instead, letting the well size
-    // tightly to its own content with nothing left to mis-center.
-    // This must not silently regress back onto the well.
-    for (const family of ['medium', 'large']) {
+  it('never sizes a countdown stack to a width computed for one phone', async () => {
+    // #204: the info column was pinned to 228pt (Medium) / 172pt (Large)
+    // — the card's interior on a 364pt-wide widget minus a budget for
+    // the well. The owner's phone has 329pt-wide widgets, so the well
+    // got ~25pt and read "•••" / "DAY…". Widget widths differ by up to
+    // 43pt across phones, so explicit widths in this view are only
+    // small content-sized constants: the date column's strut (at most
+    // 46pt, rich), the hairline, the footer's short rules.
+    for (const family of ['small', 'medium', 'large']) {
+      for (const manifest of [UPCOMING_MULTI_MANIFEST, FUTURE_MANIFEST]) {
+        await runWidget(family, manifest)
+        const sizes = (globalThis as any).__stackSizes as Array<{ width: number }>
+        expect(sizes.length).toBeGreaterThan(0)
+        expect(sizes.filter(s => s.width > 46)).toEqual([])
+      }
+    }
+  })
+
+  it('stacks the date on the left like the app, month over day', async () => {
+    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    const [, m, d] = isoDate(10).split('-').map(Number)
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    const i = texts.indexOf(months[m - 1])
+    expect(i).toBeGreaterThan(-1)
+    expect(texts[i + 1]).toBe(String(d))
+    // ...then the name with the countdown pill beside it. No separate
+    // date/weekday line: the date column already shows the date.
+    const name = texts.indexOf('Upcoming A')
+    expect(name).toBeGreaterThan(i)
+    expect(texts[name + 1]).toBe('IN 10 DAYS')
+    expect(texts.some(t => t.includes('Monday'))).toBe(false)
+  })
+
+  it('keeps the countdown in the well on Small, with no pill beside the name', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('DAYS AWAY')
+    expect(texts.some(t => t.startsWith('IN '))).toBe(false)
+  })
+
+  it('draws the checkered flag in the header on every family', async () => {
+    for (const family of ['small', 'medium', 'large']) {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
-      const sizes = (globalThis as any).__stackSizes as Array<{ cornerRadius: number | null; width: number }>
-      const wellSizedWithWidth = sizes.some(s => s.cornerRadius === 16 && s.width > 0)
-      expect(wellSizedWithWidth).toBe(false)
+      const drawn = (globalThis as any).__drawn as Array<{ fills: number; opaque: boolean; respectScreenScale: boolean }>
+      // One flag: four filled shapes, on a transparent background (a
+      // DrawContext is opaque — black — by default), at screen scale.
+      expect(drawn).toEqual([{ fills: 4, opaque: false, respectScreenScale: true }])
     }
   })
 
@@ -394,8 +449,12 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('more upcoming'))).toBe(true)
   })
 
-  it('renders a 2-card upcoming stack plus a "more upcoming" footer on Large', async () => {
-    await expect(runWidget('large', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
+  it('stacks up to three upcoming cards on Large', async () => {
+    await runWidget('large', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    for (const name of ['Upcoming A', 'Upcoming B', 'Upcoming C']) expect(texts).toContain(name)
+    // All three fit, so nothing is left for a "more upcoming" footer.
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
   it('renders a single upcoming card plus a "more upcoming" footer on Medium', async () => {
@@ -588,6 +647,22 @@ describe('design guardrails (static source checks)', () => {
     expect(sim).toMatch(/@fortawesome\/free-solid-svg-icons|lucide-react/)
   })
 
+  it("draws the app's own checkered flag, path for path", () => {
+    // The widget can't show an SVG, so it draws the app's
+    // src/assets/checkered-flag.svg with DrawContext from a copy of its
+    // path data. Keep the copy identical to the asset.
+    const svg = readFileSync(join(__dirname, '..', 'src', 'assets', 'checkered-flag.svg'), 'utf8')
+    const assetPaths = [...svg.matchAll(/<path d="([^"]+)"/g)].map(m => m[1])
+    const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/)!
+    const block = widgetSrc.slice(widgetSrc.indexOf('const CHECKERED_FLAG_PATHS = ['))
+    const widgetPaths = [...block.slice(0, block.indexOf(']')).matchAll(/"([^"]+)"/g)].map(m => m[1])
+    expect(assetPaths).toHaveLength(4)
+    expect(widgetPaths).toEqual(assetPaths)
+    expect(widgetSrc).toContain(`const CHECKERED_FLAG_VIEWBOX = [${viewBox[1]}, ${viewBox[2]}]`)
+    // svgPathToPath reads absolute M / L / C / Z only.
+    for (const d of assetPaths) expect(d).toMatch(/^[MLCZ\d\s.-]+$/)
+  })
+
   it('keeps the widget-preview simulator constants pinned to cited iOS values', async () => {
     // The simulator's reference numbers (widget point sizes, outer
     // corner radius, dark background, DPR) are what let it render
@@ -599,15 +674,33 @@ describe('design guardrails (static source checks)', () => {
     // make the simulator lie again.
     const mod = await import('./widget-preview.mjs')
     const c = mod.WIDGET_ENV_CONSTANTS as {
+      referenceDevice: string
+      deviceWidgetSizes: Record<string, Record<string, { w: number; h: number }>>
       widgetSizes: Record<string, { w: number; h: number }>
       outerCornerRadius: number
       background: { light: string; dark: string }
       dpr: number
+      textLineHeight: number
+      flexSpacerMinWidth: number
     }
-    // iPhone 15/16 Pro (Apple HIG Widgets page):
-    expect(c.widgetSizes.small).toEqual({ w: 170, h: 170 })
-    expect(c.widgetSizes.medium).toEqual({ w: 364, h: 170 })
-    expect(c.widgetSizes.large).toEqual({ w: 364, h: 382 })
+    // Apple HIG Widgets page, "iPhone widget sizes" rows (#204 corrected
+    // the reference device: the owner's phone is 375×812, and the old
+    // 170/364 sizes were the 430×932 row, not the iPhone 15/16 Pro's).
+    const row = (s: number, mw: number, mh: number, lw: number, lh: number) => ({
+      small: { w: s, h: s }, medium: { w: mw, h: mh }, large: { w: lw, h: lh }, extraLarge: { w: lw, h: lh },
+    })
+    expect(c.deviceWidgetSizes).toEqual({
+      '430x932': row(170, 364, 170, 364, 382),
+      '393x852': row(158, 338, 158, 338, 354),
+      '375x812': row(155, 329, 155, 329, 345),
+      '375x667': row(148, 321, 148, 321, 324),
+    })
+    expect(c.referenceDevice).toBe('375x812')
+    expect(c.widgetSizes).toEqual(c.deviceWidgetSizes['375x812'])
+    // SF Pro's line height, (1950 + 494) / 2048:
+    expect(c.textLineHeight).toBe(1.19)
+    // SwiftUI's standard spacing, matching #204's measurement:
+    expect(c.flexSpacerMinWidth).toBe(8)
     // iOS ContainerRelativeShape on iPhone Pro/standard (WidgetKit sample):
     expect(c.outerCornerRadius).toBe(22)
     // UIColor.systemBackground light/dark (UIKit reference):
@@ -665,5 +758,51 @@ describe('design guardrails (static source checks)', () => {
     const body = widgetSrc.slice(start, end)
     expect(body).toMatch(/num\.lineLimit\s*=\s*1/)
     expect(body).toMatch(/lbl\.lineLimit\s*=\s*1/)
+  })
+})
+
+// The simulator's model of how a SwiftUI HStack divides its width
+// (widget-preview.mjs allocateHStack), checked against what #204's
+// on-device screenshots measured — the cases where CSS flexbox, which
+// the simulator used before, gave the wrong answer.
+describe('widget simulator: SwiftUI HStack width division', () => {
+  it('gives a text between two stretchy lines only a third of the row ("1 more upcoming…")', async () => {
+    const { allocateHStack } = await import('./widget-preview.mjs')
+    // 325pt row minus two 10pt gaps; "1 more upcoming event" at 11pt is
+    // ~112pt; each line is a stack holding a flexible spacer.
+    const widths = allocateHStack([
+      { kind: 'view', min: 8, ideal: Infinity },
+      { kind: 'view', min: 11, ideal: 112 },
+      { kind: 'view', min: 8, ideal: Infinity },
+    ], 305)
+    expect(widths[1]).toBeCloseTo(305 / 3)
+    expect(widths[1]).toBeLessThan(112) // truncated, as on the phone
+    expect(widths[0] + widths[1] + widths[2]).toBeCloseTo(305)
+  })
+
+  it('lets a flexible addSpacer() yield to text (Small\'s "Next HPDE" fits)', async () => {
+    const { allocateHStack } = await import('./widget-preview.mjs')
+    // 135pt header row: title (~65pt), flexible spacer, 16pt flag. An
+    // even split with the spacer would offer the title 59.5pt.
+    const widths = allocateHStack([
+      { kind: 'view', min: 13, ideal: 65 },
+      { kind: 'spacer', min: 8, ideal: Infinity },
+      { kind: 'fixed', min: 16, ideal: 16 },
+    ], 135)
+    expect(widths).toEqual([65, 54, 16])
+  })
+
+  it('squeezes the old countdown well to ~45pt on a 329pt Medium ("•••" / "DAY…")', async () => {
+    const { allocateHStack } = await import('./widget-preview.mjs')
+    // Card interior 293pt: the 228pt info column, a 12pt gap, a flexible
+    // spacer, then the well (~64pt wide with its padding at 364pt).
+    const widths = allocateHStack([
+      { kind: 'fixed', min: 228, ideal: 228 },
+      { kind: 'fixed', min: 12, ideal: 12 },
+      { kind: 'spacer', min: 8, ideal: Infinity },
+      { kind: 'view', min: 20, ideal: 64 },
+    ], 293)
+    // Measured on the phone: 43.5pt.
+    expect(widths[3]).toBe(45)
   })
 })

@@ -125,14 +125,21 @@ task that touches this file:
 
 1. **Run `npm run widget:preview` before making a claim about
    layout, and again after every layout edit.** The simulator writes
-   PNGs into `scripts/.widget-preview/s0.png`...`s11.png`; Read one
-   with the Read tool to see it. If Chromium's default binary isn't
+   PNGs into `scripts/.widget-preview/s0.png`, `s1.png`, … (it prints
+   which scenario and widget size each one is); Read one with the Read
+   tool to see it. It renders at the owner's phone's widget sizes
+   (375×812: 155 / 329×155 / 329×345) and sweeps the countdown layouts
+   across the narrowest (SE) and widest (Pro Max) phones too — check
+   those, not just one size. To compare a design option, render a
+   variant copy with `WIDGET_SCRIPT=path/to/copy.js npm run
+   widget:preview` (it writes to `.widget-preview/<copy name>/`). If Chromium's default binary isn't
    available, pass `PLAYWRIGHT_EXECUTABLE_PATH=/opt/pw-browsers/chromium`.
    Do NOT report a layout as fixed on the strength of arithmetic
    or "the code looks right" — read the render.
 2. **Trust the simulator's grounded numbers, not memory.** Widget
-   point sizes, outer corner radius, dark-mode background and DPR
-   all live in `WIDGET_ENV_CONSTANTS` at the top of
+   point sizes, outer corner radius, dark-mode background, DPR, text
+   line height and the flexible spacer's minimum all live in
+   `WIDGET_ENV_CONSTANTS` at the top of
    `scripts/widget-preview.mjs`, each with a citation to its Apple
    source. Do not edit a value there without moving its citation
    with it. `scripts/hpde-widget.test.ts` pins these values — if
@@ -147,7 +154,11 @@ task that touches this file:
    Awesome's real icon data. If a new SF Symbol appears in
    `hpde-widget.js`, either add it to `SF_SYMBOL_TO_LUCIDE` or the
    simulator renders a magenta X placeholder — do NOT paste a
-   freehand SVG path in as a stand-in.
+   freehand SVG path in as a stand-in. The countdown header's red
+   checkered flag is not an SF Symbol: the widget draws the app's own
+   `src/assets/checkered-flag.svg` with `DrawContext` (a test keeps
+   its path data identical to the asset), and the simulator replays
+   those same drawing calls.
 4. **The static guardrail tests are load-bearing.** The
    `describe('design guardrails (static source checks)')` block in
    `scripts/hpde-widget.test.ts` catches known regression classes:
