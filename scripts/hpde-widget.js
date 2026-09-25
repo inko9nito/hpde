@@ -383,7 +383,7 @@ function palette(dark) {
 // The countdown badge is solid red with white text, the corner flag a
 // semi-transparent white, and the track shape toned down. Small follows
 // its Figma design (HPDE file, node 2068:7908): its month and the bar
-// beside the name are `accent`, its track name white at 60%.
+// beside the name are `accent`, its organizer white at 60%.
 const FEATURED_PALETTE = {
   fg: new Color("#ffffff"),
   muted: new Color("#6b7280"),
@@ -401,6 +401,12 @@ const FEATURED_PALETTE = {
   track: new Color("#ffffff", 0.3),
   trackGhost: new Color("#ffffff", 0.05),
   placeholder: new Color("#ffffff", 0.15),
+  // Small's track, as its design has it: gray-500-ish #646872 on a 35%
+  // layer (then faded, see SMALL_TRACK_FADE). The other configuration
+  // keeps Medium's ghost-to-track ratio; a track with no shape gets the
+  // placeholder flag in the track's own color.
+  smallTrack: new Color("#646872", 0.35),
+  smallTrackGhost: new Color("#646872", 0.06),
 }
 
 // The featured cards' ground: a near-black gradient, top to bottom,
@@ -1643,11 +1649,11 @@ const COUNTDOWN_TOKENS = {
   // (HPDE file, node 2068:7908), where the 155pt widget is 391px: 16pt
   // in from every edge, and less top and bottom when a status line
   // (e.g. "Cached schedule") has to fit under the badge. The name and
-  // track center on a `barH`-tall red bar.
+  // organizer center on a `barH`-tall red bar.
   small: {
     pad: 16, padWithFooter: 10,
     monthFont: 13, dayFont: 29, dateGap: 5,
-    barW: 2.5, barH: 40, barGap: 6,
+    barW: 2, barH: 40, barGap: 6,
     titleFont: 13.5, rowFont: 12.5, rowGap: 4,
     pillFont: 12, pillPadV: 2.5, pillPadH: 7,
   },
@@ -1766,45 +1772,78 @@ const TRACK_SHAPES = {
 }
 
 // The event's track shape (or, as in the app for a track with no icon,
-// a faint checkered flag) in white, `width` wide with its top left at
-// (x0, y0), faded into the ground over its bottom three quarters — the
-// app's `from-gray-900/0 to-gray-900` gradient. DrawContext has no
-// gradients, so the fade is strips of the ground's own color at that
-// height (`groundAt(y, alpha)`), each a little more opaque than the one
-// above. Shared by Medium's banner and Small's background.
-function drawTrackShape(ctx, trackId, x0, y0, width, F, groundAt) {
+// a checkered flag) `width` wide with its top left at (x0, y0), in the
+// colors `look` gives: { track, ghost, placeholder }. Returns its height.
+// Shared by Medium's banner and Small's background; each fades it its
+// own way after.
+function drawTrackShape(ctx, trackId, x0, y0, width, look) {
   const win = TRACK_SHAPE_WINDOW
   const scale = width / win.w
   const height = win.h * scale
   const shape = TRACK_SHAPES[trackId]
   if (shape) {
     for (const [opacity, d] of shape) {
-      ctx.setFillColor(opacity < 1 ? F.trackGhost : F.track)
+      ctx.setFillColor(opacity < 1 ? look.ghost : look.track)
       ctx.addPath(svgPathToPath(d, scale, win.x - x0 / scale, win.y - y0 / scale))
       ctx.fillPath()
     }
   } else {
-    // The app's placeholder: the checkered flag at 15%, 56.25% of the
-    // icon's size, centered.
+    // The app's placeholder: the checkered flag, 56.25% of the icon's
+    // size, centered.
     const [vw, vh] = CHECKERED_FLAG_VIEWBOX
     const flagW = 437 * 0.5625 * scale
     const flagScale = flagW / vw
     const ox = -(x0 + (width - flagW) / 2) / flagScale
     const oy = -(y0 + (height - vh * flagScale) / 2) / flagScale
-    ctx.setFillColor(F.placeholder)
+    ctx.setFillColor(look.placeholder)
     for (const d of CHECKERED_FLAG_PATHS) {
       ctx.addPath(svgPathToPath(d, flagScale, ox, oy))
       ctx.fillPath()
     }
   }
-  // 1pt strips on whole points (whole pixels at any screen scale), so
-  // no two overlap: an overlap doubles the alpha and shows as a line.
+  return height
+}
+
+// DrawContext has no gradients, so a fade is drawn over the shape: the
+// ground's own color (`groundAt(y, alpha)`) at a rising alpha. On whole
+// points (whole pixels at any screen scale), so no two pieces overlap:
+// an overlap doubles the alpha and shows as a line.
+//
+// Medium: into the ground over the shape's bottom three quarters — the
+// app's `from-gray-900/0 to-gray-900` gradient — in 1pt strips.
+function fadeTrackDown(ctx, x0, y0, width, height, groundAt) {
   const fadeTop = Math.round(y0 + height / 4)
   const bottom = y0 + height
   for (let y = fadeTop; y < bottom; y++) {
     const f = Math.min(1, (y + 1 - fadeTop) / (bottom - fadeTop))
     ctx.setFillColor(groundAt(y, f))
     ctx.fillRect(new Rect(x0, y, width, Math.min(1, bottom - y)))
+  }
+}
+
+// Small: along the diagonal its design's gradient runs — all there at
+// the shape's top right, gone by its bottom left. The fade's progress
+// across the shape's box (u, v from 0 to 1) is t = a·u + b·v + c: the
+// first row of the Figma fill's gradientTransform (HPDE file, node
+// 2068:7914). In 1pt cells, a row's run of cells at the same alpha
+// drawn as one rect; `right` is the canvas edge the shape runs off.
+const SMALL_TRACK_FADE = { a: -0.9994, b: 0.7678, c: 0.6786 }
+function fadeTrackDiagonally(ctx, x0, y0, width, height, right, groundAt) {
+  const { a, b, c } = SMALL_TRACK_FADE
+  const alphaAt = (x, y) =>
+    Math.round(Math.max(0, Math.min(1, a * (x + 0.5 - x0) / width + b * (y + 0.5 - y0) / height + c)) * 100) / 100
+  for (let y = Math.floor(y0); y < Math.ceil(y0 + height); y++) {
+    let x = Math.floor(x0)
+    while (x < right) {
+      const alpha = alphaAt(x, y)
+      let end = x + 1
+      while (end < right && alphaAt(end, y) === alpha) end++
+      if (alpha > 0) {
+        ctx.setFillColor(groundAt(y, alpha))
+        ctx.fillRect(new Rect(x, y, end - x, 1))
+      }
+      x = end
+    }
   }
 }
 
@@ -1819,14 +1858,15 @@ function trackBannerImage(trackId, width, F, top) {
   ctx.size = new Size(width, height)
   ctx.respectScreenScale = true
   ctx.opaque = false
-  drawTrackShape(ctx, trackId, 0, 0, width, F,
+  drawTrackShape(ctx, trackId, 0, 0, width, { track: F.track, ghost: F.trackGhost, placeholder: F.placeholder })
+  fadeTrackDown(ctx, 0, 0, width, height,
     (y, alpha) => featuredGround((top + y) / FEATURED_GROUND_HEIGHT, alpha))
   return { image: ctx.getImage(), width, height }
 }
 
 // Small's background: the ground, then the track shape across its top
 // right, running off the edge — where the design puts it, as fractions
-// of the widget (SMALL_TRACK). A widget's background image fills it, so
+// of the widget (SMALL_TRACK) — faded along its diagonal. A widget's background image fills it, so
 // it's drawn once, square, at the largest Small widget's size, and
 // scales to the others.
 const SMALL_GROUND_SIZE = 170
@@ -1843,7 +1883,12 @@ function smallGroundImage(trackId, F) {
     ctx.setFillColor(groundAt(y, 1))
     ctx.fillRect(new Rect(0, y, S, 1))
   }
-  drawTrackShape(ctx, trackId, SMALL_TRACK.x * S, SMALL_TRACK.y * S, SMALL_TRACK.w * S, F, groundAt)
+  const x0 = SMALL_TRACK.x * S
+  const y0 = SMALL_TRACK.y * S
+  const width = SMALL_TRACK.w * S
+  const look = { track: F.smallTrack, ghost: F.smallTrackGhost, placeholder: F.smallTrack }
+  const height = drawTrackShape(ctx, trackId, x0, y0, width, look)
+  fadeTrackDiagonally(ctx, x0, y0, width, height, S, groundAt)
   return ctx.getImage()
 }
 
@@ -2017,7 +2062,9 @@ function renderFeaturedCountdown(w, next) {
 // 2068:7908). The track shape sits behind the date in the top right,
 // in the widget's background image with the ground (see
 // smallGroundImage). Over it: the month over the day, left-aligned;
-// the name over the track beside a red bar; the badge at the bottom.
+// the name over the organizer beside a red bar; the badge at the
+// bottom. The day, name and badge are a weight heavier than the
+// design's (#204 review).
 // Each row ends in a flex spacer, which pins it to the left edge.
 function renderSmallCountdown(w, next, footer) {
   const F = FEATURED_PALETTE
@@ -2039,7 +2086,7 @@ function renderSmallCountdown(w, next, footer) {
   month.textColor = F.accent
   month.lineLimit = 1
   const day = date.addText(String(d))
-  day.font = rSemiboldFont(t.dayFont)
+  day.font = rBoldFont(t.dayFont)
   day.textColor = F.fg
   day.lineLimit = 1
   dateRow.addSpacer()
@@ -2056,15 +2103,17 @@ function renderSmallCountdown(w, next, footer) {
   col.layoutVertically()
   col.topAlignContent()
   const title = col.addText(next.event.name)
-  title.font = rMediumFont(t.titleFont)
+  title.font = rSemiboldFont(t.titleFont)
   title.textColor = F.fg
   title.lineLimit = 1
-  if (next.event.track) {
+  // The organizer, as the design has it (the track, if there's none).
+  const byline = next.event.organizer || next.event.track
+  if (byline) {
     col.addSpacer(t.rowGap)
-    const track = col.addText(next.event.track)
-    track.font = rFont(t.rowFont)
-    track.textColor = F.subtle
-    track.lineLimit = 1
+    const by = col.addText(byline)
+    by.font = rFont(t.rowFont)
+    by.textColor = F.subtle
+    by.lineLimit = 1
   }
   block.addSpacer()
 
@@ -2175,7 +2224,7 @@ function addCountdownInfo(row, p, next, t, rich) {
 
 // "IN 9 DAYS" — styled like the app's LIVE badge beside an event name
 // (StatusBadge): a small uppercase pill, red on a faint red tint.
-// Small's design sets it in lowercase, "in 9 days", in medium weight.
+// Small's design sets it in lowercase, "in 9 days".
 function addCountdownPill(row, days, bg, fg, t, lowercase = false) {
   const pill = row.addStack()
   pill.backgroundColor = bg
@@ -2184,7 +2233,7 @@ function addCountdownPill(row, days, bg, fg, t, lowercase = false) {
   pill.centerAlignContent()
   const text = `in ${days} ${pluralize(days, "day")}`
   const label = pill.addText(lowercase ? text : text.toUpperCase())
-  label.font = lowercase ? rMediumFont(t.pillFont) : rSemiboldFont(t.pillFont)
+  label.font = rSemiboldFont(t.pillFont)
   label.textColor = fg
   label.lineLimit = 1
 }

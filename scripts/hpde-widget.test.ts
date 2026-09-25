@@ -366,11 +366,12 @@ describe('scriptable widget loads and renders', () => {
     await expect(runWidget('large', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })
 
-  it('drops the city from the location row on Small so it never truncates the track name', async () => {
-    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+  it('shows the track on Small when there is no organizer, without its city', async () => {
+    const noOrg = { events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], organizer: undefined }] }
+    await runWidget('small', noOrg)
     const texts = (globalThis as any).__texts as string[]
     expect(texts).toContain('Track A')
-    expect(texts).not.toContain('Track A, City A')
+    expect(texts.some(t => t.includes('City A'))).toBe(false)
   })
 
   it('shows the track alone on Large, like the app\'s Location row (city is only its subtitle there)', async () => {
@@ -382,10 +383,11 @@ describe('scriptable widget loads and renders', () => {
     }
   })
 
-  it('leaves the organizer off Small, as its design does', async () => {
+  it('shows the organizer, not the track, under the name on Small, as its design does', async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
-    expect(texts).not.toContain('Org A')
+    expect(texts).toContain('Org A')
+    expect(texts).not.toContain('Track A')
   })
 
   it('keeps the organizer row on Medium/Large, where there is room for it', async () => {
@@ -461,17 +463,17 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('Monday'))).toBe(false)
   })
 
-  it("lays Small out as its design: month over day, name over track, then the badge", async () => {
+  it("lays Small out as its design: month over day, name over organizer, then the badge", async () => {
     await runWidget('small', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
     const [, m, d] = isoDate(10).split('-').map(Number)
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-    // Nothing else — no header, organizer or countdown well — but the
+    // Nothing else — no header, track or countdown well — but the
     // status line (these mocks are offline, so the schedule is cached).
-    expect(texts).toEqual([months[m - 1], String(d), 'Upcoming A', 'Track A', 'in 10 days', 'Cached schedule'])
+    expect(texts).toEqual([months[m - 1], String(d), 'Upcoming A', 'Org A', 'in 10 days', 'Cached schedule'])
   })
 
-  it("draws Small's ground and track into its background, faded like Medium's", async () => {
+  it("draws Small's ground and track into its background, faded along the design's diagonal", async () => {
     const withTrack = (trackId?: string) => ({
       events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], ...(trackId ? { trackId } : {}) }],
     })
@@ -495,12 +497,13 @@ describe('scriptable widget loads and renders', () => {
     expect(g.opaque).toBe(true)
     expect(g.rectColors[0]).toEqual({ hex: '#262626', alpha: 1 })
     expect(g.rectColors[169]).toEqual({ hex: '#1b1b1b', alpha: 1 })
-    // ...then the fade: strips of the ground's color, more opaque going
-    // down, ending fully opaque.
+    // ...then the fade: cells of the ground's color over the shape,
+    // clear at its top right and fully opaque by its bottom left.
     const fade = g.rectColors.slice(170)
-    expect(fade.length).toBeGreaterThan(30)
-    for (let i = 1; i < fade.length; i++) expect(fade[i].alpha).toBeGreaterThanOrEqual(fade[i - 1].alpha)
-    expect(fade[fade.length - 1].alpha).toBe(1)
+    expect(fade.length).toBeGreaterThan(100)
+    expect(fade.every(c => c.alpha > 0 && c.alpha <= 1)).toBe(true)
+    expect(fade.some(c => c.alpha < 0.2)).toBe(true)
+    expect(fade.some(c => c.alpha === 1)).toBe(true)
   })
 
   it("gives Medium the same ground as Small: the design's gradient, top to bottom", async () => {
@@ -905,7 +908,7 @@ describe('design guardrails (static source checks)', () => {
     }
     const small = bodyOf('renderSmallCountdown')
     const texts = small.match(/const (\w+) = \w+\.addText\(/g)!.map(m => m.split(' ')[1])
-    expect(texts).toEqual(['month', 'day', 'title', 'track'])
+    expect(texts).toEqual(['month', 'day', 'title', 'by'])
     for (const t of texts) expect(small).toMatch(new RegExp(`${t}\\.lineLimit\\s*=\\s*1\\b`))
     expect(bodyOf('addCountdownPill')).toMatch(/label\.lineLimit\s*=\s*1/)
   })
