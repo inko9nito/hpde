@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
-import { renderScenario, fontFaceCss, loadLucideIconShapes, WIDGET_ENV_CONSTANTS } from './widget-preview.mjs'
+import { renderScenario, fontFaceCss, layoutRuntimeScript, loadLucideIconShapes, WIDGET_ENV_CONSTANTS } from './widget-preview.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '..', 'src', 'assets')
@@ -48,7 +48,9 @@ if (!eventDay) throw new Error(`2026-09-11_msrc-1-7.md missing from ${fixturesDi
 
 // Small / medium: the countdown view ahead of that event. Those sizes
 // are laid out for the countdown; the event-day view is designed for
-// large.
+// large. Rendered at the largest iPhone widget sizes (the setup page
+// shows them at 170 / 364pt wide).
+const DEVICE = '430x932'
 const SHOTS = [
   { family: 'small', at: '2026-09-01T12:00:00', manifest: { events: realEvents } },
   { family: 'medium', at: '2026-09-01T12:00:00', manifest: { events: realEvents } },
@@ -75,7 +77,7 @@ function freezeClock(iso) {
 const cells = []
 for (const shot of SHOTS) {
   freezeClock(shot.at)
-  const html = await renderScenario({ family: shot.family, manifest: shot.manifest, online: true }, false)
+  const html = await renderScenario({ family: shot.family, manifest: shot.manifest, online: true, device: DEVICE }, false)
   cells.push(`<div class="cell" id="${shot.family}">${html}</div>`)
 }
 
@@ -136,13 +138,15 @@ const page = `<!doctype html>
   .title { font-size:15px; font-weight:600; color:#111; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .time { font-size:13px; color:#8a8a8e; flex-shrink:0; }
   .body { font-size:15px; color:#222; line-height:1.3; margin-top:1px; }
-</style></head>
+</style>
+<script>${layoutRuntimeScript()}</script></head>
 <body>${cells.join('\n')}</body></html>`
 
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined })
 const tab = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: WIDGET_ENV_CONSTANTS.dpr })
 await tab.setContent(page)
 await tab.evaluate(() => document.fonts.ready)
+await tab.evaluate(() => window.__layoutWidgets())
 for (const [id, file] of OUTPUTS) {
   const el = await tab.$(`#${id} > *`)
   const path = join(outDir, file)

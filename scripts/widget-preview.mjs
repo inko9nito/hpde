@@ -15,11 +15,13 @@
 // SF Symbols glyph library are not open-source assets we can ship in
 // this repo — see WIDGET_ENV_CONSTANTS below for exactly what each
 // stand-in is and why). It CAN replicate the actual layout mechanics
-// this file depends on — stack orientation, the flex-spacer
-// full-width cascade, fixed sizing, padding, alignment, line-limit
-// truncation — using a real browser layout engine instead of
-// arithmetic guesses, at Apple's DOCUMENTED point sizes for a specific
-// reference iPhone. That's enough to catch overlap / misalignment /
+// this file depends on — stack orientation, how a SwiftUI stack
+// divides its width between children (allocateHStack; CSS flexbox
+// does it differently, #204), fixed sizing, padding, alignment,
+// line-limit truncation — measuring real rendered text instead of
+// arithmetic guesses, at Apple's DOCUMENTED widget sizes for the
+// owner's iPhone (plus the narrowest and widest phones for the
+// width-sensitive layouts). That's enough to catch overlap / misalignment /
 // truncation / overflow immediately, locally, without a phone
 // round-trip. On-device is still the final check for exact pixel
 // fit — this is for catching the obvious stuff before it ever reaches
@@ -52,33 +54,48 @@ mkdirSync(outDir, { recursive: true })
 // update the citation. If you can't cite it, don't put it here —
 // this table exists so nothing in this simulator is a guess.
 //
-// Reference device: iPhone 15/16 Pro (Apple's current-generation
-// standard-size iPhone). Widget point sizes are per-device on iOS; a
-// simulator has to pick one. Picking the Pro means the simulator is
-// exact for the phone the widget's owner is most likely to be running
-// (per Statcounter / Mixpanel iPhone-model mix, 2025) and one point
-// larger than the mini/SE families in each dimension, which is a
-// conservative direction — content that fits at 170×170 will also fit
-// at 158×158 with slightly more slack, but content that fits at
-// 158×158 might overflow at 170×170 (unlikely for our layout but the
-// wrong direction to be optimistic in).
-export const WIDGET_ENV_CONSTANTS = Object.freeze({
-  referenceDevice: 'iPhone 15/16 Pro (6.1")',
+// Widget point sizes are per-device on iOS, so the simulator renders at
+// the owner's phone by default and sweeps the narrowest and widest
+// supported phones for the layouts that are most width-sensitive.
+//
+// Widget sizes per screen size, from Apple's Human Interface
+// Guidelines, Widgets → Specifications → "iPhone widget sizes":
+//   https://developer.apple.com/design/human-interface-guidelines/widgets
+// (screen size in portrait points → small, medium, large). Keyed by
+// that screen size so the widget's own Device.screenSize() lookup (see
+// widgetSizeForScreen in hpde-widget.js) and this table share keys.
+const DEVICE_WIDGET_SIZES = {
+  // iPhone 14 Pro Max / 15 Plus / 15 Pro Max — the largest row.
+  '430x932': { small: { w: 170, h: 170 }, medium: { w: 364, h: 170 }, large: { w: 364, h: 382 } },
+  // iPhone 14 Pro / 15 / 15 Pro.
+  '393x852': { small: { w: 158, h: 158 }, medium: { w: 338, h: 158 }, large: { w: 338, h: 354 } },
+  // iPhone X / XS / 11 Pro (12 mini and 13 mini, 360×780, share these
+  // widget sizes). The owner's phone: #204's on-device screenshots are
+  // 1125×2436 px @3x = 375×812 pt, and the widgets in them measure
+  // 987 px = 329 pt wide (Medium/Large), 1034 px ≈ 345 pt tall (Large)
+  // and ~463 px ≈ 155 pt (Small) — this row exactly.
+  '375x812': { small: { w: 155, h: 155 }, medium: { w: 329, h: 155 }, large: { w: 329, h: 345 } },
+  // iPhone SE (2nd/3rd gen) / 8 — the narrowest phone that runs a
+  // current iOS.
+  '375x667': { small: { w: 148, h: 148 }, medium: { w: 321, h: 148 }, large: { w: 321, h: 324 } },
+}
+// extraLarge is iPad-only per HIG; mirror large so Scriptable's
+// widgetFamily === 'extraLarge' code path stays renderable — the
+// widget itself never targets iPad.
+function withExtraLarge(sizes) { return { ...sizes, extraLarge: sizes.large } }
 
-  // Widget point sizes for the reference device, per Apple's Human
-  // Interface Guidelines / Widgets page:
-  //   https://developer.apple.com/design/human-interface-guidelines/widgets
-  // "iPhone 16 Pro, 16, 15 Pro Max, 15 Pro, 15 Plus, 15, 14 Pro Max,
-  // 14 Pro, 14 Plus" row: 170×170, 364×170, 364×382.
-  // extraLarge is iPad-only per HIG; we mirror the large size to
-  // keep Scriptable's widgetFamily === 'extraLarge' code path
-  // renderable — the widget itself never targets iPad.
-  widgetSizes: {
-    small:      { w: 170, h: 170 },
-    medium:     { w: 364, h: 170 },
-    large:      { w: 364, h: 382 },
-    extraLarge: { w: 364, h: 382 },
-  },
+export const WIDGET_ENV_CONSTANTS = Object.freeze({
+  // The phone the widget's owner actually uses (see DEVICE_WIDGET_SIZES).
+  // Until #204 this was the 430×932 row mislabelled as "iPhone 15/16
+  // Pro", so every render was 35pt wider than the real widget — room
+  // the device never had, which is why fixed widths tuned in the
+  // simulator truncated the countdown well to "•••" / "DAY…" on-device.
+  referenceDevice: '375x812',
+  deviceWidgetSizes: Object.fromEntries(
+    Object.entries(DEVICE_WIDGET_SIZES).map(([k, v]) => [k, withExtraLarge(v)]),
+  ),
+  // Widget sizes on the reference device.
+  widgetSizes: withExtraLarge(DEVICE_WIDGET_SIZES['375x812']),
 
   // Outer widget corner radius. iOS 16+ provides the widget's outer
   // shape via SwiftUI's ContainerRelativeShape / WidgetKit chrome; the
@@ -125,58 +142,225 @@ export const WIDGET_ENV_CONSTANTS = Object.freeze({
   //      truncate) off this simulator.
   fontFamilyName: 'WidgetPreviewFont',
   fontFallbackStack: '-apple-system, BlinkMacSystemFont, "SF Pro Rounded", WidgetPreviewFont, "system-ui", sans-serif',
+
+  // Line height of one line of text, in ems. SF Pro's hhea metrics
+  // (UPM 2048, ascender 1950, descender 494 — the SF fonts shipped with
+  // Apple's SF Pro download) give (1950 + 494) / 2048 ≈ 1.19; SwiftUI's
+  // Text uses the font's own line height. Nunito's is 1.364, so without
+  // this every text line in the simulator was ~15% taller than on the
+  // phone. Cross-checked against #204's screenshot: 11pt info rows with
+  // 5pt spacing repeat every 55 px @3x = 18.3pt = 11 × 1.21 + 5.
+  textLineHeight: 1.19,
+
+  // Minimum width of a flexible addSpacer() (SwiftUI Spacer() with no
+  // minLength). SwiftUI's standard spacing is 8pt; #204's Medium
+  // screenshot measured a squeezed flexible spacer at ~9.5pt (28.5 px
+  // @3x) between the 228pt info column + 12pt spacer and the well, which
+  // is 8pt within measurement error of the card edges.
+  flexSpacerMinWidth: 8,
 })
 
-// ---------- VNode tree + the width-cascade pass ----------
+// ---------- SwiftUI stack layout (widths) ----------
 //
-// Scriptable's real layout rule (see this file's own "flex spacer
-// cascade" comments): a stack whose only content is an unconstrained
-// addSpacer() has an "as large as possible" ideal width that cascades
-// UP through every ancestor stack that isn't otherwise size-constrained
-// — which is how e.g. a countdown well or a card stretches to the
-// widget's full width from a single trailing spacer three stacks deep.
-// Plain CSS flexbox does NOT do this automatically (a child's flex:1
-// only distributes space within its OWN immediate parent — it doesn't
-// make the parent itself bigger). computeWidthCascade replicates the
-// upward propagation explicitly: any stack containing a flex spacer
-// (directly, or transitively through a descendant that itself needed
-// to cascade) is marked to stretch within ITS OWN parent, unless it has
-// an explicit fixed width (Scriptable's `.size = new Size(w, h)` is a
-// hard boundary — cascade stops there, matching the real behavior).
+// Scriptable stacks are SwiftUI HStacks/VStacks, and SwiftUI divides a
+// row's width differently from CSS flexbox. That difference is the
+// other half of #204 (the first being the widget size): the simulator
+// showed "1 more upcoming event" in full while the phone showed "1 more
+// upcoming…", because CSS gives a text its full width before the
+// stretchy divider lines on either side, whereas SwiftUI does this:
+//
+//   1. Fixed-size children (an explicit .size width, a fixed
+//      addSpacer(n), an image) take their width.
+//   2. Flexible addSpacer()s reserve only their minimum for now.
+//   3. Every other child is offered an EQUAL SHARE of what's left, in
+//      order of increasing flexibility (ideal width − minimum width):
+//      the least flexible is offered remaining ÷ children-left, takes
+//      what it needs (up to its ideal; a lineLimit=1 text truncates if
+//      offered less), and the rest moves on to the next child. A stack
+//      that contains a flexible spacer is infinitely flexible, so it
+//      goes last and takes everything left.
+//   4. Whatever is still left goes to the flexible spacers, evenly.
+//
+// Measured on #204's screenshots: the "more upcoming" footer row was
+// 325pt; minus two 10pt gaps, the text was offered 305 ÷ 3 = 101.7pt,
+// truncated, and each divider line took half of the remaining ~209pt
+// (measured 104.7 and 104.3pt). Rule 2 is also on-device: Small's
+// "Next HPDE" header shows untruncated even though an even split with
+// its trailing spacer would have cut it off.
+//
+// A VStack offers its full inner width to every child and is as wide as
+// its widest child; anything infinitely flexible makes it take the full
+// offer (how a card stretches to the widget's width from one trailing
+// spacer several stacks deep).
+//
+// Heights stay with CSS: widget rows are single-line texts and fixed
+// sizes, and CSS column flex already splits leftover height evenly
+// among vertical flex spacers, as SwiftUI does.
+//
+// `items`: [{ kind: 'fixed' | 'spacer' | 'view', min, ideal, place? }].
+// `place(offer)` lays out a child's subtree within `offer` and returns
+// the width it actually takes. Returns the width of each item.
+// Serialized into the preview page (see layoutWidgetRoots), so it must
+// stay self-contained.
+export function allocateHStack(items, available) {
+  const widths = items.map(() => 0)
+  let remaining = available
+  const spacers = []
+  const views = []
+  items.forEach((it, i) => {
+    if (it.kind === 'fixed') {
+      widths[i] = it.place ? it.place(it.ideal) : it.ideal
+      remaining -= widths[i]
+    } else if (it.kind === 'spacer') {
+      widths[i] = it.min
+      remaining -= it.min
+      spacers.push(i)
+    } else {
+      views.push(i)
+    }
+  })
+  const flexibility = it => (it.ideal === Infinity ? Infinity : it.ideal - it.min)
+  // Stable sort: equally flexible children keep their order.
+  views.sort((a, b) => {
+    const fa = flexibility(items[a])
+    const fb = flexibility(items[b])
+    return fa === fb ? a - b : fa < fb ? -1 : 1
+  })
+  views.forEach((i, n) => {
+    const it = items[i]
+    const offer = Math.max(0, remaining) / (views.length - n)
+    widths[i] = it.place ? it.place(offer) : Math.max(it.min, Math.min(offer, it.ideal))
+    remaining -= widths[i]
+  })
+  if (spacers.length > 0 && remaining > 0) {
+    for (const i of spacers) widths[i] += remaining / spacers.length
+  }
+  return widths
+}
+
+// Runs in the preview page after fonts load: lays out every
+// [data-widget-root] with allocateHStack's rules by measuring the real
+// rendered text, then pins each node's width in px. Serialized with
+// toString(), so it must stay self-contained.
+export function layoutWidgetRoots(spacerMin) {
+  const px = v => parseFloat(v) || 0
+  const kids = el => Array.from(el.children)
+  const padH = el => { const cs = getComputedStyle(el); return px(cs.paddingLeft) + px(cs.paddingRight) }
+  const gapsH = el => px(getComputedStyle(el).columnGap) * Math.max(0, el.children.length - 1)
+  const cache = new Map()
+
+  function measureText(el) {
+    const prev = el.style.width
+    el.style.width = 'max-content'
+    const ideal = el.getBoundingClientRect().width
+    let min
+    if (el.dataset.ll === '1') {
+      // A truncating text can shrink to its ellipsis (≈ 1em).
+      min = Math.min(ideal, px(getComputedStyle(el).fontSize))
+    } else {
+      el.style.width = 'min-content'
+      min = el.getBoundingClientRect().width
+    }
+    el.style.width = prev
+    return { min, ideal }
+  }
+
+  function measure(el) {
+    if (cache.has(el)) return cache.get(el)
+    const k = el.dataset.k
+    let m
+    if (el.dataset.w) {
+      m = { min: +el.dataset.w, ideal: +el.dataset.w, fixed: true }
+    } else if (k === 'text') {
+      m = measureText(el)
+    } else if (k === 'img') {
+      m = { min: px(el.style.width), ideal: px(el.style.width), fixed: true }
+    } else if (k === 'h') {
+      let min = padH(el) + gapsH(el)
+      let ideal = min
+      for (const c of kids(el)) {
+        if (c.dataset.k === 'sp') { min += spacerMin; ideal = Infinity; continue }
+        if (c.dataset.k === 'fsp') { min += +c.dataset.n; ideal += +c.dataset.n; continue }
+        const cm = measure(c)
+        min += cm.min
+        ideal += cm.ideal
+      }
+      m = { min, ideal }
+    } else if (k === 'v') {
+      let min = 0
+      let ideal = 0
+      for (const c of kids(el)) {
+        if (c.dataset.k === 'sp' || c.dataset.k === 'fsp') continue
+        const cm = measure(c)
+        min = Math.max(min, cm.min)
+        ideal = Math.max(ideal, cm.ideal)
+      }
+      m = { min: padH(el) + min, ideal: padH(el) + ideal }
+    } else {
+      m = { min: 0, ideal: 0 }
+    }
+    cache.set(el, m)
+    return m
+  }
+
+  // Lays out el's subtree within `offer`; returns el's width.
+  function layout(el, offer) {
+    const k = el.dataset.k
+    const m = measure(el)
+    let w = m.fixed ? m.ideal : Math.max(m.min, Math.min(offer, m.ideal))
+    if (k === 'h') {
+      const cs = kids(el)
+      const items = cs.map(c => {
+        const ck = c.dataset.k
+        if (ck === 'sp') return { kind: 'spacer', min: spacerMin, ideal: Infinity }
+        if (ck === 'fsp') return { kind: 'fixed', min: +c.dataset.n, ideal: +c.dataset.n }
+        const cm = measure(c)
+        return { kind: cm.fixed ? 'fixed' : 'view', min: cm.min, ideal: cm.ideal, place: o => layout(c, o) }
+      })
+      const widths = allocateHStack(items, w - padH(el) - gapsH(el))
+      cs.forEach((c, i) => {
+        c.style.width = widths[i] + 'px'
+        c.style.flex = '0 0 auto'
+        c.style.minWidth = '0'
+      })
+      // An HStack hugs its children (a flexible spacer inside has
+      // already taken up any leftover).
+      if (!m.fixed) w = padH(el) + gapsH(el) + widths.reduce((a, b) => a + b, 0)
+    } else if (k === 'v') {
+      const inner = w - padH(el)
+      let widest = 0
+      for (const c of kids(el)) {
+        if (c.dataset.k === 'sp' || c.dataset.k === 'fsp') continue
+        const cw = layout(c, inner)
+        c.style.width = cw + 'px'
+        // SwiftUI never squeezes a view below its height; it overflows.
+        c.style.flexShrink = '0'
+        widest = Math.max(widest, cw)
+      }
+      if (!m.fixed) w = Math.min(w, padH(el) + widest)
+    }
+    return w
+  }
+
+  for (const root of document.querySelectorAll('[data-widget-root]')) {
+    cache.clear()
+    layout(root, +root.dataset.w)
+  }
+}
+
+// The <script> both preview pages inject; call
+// `window.__layoutWidgets()` once document.fonts.ready resolves.
+export function layoutRuntimeScript() {
+  return `${allocateHStack.toString()}
+${layoutWidgetRoots.toString()}
+window.__layoutWidgets = () => layoutWidgetRoots(${WIDGET_ENV_CONSTANTS.flexSpacerMinWidth})`
+}
+
+// ---------- VNode tree ----------
+
 let nodeId = 0
 function makeNode(kind) {
-  return {
-    id: nodeId++, kind, style: {}, children: [], text: null,
-    orientation: 'row', spacerFlex: false, explicitWidth: false,
-  }
-}
-
-function computeWidthCascade(node) {
-  let childWants = false
-  for (const c of node.children) {
-    if (computeWidthCascade(c)) childWants = true
-  }
-  const selfSpacerWants = node.orientation === 'row' && node.children.some(c => c.spacerFlex)
-  const wants = selfSpacerWants || childWants
-  if (wants && !node.explicitWidth) {
-    node.wantsFullWidth = true
-    return true
-  }
-  return false
-}
-
-// Applied AFTER computeWidthCascade, so each node knows its parent's
-// orientation (needed to pick flex-grow vs align-self:stretch).
-function applyWidthCascadeStyles(node, parentOrientation) {
-  if (node.wantsFullWidth) {
-    if (parentOrientation === 'row') {
-      node.style.flex = '1 1 0'
-      node.style['min-width'] = '0'
-    } else {
-      node.style['align-self'] = 'stretch'
-    }
-  }
-  for (const c of node.children) applyWidthCascadeStyles(c, node.orientation)
+  return { id: nodeId++, kind, style: {}, data: {}, children: [], text: null, orientation: 'row' }
 }
 
 function escapeHtml(s) {
@@ -186,13 +370,15 @@ function escapeHtml(s) {
 function renderNode(node) {
   const styleStr = Object.entries(node.style).map(([k, v]) => `${k}:${v}`).join(';')
   const styleAttr = styleStr ? ` style="${styleStr}"` : ''
+  const dataAttr = Object.entries(node.data).map(([k, v]) => ` data-${k}="${escapeHtml(v)}"`).join('')
+  const attrs = `${styleAttr}${dataAttr}`
   if (node.kind === 'image') {
-    return `<div${styleAttr}>${node.text ?? ''}</div>` // raw SVG markup, not escaped
+    return `<div${attrs}>${node.text ?? ''}</div>` // raw SVG markup, not escaped
   }
   if (node.kind === 'text') {
-    return `<div${styleAttr}>${escapeHtml(node.text ?? '')}</div>`
+    return `<div${attrs}>${escapeHtml(node.text ?? '')}</div>`
   }
-  return `<div${styleAttr}>${node.children.map(renderNode).join('')}</div>`
+  return `<div${attrs}>${node.children.map(renderNode).join('')}</div>`
 }
 
 // ---------- Color / Font mocks ----------
@@ -318,32 +504,49 @@ class TextWrapper {
   set font(f) { if (f) { this.node.style['font-size'] = f.size + 'px'; this.node.style['font-weight'] = f.weight } }
   set textColor(c) { this.node.style.color = colorCss(c) }
   set lineLimit(n) {
+    this.node.data.ll = String(n)
     if (n === 1) {
-      this.node.style['white-space'] = 'nowrap'
+      this.node.style['white-space'] = 'pre'
       this.node.style.overflow = 'hidden'
       this.node.style['text-overflow'] = 'ellipsis'
-      this.node.style['min-width'] = '0'
       // KNOWN ISSUE, not fixed: some lineLimit=1 text (seen so far on
       // "…, TX" location strings) occasionally renders its last glyph
       // wrong — e.g. a capital X reading as a stray mark — only in the
-      // full multi-scenario page, never in an isolated reproduction of
-      // the exact same element/styles/font. Ruled out by direct
-      // testing, each still reproducing the artifact: the local-font
-      // data-URI not loading (it loads — document.fonts confirms
-      // status "loaded"), a text box sized with zero pixel tolerance
-      // for its content (DOM measurement shows no overflow), the
-      // variable font's runtime weight interpolation (a static-weight
-      // instance does the same thing), and text-overflow:ellipsis's
-      // own width calculation (removing it entirely changes nothing).
-      // The `padding-right` below is cheap insurance against the
-      // "zero tolerance" case even though it didn't resolve the one
-      // reproduction found so far — treat any garbled trailing glyph
-      // in a render as a simulator artifact to verify by eye against
-      // the source text, not a signal about the real widget.
-      this.node.style['padding-right'] = '2px'
+      // full multi-scenario page, never in an isolated reproduction.
+      // Treat any garbled trailing glyph in a render as a simulator
+      // artifact to verify by eye against the source text, not a signal
+      // about the real widget.
+    } else if (n > 1) {
+      this.node.style.display = '-webkit-box'
+      this.node.style['-webkit-box-orient'] = 'vertical'
+      this.node.style['-webkit-line-clamp'] = String(n)
+      this.node.style.overflow = 'hidden'
     }
   }
   set textOpacity(v) { this.node.style.opacity = v }
+}
+
+// DrawContext / Path / Point — enough of Scriptable's drawing API to
+// replay what the widget draws (its checkered flag) as an inline SVG,
+// from the widget's OWN path data: nothing here is a stand-in shape.
+class PointMock { constructor(x, y) { this.x = x; this.y = y } }
+class PathMock {
+  constructor() { this.segments = [] }
+  move(p) { this.segments.push(`M${p.x} ${p.y}`) }
+  addLine(p) { this.segments.push(`L${p.x} ${p.y}`) }
+  addCurve(p, c1, c2) { this.segments.push(`C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p.x} ${p.y}`) }
+  closeSubpath() { this.segments.push('Z') }
+}
+class DrawContextMock {
+  constructor() { this.size = new SizeMock(100, 100); this.opaque = true; this.respectScreenScale = false; this.fills = []; this.fill = null; this.path = null }
+  setFillColor(c) { this.fill = c }
+  addPath(path) { this.path = path }
+  fillPath() { if (this.path) this.fills.push({ segments: this.path.segments.join(''), color: colorCss(this.fill) }) }
+  getImage() {
+    const { width: w, height: h } = this.size
+    const body = this.fills.map(f => `<path fill="${f.color}" d="${f.segments}"/>`).join('')
+    return { svg: `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">${body}</svg>` }
+  }
 }
 
 class ImageWrapper {
@@ -366,6 +569,7 @@ class StackMock {
   constructor(orientation = 'row') {
     this.node = makeNode(orientation)
     this.node.orientation = orientation
+    this.node.data.k = orientation === 'row' ? 'h' : 'v'
     this.node.style.display = 'flex'
     this.node.style['flex-direction'] = orientation === 'row' ? 'row' : 'column'
     // Scriptable's WidgetStack maps to SwiftUI's HStack/VStack, whose
@@ -398,42 +602,36 @@ class StackMock {
   addStack() { const s = new StackMock('row'); this.node.children.push(s.node); return s }
   layoutVertically() {
     this.node.orientation = 'column'
+    this.node.data.k = 'v'
     this.node.style['flex-direction'] = 'column'
-    // Scriptable's VStack in a size-constrained parent (a fixed-size
-    // HStack sibling, an explicit .size, etc.) makes its children
-    // fit within its cross-axis width — text with lineLimit=1
-    // ellipsizes rather than overflowing. CSS's default with our
-    // align-items: center/flex-start (set by centerAlignContent /
-    // topAlignContent) instead lets children keep their natural
-    // width and overflow, which produced the "info column text
-    // running into the well" bug the on-device photo showed. Adding
-    // `overflow: hidden` clips the visible overflow so the render
-    // matches Scriptable's actual behavior: content truncates
-    // instead of leaking into the well's area. The individual text
-    // element still gets `text-overflow: ellipsis` from lineLimit=1
-    // (see TextWrapper.set lineLimit).
-    this.node.style.overflow = 'hidden'
   }
   addText(text) {
     const n = makeNode('text'); n.text = text
+    n.data.k = 'text'
     n.style['font-size'] = '15px'
-    n.style['min-width'] = '0'
+    n.style['line-height'] = String(WIDGET_ENV_CONSTANTS.textLineHeight)
+    // SwiftUI keeps a Text's spaces ("Next in " + "2h"); HTML collapses them.
+    n.style['white-space'] = 'pre-wrap'
     this.node.children.push(n)
     return new TextWrapper(n)
   }
-  addImage(sentinel) {
+  addImage(image) {
     const n = makeNode('image')
-    n.text = iconSvg(sentinel && sentinel.name)
+    n.data.k = 'img'
+    // A DrawContext image carries its own SVG; an SF Symbol carries a name.
+    n.text = image && image.svg ? image.svg : iconSvg(image && image.name)
     this.node.children.push(n)
     return new ImageWrapper(n)
   }
   addSpacer(n) {
     const sp = makeNode('spacer')
     if (n == null) {
-      sp.spacerFlex = true
+      sp.data.k = 'sp'
       sp.style.flex = '1 1 0'
       sp.style['align-self'] = 'stretch'
     } else {
+      sp.data.k = 'fsp'
+      sp.data.n = String(n)
       sp.style.flex = '0 0 auto'
       if (this.node.orientation === 'row') sp.style.width = n + 'px'
       else sp.style.height = n + 'px'
@@ -442,41 +640,17 @@ class StackMock {
   }
   setPadding(t, l, b, r) { this.node.style.padding = `${t}px ${r}px ${b}px ${l}px` }
   // topAlignContent / centerAlignContent / bottomAlignContent set the
-  // stack's CROSS-axis alignment.
-  //
-  // On a ROW (HStack) cross-axis is vertical — flex-start=top,
-  // center=vertical center, flex-end=bottom. Straightforward.
-  //
-  // On a COLUMN (VStack) cross-axis is horizontal — but here Scriptable
-  // and CSS diverge in a way that broke text truncation. Scriptable's
-  // VStack with a leading-aligned cross-axis STILL constrains its
-  // children to the column's cross-axis width, so a child text with
-  // `lineLimit = 1` sees a bounded width and ellipsizes. CSS's
-  // `align-items: flex-start` on a column lets each child keep its
-  // NATURAL cross-axis width and overflow the column — text with
-  // `text-overflow: ellipsis` never triggers because its parent row is
-  // as wide as the text itself, so there is no overflow to clip.
-  // Using `align-items: stretch` (CSS default) instead matches
-  // Scriptable's actual behavior: the child row fills the column's
-  // width, the text inside can then shrink and ellipsize cleanly, and
-  // visual left-alignment is preserved because a stretched row still
-  // packs its own children at flex-start (leading edge). For
-  // centerAlignContent on a column we do want the actual "children
-  // horizontally centered inside a fixed-width column" behavior (used
-  // in the well's countdown-unit columns), so that one keeps
-  // `align-items: center`.
+  // stack's CROSS-axis alignment: on a row, top / center / bottom; on a
+  // column, leading / center / trailing. Widths come from the SwiftUI
+  // layout pass (layoutWidgetRoots), so a column's children keep their
+  // own width and this only positions them.
   centerAlignContent() { this.node.style['align-items'] = 'center' }
-  topAlignContent() {
-    this.node.style['align-items'] = this.node.orientation === 'column' ? 'stretch' : 'flex-start'
-  }
-  bottomAlignContent() {
-    this.node.style['align-items'] = this.node.orientation === 'column' ? 'stretch' : 'flex-end'
-  }
+  topAlignContent() { this.node.style['align-items'] = 'flex-start' }
+  bottomAlignContent() { this.node.style['align-items'] = 'flex-end' }
   set backgroundColor(c) { this.node.style['background-color'] = colorCss(c) }
   set cornerRadius(v) { this.node.style['border-radius'] = v + 'px' }
   set size(s) {
-    this.node.explicitWidth = s.width > 0
-    if (s.width > 0) { this.node.style.width = s.width + 'px'; this.node.style['flex-shrink'] = '0' }
+    if (s.width > 0) { this.node.data.w = String(s.width); this.node.style.width = s.width + 'px'; this.node.style['flex-shrink'] = '0' }
     if (s.height > 0) { this.node.style.height = s.height + 'px'; this.node.style['flex-shrink'] = '0' }
   }
   set spacing(n) { this.node.style.gap = n + 'px' }
@@ -485,18 +659,19 @@ class StackMock {
   set borderWidth(_v) {}
 }
 
+// A ListWidget is a VStack in a fixed frame: SwiftUI centers its
+// children horizontally (a VStack's default alignment) and centers the
+// whole column vertically when it's shorter than the widget — the
+// widget script's own comments note content floating to the middle
+// on-device without a trailing flex spacer. Content taller than the
+// widget overflows equally off the top and bottom, as in SwiftUI.
 class ListWidgetMock extends StackMock {
-  constructor() { super('column'); this.node.style['align-items'] = 'stretch' }
+  constructor() {
+    super('column')
+    this.node.data.k = 'v'
+    this.node.style['justify-content'] = 'center'
+  }
   set refreshAfterDate(_v) {}
-}
-
-// Widget point dimensions — sourced from WIDGET_ENV_CONSTANTS, not
-// hard-coded here, so a single edit up top propagates everywhere.
-const FAMILY_SIZE = {
-  small: [WIDGET_ENV_CONSTANTS.widgetSizes.small.w, WIDGET_ENV_CONSTANTS.widgetSizes.small.h],
-  medium: [WIDGET_ENV_CONSTANTS.widgetSizes.medium.w, WIDGET_ENV_CONSTANTS.widgetSizes.medium.h],
-  large: [WIDGET_ENV_CONSTANTS.widgetSizes.large.w, WIDGET_ENV_CONSTANTS.widgetSizes.large.h],
-  extraLarge: [WIDGET_ENV_CONSTANTS.widgetSizes.extraLarge.w, WIDGET_ENV_CONSTANTS.widgetSizes.extraLarge.h],
 }
 
 function isoDate(offsetDays) {
@@ -566,6 +741,26 @@ const NO_EVENTS = { events: [] }
 // populated-today view for future-proofing this tool beyond the
 // countdown view. Add a scenario here any time a new layout gets built
 // — that's the whole point of keeping this checked into the repo.
+// A real event with long strings — the ones that truncated on-device.
+const UPCOMING_LONG = {
+  events: [
+    { id: 'e', name: 'TDE at ECR 2.7 CW', organizer: 'The Drivers Edge', track: 'Eagles Canyon Raceway',
+      city: 'Decatur, TX', configuration: '2.7', direction: 'Clockwise',
+      runGroups: [], days: [{ date: isoDate(9), label: 'Saturday', activities: [] }] },
+    ...UPCOMING_MULTI.events,
+  ],
+}
+
+// The owner's phone first (every scenario), then the narrowest and
+// widest phones for the width-sensitive countdown layouts. Scenarios
+// without a `device` render on WIDGET_ENV_CONSTANTS.referenceDevice.
+const SWEEP_DEVICES = ['375x667', '430x932']
+const SWEEP = [
+  { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (long names)' },
+  { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
+  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
+  { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (2 upcoming, long names)' },
+]
 const SCENARIOS = [
   { family: 'small', manifest: NO_EVENTS, label: 'Small — zero state' },
   { family: 'medium', manifest: NO_EVENTS, label: 'Medium — zero state' },
@@ -578,13 +773,23 @@ const SCENARIOS = [
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
   { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },
   { family: 'large', manifest: TODAY_NO_SCHEDULE, label: 'Large — today, no schedule yet' },
+  ...[WIDGET_ENV_CONSTANTS.referenceDevice, ...SWEEP_DEVICES].flatMap(device =>
+    SWEEP.map(s => ({ ...s, device }))),
 ]
 
-function installMocks(g, manifest, widgetFamily, widgetParameter = null) {
+function screenSizeOf(device) {
+  const [width, height] = device.split('x').map(Number)
+  return { width, height }
+}
+
+function installMocks(g, manifest, widgetFamily, widgetParameter = null, device = WIDGET_ENV_CONSTANTS.referenceDevice) {
   g.Color = ColorMock
   g.Size = SizeMock
+  g.Point = PointMock
+  g.Path = PathMock
+  g.DrawContext = DrawContextMock
   g.Font = Font
-  g.Device = { isUsingDarkAppearance: () => g.__dark, screenSize: () => ({ width: 390, height: 844 }) }
+  g.Device = { isUsingDarkAppearance: () => g.__dark, screenSize: () => screenSizeOf(device) }
   g.FileManager = {
     iCloud: () => { throw new Error('no iCloud in preview') },
     local: () => ({
@@ -625,9 +830,13 @@ function installMocks(g, manifest, widgetFamily, widgetParameter = null) {
   g.Notification = NotificationStub
 }
 
+// Returns the widget's HTML; the page must include layoutRuntimeScript()
+// and call window.__layoutWidgets() after fonts load. `scenario.device`
+// is a DEVICE_WIDGET_SIZES key (default: the reference device).
 export async function renderScenario(scenario, dark) {
   const g = globalThis
-  installMocks(g, scenario.manifest, scenario.family, scenario.param ?? null)
+  const device = scenario.device ?? WIDGET_ENV_CONSTANTS.referenceDevice
+  installMocks(g, scenario.manifest, scenario.family, scenario.param ?? null, device)
   g.__dark = dark
   g.__online = !!scenario.online
   g.__widget = null
@@ -636,10 +845,11 @@ export async function renderScenario(scenario, dark) {
   await eval(wrapped)
   const root = g.__widget instanceof StackMock ? g.__widget.node : null
   if (!root) return '<div style="color:red">render failed — no widget produced</div>'
-  root.explicitWidth = true // the frame itself is the hard cascade boundary
-  computeWidthCascade(root)
-  applyWidthCascadeStyles(root, 'column')
-  const [w, h] = FAMILY_SIZE[scenario.family] || FAMILY_SIZE.medium
+  const sizes = WIDGET_ENV_CONSTANTS.deviceWidgetSizes[device]
+  if (!sizes) throw new Error(`unknown device ${device}`)
+  const { w, h } = sizes[scenario.family] || sizes.medium
+  root.data['widget-root'] = ''
+  root.data.w = String(w)
   root.style.width = w + 'px'
   root.style.height = h + 'px'
   root.style.overflow = 'hidden'
@@ -664,9 +874,12 @@ export function fontFaceCss() {
 async function main() {
   const sections = []
   for (const scenario of SCENARIOS) {
+    const device = scenario.device ?? WIDGET_ENV_CONSTANTS.referenceDevice
+    const { w, h } = WIDGET_ENV_CONSTANTS.deviceWidgetSizes[device][scenario.family]
     for (const dark of [false, true]) {
       const html = await renderScenario(scenario, dark)
-      sections.push({ label: `${scenario.label} — ${dark ? 'dark' : 'light'}`, id: `s${sections.length}`, html })
+      const label = `${scenario.label} — ${w}×${h} — ${dark ? 'dark' : 'light'}`
+      sections.push({ label, id: `s${sections.length}`, html })
     }
   }
 
@@ -685,7 +898,8 @@ async function main() {
   .cell { display:flex; flex-direction:column; gap:8px; align-items:flex-start; }
   .cell span { color:#ddd; font-size:12px; font-family: system-ui, sans-serif; }
   .frame { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-</style></head>
+</style>
+<script>${layoutRuntimeScript()}</script></head>
 <body><div class="grid">
 ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}</span><div class="frame">${s.html}</div></div>`).join('\n')}
 </div></body></html>`
@@ -700,6 +914,8 @@ ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}
   // if `launch()` fails with an "Executable doesn't exist" error.
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined })
   const page1 = await browser.newPage({ viewport: { width: 1600, height: 1600 }, deviceScaleFactor: WIDGET_ENV_CONSTANTS.dpr })
+  const pageErrors = []
+  page1.on('pageerror', err => pageErrors.push(err))
   await page1.goto('file://' + htmlPath)
   // Without this, a screenshot can be taken before the local Nunito
   // @font-face finishes loading — text lays out (and lineLimit's
@@ -710,6 +926,10 @@ ${sections.map(s => `<div class="cell" id="${s.id}"><span>${escapeHtml(s.label)}
   // truncation at all. document.fonts.ready resolves once every
   // requested face has actually loaded and the page has reflowed.
   await page1.evaluate(() => document.fonts.ready)
+  // SwiftUI-style widths are measured from the real text, so only once
+  // the font is in.
+  await page1.evaluate(() => window.__layoutWidgets())
+  if (pageErrors.length > 0) throw pageErrors[0]
   await page1.screenshot({ path: join(outDir, 'all.png'), fullPage: true })
   for (const s of sections) {
     const el = await page1.$(`#${s.id}`)
