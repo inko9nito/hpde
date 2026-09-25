@@ -158,9 +158,9 @@ task that touches this file:
    checkered flag is not an SF Symbol: the widget draws the app's own
    `src/assets/checkered-flag.svg` with `DrawContext` (a test keeps
    its path data identical to the asset), and the simulator replays
-   those same drawing calls. The Medium and Small countdown cards' track
+   those same drawing calls. The Small and Medium countdown cards' track
    shape works the same way: `TRACK_SHAPES` copies
-   `src/data/track-icons/<id>.svg` (Small draws it, with the cards'
+   `src/data/track-icons/<id>.svg` (each card draws it, with its
    gradient ground, into the widget's background image). When a track icon is added to
    the app, add its paths there too; a test fails until you do.
 4. **The static guardrail tests are load-bearing.** The

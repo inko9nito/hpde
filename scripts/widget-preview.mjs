@@ -808,9 +808,10 @@ const SCENARIOS = [
   { family: 'medium', manifest: NO_EVENTS, label: 'Medium — zero state' },
   { family: 'large', manifest: NO_EVENTS, label: 'Large — zero state' },
   { family: 'small', manifest: UPCOMING_ONE, label: 'Small — countdown (1 upcoming)' },
-  // Online: no "Cached schedule" line, so Small keeps its design's
-  // 16pt padding top and bottom.
+  // Online: no "Cached schedule" line, so the featured cards keep their
+  // designs' 16pt padding top and bottom.
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (online)', online: true },
+  { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (online)', online: true },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
   { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming, stacked)' },

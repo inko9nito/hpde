@@ -377,43 +377,28 @@ function palette(dark) {
         pastOpacity: 0.6 }
 }
 
-// The Medium and Small countdowns are the app's featured event card
-// (#204), which is near-black whatever the phone's appearance: white
-// text, gray-400 organizer, gray-700 hairline, red-400 month on Medium.
-// The countdown badge is solid red with white text, the corner flag a
-// semi-transparent white, and the track shape toned down. Small follows
-// its Figma design (HPDE file, node 2068:7908): its month and the bar
-// beside the name are `accent`, its organizer white at 60%.
+// The Small and Medium countdowns are the app's featured event card
+// (#204), near-black whatever the phone's appearance, as their Figma
+// designs have it (HPDE file, nodes 2068:7908 and 2069:8111): white
+// text, the month and the bar beside the name in `accent`, the
+// organizer white at 60%, a solid red badge with white text. The track
+// is #646872 on a 35% layer (then faded, see FEATURED_TRACK); the other
+// configuration, where a track has one, is a sixth of that; a track
+// with no shape gets the placeholder flag in the track's color.
 const FEATURED_PALETTE = {
   fg: new Color("#ffffff"),
-  muted: new Color("#6b7280"),
-  mutedStrong: new Color("#9ca3af"),
-  brand: new Color("#f87171"),
   accent: new Color("#d64545"),
   subtle: new Color("#ffffff", 0.6),
-  divider: new Color("#374151"),
   badgeBg: new Color("#dc2626"),
   badgeFg: new Color("#ffffff"),
-  flag: new Color("#ffffff", 0.35),
-  // Much softer than the app's full white, which reads too stark on a
-  // widget: the configuration at 30%, the rest of the track (the SVGs'
-  // 0.3-opacity paths) at 5%.
-  track: new Color("#ffffff", 0.3),
-  trackGhost: new Color("#ffffff", 0.05),
-  placeholder: new Color("#ffffff", 0.15),
-  // Small's track, as its design has it: gray-500-ish #646872 on a 35%
-  // layer (then faded, see SMALL_TRACK_FADE). The other configuration
-  // keeps Medium's ghost-to-track ratio; a track with no shape gets the
-  // placeholder flag in the track's own color.
-  smallTrack: new Color("#646872", 0.35),
-  smallTrackGhost: new Color("#646872", 0.06),
+  track: new Color("#646872", 0.35),
+  trackGhost: new Color("#646872", 0.06),
 }
 
 // The featured cards' ground: a near-black gradient, top to bottom,
-// from Small's Figma design — [how far down, color]. Medium uses it as
-// its background gradient; Small draws it into its background image
-// (the track sits behind its text), and the track's fade on both is
-// drawn in the ground's own color at each height.
+// from the designs — [how far down, color]. Both cards draw it into
+// their background image with the track (which sits behind their
+// text), and the track's fade in the ground's own color at each height.
 const FEATURED_GROUND = [
   [0, "#262626"], [0.149, "#262626"], [0.418, "#222222"], [0.817, "#1c1c1c"], [1, "#1b1b1b"],
 ]
@@ -433,13 +418,14 @@ function featuredGround(f, alpha = 1) {
   return new Color(`#${hex}`, alpha)
 }
 
-// Both featured cards also set the widget's background color to the
+// The featured card also sets the widget's background color to the
 // ground's middle, replacing the phone-appearance one makeWidget set:
-// whichever of color and gradient/image Scriptable shows, it's dark.
+// whichever of color and image Scriptable shows, it's dark.
 function setFeaturedGround(w) {
   w.backgroundColor = featuredGround(0.5)
 }
 
+// Without DrawContext (no background image), the ground alone.
 function featuredGradient() {
   const g = new LinearGradient()
   g.colors = FEATURED_GROUND.map(([f]) => featuredGround(f))
@@ -1636,21 +1622,13 @@ const COUNTDOWN_TOKENS = {
     monthFont: 13, dayFont: 34, yearFont: 11, dateColW: 46, dateGap: 16,
     pillFont: 10, pillPadV: 4, pillPadH: 7, pillGap: 8,
   },
-  // Medium's featured card (renderFeaturedCountdown). `bannerWidth` is
-  // the track banner's width: about half the widget, as the app's shape
-  // is about half its card.
+  // The Small and Medium featured card (renderFeaturedCountdown), from
+  // their Figma designs (HPDE file, nodes 2068:7908 and 2069:8111), where
+  // the 155pt-tall widgets are 392px: 16pt in from every edge, and less
+  // top and bottom when a status line (e.g. "Cached schedule") has to
+  // fit under the badge. The name and organizer center on a
+  // `barH`-tall red bar.
   featured: {
-    padV: 10, padH: 16, bannerWidth: 172, flagWidth: 18,
-    titleFont: 16, titleLines: 1, titleGap: 3, rowFont: 13,
-    monthFont: 11, dayFont: 26, yearFont: 10, dateColW: 36, dateGap: 14, dividerH: 36,
-    pillFont: 9, pillPadV: 3, pillPadH: 6, pillGap: 8,
-  },
-  // Small's featured card (renderSmallCountdown), from its Figma design
-  // (HPDE file, node 2068:7908), where the 155pt widget is 391px: 16pt
-  // in from every edge, and less top and bottom when a status line
-  // (e.g. "Cached schedule") has to fit under the badge. The name and
-  // organizer center on a `barH`-tall red bar.
-  small: {
     pad: 16, padWithFooter: 10,
     monthFont: 13, dayFont: 29, dateGap: 5,
     barW: 2, barH: 40, barGap: 6,
@@ -1774,8 +1752,7 @@ const TRACK_SHAPES = {
 // The event's track shape (or, as in the app for a track with no icon,
 // a checkered flag) `width` wide with its top left at (x0, y0), in the
 // colors `look` gives: { track, ghost, placeholder }. Returns its height.
-// Shared by Medium's banner and Small's background; each fades it its
-// own way after.
+// Shared by the Small and Medium cards' backgrounds.
 function drawTrackShape(ctx, trackId, x0, y0, width, look) {
   const win = TRACK_SHAPE_WINDOW
   const scale = width / win.w
@@ -1804,40 +1781,34 @@ function drawTrackShape(ctx, trackId, x0, y0, width, look) {
   return height
 }
 
-// DrawContext has no gradients, so a fade is drawn over the shape: the
-// ground's own color (`groundAt(y, alpha)`) at a rising alpha. On whole
-// points (whole pixels at any screen scale), so no two pieces overlap:
-// an overlap doubles the alpha and shows as a line.
+// The designs fade the track along a diagonal — all there at its top
+// right, gone by its bottom left. The fade's progress across the
+// shape's box (u, v from 0 to 1) is t = a·u + b·v + c: the first row of
+// the Figma fill's gradientTransform (`fade`, see FEATURED_TRACK).
+// DrawContext has no gradients, so the fade is drawn over the shape:
+// the ground's own color (`groundAt(y, alpha)`) at alpha t, in 1pt
+// cells on whole points (whole pixels at any screen scale), so no two
+// overlap — an overlap doubles the alpha and shows as a line. A row's
+// run of cells at the same alpha is one rect.
 //
-// Medium: into the ground over the shape's bottom three quarters — the
-// app's `from-gray-900/0 to-gray-900` gradient — in 1pt strips.
-function fadeTrackDown(ctx, x0, y0, width, height, groundAt) {
-  const fadeTop = Math.round(y0 + height / 4)
-  const bottom = y0 + height
-  for (let y = fadeTop; y < bottom; y++) {
-    const f = Math.min(1, (y + 1 - fadeTop) / (bottom - fadeTop))
-    ctx.setFillColor(groundAt(y, f))
-    ctx.fillRect(new Rect(x0, y, width, Math.min(1, bottom - y)))
+// It also clips: outside the shape's box the cells are the ground,
+// opaque. Some shapes' other configuration runs past the window the app
+// crops them to (TRACK_SHAPE_WINDOW), and the canvas here is the whole
+// widget, so nothing else would cut it off.
+function fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, fade) {
+  const { a, b, c } = fade
+  const alphaAt = (x, y) => {
+    const u = (x + 0.5 - x0) / width
+    const v = (y + 0.5 - y0) / height
+    if (u < 0 || u > 1 || v < 0 || v > 1) return 1
+    return Math.round(Math.max(0, Math.min(1, a * u + b * v + c)) * 100) / 100
   }
-}
-
-// Small: along the diagonal its design's gradient runs — all there at
-// the shape's top right, gone by its bottom left. The fade's progress
-// across the shape's box (u, v from 0 to 1) is t = a·u + b·v + c: the
-// first row of the Figma fill's gradientTransform (HPDE file, node
-// 2068:7914). In 1pt cells, a row's run of cells at the same alpha
-// drawn as one rect; `right` is the canvas edge the shape runs off.
-const SMALL_TRACK_FADE = { a: -0.9994, b: 0.7678, c: 0.6786 }
-function fadeTrackDiagonally(ctx, x0, y0, width, height, right, groundAt) {
-  const { a, b, c } = SMALL_TRACK_FADE
-  const alphaAt = (x, y) =>
-    Math.round(Math.max(0, Math.min(1, a * (x + 0.5 - x0) / width + b * (y + 0.5 - y0) / height + c)) * 100) / 100
-  for (let y = Math.floor(y0); y < Math.ceil(y0 + height); y++) {
-    let x = Math.floor(x0)
-    while (x < right) {
+  for (let y = 0; y < H; y++) {
+    let x = 0
+    while (x < W) {
       const alpha = alphaAt(x, y)
       let end = x + 1
-      while (end < right && alphaAt(end, y) === alpha) end++
+      while (end < W && alphaAt(end, y) === alpha) end++
       if (alpha > 0) {
         ctx.setFillColor(groundAt(y, alpha))
         ctx.fillRect(new Rect(x, y, end - x, 1))
@@ -1847,48 +1818,41 @@ function fadeTrackDiagonally(ctx, x0, y0, width, height, right, groundAt) {
   }
 }
 
-// Medium's banner. It sits `top` points down a widget about
-// FEATURED_GROUND_HEIGHT tall — the owner's phone's; on others the
-// ground under the banner differs by a shade at most.
-const FEATURED_GROUND_HEIGHT = 155
-function trackBannerImage(trackId, width, F, top) {
-  if (typeof DrawContext === "undefined") return null
-  const height = TRACK_SHAPE_WINDOW.h * (width / TRACK_SHAPE_WINDOW.w)
-  const ctx = new DrawContext()
-  ctx.size = new Size(width, height)
-  ctx.respectScreenScale = true
-  ctx.opaque = false
-  drawTrackShape(ctx, trackId, 0, 0, width, { track: F.track, ghost: F.trackGhost, placeholder: F.placeholder })
-  fadeTrackDown(ctx, 0, 0, width, height,
-    (y, alpha) => featuredGround((top + y) / FEATURED_GROUND_HEIGHT, alpha))
-  return { image: ctx.getImage(), width, height }
+// Where each family's design puts the track, as fractions of the
+// widget (x and w of its width, y of its height), and the fade of its
+// Figma fill (HPDE file: Small 2068:7914, Medium 2069:8118).
+const FEATURED_TRACK = {
+  small: { x: 0.35, y: 0.138, w: 0.772, fade: { a: -0.9994, b: 0.7678, c: 0.6786 } },
+  medium: { x: 0.3184, y: 0.1658, w: 0.7155, fade: { a: -1.0417, b: 0.5806, c: 0.9411 } },
 }
+// A widget's background image fills it (scaled to cover, centered), so
+// each family's is drawn once, at its largest widget's size (a Pro
+// Max's), and scales to the others: Small's are all square, and
+// Medium's differ in shape by under 3%, a point or two cropped off
+// two edges.
+const FEATURED_GROUND_SIZE = { small: [170, 170], medium: [364, 170] }
 
-// Small's background: the ground, then the track shape across its top
-// right, running off the edge — where the design puts it, as fractions
-// of the widget (SMALL_TRACK) — faded along its diagonal. A widget's background image fills it, so
-// it's drawn once, square, at the largest Small widget's size, and
-// scales to the others.
-const SMALL_GROUND_SIZE = 170
-const SMALL_TRACK = { x: 0.35, y: 0.138, w: 0.772 }
-function smallGroundImage(trackId, F) {
+// The card's background: the ground, then the track shape across its
+// top right, running off the edge, faded along its diagonal.
+function featuredGroundImage(family, trackId, F) {
   if (typeof DrawContext === "undefined") return null
-  const S = SMALL_GROUND_SIZE
+  const [W, H] = FEATURED_GROUND_SIZE[family]
+  const place = FEATURED_TRACK[family]
   const ctx = new DrawContext()
-  ctx.size = new Size(S, S)
+  ctx.size = new Size(W, H)
   ctx.respectScreenScale = true
   ctx.opaque = true
-  const groundAt = (y, alpha) => featuredGround((y + 0.5) / S, alpha)
-  for (let y = 0; y < S; y++) {
+  const groundAt = (y, alpha) => featuredGround((y + 0.5) / H, alpha)
+  for (let y = 0; y < H; y++) {
     ctx.setFillColor(groundAt(y, 1))
-    ctx.fillRect(new Rect(0, y, S, 1))
+    ctx.fillRect(new Rect(0, y, W, 1))
   }
-  const x0 = SMALL_TRACK.x * S
-  const y0 = SMALL_TRACK.y * S
-  const width = SMALL_TRACK.w * S
-  const look = { track: F.smallTrack, ghost: F.smallTrackGhost, placeholder: F.smallTrack }
+  const x0 = place.x * W
+  const y0 = place.y * H
+  const width = place.w * W
+  const look = { track: F.track, ghost: F.trackGhost, placeholder: F.track }
   const height = drawTrackShape(ctx, trackId, x0, y0, width, look)
-  fadeTrackDiagonally(ctx, x0, y0, width, height, S, groundAt)
+  fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, place.fade)
   return ctx.getImage()
 }
 
@@ -1973,12 +1937,8 @@ function renderCountdownState(w, p, upcoming, footer) {
 
   // Small and Medium are each one featured card, with no room for a
   // "more upcoming" footer.
-  if (family === "small") {
-    renderSmallCountdown(w, items[0], footer)
-    return
-  }
-  if (family === "medium") {
-    renderFeaturedCountdown(w, items[0])
+  if (family === "small" || family === "medium") {
+    renderFeaturedCountdown(w, items[0], footer, family)
     return
   }
 
@@ -2003,76 +1963,22 @@ function renderCountdownState(w, p, upcoming, footer) {
   w.addSpacer()
 }
 
-// Medium: the whole widget is the app's featured event card — the
-// event's track shape across the top, faded into the dark ground, then
-// the date, a hairline, and the name (with the countdown badge beside
-// it) over the organizer. The small flag sits in the top right corner.
-function renderFeaturedCountdown(w, next) {
-  const F = FEATURED_PALETTE
-  const t = COUNTDOWN_TOKENS.featured
-  setFeaturedGround(w)
-  w.backgroundGradient = featuredGradient()
-  w.setPadding(t.padV, t.padH, t.padV, t.padH)
-
-  // [flag-wide gap] [spacer] banner [spacer] [flag]: the leading gap
-  // matches the flag so the banner stays centered on the widget.
-  const top = w.addStack()
-  top.topAlignContent()
-  top.addSpacer(t.flagWidth)
-  top.addSpacer()
-  const banner = trackBannerImage(next.event.trackId, t.bannerWidth, F, t.padV)
-  if (banner) {
-    const img = top.addImage(banner.image)
-    img.imageSize = new Size(banner.width, banner.height)
-  }
-  top.addSpacer()
-  addCheckeredFlag(top, F.flag, t.flagWidth)
-
-  const row = w.addStack()
-  row.centerAlignContent()
-  addDateColumn(row, next.day.date, F, t)
-  row.addSpacer(t.dateGap)
-  const hairline = row.addStack()
-  hairline.size = new Size(1, t.dividerH)
-  hairline.backgroundColor = F.divider
-  row.addSpacer(t.dateGap)
-
-  const col = row.addStack()
-  col.layoutVertically()
-  col.topAlignContent()
-  const titleRow = col.addStack()
-  titleRow.centerAlignContent()
-  titleRow.spacing = t.pillGap
-  const title = titleRow.addText(next.event.name)
-  title.font = rBoldFont(t.titleFont)
-  title.textColor = F.fg
-  title.lineLimit = t.titleLines
-  addCountdownPill(titleRow, daysUntil(next.day.date), F.badgeBg, F.badgeFg, t)
-  if (next.event.organizer) {
-    col.addSpacer(t.titleGap)
-    const org = col.addText(next.event.organizer)
-    org.font = rFont(t.rowFont)
-    org.textColor = F.mutedStrong
-    org.lineLimit = 1
-  }
-  row.addSpacer()
-}
-
-// Small: the featured card as its Figma design has it (HPDE file, node
-// 2068:7908). The track shape sits behind the date in the top right,
-// in the widget's background image with the ground (see
-// smallGroundImage). Over it: the month over the day, left-aligned;
+// Small and Medium: the featured card as their Figma designs have it
+// (HPDE file, nodes 2068:7908 and 2069:8111) — Medium is Small, wider,
+// with a bigger track. The track shape sits behind the date in the top
+// right, in the widget's background image with the ground (see
+// featuredGroundImage). Over it: the month over the day, left-aligned;
 // the name over the organizer beside a red bar; the badge at the
 // bottom. The day, name and badge are a weight heavier than the
 // design's (#204 review).
 // Each row ends in a flex spacer, which pins it to the left edge.
-function renderSmallCountdown(w, next, footer) {
+function renderFeaturedCountdown(w, next, footer, family) {
   const F = FEATURED_PALETTE
-  const t = COUNTDOWN_TOKENS.small
+  const t = COUNTDOWN_TOKENS.featured
   const padV = footer ? t.padWithFooter : t.pad
   w.setPadding(padV, t.pad, padV, t.pad)
   setFeaturedGround(w)
-  const ground = smallGroundImage(next.event.trackId, F)
+  const ground = featuredGroundImage(family, next.event.trackId, F)
   if (ground) w.backgroundImage = ground
   else w.backgroundGradient = featuredGradient()
 

@@ -141,6 +141,7 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   // Records what the widget draws (the header's checkered flag).
   g.__drawn = [] as Array<{
     fills: number; rects?: number; rectColors?: Array<{ hex: string; alpha: number }>
+    rectBoxes?: Array<{ x: number; y: number; width: number; height: number }>
     opaque: boolean; respectScreenScale: boolean
   }>
   g.Point = class { constructor(public x: number, public y: number) { num(x); num(y) } }
@@ -161,14 +162,19 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     rects = 0
     color: { hex: string; alpha: number } | null = null
     rectColors: Array<{ hex: string; alpha: number }> = []
+    rectBoxes: Array<{ x: number; y: number; width: number; height: number }> = []
     setFillColor(c: { hex: string; alpha?: number }) { this.color = { hex: c.hex, alpha: c.alpha ?? 1 } }
     addPath() {}
     fillPath() { this.fills++ }
-    fillRect() { this.rects++; this.rectColors.push(this.color!) }
+    fillRect(r: { x: number; y: number; width: number; height: number }) {
+      this.rects++
+      this.rectColors.push(this.color!)
+      this.rectBoxes.push({ x: r.x, y: r.y, width: r.width, height: r.height })
+    }
     getImage() {
       g.__drawn.push({
         fills: this.fills,
-        ...(this.rects ? { rects: this.rects, rectColors: this.rectColors } : {}),
+        ...(this.rects ? { rects: this.rects, rectColors: this.rectColors, rectBoxes: this.rectBoxes } : {}),
         opaque: this.opaque,
         respectScreenScale: this.respectScreenScale,
       })
@@ -448,7 +454,7 @@ describe('scriptable widget loads and renders', () => {
   })
 
   it('stacks the date on the left like the app, month over day', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
+    await runWidget('large', UPCOMING_MULTI_MANIFEST)
     const texts = (globalThis as any).__texts as string[]
     const [, m, d] = isoDate(10).split('-').map(Number)
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -463,105 +469,74 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('Monday'))).toBe(false)
   })
 
-  it("lays Small out as its design: month over day, name over organizer, then the badge", async () => {
-    await runWidget('small', UPCOMING_MULTI_MANIFEST)
-    const texts = (globalThis as any).__texts as string[]
+  it("lays Small and Medium out as their designs: month over day, name over organizer, then the badge", async () => {
     const [, m, d] = isoDate(10).split('-').map(Number)
     const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-    // Nothing else — no header, track or countdown well — but the
-    // status line (these mocks are offline, so the schedule is cached).
-    expect(texts).toEqual([months[m - 1], String(d), 'Upcoming A', 'Org A', 'in 10 days', 'Cached schedule'])
+    for (const family of ['small', 'medium']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const texts = (globalThis as any).__texts as string[]
+      // Nothing else — no header, track, countdown well or "more
+      // upcoming" footer — but the status line (these mocks are
+      // offline, so the schedule is cached).
+      expect(texts).toEqual([months[m - 1], String(d), 'Upcoming A', 'Org A', 'in 10 days', 'Cached schedule'])
+    }
   })
 
-  it("draws Small's ground and track into its background, faded along the design's diagonal", async () => {
+  it("draws each featured card's ground and track into its background, faded along its design's diagonal", async () => {
     const withTrack = (trackId?: string) => ({
       events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], ...(trackId ? { trackId } : {}) }],
     })
-    const ground = async (trackId?: string) => {
-      await runWidget('small', withTrack(trackId))
+    const ground = async (family: string, trackId?: string) => {
+      await runWidget(family, withTrack(trackId))
       const drawn = (globalThis as any).__drawn as Array<{
-        fills: number; rects: number; rectColors: Array<{ hex: string; alpha: number }>; opaque: boolean
+        fills: number; rects: number; rectColors: Array<{ hex: string; alpha: number }>
+        rectBoxes: Array<{ x: number; y: number }>; opaque: boolean
       }>
-      // One image, and it is the widget's background.
+      // One image — no corner flag — and it is the widget's background.
       expect(drawn).toHaveLength(1)
       expect((globalThis as any).__background.image).toBeDefined()
       return drawn[0]
     }
-    // The track's own paths, or the app's placeholder flag (four shapes).
-    expect((await ground('ecr-2-7')).fills).toBe(1)
-    expect((await ground('msrc-1-7')).fills).toBe(2)
-    expect((await ground()).fills).toBe(4)
-    const g = await ground('ecr-2-7')
-    // Opaque: the ground covers it, 1pt strips from the design's top
-    // color to its bottom one...
-    expect(g.opaque).toBe(true)
-    expect(g.rectColors[0]).toEqual({ hex: '#262626', alpha: 1 })
-    expect(g.rectColors[169]).toEqual({ hex: '#1b1b1b', alpha: 1 })
-    // ...then the fade: cells of the ground's color over the shape,
-    // clear at its top right and fully opaque by its bottom left.
-    const fade = g.rectColors.slice(170)
-    expect(fade.length).toBeGreaterThan(100)
-    expect(fade.every(c => c.alpha > 0 && c.alpha <= 1)).toBe(true)
-    expect(fade.some(c => c.alpha < 0.2)).toBe(true)
-    expect(fade.some(c => c.alpha === 1)).toBe(true)
-  })
-
-  it("gives Medium the same ground as Small: the design's gradient, top to bottom", async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
-    const gradient = (globalThis as any).__background.gradient as {
-      colors: Array<{ hex: string }>; locations: number[]; startPoint: { x: number; y: number }; endPoint: { x: number; y: number }
+    for (const family of ['small', 'medium']) {
+      // The track's own paths, or the app's placeholder flag (four shapes).
+      expect((await ground(family, 'ecr-2-7')).fills).toBe(1)
+      expect((await ground(family, 'msrc-1-7')).fills).toBe(2)
+      expect((await ground(family)).fills).toBe(4)
+      const g = await ground(family, 'ecr-2-7')
+      // Opaque: the ground covers it, 170 1pt strips (the family's
+      // largest widget is 170pt tall) from the design's top color to
+      // its bottom one...
+      expect(g.opaque).toBe(true)
+      expect(g.rectColors[0]).toEqual({ hex: '#262626', alpha: 1 })
+      expect(g.rectColors[169]).toEqual({ hex: '#1b1b1b', alpha: 1 })
+      // ...then the fade: cells of the ground's color over the shape,
+      // clear at its top right and fully opaque by its bottom left.
+      const fade = g.rectColors.slice(170)
+      expect(fade.length).toBeGreaterThan(100)
+      expect(fade.every(c => c.alpha > 0 && c.alpha <= 1)).toBe(true)
+      expect(fade.some(c => c.alpha < 0.2)).toBe(true)
+      expect(fade.some(c => c.alpha === 1)).toBe(true)
+      // ...and it clips the shape to its box: some shapes' other
+      // configuration runs past it (MSRC 1.7's showed as a stray mark
+      // under the organizer on Medium). Left of the box, on every row,
+      // it's the ground, opaque.
+      const clip = await ground(family, 'msrc-1-7')
+      const boxes = clip.rectBoxes.slice(170)
+      const colors = clip.rectColors.slice(170)
+      for (let y = 0; y < 170; y++) {
+        const i = boxes.findIndex(b => b.y === y && b.x === 0)
+        expect(i).toBeGreaterThan(-1)
+        expect(colors[i].alpha).toBe(1)
+      }
     }
-    expect(gradient.colors.map(c => c.hex)).toEqual(['#262626', '#262626', '#222222', '#1c1c1c', '#1b1b1b'])
-    expect(gradient.locations).toEqual([0, 0.149, 0.418, 0.817, 1])
-    expect([gradient.startPoint, gradient.endPoint]).toEqual([{ x: 0, y: 0 }, { x: 0, y: 1 }])
   })
 
-  it('draws the checkered flag in the corner on Medium and Large (Small\'s design has none)', async () => {
+  it('draws the checkered flag in the corner on Large (the featured cards\' designs have none)', async () => {
     // One flag: four filled shapes, on a transparent background (a
     // DrawContext is opaque — black — by default), at screen scale.
     const flag = { fills: 4, opaque: false, respectScreenScale: true }
-    for (const family of ['large']) {
-      await runWidget(family, UPCOMING_MULTI_MANIFEST)
-      expect((globalThis as any).__drawn).toEqual([flag])
-    }
-    // Medium draws its track banner first, then the flag.
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
-    const drawn = (globalThis as any).__drawn as Array<{ fills: number }>
-    expect(drawn).toHaveLength(2)
-    expect(drawn[1]).toEqual(flag)
-  })
-
-  it("draws the event's track shape across the top of the Medium card, faded like the app's", async () => {
-    const withTrack = (trackId?: string) => ({
-      events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], ...(trackId ? { trackId } : {}) }],
-    })
-    const banner = async (trackId?: string) => {
-      await runWidget('medium', withTrack(trackId))
-      return ((globalThis as any).__drawn as Array<{ fills: number; rects?: number; opaque: boolean }>)[0]
-    }
-    // One filled path per path in the app's SVG: Eagles Canyon has one;
-    // MSRC 1.7 has two (the other configuration, ghosted).
-    expect((await banner('ecr-2-7')).fills).toBe(1)
-    expect((await banner('msrc-1-7')).fills).toBe(2)
-    // No trackId, or one the app has no icon for: the app's placeholder
-    // flag (four shapes).
-    expect((await banner()).fills).toBe(4)
-    expect((await banner('nowhere-1-0')).fills).toBe(4)
-    // The fade: 1pt strips over the bottom three quarters.
-    const b = await banner('ecr-2-7')
-    expect(b.opaque).toBe(false)
-    expect(b.rects).toBeGreaterThan(40)
-  })
-
-  it('makes the Medium countdown the app\'s featured card: name + badge over organizer, one event', async () => {
-    await runWidget('medium', UPCOMING_MULTI_MANIFEST)
-    const texts = (globalThis as any).__texts as string[]
-    const name = texts.indexOf('Upcoming A')
-    expect(texts.slice(name, name + 3)).toEqual(['Upcoming A', 'IN 10 DAYS', 'Org A'])
-    // No header, location or "more upcoming" footer — the app's card has none.
-    expect(texts).not.toContain('Upcoming HPDE events')
-    expect(texts).not.toContain('Track A')
-    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
+    await runWidget('large', UPCOMING_MULTI_MANIFEST)
+    expect((globalThis as any).__drawn).toEqual([flag])
   })
 
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
@@ -890,7 +865,7 @@ describe('design guardrails (static source checks)', () => {
     expect(offenders).toEqual([])
   })
 
-  it('gives every text on the Small card, and its badge, an explicit lineLimit', () => {
+  it('gives every text on the featured card, and its badge, an explicit lineLimit', () => {
     // Real on-device bug (#203): Small's old countdown well set no
     // `.lineLimit = 1` on its texts. Without it, Text is free to wrap —
     // and a wrappable Text reports a much smaller "ideal width" to
@@ -899,14 +874,15 @@ describe('design guardrails (static source checks)', () => {
     // got squeezed to a sliver: "17" wrapped into "1" / "7", "DAYS
     // AWAY" into "DAYS" / "AWAY", on a real device — invisible in this
     // repo's simulator because Chromium's flexbox doesn't collapse the
-    // same way. Small's card is just as narrow, so every text on it
-    // (month, day, name, track) and the badge's label must be one line.
+    // same way. The featured card is as narrow on Small, so every text
+    // on it (month, day, name, organizer) and the badge's label must be
+    // one line.
     const bodyOf = (name: string) => {
       const start = widgetSrc.indexOf(`function ${name}(`)
       expect(start).toBeGreaterThan(-1)
       return widgetSrc.slice(start, widgetSrc.indexOf('\n}', start))
     }
-    const small = bodyOf('renderSmallCountdown')
+    const small = bodyOf('renderFeaturedCountdown')
     const texts = small.match(/const (\w+) = \w+\.addText\(/g)!.map(m => m.split(' ')[1])
     expect(texts).toEqual(['month', 'day', 'title', 'by'])
     for (const t of texts) expect(small).toMatch(new RegExp(`${t}\\.lineLimit\\s*=\\s*1\\b`))
