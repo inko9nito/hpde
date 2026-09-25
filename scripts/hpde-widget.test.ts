@@ -409,9 +409,19 @@ describe('scriptable widget loads and renders', () => {
     const i = texts.indexOf(months[m - 1])
     expect(i).toBeGreaterThan(-1)
     expect(texts[i + 1]).toBe(String(d))
-    // ...then the name, and the countdown line.
-    expect(texts.indexOf('Upcoming A')).toBeGreaterThan(i)
-    expect(texts).toContain('Monday · in 10 days')
+    // ...then the name with the countdown pill beside it. No separate
+    // date/weekday line: the date column already shows the date.
+    const name = texts.indexOf('Upcoming A')
+    expect(name).toBeGreaterThan(i)
+    expect(texts[name + 1]).toBe('IN 10 DAYS')
+    expect(texts.some(t => t.includes('Monday'))).toBe(false)
+  })
+
+  it('keeps the countdown in the well on Small, with no pill beside the name', async () => {
+    await runWidget('small', UPCOMING_MULTI_MANIFEST)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('DAYS AWAY')
+    expect(texts.some(t => t.startsWith('IN '))).toBe(false)
   })
 
   it('draws the checkered flag in the header on every family', async () => {

@@ -343,8 +343,9 @@ function validateWidgetParameter(parsed, manifest) {
 // `accent` (blue) is the today view's now-marker, as the app's
 // TimeIndicator. `brand` (red) is the upcoming-events view's accent —
 // the app's DateBlock month (red-600 light / red-400 dark) — for the
-// month, the countdown line, the Small well and the checkered flag;
-// `brandTint` is the Small well's background.
+// month, the countdown pill, the Small well and the checkered flag;
+// `brandTint` (the app's LIVE badge background, red-500 at 10%) is the
+// pill's and the Small well's background.
 function palette(dark) {
   return dark
     // Dark mode keeps its "cards are slightly LIGHTER than the
@@ -358,7 +359,7 @@ function palette(dark) {
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
         accent: new Color("#3b82f6"),
-        brand: new Color("#f87171"), brandTint: new Color("#2a1618"),
+        brand: new Color("#f87171"), brandTint: new Color("#ef4444", 0.15),
         pastOpacity: 0.6 }
     // Light mode: widget background is now white and non-current
     // cards use the light gray that USED to be the widget
@@ -372,7 +373,7 @@ function palette(dark) {
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
         accent: new Color("#3b82f6"),
-        brand: new Color("#dc2626"), brandTint: new Color("#fef2f2"),
+        brand: new Color("#dc2626"), brandTint: new Color("#ef4444", 0.1),
         pastOpacity: 0.6 }
 }
 
@@ -1497,8 +1498,8 @@ function daysUntil(iso) {
 // countdown card instead of a plain "Next: <name>" line. Laid out like
 // the app's event cards (#204): the date stacked on the left (red month
 // over a big day number, as the app's DateBlock), a hairline, then the
-// name over the organizer, the location, and a red "Saturday · in 9
-// days" line.
+// name with a red "IN 9 DAYS" pill beside it (where the app puts its
+// LIVE badge), over the organizer and the location.
 const COUNTDOWN_CARD_GAP = 10
 
 // ----- how the countdown view is laid out, and why -----
@@ -1559,17 +1560,19 @@ const COUNTDOWN_FOOTER_RULE_WIDTH = 20
 // enough to truncate even "Test Raceway".
 const COUNTDOWN_TOKENS = {
   small: {
-    titleFont: 13, titleLines: 2, titleGap: 2, rowFont: 11, rowIconSize: 0, rowIconGap: 4, rowSpacing: 2,
+    titleFont: 11, titleLines: 2, titleGap: 2, rowFont: 11, rowIconSize: 0, rowIconGap: 4, rowSpacing: 2,
     monthFont: 10, dayFont: 22, yearFont: 9, dateColW: 30, dateGap: 8, dividerH: 0,
     wellPadV: 5, wellPadH: 8, unitFont: 18, unitLabelFont: 7,
   },
   regular: {
-    cardPad: 10, titleFont: 15, titleLines: 1, titleGap: 1, rowFont: 11, rowIconSize: 11, rowIconGap: 5, rowSpacing: 3,
+    cardPad: 10, titleFont: 15, titleLines: 1, titleGap: 2, rowFont: 11, rowIconSize: 11, rowIconGap: 5, rowSpacing: 3,
     monthFont: 11, dayFont: 26, yearFont: 10, dateColW: 36, dateGap: 12, dividerH: 36,
+    pillFont: 9, pillPadV: 3, pillPadH: 6, pillGap: 6,
   },
   rich: {
-    cardPad: 16, titleFont: 18, titleLines: 1, titleGap: 3, rowFont: 13, rowIconSize: 13, rowIconGap: 6, rowSpacing: 6,
+    cardPad: 16, titleFont: 18, titleLines: 1, titleGap: 4, rowFont: 13, rowIconSize: 13, rowIconGap: 6, rowSpacing: 6,
     monthFont: 13, dayFont: 34, yearFont: 11, dateColW: 46, dateGap: 16, dividerH: 40,
+    pillFont: 10, pillPadV: 4, pillPadH: 7, pillGap: 8,
   },
 }
 
@@ -1828,8 +1831,9 @@ function addDateColumn(row, iso, p, t) {
   strut.size = new Size(t.dateColW, 1)
 }
 
-// Name, organizer, location (plus track configuration on the rich
-// card) and the red countdown line. Small keeps just the name (up to
+// The name with the countdown pill beside it, then the organizer and
+// location (plus track configuration on the rich card). No date line:
+// the date column already shows it. Small keeps just the name (up to
 // two lines) and the track: its well carries the countdown.
 function addCountdownInfo(row, p, next, t, rich) {
   const small = t === COUNTDOWN_TOKENS.small
@@ -1840,10 +1844,17 @@ function addCountdownInfo(row, p, next, t, rich) {
   // of sharing a left edge.
   col.topAlignContent()
 
-  const title = col.addText(next.event.name)
+  // Name, then the pill. Of the two, the pill is the less flexible (a
+  // few characters), so the row offers it its width first and the name
+  // truncates if anything has to.
+  const titleRow = col.addStack()
+  titleRow.centerAlignContent()
+  titleRow.spacing = t.pillGap
+  const title = titleRow.addText(next.event.name)
   title.font = rBoldFont(t.titleFont)
   title.textColor = p.fg
   title.lineLimit = t.titleLines
+  if (!small) addCountdownPill(titleRow, daysUntil(next.day.date), p, t)
 
   const lines = []
   if (next.event.organizer && !small) lines.push({ text: next.event.organizer })
@@ -1857,20 +1868,26 @@ function addCountdownInfo(row, p, next, t, rich) {
   if (rich && trackConfig) {
     lines.push({ icon: "point.topleft.down.curvedto.point.bottomright.up", text: trackConfig })
   }
-  if (!small) {
-    const days = daysUntil(next.day.date)
-    lines.push({
-      icon: "calendar",
-      text: `${next.day.label || weekdayLabel(next.day.date)} · in ${days} ${pluralize(days, "day")}`,
-      accent: true,
-    })
-  }
 
   col.addSpacer(t.titleGap)
   for (let i = 0; i < lines.length; i++) {
     if (i > 0) col.addSpacer(t.rowSpacing)
     addInfoRow(col, lines[i], p, t)
   }
+}
+
+// "IN 9 DAYS" — styled like the app's LIVE badge beside an event name
+// (StatusBadge): a small uppercase pill, red on a faint red tint.
+function addCountdownPill(row, days, p, t) {
+  const pill = row.addStack()
+  pill.backgroundColor = p.brandTint
+  pill.cornerRadius = 100
+  pill.setPadding(t.pillPadV, t.pillPadH, t.pillPadV, t.pillPadH)
+  pill.centerAlignContent()
+  const label = pill.addText(`in ${days} ${pluralize(days, "day")}`.toUpperCase())
+  label.font = rSemiboldFont(t.pillFont)
+  label.textColor = p.brand
+  label.lineLimit = 1
 }
 
 // Small-only: the countdown "well" — a red-tinted rounded box with the
@@ -1889,10 +1906,9 @@ function drawCountdownWell(container, next, p, t) {
   well.addSpacer()
 }
 
-// One info line: an optional SF Symbol, then the text. `accent` lines
-// (the countdown) are red and semibold. A line without an icon (the
-// organizer) sits flush with the title, like the app's name-over-
-// organizer.
+// One info line: an optional SF Symbol, then the text. A line without
+// an icon (the organizer) sits flush with the title, like the app's
+// name-over-organizer.
 function addInfoRow(col, row, p, t) {
   const stack = col.addStack()
   stack.centerAlignContent()
@@ -1902,12 +1918,12 @@ function addInfoRow(col, row, p, t) {
     if (sym) {
       const img = stack.addImage(sym.image)
       img.imageSize = new Size(t.rowIconSize, t.rowIconSize)
-      img.tintColor = row.accent ? p.brand : p.muted
+      img.tintColor = p.muted
     }
   }
   const text = stack.addText(row.text)
-  text.font = row.accent ? rSemiboldFont(t.rowFont) : rFont(t.rowFont)
-  text.textColor = row.accent ? p.brand : p.mutedStrong
+  text.font = rFont(t.rowFont)
+  text.textColor = p.mutedStrong
   text.lineLimit = 1
 }
 
