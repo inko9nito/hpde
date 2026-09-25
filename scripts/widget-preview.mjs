@@ -800,7 +800,7 @@ const SWEEP_DEVICES = ['375x667', '430x932']
 const SWEEP = [
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (long names)' },
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
-  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
+  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (4 upcoming, long names)' },
 ]
 const SCENARIOS = [
@@ -812,9 +812,11 @@ const SCENARIOS = [
   // designs' 16pt padding top and bottom.
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (online)', online: true },
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (online)', online: true },
+  { family: 'large', manifest: { events: UPCOMING_LONG.events.slice(0, 1) }, label: 'Large — countdown (online, 1 upcoming)', online: true },
+  { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (online, 4 upcoming)', online: true },
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
-  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming, rich)' },
-  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming, stacked)' },
+  { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
+  { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming: 2 + footer)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
   { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },

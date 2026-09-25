@@ -368,7 +368,7 @@ describe('scriptable widget loads and renders', () => {
     await expect(runWidget('small', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })
 
-  it('renders a single upcoming event as a rich card on Large', async () => {
+  it('renders a single upcoming event on Large', async () => {
     await expect(runWidget('large', FUTURE_MANIFEST)).resolves.toBeUndefined()
   })
 
@@ -402,18 +402,14 @@ describe('scriptable widget loads and renders', () => {
     expect(texts).toContain('Org A')
   })
 
-  it('draws no card container around a countdown event on Small', async () => {
-    await runWidget('small', UPCOMING_MULTI_MANIFEST)
-    const radii = (globalThis as any).__cornerRadii as number[]
-    // COUNTDOWN_CARD_RADIUS (20) is only ever applied by drawCountdownCard's
-    // container — the badge's and the bar's radii are Small's own.
-    expect(radii).not.toContain(20)
-  })
-
-  it('keeps the card container around a countdown event on Large (Medium is itself the card)', async () => {
-    await runWidget('large', UPCOMING_MULTI_MANIFEST)
-    const radii = (globalThis as any).__cornerRadii as number[]
-    expect(radii).toContain(20)
+  it('draws no card container around a countdown event, on any family', async () => {
+    // The designs have none: the widget itself is the card. The only
+    // rounded stacks are the badges (100) and the red bars (1).
+    for (const family of ['small', 'medium', 'large']) {
+      await runWidget(family, UPCOMING_MULTI_MANIFEST)
+      const radii = (globalThis as any).__cornerRadii as number[]
+      expect(new Set(radii)).toEqual(new Set([1, 100]))
+    }
   })
 
   it('never forces a countdown card to a large explicit height', async () => {
@@ -428,10 +424,13 @@ describe('scriptable widget loads and renders', () => {
     // height would be far larger (the old code divided most of a
     // ~130-345pt interior across 1-2 cards), so a ceiling just above
     // the badge still catches the regression without flagging those.
+    // Large's red bar runs beside three lines, 56pt: the one thing
+    // taller, and only a bar (2pt wide) may be.
     for (const family of ['small', 'medium', 'large']) {
       await runWidget(family, UPCOMING_MULTI_MANIFEST)
-      const heights = (globalThis as any).__sizeHeights as number[]
-      expect(heights.every(h => h <= 40)).toBe(true)
+      const sizes = (globalThis as any).__stackSizes as Array<{ width: number; height: number }>
+      expect(sizes.filter(s => s.height > 40 && s.width !== 2)).toEqual([])
+      expect(sizes.every(s => s.height <= 56)).toBe(true)
     }
   })
 
@@ -461,11 +460,11 @@ describe('scriptable widget loads and renders', () => {
     const i = texts.indexOf(months[m - 1])
     expect(i).toBeGreaterThan(-1)
     expect(texts[i + 1]).toBe(String(d))
-    // ...then the name with the countdown pill beside it. No separate
-    // date/weekday line: the date column already shows the date.
+    // ...then the name over its details. No separate date/weekday
+    // line: the date column already shows the date.
     const name = texts.indexOf('Upcoming A')
     expect(name).toBeGreaterThan(i)
-    expect(texts[name + 1]).toBe('IN 10 DAYS')
+    expect(texts[name + 1]).toBe('Org A')
     expect(texts.some(t => t.includes('Monday'))).toBe(false)
   })
 
@@ -531,12 +530,49 @@ describe('scriptable widget loads and renders', () => {
     }
   })
 
-  it('draws the checkered flag in the corner on Large (the featured cards\' designs have none)', async () => {
+  it('draws the checkered flag in the corner on Large with more than one event, as its design has it', async () => {
     // One flag: four filled shapes, on a transparent background (a
-    // DrawContext is opaque — black — by default), at screen scale.
+    // DrawContext is opaque — black — by default), at screen scale —
+    // after the background.
     const flag = { fills: 4, opaque: false, respectScreenScale: true }
     await runWidget('large', UPCOMING_MULTI_MANIFEST)
-    expect((globalThis as any).__drawn).toEqual([flag])
+    const drawn = (globalThis as any).__drawn as unknown[]
+    expect(drawn).toHaveLength(2)
+    expect(drawn[1]).toEqual(flag)
+    // With one event, the design has no flag: just the background.
+    await runWidget('large', FUTURE_MANIFEST)
+    expect((globalThis as any).__drawn).toHaveLength(1)
+  })
+
+  it("lays Large out as its designs: one event, with its badge above it", async () => {
+    const one = { events: [UPCOMING_MULTI_MANIFEST.events[0]] }
+    await runWidget('large', one)
+    const texts = (globalThis as any).__texts as string[]
+    const [, m, d] = isoDate(10).split('-').map(Number)
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    expect(texts).toEqual(['Upcoming track event', 'in 10 days', months[m - 1], String(d),
+      'Upcoming A', 'Org A', 'Track A', 'Cached schedule'])
+    // Its track across the bottom, the design's fainter 20% layer:
+    // this event has no trackId, so the placeholder flag, over the 382
+    // strips of Large's ground.
+    const drawn = (globalThis as any).__drawn as Array<{ fills: number; rectColors: Array<{ hex: string }> }>
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0].fills).toBe(4)
+    expect(drawn[0].rectColors[381]).toEqual({ hex: '#1b1b1b', alpha: 1 })
+  })
+
+  it("lays Large out as its designs: two events, each with its badge under it and its own track", async () => {
+    const withTracks = { events: UPCOMING_MULTI_MANIFEST.events.map((e, i) => ({ ...e, trackId: ['ecr-2-7', 'msrc-1-7', 'msrc-3-1'][i] })) }
+    await runWidget('large', withTracks)
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts[0]).toBe('Upcoming track events')
+    const a = texts.indexOf('Upcoming A')
+    const b = texts.indexOf('Upcoming B')
+    expect(texts.slice(a, a + 4)).toEqual(['Upcoming A', 'Org A', 'Track A', 'in 10 days'])
+    expect(texts.slice(b, b + 4)).toEqual(['Upcoming B', 'Org B', 'Track B', 'in 17 days'])
+    // Each event's own track: ECR's one path, MSRC 1.7's two.
+    const drawn = (globalThis as any).__drawn as Array<{ fills: number }>
+    expect(drawn[0].fills).toBe(1 + 2)
   })
 
   it('never shows a "more upcoming" footer on Small, however many events are left over', async () => {
@@ -545,19 +581,16 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
-  it('still shows the "more upcoming" footer on Large once more than three are coming', async () => {
-    const fourth = { ...UPCOMING_MULTI_MANIFEST.events[2], id: 'upcoming-d', name: 'Upcoming D',
-      days: [{ date: isoDate(31), label: 'Monday', activities: [] }] }
-    await runWidget('large', { events: [...UPCOMING_MULTI_MANIFEST.events, fourth] })
-    const texts = (globalThis as any).__texts as string[]
-    expect(texts.some(t => t.includes('more upcoming'))).toBe(true)
-  })
-
-  it('stacks up to three upcoming cards on Large', async () => {
+  it('shows two events on Large, and "N more upcoming events" for the rest', async () => {
     await runWidget('large', UPCOMING_MULTI_MANIFEST)
-    const texts = (globalThis as any).__texts as string[]
-    for (const name of ['Upcoming A', 'Upcoming B', 'Upcoming C']) expect(texts).toContain(name)
-    // All three fit, so nothing is left for a "more upcoming" footer.
+    let texts = (globalThis as any).__texts as string[]
+    expect(texts).toContain('Upcoming A')
+    expect(texts).toContain('Upcoming B')
+    expect(texts).not.toContain('Upcoming C')
+    expect(texts).toContain('1 more upcoming event')
+    // Exactly two: no footer.
+    await runWidget('large', { events: UPCOMING_MULTI_MANIFEST.events.slice(0, 2) })
+    texts = (globalThis as any).__texts as string[]
     expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
@@ -875,18 +908,25 @@ describe('design guardrails (static source checks)', () => {
     // AWAY" into "DAYS" / "AWAY", on a real device — invisible in this
     // repo's simulator because Chromium's flexbox doesn't collapse the
     // same way. The featured card is as narrow on Small, so every text
-    // on it (month, day, name, organizer) and the badge's label must be
-    // one line.
+    // on it — the date, name and lines under it, Large's header and
+    // footer, the badge — must be one line.
     const bodyOf = (name: string) => {
       const start = widgetSrc.indexOf(`function ${name}(`)
       expect(start).toBeGreaterThan(-1)
       return widgetSrc.slice(start, widgetSrc.indexOf('\n}', start))
     }
-    const small = bodyOf('renderFeaturedCountdown')
-    const texts = small.match(/const (\w+) = \w+\.addText\(/g)!.map(m => m.split(' ')[1])
-    expect(texts).toEqual(['month', 'day', 'title', 'by'])
-    for (const t of texts) expect(small).toMatch(new RegExp(`${t}\\.lineLimit\\s*=\\s*1\\b`))
-    expect(bodyOf('addCountdownPill')).toMatch(/label\.lineLimit\s*=\s*1/)
+    const expected = {
+      addFeaturedDate: ['month', 'day'],
+      addFeaturedInfo: ['title', 'text'],
+      renderLargeCountdown: ['title', 'more'],
+      addCountdownPill: ['label'],
+    }
+    for (const [fn, names] of Object.entries(expected)) {
+      const body = bodyOf(fn)
+      const texts = [...body.matchAll(/const (\w+) = \w+\.addText\(/g)].map(m => m[1])
+      expect(texts).toEqual(names)
+      for (const t of texts) expect(body).toMatch(new RegExp(`${t}\\.lineLimit\\s*=\\s*1\\b`))
+    }
   })
 })
 

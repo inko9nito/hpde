@@ -377,9 +377,10 @@ function palette(dark) {
         pastOpacity: 0.6 }
 }
 
-// The Small and Medium countdowns are the app's featured event card
-// (#204), near-black whatever the phone's appearance, as their Figma
-// designs have it (HPDE file, nodes 2068:7908 and 2069:8111): white
+// The countdowns are the app's featured event card (#204), near-black
+// whatever the phone's appearance, as their Figma designs have it (HPDE
+// file: Small 2068:7908, Medium 2069:8111, Large 2069:8015 with one
+// event and 2069:8027 with more): white
 // text, the month and the bar beside the name in `accent`, the
 // organizer white at 60%, a solid red badge with white text. The track
 // is #646872 on a 35% layer (then faded, see FEATURED_TRACK); the other
@@ -393,6 +394,11 @@ const FEATURED_PALETTE = {
   badgeFg: new Color("#ffffff"),
   track: new Color("#646872", 0.35),
   trackGhost: new Color("#646872", 0.06),
+  // Large with one event: its big track is fainter, a 20% layer.
+  trackFaint: new Color("#646872", 0.2),
+  trackFaintGhost: new Color("#646872", 0.033),
+  // Large's header flag: white at 60%.
+  flag: new Color("#ffffff", 0.6),
 }
 
 // The featured cards' ground: a near-black gradient, top to bottom,
@@ -418,11 +424,17 @@ function featuredGround(f, alpha = 1) {
   return new Color(`#${hex}`, alpha)
 }
 
-// The featured card also sets the widget's background color to the
-// ground's middle, replacing the phone-appearance one makeWidget set:
-// whichever of color and image Scriptable shows, it's dark.
-function setFeaturedGround(w) {
+// The card's background: its ground and tracks (`items`' tracks at
+// `places`, see FEATURED_TRACK) as the widget's background image. The
+// background color is set too, to the ground's middle, replacing the
+// phone-appearance one makeWidget set: whichever of color and image
+// Scriptable shows, it's dark.
+function setFeaturedGround(w, family, items, places) {
   w.backgroundColor = featuredGround(0.5)
+  const tracks = places.map((place, i) => ({ trackId: items[i] && items[i].event.trackId, place }))
+  const image = featuredGroundImage(family, tracks, FEATURED_PALETTE)
+  if (image) w.backgroundImage = image
+  else w.backgroundGradient = featuredGradient()
 }
 
 // Without DrawContext (no background image), the ground alone.
@@ -544,10 +556,10 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
 
   const picked = pickToday(manifest)
   if (!picked) {
-    // Medium only has room for one countdown card; Large stacks three.
+    // Small and Medium show one event; Large up to two.
     const family = config.widgetFamily || "medium"
     const isLarge = family === "large" || family === "extraLarge"
-    const upcoming = pickUpcoming(manifest, isLarge ? 3 : 1)
+    const upcoming = pickUpcoming(manifest, isLarge ? 2 : 1)
     const footer = statusFooterBits(stale, parsed, notifStatus).length > 0
     renderNoEvents(w, p, stale, upcoming, footer)
     drawStatusFooter(w, p, stale, parsed, notifStatus)
@@ -748,35 +760,6 @@ function drawMoreActivitiesFooter(w, p, count) {
   text.font = rFont(11)
   text.textColor = p.muted
   row.addSpacer()
-}
-
-// Same "N more ___" convention as drawMoreActivitiesFooter, for
-// upcoming events that didn't fit in the countdown card(s), with a
-// short rule either side: "— 2 more upcoming events —". The rules are a
-// fixed length, and the flex spacers around the group center it: a
-// spacer only gets what's left once the text has its width. Rules that
-// stretched to the widget's edges (#204) were flexible views beside the
-// text, so SwiftUI gave the text only a third of the row ("1 more
-// upcoming…") — and the right-hand one ran into the widget's edge,
-// which has no right padding.
-function drawMoreUpcomingFooter(w, p, count) {
-  const row = w.addStack()
-  row.centerAlignContent()
-  row.spacing = 8
-  row.addSpacer()
-  addFooterRule(row, p)
-  const text = row.addText(`${count} more upcoming event${count === 1 ? "" : "s"}`)
-  text.font = rFont(11)
-  text.textColor = p.muted
-  text.lineLimit = 1
-  addFooterRule(row, p)
-  row.addSpacer()
-}
-
-function addFooterRule(row, p) {
-  const rule = row.addStack()
-  rule.backgroundColor = p.divider
-  rule.size = new Size(COUNTDOWN_FOOTER_RULE_WIDTH, 1)
 }
 
 function renderHeader(w, event, day, p, stale) {
@@ -1525,20 +1508,6 @@ function renderCenteredMessage(w, p, text) {
   w.addSpacer()
 }
 
-// "Clockwise" -> "CW (clockwise)", "Counter-clockwise" -> "CCW
-// (counter-clockwise)" — mirrors the web app's abbreviateDirection so
-// the widget and the event-details drawer read the same way.
-function abbreviateDirection(direction) {
-  const normalized = direction.trim().toLowerCase()
-  if (normalized === "clockwise") return "CW (clockwise)"
-  if (normalized === "counter-clockwise" || normalized === "counterclockwise") return "CCW (counter-clockwise)"
-  return direction
-}
-
-function formatTrackConfig(configuration, direction) {
-  return [configuration, direction ? abbreviateDirection(direction) : null].filter(Boolean).join(" ")
-}
-
 function pluralize(n, word) {
   return n === 1 ? word : `${word}s`
 }
@@ -1553,13 +1522,10 @@ function daysUntil(iso) {
   return Math.round((target - todayStart) / (24 * 60 * 60 * 1000))
 }
 
-// There's no event today, but a future one is scheduled — show a
-// countdown card instead of a plain "Next: <name>" line. Laid out like
-// the app's event cards (#204): the date stacked on the left (red month
-// over a big day number, as the app's DateBlock), then the
-// name with a red "IN 9 DAYS" pill beside it (where the app puts its
-// LIVE badge), over the organizer and the location.
-const COUNTDOWN_CARD_GAP = 10
+// There's no event today, but a future one is scheduled — show the
+// app's featured event card instead of a plain "Next: <name>" line
+// (#204): the red month over the day, the name and its details beside
+// a red bar, and a red "in 9 days" badge, over the track's shape.
 
 // ----- how the countdown view is laid out, and why -----
 //
@@ -1575,11 +1541,11 @@ const COUNTDOWN_CARD_GAP = 10
 //      owner's 375×812 phone, 364pt on a Pro Max); an info column sized
 //      228pt "because the card is 332pt wide" left the countdown well
 //      25pt on the owner's phone, so it read "•••" / "DAY…". Explicit
-//      widths here are only small, content-sized constants (the date
-//      column, the footer's short rules).
+//      widths here are only small, content-sized constants (Large's
+//      date column, the red bar).
 //   2. At most one child in a row can truncate. The info column is the
-//      only flexible child of a card row (the date column is pinned to
-//      a fixed width by a strut, see addDateColumn), so it gets all the
+//      only flexible child of an event row (Large's date column is
+//      pinned to a fixed width by a strut, see addFeaturedDate), so it gets all the
 //      width left and its lineLimit=1 texts truncate only when they
 //      truly don't fit. A row with two stretchy things beside a text —
 //      the old "line · N more upcoming · line" footer — gives the text
@@ -1596,32 +1562,10 @@ const COUNTDOWN_CARD_GAP = 10
 // bug (#180 follow-ups) impossible to reintroduce, because there's only
 // one place to change a tier's spacing.
 //
-// Tiers, in increasing available space:
-//   regular — Large when it's stacking 2–3 cards.
-//   rich    — Large showing exactly one card: bigger type, and the
-//             track configuration row.
-//
-// Shared (non-tiered) geometry:
+// The zero state's header keeps the widget's margin:
 const COUNTDOWN_MARGIN = 8       // outer left/right margin — header AND cards
-const COUNTDOWN_CARD_RADIUS = 20
-// The "N more upcoming" footer's short rules either side of its text.
-const COUNTDOWN_FOOTER_RULE_WIDTH = 20
 
-// `dateColW` is the date column's fixed width — wide enough for the
-// widest month ("MAY") and a two-digit day at that tier's sizes, so the
-// info column lines up across stacked cards whatever
-// the date. `dateGap` is the gap between the date and the info column.
 const COUNTDOWN_TOKENS = {
-  regular: {
-    cardPad: 10, titleFont: 15, titleLines: 1, titleGap: 2, rowFont: 11, rowIconSize: 11, rowIconGap: 5, rowSpacing: 3,
-    monthFont: 11, dayFont: 26, yearFont: 10, dateColW: 36, dateGap: 12,
-    pillFont: 9, pillPadV: 3, pillPadH: 6, pillGap: 6,
-  },
-  rich: {
-    cardPad: 16, titleFont: 18, titleLines: 1, titleGap: 4, rowFont: 13, rowIconSize: 13, rowIconGap: 6, rowSpacing: 6,
-    monthFont: 13, dayFont: 34, yearFont: 11, dateColW: 46, dateGap: 16,
-    pillFont: 10, pillPadV: 4, pillPadH: 7, pillGap: 8,
-  },
   // The Small and Medium featured card (renderFeaturedCountdown), from
   // their Figma designs (HPDE file, nodes 2068:7908 and 2069:8111), where
   // the 155pt-tall widgets are 392px: 16pt in from every edge, and less
@@ -1635,10 +1579,21 @@ const COUNTDOWN_TOKENS = {
     titleFont: 13.5, rowFont: 12.5, rowGap: 4,
     pillFont: 12, pillPadV: 2.5, pillPadH: 7,
   },
-}
-
-function countdownTier(rich) {
-  return rich ? "rich" : "regular"
+  // Large (renderLargeCountdown), same type and badge, from its designs
+  // (2069:8015, 2069:8027). The date is a `dateColW` column, so names
+  // line up across events whatever the date; the bar runs beside
+  // three lines. With one event, `headerGap` and `badgeGap` space the
+  // header, badge and event; with more, each event's badge sits
+  // `badgeTop` under it, in line with the bar.
+  large: {
+    pad: 16, padWithFooter: 10,
+    headerFont: 12.5, flagWidth: 25, headerGap: 12, badgeGap: 42, badgeTop: 11.5,
+    monthFont: 13, dayFont: 29, dateColW: 45,
+    barW: 2, barH: 56, barGap: 6,
+    titleFont: 13.5, rowFont: 12.5, rowGap: 3,
+    pillFont: 12, pillPadV: 2.5, pillPadH: 7,
+    footerFont: 12.5,
+  },
 }
 
 // ----- the app's checkered flag -----
@@ -1795,7 +1750,9 @@ function drawTrackShape(ctx, trackId, x0, y0, width, look) {
 // opaque. Some shapes' other configuration runs past the window the app
 // crops them to (TRACK_SHAPE_WINDOW), and the canvas here is the whole
 // widget, so nothing else would cut it off.
-function fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, fade) {
+// Only rows `from` to `to` (a band of the canvas: with more than one
+// track, each fades and clips its own).
+function fadeTrackDiagonally(ctx, x0, y0, width, height, W, from, to, groundAt, fade) {
   const { a, b, c } = fade
   const alphaAt = (x, y) => {
     const u = (x + 0.5 - x0) / width
@@ -1803,7 +1760,7 @@ function fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, fade) {
     if (u < 0 || u > 1 || v < 0 || v > 1) return 1
     return Math.round(Math.max(0, Math.min(1, a * u + b * v + c)) * 100) / 100
   }
-  for (let y = 0; y < H; y++) {
+  for (let y = from; y < to; y++) {
     let x = 0
     while (x < W) {
       const alpha = alphaAt(x, y)
@@ -1818,26 +1775,35 @@ function fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, fade) {
   }
 }
 
-// Where each family's design puts the track, as fractions of the
-// widget (x and w of its width, y of its height), and the fade of its
-// Figma fill (HPDE file: Small 2068:7914, Medium 2069:8118).
+// Where each design puts the track, as fractions of the widget (x and w
+// of its width, y of its height), the fade of its Figma fill, and how
+// strong it is. HPDE file: Small 2068:7914, Medium 2069:8118, Large
+// with one event 2069:8166, and with more 2069:8066 / 2069:8079 (one
+// beside each event, Small's size and fade).
+const SMALL_FADE = { a: -0.9994, b: 0.7678, c: 0.6786 }
 const FEATURED_TRACK = {
-  small: { x: 0.35, y: 0.138, w: 0.772, fade: { a: -0.9994, b: 0.7678, c: 0.6786 } },
-  medium: { x: 0.3184, y: 0.1658, w: 0.7155, fade: { a: -1.0417, b: 0.5806, c: 0.9411 } },
+  small: [{ x: 0.35, y: 0.138, w: 0.772, fade: SMALL_FADE }],
+  medium: [{ x: 0.3184, y: 0.1658, w: 0.7155, fade: { a: -1.0417, b: 0.5806, c: 0.9411 } }],
+  largeOne: [{ x: 0.0872, y: 0.5647, w: 0.9722, fade: { a: -1.4848, b: 0.4671, c: 0.7276 }, faint: true }],
+  largeMany: [
+    { x: 0.6574, y: 0.2153, w: 0.3656, fade: SMALL_FADE },
+    { x: 0.6574, y: 0.5796, w: 0.3656, fade: SMALL_FADE },
+  ],
 }
 // A widget's background image fills it (scaled to cover, centered), so
 // each family's is drawn once, at its largest widget's size (a Pro
-// Max's), and scales to the others: Small's are all square, and
-// Medium's differ in shape by under 3%, a point or two cropped off
-// two edges.
-const FEATURED_GROUND_SIZE = { small: [170, 170], medium: [364, 170] }
+// Max's), and scales to the others: Small's are all square; Medium's
+// and Large's differ in shape by under 4%, a few points cropped off two
+// edges.
+const FEATURED_GROUND_SIZE = { small: [170, 170], medium: [364, 170], large: [364, 382] }
 
-// The card's background: the ground, then the track shape across its
-// top right, running off the edge, faded along its diagonal.
-function featuredGroundImage(family, trackId, F) {
+// The card's background: the ground, then each track shape (`tracks`,
+// one per placement), running off the right edge, faded along its
+// diagonal. The shapes go down first; then each fades and clips its own
+// band of rows, the bands meeting halfway between tracks.
+function featuredGroundImage(family, tracks, F) {
   if (typeof DrawContext === "undefined") return null
   const [W, H] = FEATURED_GROUND_SIZE[family]
-  const place = FEATURED_TRACK[family]
   const ctx = new DrawContext()
   ctx.size = new Size(W, H)
   ctx.respectScreenScale = true
@@ -1847,12 +1813,21 @@ function featuredGroundImage(family, trackId, F) {
     ctx.setFillColor(groundAt(y, 1))
     ctx.fillRect(new Rect(0, y, W, 1))
   }
-  const x0 = place.x * W
-  const y0 = place.y * H
-  const width = place.w * W
-  const look = { track: F.track, ghost: F.trackGhost, placeholder: F.track }
-  const height = drawTrackShape(ctx, trackId, x0, y0, width, look)
-  fadeTrackDiagonally(ctx, x0, y0, width, height, W, H, groundAt, place.fade)
+  const boxes = tracks.map(({ trackId, place }) => {
+    const x0 = place.x * W
+    const y0 = place.y * H
+    const width = place.w * W
+    const look = place.faint
+      ? { track: F.trackFaint, ghost: F.trackFaintGhost, placeholder: F.trackFaint }
+      : { track: F.track, ghost: F.trackGhost, placeholder: F.track }
+    const height = drawTrackShape(ctx, trackId, x0, y0, width, look)
+    return { x0, y0, width, height, fade: place.fade }
+  })
+  boxes.forEach((b, i) => {
+    const from = i === 0 ? 0 : Math.round((boxes[i - 1].y0 + boxes[i - 1].height + b.y0) / 2)
+    const to = i === boxes.length - 1 ? H : Math.round((b.y0 + b.height + boxes[i + 1].y0) / 2)
+    fadeTrackDiagonally(ctx, b.x0, b.y0, b.width, b.height, W, from, to, groundAt, b.fade)
+  })
   return ctx.getImage()
 }
 
@@ -1929,38 +1904,15 @@ function renderUpcomingHeader(w, p, family) {
 // up to three), plus a "N more upcoming" footer for whatever didn't fit —
 // same convention as drawMoreActivitiesFooter for a day's activities.
 function renderCountdownState(w, p, upcoming, footer) {
-  const { items, total } = upcoming
   const family = config.widgetFamily || "medium"
-  const isLarge = family === "large" || family === "extraLarge"
-  const remaining = total - items.length
-  const showMoreFooter = remaining > 0
-
   // Small and Medium are each one featured card, with no room for a
   // "more upcoming" footer.
   if (family === "small" || family === "medium") {
-    renderFeaturedCountdown(w, items[0], footer, family)
+    renderFeaturedCountdown(w, upcoming.items[0], footer, family)
     return
   }
 
-  renderUpcomingHeader(w, p, family)
-
-  // A single upcoming event gets the rich card on Large; stacking a
-  // second card puts them all into the denser regular layout.
-  const rich = isLarge && items.length === 1
-
-  // Cards size to their own content; real leftover space collects in
-  // one flex spacer at the very end (forcing cards to a computed height
-  // centered short content in an oversized box — uneven padding).
-  for (let i = 0; i < items.length; i++) {
-    if (i > 0) w.addSpacer(COUNTDOWN_CARD_GAP)
-    drawCountdownCard(w, p, items[i], rich)
-  }
-
-  if (showMoreFooter) {
-    w.addSpacer(6)
-    drawMoreUpcomingFooter(w, p, remaining)
-  }
-  w.addSpacer()
+  renderLargeCountdown(w, upcoming, footer)
 }
 
 // Small and Medium: the featured card as their Figma designs have it
@@ -1977,13 +1929,93 @@ function renderFeaturedCountdown(w, next, footer, family) {
   const t = COUNTDOWN_TOKENS.featured
   const padV = footer ? t.padWithFooter : t.pad
   w.setPadding(padV, t.pad, padV, t.pad)
-  setFeaturedGround(w)
-  const ground = featuredGroundImage(family, next.event.trackId, F)
-  if (ground) w.backgroundImage = ground
-  else w.backgroundGradient = featuredGradient()
+  setFeaturedGround(w, family, [next], FEATURED_TRACK[family])
 
   const dateRow = w.addStack()
-  const date = dateRow.addStack()
+  addFeaturedDate(dateRow, next, F, t)
+  dateRow.addSpacer()
+
+  w.addSpacer(t.dateGap)
+  const block = w.addStack()
+  block.centerAlignContent()
+  // The organizer, as the design has it (the track, if there's none).
+  addFeaturedInfo(block, [next.event.organizer || next.event.track], next, F, t)
+  block.addSpacer()
+
+  w.addSpacer()
+  addFeaturedBadge(w, next, F, t)
+}
+
+// Large: its designs have a header, then either one event with its
+// badge above it and a big faint track across the bottom, or two
+// events, each with its badge under it and its own track beside it,
+// and "N more upcoming events" at the bottom. Flex spacers between the
+// events spread them down the widget.
+function renderLargeCountdown(w, upcoming, footer) {
+  const F = FEATURED_PALETTE
+  const t = COUNTDOWN_TOKENS.large
+  const { items, total } = upcoming
+  const one = items.length === 1
+  const padV = footer ? t.padWithFooter : t.pad
+  w.setPadding(padV, t.pad, padV, t.pad)
+  setFeaturedGround(w, "large", items, one ? FEATURED_TRACK.largeOne : FEATURED_TRACK.largeMany)
+
+  const head = w.addStack()
+  head.centerAlignContent()
+  const title = head.addText(one ? "Upcoming track event" : "Upcoming track events")
+  title.font = rFont(t.headerFont)
+  title.textColor = F.subtle
+  title.lineLimit = 1
+  head.addSpacer()
+  if (!one) addCheckeredFlag(head, F.flag, t.flagWidth)
+
+  if (one) {
+    w.addSpacer(t.headerGap)
+    addFeaturedBadge(w, items[0], F, t)
+    w.addSpacer(t.badgeGap)
+    addLargeEvent(w, items[0], F, t)
+    w.addSpacer()
+    return
+  }
+
+  for (const next of items) {
+    w.addSpacer()
+    addLargeEvent(w, next, F, t)
+    w.addSpacer(t.badgeTop)
+    const badgeRow = w.addStack()
+    badgeRow.addSpacer(t.dateColW)
+    addCountdownPill(badgeRow, daysUntil(next.day.date), F.badgeBg, F.badgeFg, t)
+    badgeRow.addSpacer()
+  }
+  w.addSpacer()
+  const remaining = total - items.length
+  if (remaining > 0) {
+    const row = w.addStack()
+    row.addSpacer()
+    const more = row.addText(`${remaining} more upcoming event${remaining === 1 ? "" : "s"}`)
+    more.font = rFont(t.footerFont)
+    more.textColor = F.subtle
+    more.lineLimit = 1
+    row.addSpacer()
+  }
+}
+
+// One of Large's events: the date in its column, then the bar beside
+// the name, organizer and track.
+function addLargeEvent(w, next, F, t) {
+  const row = w.addStack()
+  row.topAlignContent()
+  addFeaturedDate(row, next, F, t, t.dateColW)
+  addFeaturedInfo(row, [next.event.organizer, next.event.track], next, F, t)
+  row.addSpacer()
+}
+
+// The red month over the day, left-aligned. With `width`, the column is
+// that wide: its last child is a 1pt-tall empty strut at that width (a
+// VStack is as wide as its widest child), so names line up whatever
+// the date.
+function addFeaturedDate(parent, next, F, t, width) {
+  const date = parent.addStack()
   date.layoutVertically()
   date.topAlignContent()
   const [, m, d] = next.day.date.split("-").map(Number)
@@ -1995,172 +2027,56 @@ function renderFeaturedCountdown(w, next, footer, family) {
   day.font = rBoldFont(t.dayFont)
   day.textColor = F.fg
   day.lineLimit = 1
-  dateRow.addSpacer()
+  if (width) {
+    const strut = date.addStack()
+    strut.size = new Size(width, 1)
+  }
+}
 
-  w.addSpacer(t.dateGap)
-  const block = w.addStack()
-  block.centerAlignContent()
-  const bar = block.addStack()
+// The red bar beside the name and, under it, each of `lines` that's
+// there (white at 60%).
+function addFeaturedInfo(parent, lines, next, F, t) {
+  const bar = parent.addStack()
   bar.size = new Size(t.barW, t.barH)
   bar.backgroundColor = F.accent
   bar.cornerRadius = 1
-  block.addSpacer(t.barGap)
-  const col = block.addStack()
+  parent.addSpacer(t.barGap)
+  const col = parent.addStack()
   col.layoutVertically()
   col.topAlignContent()
   const title = col.addText(next.event.name)
   title.font = rSemiboldFont(t.titleFont)
   title.textColor = F.fg
   title.lineLimit = 1
-  // The organizer, as the design has it (the track, if there's none).
-  const byline = next.event.organizer || next.event.track
-  if (byline) {
+  for (const line of lines.filter(Boolean)) {
     col.addSpacer(t.rowGap)
-    const by = col.addText(byline)
-    by.font = rFont(t.rowFont)
-    by.textColor = F.subtle
-    by.lineLimit = 1
+    const text = col.addText(line)
+    text.font = rFont(t.rowFont)
+    text.textColor = F.subtle
+    text.lineLimit = 1
   }
-  block.addSpacer()
-
-  w.addSpacer()
-  const badgeRow = w.addStack()
-  addCountdownPill(badgeRow, daysUntil(next.day.date), F.badgeBg, F.badgeFg, t, true)
-  badgeRow.addSpacer()
 }
 
-function drawCountdownCard(w, p, next, rich) {
-  const t = COUNTDOWN_TOKENS[countdownTier(rich)]
-
-  const outer = w.addStack()
-  outer.addSpacer(COUNTDOWN_MARGIN)
-  const card = outer.addStack()
-  card.backgroundColor = p.cardBg
-  card.cornerRadius = COUNTDOWN_CARD_RADIUS
-  card.setPadding(t.cardPad, t.cardPad, t.cardPad, t.cardPad)
-  drawCountdownRow(card, p, next, t, rich)
-  outer.addSpacer(COUNTDOWN_MARGIN)
-}
-
-// [date column] [info column] — then a trailing flex spacer,
-// which stretches the row (and the card around it) to the full width
-// without competing with the info column for it (see the layout rules
-// above).
-function drawCountdownRow(row, p, next, t, rich) {
-  row.centerAlignContent()
-  addDateColumn(row, next.day.date, p, t)
-  row.addSpacer(t.dateGap)
-  addCountdownInfo(row, p, next, t, rich)
+// The badge on a row of its own, at the left.
+function addFeaturedBadge(w, next, F, t) {
+  const row = w.addStack()
+  addCountdownPill(row, daysUntil(next.day.date), F.badgeBg, F.badgeFg, t)
   row.addSpacer()
 }
 
-// Red month over a big day number (and the year, when it isn't this
-// year) — the app's DateBlock. The last child is a 1pt-tall empty
-// strut at the column's fixed width: a VStack is as wide as its widest
-// child and centers the rest on it (centerAlignContent, the same
-// cross-axis centering the well's number relies on), so the column is
-// exactly dateColW wide with the date centered in it, whatever the
-// month and day. That keeps the info column in the same
-// place on stacked cards, without asking a fixed-size stack to center
-// its own content (which mis-centered on-device, #202).
 const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-function addDateColumn(row, iso, p, t) {
-  const [y, m, d] = iso.split("-").map(Number)
-  const col = row.addStack()
-  col.layoutVertically()
-  col.centerAlignContent()
-  const month = col.addText(MONTH_ABBR[m - 1])
-  month.font = rSemiboldFont(t.monthFont)
-  month.textColor = p.brand
-  month.lineLimit = 1
-  const day = col.addText(String(d))
-  day.font = rBoldFont(t.dayFont)
-  day.textColor = p.fg
-  day.lineLimit = 1
-  if (y !== new Date().getFullYear()) {
-    const year = col.addText(String(y))
-    year.font = rFont(t.yearFont)
-    year.textColor = p.muted
-    year.lineLimit = 1
-  }
-  const strut = col.addStack()
-  strut.size = new Size(t.dateColW, 1)
-}
 
-// The name with the countdown pill beside it, then the organizer and
-// location (plus track configuration on the rich card). No date line:
-// the date column already shows it.
-function addCountdownInfo(row, p, next, t, rich) {
-  const col = row.addStack()
-  col.layoutVertically()
-  // A VStack's real default cross-axis alignment is center — without
-  // this, rows of different widths would center on each other instead
-  // of sharing a left edge.
-  col.topAlignContent()
-
-  // Name, then the pill. Of the two, the pill is the less flexible (a
-  // few characters), so the row offers it its width first and the name
-  // truncates if anything has to.
-  const titleRow = col.addStack()
-  titleRow.centerAlignContent()
-  titleRow.spacing = t.pillGap
-  const title = titleRow.addText(next.event.name)
-  title.font = rBoldFont(t.titleFont)
-  title.textColor = p.fg
-  title.lineLimit = t.titleLines
-  addCountdownPill(titleRow, daysUntil(next.day.date), p.brandTint, p.brand, t)
-
-  // Same fields and icons as the app's event details (EventInfo):
-  // Users for the organizer, MapPin for the track. The app shows the
-  // city only as the track's subtitle, so the widget leaves it out.
-  const lines = []
-  if (next.event.organizer) lines.push({ icon: "person.2", text: next.event.organizer })
-  if (next.event.track) lines.push({ icon: "mappin", text: next.event.track })
-  const trackConfig = formatTrackConfig(next.event.configuration, next.event.direction)
-  if (rich && trackConfig) {
-    lines.push({ icon: "point.topleft.down.curvedto.point.bottomright.up", text: trackConfig })
-  }
-
-  col.addSpacer(t.titleGap)
-  for (let i = 0; i < lines.length; i++) {
-    if (i > 0) col.addSpacer(t.rowSpacing)
-    addInfoRow(col, lines[i], p, t)
-  }
-}
-
-// "IN 9 DAYS" — styled like the app's LIVE badge beside an event name
-// (StatusBadge): a small uppercase pill, red on a faint red tint.
-// Small's design sets it in lowercase, "in 9 days".
-function addCountdownPill(row, days, bg, fg, t, lowercase = false) {
+// "in 9 days": a solid pill, as the designs have it.
+function addCountdownPill(row, days, bg, fg, t) {
   const pill = row.addStack()
   pill.backgroundColor = bg
   pill.cornerRadius = 100
   pill.setPadding(t.pillPadV, t.pillPadH, t.pillPadV, t.pillPadH)
   pill.centerAlignContent()
-  const text = `in ${days} ${pluralize(days, "day")}`
-  const label = pill.addText(lowercase ? text : text.toUpperCase())
+  const label = pill.addText(`in ${days} ${pluralize(days, "day")}`)
   label.font = rSemiboldFont(t.pillFont)
   label.textColor = fg
   label.lineLimit = 1
-}
-
-// One info line: an SF Symbol, then the text.
-function addInfoRow(col, row, p, t) {
-  const stack = col.addStack()
-  stack.centerAlignContent()
-  stack.spacing = t.rowIconGap
-  if (row.icon && t.rowIconSize > 0 && typeof SFSymbol !== "undefined") {
-    const sym = SFSymbol.named(row.icon)
-    if (sym) {
-      const img = stack.addImage(sym.image)
-      img.imageSize = new Size(t.rowIconSize, t.rowIconSize)
-      img.tintColor = p.muted
-    }
-  }
-  const text = stack.addText(row.text)
-  text.font = rFont(t.rowFont)
-  text.textColor = p.mutedStrong
-  text.lineLimit = 1
 }
 
 function renderError(err) {
