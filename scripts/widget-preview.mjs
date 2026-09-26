@@ -460,6 +460,10 @@ const SF_SYMBOL_TO_LUCIDE = {
   car: 'car',
   graduationcap: 'graduation-cap',
   'fork.knife': 'utensils',
+  // The live view's parameter chips (#291).
+  bell: 'bell',
+  'bell.slash': 'bell-off',
+  'exclamationmark.triangle': 'triangle-alert',
   // Track configuration icon: SF Symbol is an arrow curving from
   // top-left down to bottom-right. Lucide's closest match is `route`
   // (a curved path between two points), same intent — a track shape.
@@ -745,6 +749,45 @@ const RICH_MANIFEST = {
   }],
 }
 
+// An event day on a fixed date, for scenarios with a frozen clock
+// (`at`): a run-group filter and alert time shown in chips (#291)
+// don't depend on when the preview runs. Saturday of the TDE at MSRC
+// 1.7 (scripts/fixtures/showcase), trimmed, plus Sunday's SCCA event,
+// whose Blue group isn't at this one.
+const LIVE_DAY = '2026-09-12'
+const LIVE_MANIFEST = {
+  events: [{
+    id: 'tde', name: 'TDE at MSRC 1.7CW',
+    runGroups: [
+      { id: 'instructors', label: 'Instructors', color: '#18181b' },
+      { id: 'pink', label: 'Pink', color: '#db2777' },
+      { id: 'purple', label: 'Purple', color: '#9333ea' },
+      { id: 'orange', label: 'Orange', color: '#ea580c' },
+    ],
+    days: [{
+      date: LIVE_DAY, label: 'Saturday',
+      activities: [
+        { time: '07:30', type: 'general', label: 'Mandatory drivers meeting', subtitle: 'MSRC clubhouse upstairs' },
+        { time: '08:00', type: 'general', label: 'Track goes hot' },
+        { time: '08:30', type: 'session', onTrack: ['pink'], inClass: [] },
+        { time: '08:55', type: 'session', onTrack: ['purple'], inClass: ['pink'] },
+        { time: '09:30', type: 'session', onTrack: ['orange'], inClass: ['purple'] },
+        { time: '09:55', type: 'session', onTrack: ['instructors'], inClass: ['orange'] },
+        { time: '10:25', type: 'session', onTrack: ['pink'], inClass: [] },
+        { time: '10:50', type: 'session', onTrack: ['purple'], inClass: [] },
+        { time: '11:15', type: 'session', onTrack: ['orange'], inClass: ['purple'] },
+        { time: '11:40', type: 'lunch', label: 'Lunch / Lead-follow laps', subtitle: '40 minutes' },
+        { time: '13:50', type: 'session', onTrack: ['orange'], inClass: ['purple'] },
+        { time: '16:50', type: 'general', label: 'Track goes cold' },
+      ],
+    }],
+  }, {
+    id: 'scca', name: 'MSR SCCA',
+    runGroups: [{ id: 'blue', label: 'Blue', color: '#2563eb' }],
+    days: [{ date: '2026-09-13', label: 'Sunday', activities: [] }],
+  }],
+}
+
 const UPCOMING_MULTI = {
   events: [
     { id: 'a', name: 'Test Event', organizer: 'Test Organizer', track: 'Test Raceway', city: 'Testville, TX',
@@ -794,10 +837,13 @@ const UPCOMING_LONG = {
 }
 
 // The owner's phone first (every scenario), then the narrowest and
-// widest phones for the width-sensitive countdown layouts. Scenarios
+// widest phones for the width-sensitive countdown layouts and the
+// tightest live view. Scenarios
 // without a `device` render on WIDGET_ENV_CONSTANTS.referenceDevice.
 const SWEEP_DEVICES = ['375x667', '430x932']
 const SWEEP = [
+  // The tightest live view: a two-row current card under the chips.
+  { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T09:31`, param: 'orange,purple|15m', label: 'Medium — live, two-row card + chips' },
   { family: 'small', manifest: UPCOMING_LONG, label: 'Small — countdown (long names)' },
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
@@ -818,6 +864,14 @@ const SCENARIOS = [
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming: 2 + footer)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
+  // The live view's parameter chips (#291), at a fixed time.
+  { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange|15m', label: 'Large — live, filtered + 15m alerts' },
+  { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange,blue|0m', label: 'Large — live, a group not at this event' },
+  { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange,blu|15m', label: 'Large — live, a typo in the parameter' },
+  { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, label: 'Large — live, no parameter' },
+  { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange|15m', label: 'Medium — live, filtered + 15m alerts' },
+  { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'blue', label: 'Medium — live, no sessions for the filter' },
+  { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T08:53`, param: '15m', label: 'Medium — live, between cards' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },
   { family: 'medium', manifest: TODAY_NO_SCHEDULE, label: 'Medium — today, no schedule yet' },
   { family: 'large', manifest: TODAY_NO_SCHEDULE, label: 'Large — today, no schedule yet' },
@@ -891,8 +945,23 @@ export async function renderScenario(scenario, dark) {
   g.__online = !!scenario.online
   g.__widget = null
   const wrapped = `(async () => { ${widgetSrc} })()`
-  // eslint-disable-next-line no-eval
-  await eval(wrapped)
+  // `scenario.at` (local time, e.g. 2026-09-12T10:05) freezes the
+  // widget's clock for the render, so a live-view scenario shows the
+  // same moment of its day whenever the preview runs.
+  const RealDate = g.Date
+  if (scenario.at) {
+    const fixed = new RealDate(scenario.at).getTime()
+    g.Date = class extends RealDate {
+      constructor(...args) { if (args.length === 0) super(fixed); else super(...args) }
+      static now() { return fixed }
+    }
+  }
+  try {
+    // eslint-disable-next-line no-eval
+    await eval(wrapped)
+  } finally {
+    g.Date = RealDate
+  }
   const root = g.__widget instanceof StackMock ? g.__widget.node : null
   if (!root) return '<div style="color:red">render failed — no widget produced</div>'
   const sizes = WIDGET_ENV_CONSTANTS.deviceWidgetSizes[device]
