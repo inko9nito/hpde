@@ -726,6 +726,19 @@ describe('live view header and parameter chips (#291)', () => {
     expectStart(medium, '10:00')
   })
 
+  it('drops the now-marker on Medium, so the next activity fits under the current one', async () => {
+    // Large: the marker's caption ("10:05 AM", "Next in 55m").
+    const large = await live('large', 'orange|15m')
+    expect(large).toContain('10:05 AM')
+    expect(large).toContain('Next in ')
+    // Medium: the current 10:00 card, then the next Orange session.
+    const medium = await live('medium', 'orange|15m')
+    expect(medium).not.toContain('10:05 AM')
+    expect(medium).not.toContain('Next in ')
+    expectStart(medium, 'Orange', '15m', '10:00')
+    expect(medium).toContain('11:00')
+  })
+
   it('shows the last activity on Medium once the day is over', async () => {
     const texts = await live('medium', null, '17:00')
     expect(texts).toContain('Track goes cold')

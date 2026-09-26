@@ -707,7 +707,8 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   // its own row estimate (via CURRENT_CAPTION_BLOCK_HEIGHT), and the
   // marker bar itself is drawn inside the card so it costs no extra
   // vertical space.
-  const nowLineReserve = currentIdx === -1 ? NOW_LINE_BLOCK_HEIGHT : 0
+  const marker = liveTier().nowMarker
+  const nowLineReserve = currentIdx === -1 && marker ? NOW_LINE_BLOCK_HEIGHT : 0
   const availableH = widgetInteriorHeight() - liveHeaderHeight(summary) - nowLineReserve
   // The past row and the anchor (current or next) always show; the
   // rows after them only while they fit.
@@ -716,26 +717,26 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
     const isCurrent = i === currentIdx
-    const rowH = estimateActivityRowHeight(visible[i], isCurrent)
+    const rowH = estimateActivityRowHeight(visible[i], isCurrent && marker)
     if (rows.length >= mustShow && usedH + rowH > availableH) break
     rows.push(visible[i])
     usedH += rowH
   }
 
-  const nowLineBetweenAt = currentIdx === -1 ? insertAt - start : -1
+  const nowLineBetweenAt = currentIdx === -1 && marker ? insertAt - start : -1
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
   const nowLineLast = nowLineBetweenAt >= rows.length
   for (let i = 0; i < rows.length; i++) {
-    if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextActivity, liveTier().nowLineGap)
+    if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextActivity, 6)
     const ev = rows[i]
     const isCurrentActivity = i === currentLocalIdx
     const past = !isCurrentActivity && parseMinutes(ev.time) < now
-    // No gap under the last card: the flex spacer below takes over, and
-    // on Medium the 6pt is needed to fit.
+    // No gap under the last card: the flex spacer below takes over.
     const gapAfter = i < rows.length - 1 || nowLineLast
+    // Without the marker (Medium), the current card has no position.
     drawActivityRow(w, ev, groupById, selected, p, past,
-      isCurrentActivity ? { position: currentPosition, now, nextActivity } : null, gapAfter)
+      isCurrentActivity ? { position: marker ? currentPosition : null, now, nextActivity } : null, gapAfter)
   }
   if (nowLineLast) drawNowLine(w, p, now, null, 0)
 
@@ -809,8 +810,7 @@ const NOW_LINE_BAR_HEIGHT = 2
 // underneath it. Both top and bottom use the same value so the card
 // doesn't visibly change shape when the marker flips from top to
 // bottom — the empty side still consumes the same pad, and the
-// content stays vertically centered. (On Large. Medium, short of
-// room, pads only the marker's side this much — see LIVE_TIERS.)
+// content stays vertically centered.
 // Distance from the marker row's outer edge to the nearest card
 // edge (5pt). Chosen so the bar lands past the corner radius (8pt)
 // — the 8pt-tall marker row starts at y=5 with the 2pt bar centered
@@ -861,14 +861,14 @@ const LIVE_HEADER = {
   lineH: 18, chipsH: 19,
 }
 
-// The spacing that depends on the widget's size, one row per size.
-// Medium has room for one card: less air under the header and the
-// now-line, and the current card padded for the now-marker only on the
-// marker's side (the other side as a plain card's), so a two-row
-// session card, its caption and the chips all fit under the header.
+// What depends on the widget's size, one row per size. Medium has no
+// now-marker (#291): the line across the current card and its "10:05
+// AM · Next in 20m" caption took the room of a whole card. There the
+// current activity is only tinted, its time bold, and the next one
+// shows under it; there's less air under the header too.
 const LIVE_TIERS = {
-  compact: { chipsGap: 5, gapBelow: 6, nowLineGap: 4, currentOffPad: NONCURRENT_CARD_PAD_V },
-  large: { chipsGap: 7, gapBelow: 14, nowLineGap: 6, currentOffPad: CURRENT_CARD_PAD_V },
+  compact: { chipsGap: 5, gapBelow: 8, nowMarker: false },
+  large: { chipsGap: 7, gapBelow: 14, nowMarker: true },
 }
 
 function liveTier() {
@@ -1118,11 +1118,12 @@ function drawActivityRow(w, ev, groupById, selected, p, past, current, gapAfter)
   rightGutter.topAlignContent()
   rightGutter.size = new Size(RIGHT_GUTTER_WIDTH, 0)
 
-  if (current) {
+  if (current && current.position) {
     drawCurrentCard(cardContainer, leftGutter, rightGutter,
       ev, groupById, selected, p, past, current.position)
   } else {
-    drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past)
+    // A current card without the marker is a plain card, tinted.
+    drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past, !!current)
     // Gutters stay empty — they auto-size to 0 height and take up no
     // vertical space, so the non-current row is as compact as before.
   }
@@ -1166,15 +1167,12 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
   // (both sum to CURRENT_CARD_PAD_V) or a plain spacer of the same
   // height. Same either way, so the content below sits at the exact
   // same y regardless of where the marker is.
-  // Medium pads the side without the marker as a plain card (see
-  // LIVE_TIERS), so there the content moves when the marker flips.
-  const offPad = liveTier().currentOffPad
   if (markerAtTop) {
     cardContainer.addSpacer(MARKER_ROW_INSET)
     addBarInCard(cardContainer, p.accent)
     cardContainer.addSpacer(MARKER_CONTENT_CLEARANCE)
   } else {
-    cardContainer.addSpacer(offPad)
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
   // Content grows to its natural height — no fixed-height wrapper.
@@ -1191,7 +1189,7 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
     addBarInCard(cardContainer, p.accent)
     cardContainer.addSpacer(MARKER_ROW_INSET)
   } else {
-    cardContainer.addSpacer(offPad)
+    cardContainer.addSpacer(CURRENT_CARD_PAD_V)
   }
 
   // Gutter columns place the dot / bar-continuation at exactly the
@@ -1204,17 +1202,17 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
   addGutterMarkerColumn(rightGutter, markerAtTop, "bar", p.accent)
 }
 
-function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past) {
+function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past, isCurrent) {
   // No border. Non-current cards are just tinted (light gray on
   // white) rounded rectangles, matching the current card's
   // border-less look so the whole widget reads as one system.
-  cardContainer.backgroundColor = p.cardBg
+  cardContainer.backgroundColor = isCurrent ? p.currentCardBg : p.cardBg
   cardContainer.cornerRadius = NONCURRENT_CARD_CORNER_RADIUS
   cardContainer.setPadding(
     NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
     NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
   )
-  buildCardContent(cardContainer, ev, groupById, selected, p, past, false)
+  buildCardContent(cardContainer, ev, groupById, selected, p, past, !!isCurrent)
 }
 
 // Bar drawn inside the current card, at the top or bottom pad zone.
