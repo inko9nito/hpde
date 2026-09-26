@@ -117,3 +117,84 @@ export function TrackIcon({
     </span>
   )
 }
+
+// The widget's featured cards crop every track SVG (all drawn in the
+// same 437-unit frame) to this window: the band the shapes sit in.
+// Same numbers as TRACK_SHAPE_WINDOW in scripts/hpde-widget.js.
+const TRACK_FRAME = 437
+export const TRACK_WINDOW = { x: 45, y: 146, w: 347, h: 145 }
+
+// The widget's Medium countdown card (#292, HPDE Figma 2069:8118, its
+// FEATURED_TRACK.medium): where the track sits as fractions of the card
+// (x and w of its width, y of its height), and its diagonal fade — the
+// ground laid over the shape at alpha a·u + b·v + c, u and v running
+// 0–1 across and down the track's window.
+export const FADED_TRACK = { x: 0.3184, y: 0.1658, w: 0.7155 }
+export const FADED_TRACK_FADE = { a: -1.0417, b: 0.5806, c: 0.9411 }
+
+/** The fade as a CSS mask gradient over the track's window: opaque
+ *  where the widget's ground overlay is 0, gone where it reaches 1.
+ *  The overlay is linear across the window, so it's one linear
+ *  gradient, at the angle its slope points and with stops where it
+ *  crosses 0 and 1 between the window's lowest and highest corners. */
+export function fadedTrackMask(fade = FADED_TRACK_FADE, win = TRACK_WINDOW): string {
+  const { a, b, c } = fade
+  // Slope in the window's own units (y down); CSS 0deg points up.
+  const angle = (Math.atan2(a / win.w, -(b / win.h)) * 180) / Math.PI
+  const corners = [c, a + c, b + c, a + b + c]
+  const lo = Math.min(...corners)
+  const hi = Math.max(...corners)
+  const at = (f: number) => `${(((f - lo) / (hi - lo)) * 100).toFixed(1)}%`
+  return `linear-gradient(${((angle + 360) % 360).toFixed(1)}deg, #000 ${at(0)}, transparent ${at(1)})`
+}
+
+/**
+ * The featured card's track (#292): large, behind the card's text,
+ * running off its right edge and fading along a diagonal — all there at
+ * its top right, gone by its bottom left — as on the widget's Medium
+ * countdown. Fills its (relative, overflow-hidden) card; the shape is
+ * the widget's track color, #646872 at 35%. An event with no track icon
+ * gets the checkered flag, in the same color, as the widget does.
+ */
+export function FadedTrack({ trackId }: { trackId?: string }) {
+  const src = trackIconSrc(trackId)
+  const shape = `url("${src ?? checkeredFlag}")`
+  const fade = fadedTrackMask()
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute"
+      style={{
+        left: `${FADED_TRACK.x * 100}%`,
+        top: `${FADED_TRACK.y * 100}%`,
+        width: `${FADED_TRACK.w * 100}%`,
+        aspectRatio: `${TRACK_WINDOW.w} / ${TRACK_WINDOW.h}`,
+        // Also clips the shape to the window (a mask hides what's outside
+        // its box): some tracks' other configuration runs past it.
+        WebkitMaskImage: fade,
+        maskImage: fade,
+      }}
+    >
+      {/* The whole 437-unit frame, placed so the window fills the box. */}
+      <span
+        data-track-icon={src ? trackId : 'placeholder'}
+        className="absolute block bg-[#646872]/35"
+        style={{
+          left: `${(-TRACK_WINDOW.x / TRACK_WINDOW.w) * 100}%`,
+          top: `${(-TRACK_WINDOW.y / TRACK_WINDOW.h) * 100}%`,
+          width: `${(TRACK_FRAME / TRACK_WINDOW.w) * 100}%`,
+          height: `${(TRACK_FRAME / TRACK_WINDOW.h) * 100}%`,
+          WebkitMaskImage: shape,
+          maskImage: shape,
+          // The flag is 56.25% of the frame, centered, as in TrackIcon.
+          WebkitMaskSize: src ? '100% 100%' : '56.25%',
+          maskSize: src ? '100% 100%' : '56.25%',
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'center',
+          maskPosition: 'center',
+        }}
+      />
+    </span>
+  )
+}

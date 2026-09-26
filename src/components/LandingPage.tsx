@@ -7,7 +7,7 @@ import { firstDate, partitionEvents } from '../utils/eventClass'
 import { todayLocalISO } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
-import { TrackIcon } from './TrackIcon'
+import { FadedTrack, TrackIcon } from './TrackIcon'
 import { AccountButton } from './AccountButton'
 import { AppMenu } from './AppMenu'
 import { StatusBadge } from './EventHeader'
@@ -114,10 +114,12 @@ function EventCard({
   )
 }
 
-/** An upcoming (or live) event (#276): one near-black card, the track
- *  shape large across the top fading out at its bottom edge, then the
- *  date, a hairline divider, and the name over the organizer. A live
- *  event gets the same LIVE badge as the event page's date line. */
+/** An upcoming (or live) event (#276): one near-black card, the shape
+ *  of the widget's Medium countdown, with the track large behind it,
+ *  running off the right edge and fading away down to the left (#292),
+ *  then along the bottom the date, a hairline divider, and the name
+ *  over the organizer. A live event gets the same LIVE badge as the
+ *  event page's date line. */
 function FeaturedEventCard({
   event,
   live,
@@ -130,28 +132,12 @@ function FeaturedEventCard({
   return (
     <button
       onClick={onClick}
-      className="block w-full overflow-hidden rounded-2xl border border-gray-900 bg-gray-900 text-left shadow-[0_2px_4px_rgba(17,24,39,0.08),0_12px_28px_rgba(17,24,39,0.18)] transition-colors hover:border-gray-500"
+      className="relative flex aspect-[364/170] w-full flex-col justify-end overflow-hidden rounded-2xl border border-gray-900 bg-gray-900 text-left shadow-[0_2px_4px_rgba(17,24,39,0.08),0_12px_28px_rgba(17,24,39,0.18)] transition-colors hover:border-gray-500"
     >
-      {/* The SVGs are square with the shape in a wide band across the
-          middle, so a box taller than the banner is cropped by it. The
-          gradient fades the bottom of the shape into the card. */}
-      <div className="relative flex h-32 items-center justify-center overflow-hidden">
-        <TrackIcon
-          trackId={event.trackId}
-          tone="dark"
-          size={232}
-          padding={0}
-          radius="rounded-none"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-b from-gray-900/0 to-gray-900"
-        />
-      </div>
+      <FadedTrack trackId={event.trackId} />
       {/* Same left inset and date column as the past cards, so the date
-          stacks line up down the page. Tucked up into the faded bottom
-          of the track, painted above the gradient. */}
-      <div className={`relative -mt-3 flex items-center gap-4 ${CARD_PADDING} pt-0`}>
+          stacks line up down the page; painted above the track. */}
+      <div className={`relative flex items-center gap-4 ${CARD_PADDING}`}>
         <DateBlock event={event} muted={false} dark />
         <div aria-hidden="true" className="w-px self-stretch bg-gray-700" />
         <div className="min-w-0 flex-1">
