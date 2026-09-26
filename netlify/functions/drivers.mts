@@ -2,7 +2,7 @@ import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { isAdmin } from '../lib/newEvent.mjs'
 import { listDrivers } from '../lib/drivers.mjs'
 
-// Who an admin can log lap times for (#289): everyone who has signed in,
+// Who an admin can log lap times for (#288): everyone who has signed in,
 // with their name and email, for the lap sheet's Driver picker. Admins only.
 //   GET   { drivers: [{ id, email, name }] }, by name
 //

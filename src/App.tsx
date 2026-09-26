@@ -179,7 +179,7 @@ export default function App() {
   const pushScrollRef = useRef<HTMLDivElement>(null)
   // The session whose lap times are open in the sheet (#210), if any.
   const [lapSlot, setLapSlot] = useState<SessionSlot | null>(null)
-  // An admin can log another driver's lap times (#289): whose the sheet,
+  // An admin can log another driver's lap times (#288): whose the sheet,
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
   const [lapDriver, setLapDriver] = useState<Driver | null>(null)
@@ -425,7 +425,7 @@ export default function App() {
                 />
               )}
 
-              {/* Someone else's laps on show (#289): say whose, and let the admin switch back. */}
+              {/* Someone else's laps on show (#288): say whose, and let the admin switch back. */}
               {driver && driverPicker && (
                 <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>
               )}

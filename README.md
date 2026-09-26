@@ -178,7 +178,7 @@ Only they and admins can see them.
   reaches the driver's own laps, except an admin's (below). A deploy
   preview gets an empty store of its own, so laps saved on a preview
   never touch the real ones, and they're gone with the next deploy.
-- **For another driver (admins, #289):** the lap sheet and My notes
+- **For another driver (admins, #288):** the lap sheet and My notes
   have a **Driver** picker: *Me*, or anyone who has signed in to the
   site. Pick someone to see, add, edit or remove their laps. They're
   saved in that driver's account, so they see them when they sign in,

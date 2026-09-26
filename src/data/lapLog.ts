@@ -4,7 +4,7 @@ import type { SessionLaps } from '../utils/lapTimes'
 import type { EventBest } from '../utils/trackStats'
 
 // The signed-in driver's own lap times for one event (#210), from the laps
-// function — or, for an admin, another driver's (#289). Nothing is fetched
+// function — or, for an admin, another driver's (#288). Nothing is fetched
 // for anyone who isn't signed in.
 export const LAPS_URL = `${import.meta.env.BASE_URL}api/laps`
 
@@ -38,7 +38,7 @@ async function errorFrom(res: Response): Promise<Error> {
 
 /**
  * `eventId` is null while no event's page is open: nothing to fetch.
- * `driverId` is another driver's, for an admin logging theirs (#289);
+ * `driverId` is another driver's, for an admin logging theirs (#288);
  * null for your own.
  */
 export function useLapLog(eventId: string | null, driverId: string | null = null): LapLog {

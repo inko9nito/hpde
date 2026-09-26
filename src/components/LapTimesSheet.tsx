@@ -28,9 +28,9 @@ interface Props {
   saved: (key: string) => SessionLaps | undefined
   /** The best on this track layout across every event, to mark a lap that set it. */
   allTimeBest?: number
-  /** Whose laps: another driver's, for an admin logging them (#289); null for your own. */
+  /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
   driver?: Driver | null
-  /** Admins only: the Driver picker, under the heading (#289). */
+  /** Admins only: the Driver picker, under the heading (#288). */
   driverPicker?: ReactNode
   /** The driver's saved laps are still on their way. */
   loading?: boolean
@@ -98,7 +98,7 @@ export function LapTimesSheet({
     setFailure(null)
   }
 
-  // A different driver picked, or their laps just in (#289): start over
+  // A different driver picked, or their laps just in (#288): start over
   // from what they have saved — unless something's been typed, which
   // stays, to be saved for whoever's picked now.
   const typed = textTouched || summaryTouched

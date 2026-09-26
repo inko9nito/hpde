@@ -9,7 +9,7 @@ import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 // needs their sign-in, and only ever reaches their own laps — the key is
 // made from who the token says they are, never from anything sent. The one
 // exception is an admin, who can add `driver=<user id>` to any of these to
-// read and write that driver's laps instead (#289) — the id is checked
+// read and write that driver's laps instead (#288) — the id is checked
 // against Identity, and a session saved that way records who saved it.
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —

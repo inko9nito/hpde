@@ -46,7 +46,7 @@ export interface SessionLaps {
    */
   summary?: string
   updatedAt?: string
-  /** Who saved them, when it wasn't the driver: an admin's email (#289). */
+  /** Who saved them, when it wasn't the driver: an admin's email (#288). */
   loggedBy?: string
 }
 

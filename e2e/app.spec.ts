@@ -498,7 +498,7 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('an admin logs another driver’s lap times, picked in the sheet (#289)', async ({ page }) => {
+test('an admin logs another driver’s lap times, picked in the sheet (#288)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
   const jason = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'

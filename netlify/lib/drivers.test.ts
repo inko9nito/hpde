@@ -27,7 +27,7 @@ function fakeIdentity(users: typeof people, cap = Infinity) {
   }
 }
 
-describe('listDrivers (#289)', () => {
+describe('listDrivers (#288)', () => {
   it('lists everyone by name, or email with no name, ignoring case', async () => {
     expect(await listDrivers(fakeIdentity(people))).toEqual([
       { id: ids[2], email: 'amy@example.com', name: 'Amy' },
@@ -51,7 +51,7 @@ describe('listDrivers (#289)', () => {
   })
 })
 
-describe('findDriver (#289)', () => {
+describe('findDriver (#288)', () => {
   it('finds a driver by id, and nobody for an unknown or malformed one', async () => {
     const identity = fakeIdentity(people)
     expect(await findDriver(ids[1], identity)).toEqual({ id: ids[1], email: 'jason@example.com', name: 'jason' })
@@ -65,7 +65,7 @@ describe('findDriver (#289)', () => {
   })
 })
 
-describe('drivers function (#289)', () => {
+describe('drivers function (#288)', () => {
   const identityUsers: Record<string, unknown> = {
     'driver-token': { id: ids[1], email: 'jason@example.com' },
     'admin-token': { id: ids[0], email: 'vera@example.com', app_metadata: { roles: ['admin'] } },

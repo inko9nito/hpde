@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 
-// Who an admin can log lap times for (#289), from the drivers function:
+// Who an admin can log lap times for (#288), from the drivers function:
 // everyone who has signed in.
 export const DRIVERS_URL = `${import.meta.env.BASE_URL}api/drivers`
 

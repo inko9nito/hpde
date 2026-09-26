@@ -20,9 +20,9 @@ interface Props {
   layoutBest: { best?: number; events: number }
   /** The same best, once every event's is known — marks the lap that set it. */
   allTimeBest?: number
-  /** Whose laps: another driver's, for an admin logging them (#289); null for your own. */
+  /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
   driver?: Driver | null
-  /** Admins only: the Driver picker, above the laps (#289). */
+  /** Admins only: the Driver picker, above the laps (#288). */
   driverPicker?: ReactNode
   onEdit: (session: SessionLaps) => void
 }
@@ -83,7 +83,7 @@ function Skeleton({ track, leaving, whose }: { track: boolean; leaving: boolean;
 /**
  * The My notes tab (#210): the driver's own lap times for this event,
  * session by session. Added from the Schedule tab; edited from here too.
- * An admin can pick another driver's instead (#289).
+ * An admin can pick another driver's instead (#288).
  */
 export function MyLapTimes({ event, log, layoutBest, allTimeBest, driver = null, driverPicker, onEdit }: Props) {
   // Sessions whose lap table is open. All closed to start, so the figures

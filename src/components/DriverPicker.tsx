@@ -14,7 +14,7 @@ interface Props {
 }
 
 /**
- * Admins only (#289): whose lap times the sheet and My notes are showing —
+ * Admins only (#288): whose lap times the sheet and My notes are showing —
  * your own ("Me"), or another driver's, to log them for them.
  */
 export function DriverPicker({ driver, onChange, drivers, selfId, className = '' }: Props) {

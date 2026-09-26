@@ -61,7 +61,7 @@ const fakeWidget = {
   open() {}, close() {}, logout() {}, currentUser,
 } as unknown as NonNullable<typeof window.netlifyIdentity>
 
-// Another driver an admin can log laps for (#289).
+// Another driver an admin can log laps for (#288).
 const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
 const DRIVERS = [
   { id: JASON, email: 'jason@example.com', name: 'Jason' },
@@ -230,7 +230,7 @@ describe('lap times (#210)', () => {
     expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
-    // Only admins pick a driver (#289).
+    // Only admins pick a driver (#288).
     expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
     expect(driverCalls()).toHaveLength(0)
     expect(lapCalls('GET').every(([url]) => !String(url).includes('driver='))).toBe(true)
@@ -428,7 +428,7 @@ describe('lap times (#210)', () => {
 })
 
 
-describe('an admin logging another driver’s lap times (#289)', () => {
+describe('an admin logging another driver’s lap times (#288)', () => {
   const blue2 = (ms: number): SessionLaps => ({
     key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms }],
   })

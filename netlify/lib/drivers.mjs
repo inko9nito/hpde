@@ -1,6 +1,6 @@
 import { admin } from '@netlify/identity'
 
-// The drivers an admin can log lap times for (#289): everyone who has
+// The drivers an admin can log lap times for (#288): everyone who has
 // signed in, from Netlify Identity's admin API. That API needs a token only
 // Netlify's function runtime holds (@netlify/identity reads it from there),
 // so this runs in functions, never in the browser. `identity` stands in for

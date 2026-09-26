@@ -20,7 +20,7 @@ const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) =>
   return u ? new Response(JSON.stringify(u)) : new Response('{}', { status: 401 })
 }
 
-// Stands in for Identity's admin API (#289): Jason is the only other user.
+// Stands in for Identity's admin API (#288): Jason is the only other user.
 let identityDown = false
 const identity = {
   getUser: async (id: string) => {
@@ -175,7 +175,7 @@ describe('laps function (#210)', () => {
     expect((await sessionsOf('vera-token')).map((s: { key: string }) => s.key)).toEqual(['2026-09-13 09:50 blue'])
   })
 
-  describe('an admin logging for another driver (#289)', () => {
+  describe('an admin logging for another driver (#288)', () => {
     const forJason = (q = `?event=${EVENT}`) => `${q}${q ? '&' : '?'}driver=${JASON}`
 
     it('saves into the driver’s own laps, so they see them, noting who saved them', async () => {
