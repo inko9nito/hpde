@@ -385,7 +385,8 @@ function findRunGroup(event, manifest, id) {
 // the app's DateBlock month (red-600 light / red-400 dark) — for the
 // month, the countdown pill and the Small well;
 // `brandTint` (the app's LIVE badge background, red-500 at 10%) is the
-// pill's and the Small well's background.
+// pill's and the Small well's background. `separator` is the live
+// view header's rule between the date and the name (#291).
 function palette(dark) {
   return dark
     // Dark mode keeps its "cards are slightly LIGHTER than the
@@ -398,6 +399,7 @@ function palette(dark) {
         cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
+        separator: new Color("#3f3f46"),
         accent: new Color("#3b82f6"),
         brand: new Color("#f87171"), brandTint: new Color("#ef4444", 0.15),
         pastOpacity: 0.6 }
@@ -412,6 +414,7 @@ function palette(dark) {
         cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
+        separator: new Color("#d1d5db"),
         accent: new Color("#3b82f6"),
         brand: new Color("#dc2626"), brandTint: new Color("#ef4444", 0.1),
         pastOpacity: 0.6 }
@@ -836,18 +839,22 @@ const CURRENT_CAPTION_OUTER_PAD = 4
 
 // ----- live view header (#291) -----
 //
-// The date, bold, a light bar, then the event's name, on one line at
+// The date, bold, a light rule, then the event's name, on one line at
 // the countdown's title size (COUNTDOWN_TOKENS, the same number, not a
-// copy), so the live view reads like the upcoming one — and under it,
-// when the widget's parameter changes the view, a row of chips (on the
-// activity cards' ground) saying how: the run groups it's filtered to, a
+// copy), so the live view reads like the upcoming one. The rule is as
+// tall as the capitals, so it runs from their baseline to their tops.
+// When the widget's parameter changes the view, chips (on the activity
+// cards' ground) say how: the run groups it's filtered to, a
 // warning for any of them with no sessions today, and the alert lead
-// time when it isn't the default, or that alerts are off. Filters sit
-// above the schedule in the app too. Offline, the line ends in
+// time when it isn't the default, or that alerts are off. They sit in a
+// row under the line, as filters sit above the schedule in the app;
+// the alert time alone sits at the line's end instead of a row to
+// itself. Offline, the line ends in
 // "Offline", as the old header's day did; the view has no status
 // footer (a Medium couldn't fit one under a two-row card).
 const LIVE_HEADER = {
-  barW: 2, barH: 14, barGap: 6,
+  // The rule: the cap height of the 13.5pt title (0.7em).
+  barW: 2, barH: 9.5, barGap: 7,
   chipFont: 10, chipPadV: 3, chipPadH: 7, chipSpacing: 4,
   dotSize: 6, dotGap: 4, iconGap: 3,
   // For the row-fit budget: the header line and the chip row.
@@ -869,10 +876,18 @@ function liveTier() {
   return family === "large" || family === "extraLarge" ? LIVE_TIERS.large : LIVE_TIERS.compact
 }
 
+// The alert time is the only chip: it goes at the end of the header
+// line, not in a row of its own.
+function leadInCorner(s) {
+  return s.lead != null && !s.notifsOff
+    && s.groups.length + s.missing.length + s.invalid.length === 0
+}
+
 function liveHeaderHeight(summary) {
   const t = LIVE_HEADER
   const tier = liveTier()
-  return t.lineH + (summary ? tier.chipsGap + t.chipsH : 0) + tier.gapBelow
+  const chipRow = summary && !leadInCorner(summary)
+  return t.lineH + (chipRow ? tier.chipsGap + t.chipsH : 0) + tier.gapBelow
 }
 
 function renderHeader(w, event, day, p, stale, summary) {
@@ -891,8 +906,8 @@ function renderHeader(w, event, day, p, stale, summary) {
   row.addSpacer(t.barGap)
   const bar = row.addStack()
   bar.size = new Size(t.barW, t.barH)
-  bar.backgroundColor = p.muted
-  bar.cornerRadius = 1
+  bar.backgroundColor = p.separator
+  bar.cornerRadius = t.barW / 2
   row.addSpacer(t.barGap)
 
   // The name is the one thing on the line that truncates.
@@ -902,9 +917,14 @@ function renderHeader(w, event, day, p, stale, summary) {
   title.lineLimit = 1
   row.addSpacer()
   if (stale) addLiveText(row, "Offline", rFont(t.chipFont), p.muted)
+  const corner = summary && leadInCorner(summary)
+  if (corner) {
+    if (stale) row.addSpacer(t.chipSpacing * 2)
+    addLeadChip(row, p, summary.lead)
+  }
 
   outer.addSpacer(RIGHT_GUTTER_WIDTH)
-  if (summary) {
+  if (summary && !corner) {
     w.addSpacer(tier.chipsGap)
     drawParamChips(w, p, summary)
   }
@@ -952,15 +972,18 @@ function drawParamChips(w, p, s) {
     chip.addSpacer(t.iconGap)
     addLiveText(chip, "Notifications off", rMediumFont(t.chipFont), WARN_COLOR)
   } else if (s.lead != null) {
-    const chip = addParamChip(row, p.cardBg)
-    addChipSymbol(chip, "bell", p.mutedStrong)
-    chip.addSpacer(t.iconGap)
-    const text = s.lead === 0 ? "At start" : `${s.lead}m`
-    addLiveText(chip, text, rFont(t.chipFont), p.mutedStrong)
+    addLeadChip(row, p, s.lead)
   }
 
   outer.addSpacer()
   outer.addSpacer(RIGHT_GUTTER_WIDTH)
+}
+
+function addLeadChip(row, p, lead) {
+  const chip = addParamChip(row, p.cardBg)
+  addChipSymbol(chip, "bell", p.mutedStrong)
+  chip.addSpacer(LIVE_HEADER.iconGap)
+  addLiveText(chip, lead === 0 ? "At start" : `${lead}m`, rFont(LIVE_HEADER.chipFont), p.mutedStrong)
 }
 
 function addParamChip(row, bg) {

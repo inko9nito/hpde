@@ -78,8 +78,12 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   // used to just return a blank stub, so a test could confirm the
   // render didn't throw but never what it actually said.
   g.__texts = [] as string[]
-  const textStub = (text: string) => {
+  // The stack each text first went into, so a test can ask whether two
+  // texts share a row (e.g. the alert chip at the end of the header line).
+  g.__textStacks = new Map<string, unknown>()
+  const textStub = (text: string, stack?: unknown) => {
     g.__texts.push(text)
+    if (stack && !g.__textStacks.has(text)) g.__textStacks.set(text, stack)
     return {
       font: null, textColor: null, textOpacity: 1,
       set lineLimit(v: number) { num(v) },
@@ -103,8 +107,9 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.__stackSizes = [] as Array<{ cornerRadius: number | null; width: number; height: number }>
   class StackStub {
     _cornerRadius: number | null = null
-    addStack() { return new StackStub() }
-    addText(text: string) { return textStub(text) }
+    parent: StackStub | null = null
+    addStack() { const s = new StackStub(); s.parent = this; return s }
+    addText(text: string) { return textStub(text, this) }
     addImage() { return imageStub() }
     addSpacer(_n?: number) {}
     setPadding(t: number, l: number, b: number, r: number) { [t, l, b, r].forEach(num) }
@@ -667,6 +672,21 @@ describe('live view header and parameter chips (#291)', () => {
   it('leaves the default alert time out', async () => {
     const texts = await live('large', 'orange|10m')
     expectStart(texts, 'Orange', '9:30')
+  })
+
+  it('puts the alert time alone at the end of the header line, and in the chip row with a filter', async () => {
+    // The stacks a text sits in, innermost first.
+    const ancestors = (text: string) => {
+      const out = []
+      for (let s = (globalThis as any).__textStacks.get(text); s; s = s.parent) out.push(s)
+      return out
+    }
+    const sharesRow = (a: string, b: string) => ancestors(a).some(s => ancestors(b).includes(s))
+    await live('large', '15m')
+    expect(sharesRow('15m', 'TDE at MSRC')).toBe(true)
+    await live('large', 'orange|15m')
+    expect(sharesRow('15m', 'TDE at MSRC')).toBe(false)
+    expect(sharesRow('15m', 'Orange')).toBe(true)
   })
 
   it('says when alerts come at the start', async () => {

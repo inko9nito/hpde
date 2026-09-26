@@ -788,6 +788,11 @@ const LIVE_MANIFEST = {
   }],
 }
 
+// The same day under a name too long for the header line.
+const LIVE_LONG_NAME = {
+  events: [{ ...LIVE_MANIFEST.events[0], name: 'HPDE at Circuit of the Americas Full Course' }, LIVE_MANIFEST.events[1]],
+}
+
 const UPCOMING_MULTI = {
   events: [
     { id: 'a', name: 'Test Event', organizer: 'Test Organizer', track: 'Test Raceway', city: 'Testville, TX',
@@ -869,6 +874,8 @@ const SCENARIOS = [
   { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange,blue|0m', label: 'Large — live, a group not at this event' },
   { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange,blu|15m', label: 'Large — live, a typo in the parameter' },
   { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, label: 'Large — live, no parameter' },
+  { family: 'large', manifest: LIVE_LONG_NAME, at: `${LIVE_DAY}T10:05`, param: '15m', label: 'Large — live, long name, alert time alone' },
+  { family: 'medium', manifest: LIVE_LONG_NAME, at: `${LIVE_DAY}T10:05`, param: '15m', label: 'Medium — live, long name, alert time alone' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange|15m', label: 'Medium — live, filtered + 15m alerts' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'blue', label: 'Medium — live, no sessions for the filter' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T08:53`, param: '15m', label: 'Medium — live, between cards' },
