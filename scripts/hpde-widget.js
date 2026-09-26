@@ -27,7 +27,10 @@
 const DATA_URL = "https://myhpde.netlify.app/api/events.json"
 const SITE_URL = "https://myhpde.netlify.app/"
 const CACHE_FILENAME = "hpde-events.json"
-const NOTIF_STATE_FILENAME = "hpde-notif-state.json"
+// v2 (#295): entries are keyed by widget size and kept on this device.
+// The v1 file (keyed by parameter string, in iCloud) is left unread, so
+// the parameters it remembers stop scheduling alerts.
+const NOTIF_STATE_FILENAME = "hpde-notif-state-v2.json"
 const NOTIF_ID_PREFIX = "hpde:"
 const NOTIF_THREAD_ID = "hpde"
 // Scriptable's Notification.sound defaults to null, which delivers
@@ -2286,19 +2289,20 @@ function renderError(err) {
 //   - Its lead time is the MAX across the instances that want it, so the
 //     earliest warning wins.
 //
-// Instance state lives in `hpde-notif-state.json` next to the manifest
-// cache. Each instance keys itself by a hash of its parameter string; an
-// entry ages out after NOTIF_STALE_INSTANCE_DAYS without a refresh, which
-// is how a removed widget stops contributing.
-
-function paramHash(source) {
-  let h = 5381
-  const s = String(source == null ? "" : source)
-  for (let i = 0; i < s.length; i++) {
-    h = (((h << 5) + h) + s.charCodeAt(i)) >>> 0
-  }
-  return h.toString(36)
-}
+// Instance state lives in NOTIF_STATE_FILENAME in this device's local
+// documents, not iCloud: alerts are scheduled per device, so another
+// device's widgets mustn't add groups to this one's. Scriptable gives a
+// widget no id of its own, so each instance keys itself by its size
+// (config.widgetFamily). Keying by the parameter string instead (#295)
+// made a widget whose parameter was edited count as two — the old
+// parameter kept alerting for days. Two widgets of the SAME size share
+// one entry, and the one refreshed last wins. An entry ages out after
+// NOTIF_STALE_INSTANCE_DAYS without a refresh, which is how a removed
+// widget stops contributing.
+//
+// Only widget runs take part. A run in the Scriptable app has no widget
+// parameter, so it would register as "every group, default lead" and
+// leave that in the merge for days; it leaves alerts alone instead.
 
 function slug(s) {
   return String(s == null ? "" : s)
@@ -2313,10 +2317,14 @@ function activityDate(dateStr, timeHhmm) {
   return new Date(y, m - 1, d, h, mm, 0, 0)
 }
 
+function notifStatePath(fm) {
+  return fm.joinPath(fm.documentsDirectory(), NOTIF_STATE_FILENAME)
+}
+
 function loadNotifState() {
   try {
-    const fm = getFm()
-    const path = fm.joinPath(fm.documentsDirectory(), NOTIF_STATE_FILENAME)
+    const fm = FileManager.local()
+    const path = notifStatePath(fm)
     if (fm.fileExists(path)) {
       const parsed = JSON.parse(fm.readString(path))
       if (parsed && typeof parsed === "object") return parsed
@@ -2327,9 +2335,8 @@ function loadNotifState() {
 
 function saveNotifState(state) {
   try {
-    const fm = getFm()
-    const path = fm.joinPath(fm.documentsDirectory(), NOTIF_STATE_FILENAME)
-    fm.writeString(path, JSON.stringify(state))
+    const fm = FileManager.local()
+    fm.writeString(notifStatePath(fm), JSON.stringify(state))
   } catch (_) {}
 }
 
@@ -2535,12 +2542,15 @@ async function scheduleSpecs(specs) {
 }
 
 async function refreshNotifications(manifest, parsed) {
-  if (typeof Notification === "undefined") return { scheduled: 0, denied: false }
+  if (typeof Notification === "undefined" || !config.runsInWidget) {
+    return { scheduled: 0, denied: false }
+  }
   const now = new Date()
   const state = loadNotifState()
   if (!state.instances || typeof state.instances !== "object") state.instances = {}
-  const hash = paramHash(parsed.rawParam)
-  state.instances[hash] = {
+  const family = config.widgetFamily || "widget"
+  state.instances[family] = {
+    family,
     params: parsed.rawParam,
     groups: parsed.groups,
     leadMinutes: parsed.leadMinutes,
