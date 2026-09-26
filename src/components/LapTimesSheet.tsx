@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
@@ -6,6 +7,8 @@ import { LapFigures, LapTable } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
+import { driverName } from '../data/drivers'
+import type { Driver } from '../data/drivers'
 import type { RunGroupConfig } from '../types'
 
 /** A session a driver can log laps for: a day, a start time, the groups on track. */
@@ -25,6 +28,12 @@ interface Props {
   saved: (key: string) => SessionLaps | undefined
   /** The best on this track layout across every event, to mark a lap that set it. */
   allTimeBest?: number
+  /** Whose laps: another driver's, for an admin logging them (#289); null for your own. */
+  driver?: Driver | null
+  /** Admins only: the Driver picker, under the heading (#289). */
+  driverPicker?: ReactNode
+  /** The driver's saved laps are still on their way. */
+  loading?: boolean
   onSave: (session: Omit<SessionLaps, 'key' | 'updatedAt'>) => Promise<void>
   onRemove: (key: string) => Promise<void>
   onClose: () => void
@@ -44,15 +53,18 @@ export function shortDate(iso: string): string {
  * session you drove, paste your times, check what was read, save. Opens
  * from the bottom like an iOS sheet.
  */
-export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, onSave, onRemove, onClose }: Props) {
+export function LapTimesSheet({
+  slot, runGroups, showDate, saved, allTimeBest, driver = null, driverPicker, loading = false, onSave, onRemove, onClose,
+}: Props) {
   // With more than one group on track, start from the one that already has
   // laps; failing that, ask — laps saved under the wrong group would be lost.
-  const [group, setGroup] = useState<string | null>(() =>
+  const savedGroup = () =>
     slot.groups.length === 1 ? slot.groups[0]
-      : slot.groups.find(g => saved(sessionKey(slot.date, slot.time, g))) ?? null,
-  )
+      : slot.groups.find(g => saved(sessionKey(slot.date, slot.time, g))) ?? null
+  const [group, setGroup] = useState<string | null>(savedGroup)
   const existing = group ? saved(sessionKey(slot.date, slot.time, group)) : undefined
   const [text, setText] = useState(() => (existing ? lapsToText(existing.laps) : ''))
+  const [textTouched, setTextTouched] = useState(false)
   const [readAs, setReadAs] = useState<ReadAs | undefined>(undefined)
   // A summary of the laps. Until it's typed in, a summary found in the
   // paste (the words under a timing sheet's session title) fills it.
@@ -68,14 +80,16 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
   const closeRef = useRef<HTMLButtonElement>(null)
 
   const parsed = useMemo(() => parseLapTimes(text, readAs), [text, readAs])
-  const canSave = group !== null && parsed.laps.length > 0 && parsed.errors.length === 0 && !busy
+  const canSave = group !== null && parsed.laps.length > 0 && parsed.errors.length === 0 && !busy && !loading
   const summaryFromPaste = !summaryTouched && !summaryText && !!parsed.summary
   const summary = summaryFromPaste ? parsed.summary! : summaryText
 
-  function pickGroup(next: string) {
+  // Starts over from what's saved for this group (none: ask for one).
+  function startFrom(next: string | null) {
     setGroup(next)
-    const laps = saved(sessionKey(slot.date, slot.time, next))
+    const laps = next ? saved(sessionKey(slot.date, slot.time, next)) : undefined
     setText(laps ? lapsToText(laps.laps) : '')
+    setTextTouched(false)
     setSummaryText(laps?.summary ?? '')
     setSummaryTouched(false)
     setEditing(!laps)
@@ -83,6 +97,20 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
     setConfirmingRemove(false)
     setFailure(null)
   }
+
+  // A different driver picked, or their laps just in (#289): start over
+  // from what they have saved — unless something's been typed, which
+  // stays, to be saved for whoever's picked now.
+  const typed = textTouched || summaryTouched
+  const source = `${driver?.id ?? ''} ${loading ? 'loading' : 'ready'}`
+  const [shownSource, setShownSource] = useState(source)
+  if (shownSource !== source) {
+    setShownSource(source)
+    if (!typed) startFrom(savedGroup())
+  }
+  // Until their laps are in, there's nothing to show but that.
+  const waiting = loading && !typed
+  const whose = driver ? `${driverName(driver)}’s` : 'your'
 
   // Once, when the sheet opens — not on every render, which would pull
   // focus out of the text box mid-typing (and close the iPhone keyboard).
@@ -135,6 +163,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
   function cancelEdit() {
     if (!existing) return
     setText(lapsToText(existing.laps))
+    setTextTouched(false)
     setSummaryText(existing.summary ?? '')
     setSummaryTouched(false)
     setReadAs(undefined)
@@ -175,14 +204,22 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
           </button>
         </div>
 
-        {slot.groups.length > 1 && (
+        {driverPicker && <div className="mt-4">{driverPicker}</div>}
+
+        {waiting && (
+          <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading {whose} lap times…</p>
+        )}
+
+        {slot.groups.length > 1 && !waiting && (
           <fieldset className="mt-4">
-            <legend className="text-xs font-medium text-gray-700">Which group were you driving in?</legend>
+            <legend className="text-xs font-medium text-gray-700">
+              {driver ? `Which group was ${driverName(driver)} driving in?` : 'Which group were you driving in?'}
+            </legend>
             <div className="mt-2 flex flex-wrap gap-2">
               {slot.groups.map(id => (
                 <button
                   key={id}
-                  onClick={() => pickGroup(id)}
+                  onClick={() => startFrom(id)}
                   aria-pressed={group === id}
                   className={`rounded-full ring-offset-2 transition-shadow ${group === id ? 'ring-2 ring-gray-900' : 'opacity-60 hover:opacity-100'}`}
                 >
@@ -193,7 +230,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
           </fieldset>
         )}
 
-        {group !== null && existing && !editing && (
+        {group !== null && existing && !editing && !waiting && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
             <div className="flex items-start gap-3">
               <LapFigures laps={existing.laps} allTimeBest={allTimeBest} />
@@ -209,7 +246,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
           </section>
         )}
 
-        {group !== null && editing && (
+        {group !== null && editing && !waiting && (
           <>
             <label htmlFor={textareaId} className="mt-4 text-xs font-medium text-gray-700">
               Lap times or timestamps
@@ -219,6 +256,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
               value={text}
               onChange={e => {
                 setText(e.target.value)
+                setTextTouched(true)
                 setConfirmingRemove(false)
               }}
               rows={5}
@@ -296,7 +334,7 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
         {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
         <div className="mt-5 flex flex-col items-center gap-3">
-          {(editing || group === null) && (
+          {(editing || group === null) && !waiting && (
             <button
               onClick={save}
               disabled={!canSave}
@@ -331,7 +369,8 @@ export function LapTimesSheet({ slot, runGroups, showDate, saved, allTimeBest, o
             </div>
           )}
           <p className="flex items-center gap-1 text-[11px] text-gray-400">
-            <Lock size={11} aria-hidden="true" /> Only you can see your lap times.
+            <Lock size={11} aria-hidden="true" />
+            {driver ? `Only ${driverName(driver)} and admins can see these lap times.` : 'Only you and admins can see your lap times.'}
           </p>
         </div>
       </div>
