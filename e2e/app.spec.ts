@@ -502,8 +502,10 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await stubEvents(page)
   await signInAsAdmin(page)
   const jason = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
+  // No name on his account, so he goes by his email — a long one.
+  const email = 'jasonrivera.racing@example.com'
   await page.route('**/api/drivers', route => route.fulfill({
-    json: { drivers: [{ id: 'a', email: 'admin@example.com', name: 'Ada Admin' }, { id: jason, email: 'jason@example.com', name: 'Jason Rivera' }] },
+    json: { drivers: [{ id: 'a', email: 'admin@example.com', name: 'Ada Admin' }, { id: jason, email, name: null }] },
   }))
   const laps: Record<string, { key: string }[]> = {}
   await page.route(/\/api\/laps(\?|$)/, async route => {
@@ -524,15 +526,20 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   const picker = sheet.getByLabel('Driver')
-  await expect(picker.getByRole('option')).toHaveText(['Me', 'Jason Rivera'])
-  await picker.selectOption({ label: 'Jason Rivera' })
-  await expect(sheet).toContainText('Only Jason Rivera and admins can see these lap times.')
+  await expect(picker.getByRole('option')).toHaveText(['Me', email])
+  await picker.selectOption({ label: email })
+  await expect(sheet).toContainText(`Only ${email} and admins can see these lap times.`)
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
 
   await expect(sheet).toBeHidden()
-  await expect(page.getByRole('status')).toHaveText('Lap times saved for Jason Rivera')
+  const toast = page.getByRole('status')
+  await expect(toast).toHaveText(`Lap times saved for ${email}`)
+  // It wraps rather than running off the screen.
+  const pill = (await toast.locator('> div').boundingBox())!
+  expect(pill.x).toBeGreaterThanOrEqual(0)
+  expect(pill.x + pill.width).toBeLessThanOrEqual(page.viewportSize()!.width)
   expect(Object.keys(laps)).toEqual([jason])
   // The schedule marks Jason's laps, and says so above them.
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (saved)' })).toBeVisible()
