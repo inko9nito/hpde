@@ -50,18 +50,27 @@ const otherWay: EventConfig = { ...sameLayout, id: '2026-01-10_ccw', name: 'CCW'
 let summary: { eventId: string; best?: number; sessions: number }[] = []
 
 // identity.ts caches the first widget it loads, so every test shares one
-// fake; signedIn decides whether it reports a user.
+// fake; signedIn decides whether it reports a user, roles what they are.
 let signedIn = true
+let roles: string[] = []
 const handlers: Record<string, (u: unknown) => void> = {}
-const currentUser = () => (signedIn ? { id: 'u', email: 'v@example.com', app_metadata: { roles: [] }, jwt: async () => 'token' } : null)
+const currentUser = () => (signedIn ? { id: 'u', email: 'v@example.com', app_metadata: { roles }, jwt: async () => 'token' } : null)
 const fakeWidget = {
   init: () => handlers.init?.(currentUser()),
   on: (e: string, cb: (u: unknown) => void) => { handlers[e] = cb },
   open() {}, close() {}, logout() {}, currentUser,
 } as unknown as NonNullable<typeof window.netlifyIdentity>
 
-// The laps function, in memory.
+// Another driver an admin can log laps for (#288).
+const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
+const DRIVERS = [
+  { id: JASON, email: 'jason@example.com', name: 'Jason' },
+  { id: 'u', email: 'v@example.com', name: 'Vera' },
+]
+
+// The laps function, in memory: the signed-in driver's laps, and Jason's.
 let saved: SessionLaps[] = []
+let jasonSaved: SessionLaps[] = []
 let failSaves = false
 // While set, reading the laps waits for it.
 let holdLaps: Promise<void> | null = null
@@ -72,24 +81,38 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   const url = String(input)
   if (url.includes('/.netlify/identity/settings')) return json({})
   if (url.includes('api/events')) return json({ events: [event, sameLayout, otherWay] })
+  if (url.includes('api/drivers')) {
+    expect(roles).toContain('admin')
+    return json({ drivers: DRIVERS })
+  }
   if (url.includes('api/laps')) {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
-    if (!url.includes('?')) return json({ events: summary })
-    expect(url).toContain(`event=${event.id}`)
+    const params = new URL(url, 'https://x').searchParams
+    const forJason = params.get('driver') === JASON
+    if (params.has('driver')) {
+      expect(roles).toContain('admin')
+      expect(params.get('driver')).toBe(JASON)
+    }
+    if (!params.has('event')) return json({ events: forJason ? [] : summary })
+    // Nothing saved at the earlier event.
+    if (params.get('event') === sameLayout.id && !init?.method) return json({ sessions: [] })
+    expect(params.get('event')).toBe(event.id)
+    const laps = forJason ? jasonSaved : saved
+    const keep = (next: SessionLaps[]) => { if (forJason) jasonSaved = next; else saved = next }
     if (init?.method === 'PUT') {
       if (failSaves) return json({ error: 'Blobs is down.' }, 503)
       const { session } = JSON.parse(String(init.body))
       const stored = { ...session, key: `${session.date} ${session.time} ${session.group}`, updatedAt: 'now' }
-      saved = [...saved.filter(s => s.key !== stored.key), stored].sort((a, b) => a.key.localeCompare(b.key))
+      keep([...laps.filter(s => s.key !== stored.key), stored].sort((a, b) => a.key.localeCompare(b.key)))
       return json({ session: stored })
     }
     if (init?.method === 'DELETE') {
-      const key = new URL(url, 'https://x').searchParams.get('session')
-      saved = saved.filter(s => s.key !== key)
+      const key = params.get('session')
+      keep(laps.filter(s => s.key !== key))
       return json({ deleted: key })
     }
     if (holdLaps) await holdLaps
-    return json({ sessions: saved })
+    return json({ sessions: laps })
   }
   return new Response('not found', { status: 404 })
 })
@@ -122,11 +145,14 @@ function rows(el: HTMLElement): string[][] {
 
 const lapCalls = (method: string) =>
   fetchMock.mock.calls.filter(([url, init]) => String(url).includes('api/laps') && (init?.method ?? 'GET') === method)
+const driverCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('api/drivers'))
 
 beforeEach(() => {
   localStorage.clear()
   signedIn = true
+  roles = []
   saved = []
+  jasonSaved = []
   summary = []
   holdLaps = null
   failSaves = false
@@ -204,6 +230,10 @@ describe('lap times (#210)', () => {
     expect(within(card).queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
+    // Only admins pick a driver (#288).
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    expect(driverCalls()).toHaveLength(0)
+    expect(lapCalls('GET').every(([url]) => !String(url).includes('driver='))).toBe(true)
   })
 
   it('asks which group when more than one is on track', async () => {
@@ -394,6 +424,97 @@ describe('lap times (#210)', () => {
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(lapCalls('PUT')).toHaveLength(0)
+  })
+})
+
+
+describe('an admin logging another driver’s lap times (#288)', () => {
+  const blue2 = (ms: number): SessionLaps => ({
+    key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms }],
+  })
+  beforeEach(() => { roles = ['admin'] })
+
+  it('picks the driver in the sheet, and saves the laps as theirs', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue')
+    const sheet = screen.getByRole('dialog')
+    const picker = within(sheet).getByLabelText('Driver')
+    expect(picker).toHaveValue('')
+    // Everyone else, by name; the admin is "Me".
+    await waitFor(() => expect(within(picker).getAllByRole('option').map(o => o.textContent)).toEqual(['Me', 'Jason']))
+    expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
+
+    await userEvent.selectOptions(picker, 'Jason')
+    expect(sheet).toHaveTextContent('Only Jason and admins can see these lap times.')
+    const box = await within(sheet).findByLabelText('Lap times or timestamps')
+    fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('Lap times saved for Jason')
+
+    const [url] = lapCalls('PUT')[0]
+    expect(String(url)).toContain(`driver=${JASON}`)
+    expect(jasonSaved.map(s => s.key)).toEqual(['2026-03-07 11:45 blue'])
+    expect(saved).toEqual([])
+
+    // The schedule says whose laps it's marking, and switches back.
+    expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
+    const banner = screen.getByLabelText('Driver')
+    expect(banner).toHaveValue(JASON)
+    await userEvent.selectOptions(banner, 'Me')
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Lap times: 11:45 AM, Blue' })).toBeInTheDocument()
+  })
+
+  it('keeps what’s been pasted when the driver is picked after', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue')
+    const sheet = screen.getByRole('dialog')
+    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '1:24.5' } })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
+    expect(within(sheet).getByLabelText('Lap times or timestamps')).toHaveValue('1:24.5')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
+    await waitFor(() => expect(jasonSaved).toHaveLength(1))
+    expect(saved).toEqual([])
+  })
+
+  it('shows the picked driver’s saved laps, and yours again on switching back', async () => {
+    saved = [blue2(99_420)]
+    jasonSaved = [blue2(84_420)]
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue (saved)')
+    const sheet = screen.getByRole('dialog')
+    const savedLaps = () => rows(within(sheet).getByRole('region', { name: 'Saved laps' }))[1]
+    expect(savedLaps()).toEqual(['1', '1:39.42'])
+
+    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
+    await waitFor(() => expect(savedLaps()).toEqual(['1', '1:24.42']))
+    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), 'Me')
+    await waitFor(() => expect(savedLaps()).toEqual(['1', '1:39.42']))
+  })
+
+  it('lists the picked driver’s laps on My notes', async () => {
+    saved = [blue2(99_000)]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
+    expect(await screen.findByText('No lap times yet')).toBeInTheDocument()
+    expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps.')).toBeInTheDocument()
+    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+
+    // Picked again, they're fetched afresh.
+    jasonSaved = [blue2(84_000)]
+    await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Me')
+    await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Jason')
+    expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:24')
+
+    // Another event starts back on the admin's own.
+    window.location.hash = `#/event/${sameLayout.id}`
+    const earlier = () => lapCalls('GET').filter(([url]) => String(url).includes(`event=${sameLayout.id}`))
+    await waitFor(() => expect(earlier()).toHaveLength(1))
+    expect(String(earlier()[0][0])).not.toContain('driver=')
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
   })
 })
 

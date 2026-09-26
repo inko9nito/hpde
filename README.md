@@ -133,7 +133,7 @@ Repeat for anyone else who should be able to add events.
 ## Lap times (signed in)
 
 Signed-in drivers can log their lap times for each session they drove.
-Only they can see them.
+Only they and admins can see them.
 
 - **Add:** on an event's Schedule tab, tap a session's *On track* row.
   If more than one group is on track, pick yours. Then paste your times
@@ -175,9 +175,22 @@ Only they can see them.
   `?event=` it sums up each event's best, for the layout best) in
   Netlify Blobs (store `laps`), one record per driver per event, keyed by
   their Identity user id. Every request needs a sign-in and only ever
-  reaches the driver's own laps. A deploy preview gets an empty store of
-  its own, so laps saved on a preview never touch the real ones, and
-  they're gone with the next deploy.
+  reaches the driver's own laps, except an admin's (below). A deploy
+  preview gets an empty store of its own, so laps saved on a preview
+  never touch the real ones, and they're gone with the next deploy.
+- **For another driver (admins, #288):** the lap sheet and My notes
+  have a **Driver** picker: *Me*, or anyone who has signed in to the
+  site. Pick someone to see, add, edit or remove their laps. They're
+  saved in that driver's account, so they see them when they sign in,
+  and they count toward that driver's all-time best. While someone else
+  is picked, the Schedule tab shows the picker too, so it's clear whose
+  laps are marked. Another event starts back on *Me*. Someone who has
+  never signed in isn't on the list: they need to sign in once first.
+  - `netlify/functions/drivers.mts` (`/api/drivers`, admins only) lists
+    everyone from Netlify Identity's admin API (`@netlify/identity`);
+    `/api/laps` takes `driver=<user id>` from admins only, checks the id
+    against Identity, and notes the admin's email on each session saved
+    that way (`loggedBy`).
 
 ---
 

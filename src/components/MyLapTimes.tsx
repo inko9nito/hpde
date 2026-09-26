@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { LapFigures, LapTable, lapColumns } from './LapList'
@@ -7,6 +8,8 @@ import { formatTime, formatAmPm } from '../utils/time'
 import { formatLapTime } from '../utils/lapTimes'
 import { eventBest, trackShortName } from '../utils/trackStats'
 import type { LapLog } from '../data/lapLog'
+import { driverName } from '../data/drivers'
+import type { Driver } from '../data/drivers'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventConfig } from '../types'
 
@@ -17,6 +20,10 @@ interface Props {
   layoutBest: { best?: number; events: number }
   /** The same best, once every event's is known — marks the lap that set it. */
   allTimeBest?: number
+  /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
+  driver?: Driver | null
+  /** Admins only: the Driver picker, above the laps (#288). */
+  driverPicker?: ReactNode
   onEdit: (session: SessionLaps) => void
 }
 
@@ -44,9 +51,9 @@ export const SKELETON_FADE_MS = 150
 const bar = 'animate-pulse rounded bg-gray-100'
 
 /** Stand-in for the stat cards and a session card while the laps load. */
-function Skeleton({ track, leaving }: { track: boolean; leaving: boolean }) {
+function Skeleton({ track, leaving, whose }: { track: boolean; leaving: boolean; whose: string }) {
   return (
-    <div className={leaving ? 'fade-out' : 'fade-in'} aria-busy="true" aria-label="Loading your lap times">
+    <div className={leaving ? 'fade-out' : 'fade-in'} aria-busy="true" aria-label={`Loading ${whose} lap times`}>
       <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {(track ? [0, 1] : [0]).map(i => (
           <div key={i} className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -76,14 +83,17 @@ function Skeleton({ track, leaving }: { track: boolean; leaving: boolean }) {
 /**
  * The My notes tab (#210): the driver's own lap times for this event,
  * session by session. Added from the Schedule tab; edited from here too.
+ * An admin can pick another driver's instead (#288).
  */
-export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Props) {
+export function MyLapTimes({ event, log, layoutBest, allTimeBest, driver = null, driverPicker, onEdit }: Props) {
   // Sessions whose lap table is open. All closed to start, so the figures
   // for every session fit on screen at once.
   const [open, setOpen] = useState<Set<string>>(() => new Set())
   const runGroups = event.runGroups
   const track = trackShortName(event)
   const allOpen = log.sessions.length > 0 && log.sessions.every(s => open.has(s.key))
+  const name = driver ? driverName(driver) : null
+  const whose = name ? `${name}’s` : 'your'
 
   // While the laps load, a skeleton fades in; once they're in, it fades
   // out and the lap times fade in in its place.
@@ -109,7 +119,8 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
     })
   }
 
-  const header = (
+  const header = (<>
+    {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
     <div className="mb-3 flex min-h-[20px] items-center justify-between gap-3 px-1 text-xs text-gray-500">
       {log.status === 'ready' && log.sessions.length > 0 ? (
         <button
@@ -122,14 +133,17 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
-      <span className="flex shrink-0 items-center gap-1" title="Only you can see your lap times">
+      <span
+        className="flex shrink-0 items-center gap-1"
+        title={name ? `Only ${name} and admins can see these lap times` : 'Only you and admins can see your lap times'}
+      >
         <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
       </span>
     </div>
-  )
+  </>)
 
   if (loading || leaving) {
-    return <>{header}<Skeleton track={!!track} leaving={leaving} /></>
+    return <>{header}<Skeleton track={!!track} leaving={leaving} whose={whose} /></>
   }
 
   if (log.status === 'error') {
@@ -137,7 +151,7 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
       <>
         {header}
         <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-700">Couldn’t load your lap times</p>
+          <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} lap times</p>
           <p className="mt-1 text-xs text-gray-400">Check your connection and try again.</p>
           <button
             onClick={log.reload}
@@ -157,7 +171,11 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, onEdit }: Prop
         <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
           <Timer size={20} className="mx-auto text-gray-400" aria-hidden="true" />
           <p className="mt-2 text-sm font-medium text-gray-700">No lap times yet</p>
-          <p className="mt-1 text-xs text-gray-400">On the Schedule tab, tap a session you drove to add your laps.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            {name
+              ? `On the Schedule tab, tap a session ${name} drove to add their laps.`
+              : 'On the Schedule tab, tap a session you drove to add your laps.'}
+          </p>
         </div>
       </>
     )

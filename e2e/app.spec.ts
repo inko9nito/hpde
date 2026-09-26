@@ -497,3 +497,61 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:46')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
+
+test('an admin logs another driver’s lap times, picked in the sheet (#288)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  const jason = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
+  // No name on his account, so he goes by his email — a long one.
+  const email = 'jasonrivera.racing@example.com'
+  await page.route('**/api/drivers', route => route.fulfill({
+    json: { drivers: [{ id: 'a', email: 'admin@example.com', name: 'Ada Admin' }, { id: jason, email, name: null }] },
+  }))
+  const laps: Record<string, { key: string }[]> = {}
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const req = route.request()
+    const params = new URL(req.url()).searchParams
+    const driver = params.get('driver') ?? 'a'
+    if (!params.has('event')) return route.fulfill({ json: { events: [] } })
+    if (req.method() === 'PUT') {
+      const { session } = req.postDataJSON()
+      const saved = { ...session, key: `${session.date} ${session.time} ${session.group}` }
+      laps[driver] = [saved]
+      return route.fulfill({ json: { session: saved } })
+    }
+    return route.fulfill({ json: { sessions: laps[driver] ?? [] } })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  const picker = sheet.getByLabel('Driver')
+  await expect(picker.getByRole('option')).toHaveText(['Me', email])
+  await picker.selectOption({ label: email })
+  await expect(sheet).toContainText(`Only ${email} and admins can see these lap times.`)
+  await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+
+  await expect(sheet).toBeHidden()
+  const toast = page.getByRole('status')
+  await expect(toast).toHaveText(`Lap times saved for ${email}`)
+  // It wraps rather than running off the screen.
+  const pill = (await toast.locator('> div').boundingBox())!
+  expect(pill.x).toBeGreaterThanOrEqual(0)
+  expect(pill.x + pill.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  expect(Object.keys(laps)).toEqual([jason])
+  // The schedule marks Jason's laps, and says so above them.
+  await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (saved)' })).toBeVisible()
+  await expect(page.getByLabel('Driver')).toHaveValue(jason)
+  await expect(page.getByLabel('Driver')).toBeInViewport()
+
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await expect(page.getByLabel('Driver')).toHaveValue(jason)
+  await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:23.84')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Back to the admin's own: none yet.
+  await page.getByLabel('Driver').selectOption({ label: 'Me' })
+  await expect(page.getByText('No lap times yet')).toBeVisible()
+})

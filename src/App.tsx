@@ -21,7 +21,10 @@ import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventP
 import { LapTimesSheet } from './components/LapTimesSheet'
 import type { SessionSlot } from './components/LapTimesSheet'
 import { MyLapTimes } from './components/MyLapTimes'
+import { DriverPicker } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
+import { useDrivers, driverName } from './data/drivers'
+import type { Driver } from './data/drivers'
 import { bestOnLayout, eventBest } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
@@ -176,6 +179,12 @@ export default function App() {
   const pushScrollRef = useRef<HTMLDivElement>(null)
   // The session whose lap times are open in the sheet (#210), if any.
   const [lapSlot, setLapSlot] = useState<SessionSlot | null>(null)
+  // An admin can log another driver's lap times (#288): whose the sheet,
+  // My notes and the schedule's saved marks are showing. Null for their
+  // own; back to that on another event.
+  const [lapDriver, setLapDriver] = useState<Driver | null>(null)
+  const isAdminUser = authStatus === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
+  const driver = isAdminUser ? lapDriver : null
   const [toast, setToast] = useState<ToastMessage | null>(null)
   function showToast(text: string) {
     setToast({ id: Date.now(), text })
@@ -244,13 +253,19 @@ export default function App() {
 
   // The signed-in driver's lap times for this event (#210).
   // Fetched only while this event's page is open.
-  const lapLog = useLapLog(routeEventId !== null && routeEventId === activeEvent.id ? activeEvent.id : null)
+  const lapLog = useLapLog(routeEventId !== null && routeEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
   const savedLapKeys = new Set(lapLog.byKey.keys())
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
-  const lapSummary = useLapSummary(lapLog.status !== 'off')
+  const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
   const layoutBest = bestOnLayout(activeEvent, ALL_EVENTS, lapSummary ?? [], eventBest(lapLog.sessions))
   const allTimeBest = lapSummary ? layoutBest.best : undefined
+
+  // Who else an admin can pick, fetched once they open the laps.
+  const drivers = useDrivers(isAdminUser && isOnEventRoute && (lapSlot !== null || activeTab === 'notes'))
+  const driverPicker = isAdminUser && user
+    ? <DriverPicker driver={driver} onChange={setLapDriver} drivers={drivers} selfId={user.id} />
+    : undefined
 
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -269,6 +284,7 @@ export default function App() {
     setSelectedGroups([])
     setActiveTab('schedule')
     setLapSlot(null)
+    setLapDriver(null)
   }
 
   function switchEvent(event: EventConfig) {
@@ -409,6 +425,11 @@ export default function App() {
                 />
               )}
 
+              {/* Someone else's laps on show (#288): say whose, and let the admin switch back. */}
+              {driver && driverPicker && (
+                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>
+              )}
+
               {/* Filters */}
               <div className="mb-4 flex items-center justify-between gap-3">
                 <RunGroupFilter
@@ -457,6 +478,8 @@ export default function App() {
               log={lapLog}
               layoutBest={layoutBest}
               allTimeBest={allTimeBest}
+              driver={driver}
+              driverPicker={driverPicker}
               onEdit={session => setLapSlot({
                 date: session.date,
                 time: session.time,
@@ -518,15 +541,18 @@ export default function App() {
         showDate={multiDay}
         saved={key => lapLog.byKey.get(key)}
         allTimeBest={allTimeBest}
+        driver={driver}
+        driverPicker={driverPicker}
+        loading={lapLog.status === 'loading'}
         onSave={async session => {
           await lapLog.save(session)
           setLapSlot(null)
-          showToast('Lap times saved')
+          showToast(driver ? `Lap times saved for ${driverName(driver)}` : 'Lap times saved')
         }}
         onRemove={async key => {
           await lapLog.remove(key)
           setLapSlot(null)
-          showToast('Lap times removed')
+          showToast(driver ? `Lap times removed for ${driverName(driver)}` : 'Lap times removed')
         }}
         onClose={() => setLapSlot(null)}
       />
