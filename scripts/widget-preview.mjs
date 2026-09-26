@@ -157,8 +157,9 @@ export const WIDGET_ENV_CONSTANTS = Object.freeze({
   // 5pt spacing repeat every 55 px @3x = 18.3pt = 11 × 1.21 + 5.
   textLineHeight: 1.19,
 
-  // Minimum width of a flexible addSpacer() (SwiftUI Spacer() with no
-  // minLength). SwiftUI's standard spacing is 8pt; #204's Medium
+  // Minimum length of a flexible addSpacer() (SwiftUI Spacer() with no
+  // minLength), along its stack's axis: a width in a row, a height in a
+  // column (#291). SwiftUI's standard spacing is 8pt; #204's Medium
   // screenshot measured a squeezed flexible spacer at ~9.5pt (28.5 px
   // @3x) between the 228pt info column + 12pt spacer and the well, which
   // is 8pt within measurement error of the card edges.
@@ -601,6 +602,14 @@ class ImageWrapper {
   set imageOpacity(v) { this.node.style.opacity = v }
 }
 
+// A flexible spacer in a column keeps SwiftUI's minimum length as a
+// height: squeezed, the widget's content overflows (and is clipped)
+// rather than the spacer vanishing. (In a row, layoutWidgetRoots
+// applies the same minimum to widths.)
+function flexSpacerMinHeight(sp) {
+  sp.style['min-height'] = WIDGET_ENV_CONSTANTS.flexSpacerMinWidth + 'px'
+}
+
 class StackMock {
   constructor(orientation = 'row') {
     this.node = makeNode(orientation)
@@ -640,6 +649,7 @@ class StackMock {
     this.node.orientation = 'column'
     this.node.data.k = 'v'
     this.node.style['flex-direction'] = 'column'
+    for (const c of this.node.children) if (c.data.k === 'sp') flexSpacerMinHeight(c)
   }
   addText(text) {
     const n = makeNode('text'); n.text = text
@@ -665,6 +675,7 @@ class StackMock {
       sp.data.k = 'sp'
       sp.style.flex = '1 1 0'
       sp.style['align-self'] = 'stretch'
+      if (this.node.orientation === 'column') flexSpacerMinHeight(sp)
     } else {
       sp.data.k = 'fsp'
       sp.data.n = String(n)
@@ -877,6 +888,7 @@ const SCENARIOS = [
   { family: 'large', manifest: LIVE_LONG_NAME, at: `${LIVE_DAY}T10:05`, param: '15m', label: 'Large — live, long name, alert time alone' },
   { family: 'medium', manifest: LIVE_LONG_NAME, at: `${LIVE_DAY}T10:05`, param: '15m', label: 'Medium — live, long name, alert time alone' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange|15m', label: 'Medium — live, filtered + 15m alerts' },
+  { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, label: 'Medium — live, two-row card, no parameter' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'blue', label: 'Medium — live, no sessions for the filter' },
   { family: 'medium', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T08:53`, param: '15m', label: 'Medium — live, between cards' },
   { family: 'large', manifest: RICH_MANIFEST, label: 'Large — populated today' },

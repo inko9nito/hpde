@@ -727,6 +727,9 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
   const nowLineLast = nowLineBetweenAt >= rows.length
+  // With the flex spacer after the rows, this one splits the leftover
+  // room evenly above and below them.
+  if (liveTier().centerCards) w.addSpacer()
   for (let i = 0; i < rows.length; i++) {
     if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextActivity, 6)
     const ev = rows[i]
@@ -865,10 +868,13 @@ const LIVE_HEADER = {
 // now-marker (#291): the line across the current card and its "10:05
 // AM · Next in 20m" caption took the room of a whole card. There the
 // current activity is only tinted, its time bold, and the next one
-// shows under it; there's less air under the header too.
+// shows under it; there's less air under the header too. Its one or two
+// cards sit in the middle of the room under the header rather than
+// against it with the leftover all below; Large's list starts at the
+// top.
 const LIVE_TIERS = {
-  compact: { chipsGap: 5, gapBelow: 8, nowMarker: false },
-  large: { chipsGap: 7, gapBelow: 14, nowMarker: true },
+  compact: { chipsGap: 5, gapBelow: 8, nowMarker: false, centerCards: true },
+  large: { chipsGap: 7, gapBelow: 14, nowMarker: true, centerCards: false },
 }
 
 function liveTier() {
