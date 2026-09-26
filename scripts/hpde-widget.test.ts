@@ -14,7 +14,7 @@
 // exercise every module-level initializer and every code path the
 // render loop hits on typical data.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -78,8 +78,12 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   // used to just return a blank stub, so a test could confirm the
   // render didn't throw but never what it actually said.
   g.__texts = [] as string[]
-  const textStub = (text: string) => {
+  // The stack each text first went into, so a test can ask whether two
+  // texts share a row (e.g. the alert chip at the end of the header line).
+  g.__textStacks = new Map<string, unknown>()
+  const textStub = (text: string, stack?: unknown) => {
     g.__texts.push(text)
+    if (stack && !g.__textStacks.has(text)) g.__textStacks.set(text, stack)
     return {
       font: null, textColor: null, textOpacity: 1,
       set lineLimit(v: number) { num(v) },
@@ -103,8 +107,9 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.__stackSizes = [] as Array<{ cornerRadius: number | null; width: number; height: number }>
   class StackStub {
     _cornerRadius: number | null = null
-    addStack() { return new StackStub() }
-    addText(text: string) { return textStub(text) }
+    parent: StackStub | null = null
+    addStack() { const s = new StackStub(); s.parent = this; return s }
+    addText(text: string) { return textStub(text, this) }
     addImage() { return imageStub() }
     addSpacer(_n?: number) {}
     setPadding(t: number, l: number, b: number, r: number) { [t, l, b, r].forEach(num) }
@@ -217,8 +222,13 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
   g.__notifs = []
 }
 
-async function runWidget(widgetFamily: string, manifest: unknown, widgetParameter: string | null = null) {
+async function runWidget(
+  widgetFamily: string, manifest: unknown, widgetParameter: string | null = null,
+  // Adjusts the mocks before the widget runs (e.g. notifications denied).
+  setup: () => void = () => {},
+) {
   installScriptableMocks(manifest, widgetParameter)
+  setup()
   ;(globalThis as any).config = { widgetFamily, runsInWidget: false }
   // Widget script uses top-level await; wrap in an async IIFE so
   // it can be evaled and awaited from here.
@@ -598,6 +608,149 @@ describe('scriptable widget loads and renders', () => {
 
   it('renders a single upcoming card plus a "more upcoming" footer on Medium', async () => {
     await expect(runWidget('medium', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
+  })
+})
+
+// The live view at a fixed moment: Saturday of a TDE at 10:05, with
+// Sunday's event (and its Blue group) also in the feed.
+describe('live view header and parameter chips (#291)', () => {
+  const DAY = '2026-09-12'
+  const LIVE = {
+    events: [{
+      id: 'tde', name: 'TDE at MSRC',
+      runGroups: [
+        { id: 'instructors', label: 'Instructors', color: '#18181b' },
+        { id: 'purple', label: 'Purple', color: '#9333ea' },
+        { id: 'orange', label: 'Orange', color: '#ea580c' },
+      ],
+      days: [{
+        date: DAY, label: 'Saturday',
+        activities: [
+          { time: '08:00', type: 'general', label: 'Track goes hot' },
+          { time: '09:30', type: 'session', onTrack: ['orange'], inClass: ['purple'] },
+          { time: '10:00', type: 'session', onTrack: ['instructors'], inClass: ['orange'] },
+          { time: '10:30', type: 'session', onTrack: ['purple'], inClass: [] },
+          { time: '11:00', type: 'session', onTrack: ['orange'], inClass: [] },
+          { time: '11:30', type: 'lunch', label: 'Lunch', subtitle: '60 minutes' },
+          { time: '13:00', type: 'session', onTrack: ['orange'], inClass: ['purple'] },
+          { time: '13:30', type: 'session', onTrack: ['purple'], inClass: [] },
+          { time: '14:00', type: 'session', onTrack: ['orange'], inClass: [] },
+          { time: '16:00', type: 'general', label: 'Track goes cold' },
+        ],
+      }],
+    }, {
+      id: 'scca', name: 'SCCA',
+      runGroups: [{ id: 'blue', label: 'Blue', color: '#2563eb' }],
+      days: [{ date: '2026-09-13', label: 'Sunday', activities: [] }],
+    }],
+  }
+  // The header line (the test mocks are always offline), then the chips.
+  const HEADER = ['SEP 12', 'TDE at MSRC', 'Offline']
+
+  async function live(family: string, param: string | null, at = '10:05', setup?: () => void) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(`${DAY}T${at}:00`))
+    await runWidget(family, LIVE, param, setup)
+    return (globalThis as any).__texts as string[]
+  }
+  afterEach(() => { vi.useRealTimers() })
+  // The texts begin with the header line, then `rest` (chips, then cards).
+  function expectStart(texts: string[], ...rest: string[]) {
+    expect(texts.slice(0, HEADER.length + rest.length)).toEqual([...HEADER, ...rest])
+  }
+
+  it('puts the date before the name, as the upcoming view does, and no chips without a parameter', async () => {
+    const texts = await live('large', null)
+    expectStart(texts, '9:30')
+  })
+
+  it('shows the groups it filters to and a non-default alert time', async () => {
+    const texts = await live('large', 'orange,purple|15m')
+    expectStart(texts, 'Orange', 'Purple', '15m')
+  })
+
+  it('leaves the default alert time out', async () => {
+    const texts = await live('large', 'orange|10m')
+    expectStart(texts, 'Orange', '9:30')
+  })
+
+  it('puts the alert time alone at the end of the header line, and in the chip row with a filter', async () => {
+    // The stacks a text sits in, innermost first.
+    const ancestors = (text: string) => {
+      const out = []
+      for (let s = (globalThis as any).__textStacks.get(text); s; s = s.parent) out.push(s)
+      return out
+    }
+    const sharesRow = (a: string, b: string) => ancestors(a).some(s => ancestors(b).includes(s))
+    await live('large', '15m')
+    expect(sharesRow('15m', 'TDE at MSRC')).toBe(true)
+    await live('large', 'orange|15m')
+    expect(sharesRow('15m', 'TDE at MSRC')).toBe(false)
+    expect(sharesRow('15m', 'Orange')).toBe(true)
+  })
+
+  it('says when alerts come at the start', async () => {
+    const texts = await live('large', '0m')
+    expectStart(texts, 'At start')
+  })
+
+  it('warns when a group it filters to has no sessions today', async () => {
+    const texts = await live('large', 'orange,blue')
+    expectStart(texts, 'Orange', 'No Blue today')
+  })
+
+  it('shows a parameter it can\'t read as a chip, not a footer', async () => {
+    const texts = await live('large', 'orange,blu')
+    expectStart(texts, 'Orange', 'Invalid parameter: blu')
+    expect(texts.filter(t => /Invalid/.test(t))).toHaveLength(1)
+  })
+
+  it('says notifications are off instead of the alert time', async () => {
+    const texts = await live('large', 'orange|15m', '10:05', () => {
+      ;(globalThis as any).Notification.prototype.schedule = async () => { throw new Error('denied') }
+    })
+    expectStart(texts, 'Orange', 'Notifications off')
+    expect(texts).not.toContain('15m')
+  })
+
+  it('has no status footer or "more activities" line', async () => {
+    const texts = await live('large', 'orange,purple')
+    expect(texts.some(t => /more activit|Cached schedule/.test(t))).toBe(false)
+  })
+
+  it('keeps the past card on Large but starts at the current one on Medium', async () => {
+    const large = await live('large', null)
+    expect(large).toContain('9:30')
+    const medium = await live('medium', null)
+    expect(medium).not.toContain('9:30')
+    expectStart(medium, '10:00')
+  })
+
+  it('drops the now-marker on Medium, so the next activity fits under the current one', async () => {
+    // Large: the marker's caption ("10:05 AM", "Next in 55m").
+    const large = await live('large', 'orange|15m')
+    expect(large).toContain('10:05 AM')
+    expect(large).toContain('Next in ')
+    // Medium: the current 10:00 card, then the next Orange session.
+    const medium = await live('medium', 'orange|15m')
+    expect(medium).not.toContain('10:05 AM')
+    expect(medium).not.toContain('Next in ')
+    expectStart(medium, 'Orange', '15m', '10:00')
+    expect(medium).toContain('11:00')
+  })
+
+  it('shows the last activity on Medium once the day is over', async () => {
+    const texts = await live('medium', null, '17:00')
+    expect(texts).toContain('Track goes cold')
+  })
+
+  it('shows no group chips before the day has a schedule', async () => {
+    const empty = { events: [{ ...LIVE.events[0], days: [{ date: DAY, label: 'Saturday', activities: [] }] }] }
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(`${DAY}T10:05:00`))
+    await runWidget('large', empty, 'orange|15m')
+    const texts = (globalThis as any).__texts as string[]
+    expectStart(texts, '15m', 'Schedule coming soon')
   })
 })
 

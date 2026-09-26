@@ -338,6 +338,46 @@ function validateWidgetParameter(parsed, manifest) {
   return parsed
 }
 
+// What the widget's parameter and alerts change about today's view
+// (#291), for the chips under the live view's header: the run groups
+// it's filtered to that have sessions today, the ones that don't (every
+// one of their sessions is missing, so they get a warning), parameter
+// tokens it couldn't read, and the alerts — off, or their lead time when
+// it isn't the default. Null when there's none of it.
+function paramSummary(parsed, notifStatus, event, day, manifest) {
+  const running = new Set()
+  for (const a of day.activities || []) {
+    if (a.type !== "session") continue
+    for (const id of [...(a.onTrack || []), ...(a.inClass || [])]) running.add(id)
+  }
+  const groups = []
+  const missing = []
+  // With no schedule yet, nothing is filtered out: no group chips.
+  if ((day.activities || []).length > 0) {
+    for (const id of (parsed && parsed.groups) || []) {
+      const g = findRunGroup(event, manifest, id)
+      if (running.has(id)) groups.push(g)
+      else missing.push(g)
+    }
+  }
+  const invalid = (parsed && parsed.invalid) || []
+  const notifsOff = !!(notifStatus && notifStatus.denied)
+  const lead = !notifsOff && parsed && parsed.leadMinutes !== DEFAULT_LEAD_MIN ? parsed.leadMinutes : null
+  if (groups.length + missing.length + invalid.length === 0 && !notifsOff && lead == null) return null
+  return { groups, missing, invalid, notifsOff, lead }
+}
+
+// A run group by id: today's event's own, else another event's (a
+// filter can name a group that only runs at another event).
+function findRunGroup(event, manifest, id) {
+  const events = [event, ...((manifest && manifest.events) || [])]
+  for (const e of events) {
+    const g = (e.runGroups || []).find(x => x.id === id)
+    if (g) return g
+  }
+  return { id, label: id }
+}
+
 // ---------- palette ----------
 
 // `accent` (blue) is the today view's now-marker, as the app's
@@ -345,7 +385,8 @@ function validateWidgetParameter(parsed, manifest) {
 // the app's DateBlock month (red-600 light / red-400 dark) — for the
 // month, the countdown pill and the Small well;
 // `brandTint` (the app's LIVE badge background, red-500 at 10%) is the
-// pill's and the Small well's background.
+// pill's and the Small well's background. `separator` is the live
+// view header's rule between the date and the name (#291).
 function palette(dark) {
   return dark
     // Dark mode keeps its "cards are slightly LIGHTER than the
@@ -358,6 +399,7 @@ function palette(dark) {
         cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
+        separator: new Color("#3f3f46"),
         accent: new Color("#3b82f6"),
         brand: new Color("#f87171"), brandTint: new Color("#ef4444", 0.15),
         pastOpacity: 0.6 }
@@ -372,6 +414,7 @@ function palette(dark) {
         cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
+        separator: new Color("#d1d5db"),
         accent: new Color("#3b82f6"),
         brand: new Color("#dc2626"), brandTint: new Color("#ef4444", 0.1),
         pastOpacity: 0.6 }
@@ -582,13 +625,13 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
     return (e.onTrack.length > 0) || (e.inClass.length > 0)
   }).filter(e => e.type !== "break")
 
-  renderHeader(w, event, day, p, stale)
+  const summary = paramSummary(parsed, notifStatus, event, day, manifest)
+  renderHeader(w, event, day, p, stale, summary)
 
   // An event created in the app (#229) has no schedule until one is added.
   // Say so, as the app does, instead of drawing an empty timeline.
   if (day.activities.length === 0) {
     renderCenteredMessage(w, p, "Schedule coming soon")
-    drawStatusFooter(w, p, stale, parsed, notifStatus)
     w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000)
     return w
   }
@@ -641,12 +684,13 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   // Absolute cap so we never render more rows than the widget can
   // ever plausibly fit, even for a run of all-simple general activities.
   const maxRowsCap = isLarge ? 10 : 4
-  // Always show exactly one past activity before the current one so the
-  // current card sits at row 1 — as close to the top as it can be
-  // without hiding what just happened.
-  const maxPast = 1
-
   const anchorIdx = currentIdx !== -1 ? currentIdx : insertAt
+  // Large shows exactly one past activity before the current one so the
+  // current card sits at row 1 — as close to the top as it can be
+  // without hiding what just happened. Medium has no room for it (#291):
+  // it starts at what's on now or next, and shows the last activity
+  // only once the day's are all over.
+  const maxPast = isLarge || anchorIdx >= visible.length ? 1 : 0
   const start = Math.max(0, anchorIdx - maxPast)
 
   // Dynamic row-fitting: pack rows into the widget's interior height
@@ -663,53 +707,50 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   // its own row estimate (via CURRENT_CAPTION_BLOCK_HEIGHT), and the
   // marker bar itself is drawn inside the card so it costs no extra
   // vertical space.
-  const nowLineReserve = currentIdx === -1 ? NOW_LINE_BLOCK_HEIGHT : 0
-  // 48 = header row (~22, 18pt bold) + its 24pt bottom spacer + a
-  // couple pt of margin — keep in sync with renderHeader.
-  const availableH = widgetInteriorHeight() - 48 - nowLineReserve
+  const marker = liveTier().nowMarker
+  const nowLineReserve = currentIdx === -1 && marker ? NOW_LINE_BLOCK_HEIGHT : 0
+  const availableH = widgetInteriorHeight() - liveHeaderHeight(summary) - nowLineReserve
+  // The past row and the anchor (current or next) always show; the
+  // rows after them only while they fit.
+  const mustShow = anchorIdx - start + 1
   const rows = []
   let usedH = 0
   for (let i = start; i < visible.length && rows.length < maxRowsCap; i++) {
     const isCurrent = i === currentIdx
-    const rowH = estimateActivityRowHeight(visible[i], isCurrent)
-    if (rows.length >= 2 && usedH + rowH > availableH) break
+    const rowH = estimateActivityRowHeight(visible[i], isCurrent && marker)
+    if (rows.length >= mustShow && usedH + rowH > availableH) break
     rows.push(visible[i])
     usedH += rowH
   }
 
-  const nowLineBetweenAt = currentIdx === -1 ? insertAt - start : -1
+  const nowLineBetweenAt = currentIdx === -1 && marker ? insertAt - start : -1
   const currentLocalIdx = currentIdx === -1 ? -1 : currentIdx - start
 
+  const nowLineLast = nowLineBetweenAt >= rows.length
+  // With the flex spacer after the rows, this one splits the leftover
+  // room evenly above and below them.
+  if (liveTier().centerCards) w.addSpacer()
   for (let i = 0; i < rows.length; i++) {
     if (i === nowLineBetweenAt) drawNowLine(w, p, now, nextActivity, 6)
     const ev = rows[i]
     const isCurrentActivity = i === currentLocalIdx
     const past = !isCurrentActivity && parseMinutes(ev.time) < now
+    // No gap under the last card: the flex spacer below takes over.
+    const gapAfter = i < rows.length - 1 || nowLineLast
+    // Without the marker (Medium), the current card has no position.
     drawActivityRow(w, ev, groupById, selected, p, past,
-      isCurrentActivity ? { position: currentPosition, now, nextActivity } : null)
+      isCurrentActivity ? { position: marker ? currentPosition : null, now, nextActivity } : null, gapAfter)
   }
-  if (nowLineBetweenAt >= rows.length) drawNowLine(w, p, now, null, 6)
-
-  // Count activities that came after the last rendered row — either
-  // dropped by the row-fit budget or capped by maxRowsCap. Past
-  // activities skipped at the top (before `start`) are already over,
-  // not "more" of anything, so we don't count them here.
-  const lastRenderedIdx = rows.length > 0 ? start + rows.length - 1 : start - 1
-  const remaining = visible.length - 1 - lastRenderedIdx
+  if (nowLineLast) drawNowLine(w, p, now, null, 0)
 
   // Flex spacer forces the widget's content stack to top-align.
   // Without it, Scriptable's ListWidget centers whatever content
   // it has vertically when it's shorter than the widget's box,
   // which showed up as awkward empty gutters above the header and
-  // below the bottom card. When more activities fell off the bottom,
-  // drop a muted "X more activities" line into that empty area so it
-  // doesn't read as if the last rendered activity were the last one.
+  // below the bottom card. (#291 took out the "N more activities" line
+  // that sat here, and the status footer, whose news is in the header
+  // now, to make room for the parameter chips.)
   w.addSpacer()
-  if (remaining > 0) {
-    drawMoreActivitiesFooter(w, p, remaining)
-    w.addSpacer()
-  }
-  drawStatusFooter(w, p, stale, parsed, notifStatus)
 
   w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
   return w
@@ -718,6 +759,7 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
 // Shared with the countdown card's height math (see renderCountdownState)
 // so it can reserve space for this footer only when it's actually
 // going to render something, instead of always leaving a blank gap.
+// The live view says the same in its header (see renderHeader).
 function statusFooterBits(stale, parsed, notifStatus) {
   const bits = []
   if (notifStatus && notifStatus.denied) {
@@ -750,46 +792,6 @@ function drawStatusFooter(w, p, stale, parsed, notifStatus) {
     el.textColor = bits[i].warn ? WARN_COLOR : p.muted
   }
   row.addSpacer()
-}
-
-function drawMoreActivitiesFooter(w, p, count) {
-  const row = w.addStack()
-  row.centerAlignContent()
-  row.addSpacer()
-  const text = row.addText(`${count} more activit${count === 1 ? "y" : "ies"}`)
-  text.font = rFont(11)
-  text.textColor = p.muted
-  row.addSpacer()
-}
-
-function renderHeader(w, event, day, p, stale) {
-  const outer = w.addStack()
-  outer.spacing = 0
-  outer.addSpacer(LEFT_GUTTER_WIDTH)
-  const row = outer.addStack()
-  row.centerAlignContent()
-
-  // Event name on the left, truncated if it doesn't fit — the day
-  // on the right always needs its full width so it never gets
-  // squeezed out.
-  const title = row.addText(event.name)
-  title.font = rBoldFont(18)
-  title.textColor = p.fg
-  title.lineLimit = 1
-
-  row.addSpacer()
-
-  // Day on the right, right-aligned, formatted like "Friday (Sep
-  // 11)". The offline flag folds into the same string instead of a
-  // separate element so it can't crowd the day text out.
-  const dayText = `${day.label} (${shortDate(day.date)})`
-  const dayEl = row.addText(stale ? `offline · ${dayText}` : dayText)
-  dayEl.font = rFont(12)
-  dayEl.textColor = p.muted
-  dayEl.lineLimit = 1
-
-  outer.addSpacer(RIGHT_GUTTER_WIDTH)
-  w.addSpacer(24) // further increased from 18
 }
 
 // ----- now-marker sizing -----
@@ -837,6 +839,184 @@ const CURRENT_CARD_CORNER_RADIUS = 8
 // in 3h 22m") on the outside — matches the pre-#77 spacing so the
 // caption reads as a footer/header for the card.
 const CURRENT_CAPTION_OUTER_PAD = 4
+
+// ----- live view header (#291) -----
+//
+// The date, bold, a light rule, then the event's name, on one line at
+// the countdown's title size (COUNTDOWN_TOKENS, the same number, not a
+// copy), so the live view reads like the upcoming one. The rule is as
+// tall as the capitals, so it runs from their baseline to their tops.
+// When the widget's parameter changes the view, chips (on the activity
+// cards' ground) say how: the run groups it's filtered to, a
+// warning for any of them with no sessions today, and the alert lead
+// time when it isn't the default, or that alerts are off. They sit in a
+// row under the line, as filters sit above the schedule in the app;
+// the alert time alone sits at the line's end instead of a row to
+// itself. Offline, the line ends in
+// "Offline", as the old header's day did; the view has no status
+// footer (a Medium couldn't fit one under a two-row card).
+const LIVE_HEADER = {
+  // The rule: the cap height of the 13.5pt title (0.7em).
+  barW: 2, barH: 9.5, barGap: 7,
+  chipFont: 10, chipPadV: 3, chipPadH: 7, chipSpacing: 4,
+  dotSize: 6, dotGap: 4, iconGap: 3,
+  // For the row-fit budget: the header line and the chip row.
+  lineH: 18, chipsH: 19,
+}
+
+// What depends on the widget's size, one row per size. Medium has no
+// now-marker (#291): the line across the current card and its "10:05
+// AM · Next in 20m" caption took the room of a whole card. There the
+// current activity is only tinted, its time bold, and the next one
+// shows under it; there's less air under the header too. Its one or two
+// cards sit in the middle of the room under the header rather than
+// against it with the leftover all below; Large's list starts at the
+// top.
+const LIVE_TIERS = {
+  compact: { chipsGap: 5, gapBelow: 8, nowMarker: false, centerCards: true },
+  large: { chipsGap: 7, gapBelow: 14, nowMarker: true, centerCards: false },
+}
+
+function liveTier() {
+  const family = config.widgetFamily || "medium"
+  return family === "large" || family === "extraLarge" ? LIVE_TIERS.large : LIVE_TIERS.compact
+}
+
+// The alert time is the only chip: it goes at the end of the header
+// line, not in a row of its own.
+function leadInCorner(s) {
+  return s.lead != null && !s.notifsOff
+    && s.groups.length + s.missing.length + s.invalid.length === 0
+}
+
+function liveHeaderHeight(summary) {
+  const t = LIVE_HEADER
+  const tier = liveTier()
+  const chipRow = summary && !leadInCorner(summary)
+  return t.lineH + (chipRow ? tier.chipsGap + t.chipsH : 0) + tier.gapBelow
+}
+
+function renderHeader(w, event, day, p, stale, summary) {
+  const t = LIVE_HEADER
+  const tier = liveTier()
+  const c = COUNTDOWN_TOKENS.large
+  const outer = w.addStack()
+  outer.spacing = 0
+  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  const row = outer.addStack()
+  row.centerAlignContent()
+
+  const [, m, d] = day.date.split("-").map(Number)
+  addLiveText(row, `${MONTH_ABBR[m - 1]} ${d}`, rBoldFont(c.titleFont), p.fg)
+
+  row.addSpacer(t.barGap)
+  const bar = row.addStack()
+  bar.size = new Size(t.barW, t.barH)
+  bar.backgroundColor = p.separator
+  bar.cornerRadius = t.barW / 2
+  row.addSpacer(t.barGap)
+
+  // The name is the one thing on the line that truncates.
+  const title = row.addText(event.name)
+  title.font = rSemiboldFont(c.titleFont)
+  title.textColor = p.fg
+  title.lineLimit = 1
+  row.addSpacer()
+  if (stale) addLiveText(row, "Offline", rFont(t.chipFont), p.muted)
+  const corner = summary && leadInCorner(summary)
+  if (corner) {
+    if (stale) row.addSpacer(t.chipSpacing * 2)
+    addLeadChip(row, p, summary.lead)
+  }
+
+  outer.addSpacer(RIGHT_GUTTER_WIDTH)
+  if (summary && !corner) {
+    w.addSpacer(tier.chipsGap)
+    drawParamChips(w, p, summary)
+  }
+  w.addSpacer(tier.gapBelow)
+}
+
+function drawParamChips(w, p, s) {
+  const t = LIVE_HEADER
+  const outer = w.addStack()
+  outer.addSpacer(LEFT_GUTTER_WIDTH)
+  const row = outer.addStack()
+  row.centerAlignContent()
+  row.spacing = t.chipSpacing
+
+  // A chip per group, each with one text: an HStack offers its children
+  // equal shares, least flexible first, so a chip holding two names
+  // could be squeezed to "Ora…" / "Pur…" with room to spare. Small
+  // chips each take what they need and pass the rest on.
+  for (const g of s.groups) {
+    const chip = addParamChip(row, p.cardBg)
+    const dot = chip.addStack()
+    dot.size = new Size(t.dotSize, t.dotSize)
+    dot.cornerRadius = t.dotSize / 2
+    dot.backgroundColor = new Color(g.color)
+    chip.addSpacer(t.dotGap)
+    addLiveText(chip, g.label, rMediumFont(t.chipFont), p.fg)
+  }
+  if (s.missing.length > 0) {
+    const chip = addParamChip(row, p.brandTint)
+    addChipSymbol(chip, "exclamationmark.triangle", WARN_COLOR)
+    chip.addSpacer(t.iconGap)
+    const names = s.missing.map(g => g.label).join(" or ")
+    addLiveText(chip, `No ${names} today`, rMediumFont(t.chipFont), WARN_COLOR)
+  }
+  if (s.invalid.length > 0) {
+    const chip = addParamChip(row, p.brandTint)
+    addChipSymbol(chip, "exclamationmark.triangle", WARN_COLOR)
+    chip.addSpacer(t.iconGap)
+    const label = s.invalid.length === 1 ? "Invalid parameter" : "Invalid parameters"
+    addLiveText(chip, `${label}: ${s.invalid.join(", ")}`, rMediumFont(t.chipFont), WARN_COLOR)
+  }
+  if (s.notifsOff) {
+    const chip = addParamChip(row, p.brandTint)
+    addChipSymbol(chip, "bell.slash", WARN_COLOR)
+    chip.addSpacer(t.iconGap)
+    addLiveText(chip, "Notifications off", rMediumFont(t.chipFont), WARN_COLOR)
+  } else if (s.lead != null) {
+    addLeadChip(row, p, s.lead)
+  }
+
+  outer.addSpacer()
+  outer.addSpacer(RIGHT_GUTTER_WIDTH)
+}
+
+function addLeadChip(row, p, lead) {
+  const chip = addParamChip(row, p.cardBg)
+  addChipSymbol(chip, "bell", p.mutedStrong)
+  chip.addSpacer(LIVE_HEADER.iconGap)
+  addLiveText(chip, lead === 0 ? "At start" : `${lead}m`, rFont(LIVE_HEADER.chipFont), p.mutedStrong)
+}
+
+function addParamChip(row, bg) {
+  const t = LIVE_HEADER
+  const chip = row.addStack()
+  chip.centerAlignContent()
+  chip.backgroundColor = bg
+  chip.cornerRadius = 100
+  chip.setPadding(t.chipPadV, t.chipPadH, t.chipPadV, t.chipPadH)
+  return chip
+}
+
+function addChipSymbol(chip, name, color) {
+  if (typeof SFSymbol === "undefined") return
+  const sym = SFSymbol.named(name)
+  if (!sym) return
+  const img = chip.addImage(sym.image)
+  img.imageSize = new Size(LIVE_HEADER.chipFont, LIVE_HEADER.chipFont)
+  img.tintColor = color
+}
+
+function addLiveText(stack, text, font, color) {
+  const el = stack.addText(text)
+  el.font = font
+  el.textColor = color
+  el.lineLimit = 1
+}
 
 function activityNote(ev) {
   // Only general-activity subtitles surface in the widget. Session
@@ -897,7 +1077,7 @@ const FOOD_ICON_GAP = 8
 // font or size change.
 const AMPM_BASELINE_NUDGE = 1
 
-function drawActivityRow(w, ev, groupById, selected, p, past, current) {
+function drawActivityRow(w, ev, groupById, selected, p, past, current, gapAfter) {
   // "Above": the marker overlaps the TOP straight-sides zone of the
   // current card; the caption ("3:08 AM · Next in 3h 22m") sits
   // just above the card.
@@ -944,11 +1124,12 @@ function drawActivityRow(w, ev, groupById, selected, p, past, current) {
   rightGutter.topAlignContent()
   rightGutter.size = new Size(RIGHT_GUTTER_WIDTH, 0)
 
-  if (current) {
+  if (current && current.position) {
     drawCurrentCard(cardContainer, leftGutter, rightGutter,
       ev, groupById, selected, p, past, current.position)
   } else {
-    drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past)
+    // A current card without the marker is a plain card, tinted.
+    drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past, !!current)
     // Gutters stay empty — they auto-size to 0 height and take up no
     // vertical space, so the non-current row is as compact as before.
   }
@@ -960,7 +1141,7 @@ function drawActivityRow(w, ev, groupById, selected, p, past, current) {
     drawNowCaption(w, p, current.now, current.nextActivity)
     w.addSpacer(CURRENT_CAPTION_OUTER_PAD)
   }
-  w.addSpacer(6)
+  if (gapAfter) w.addSpacer(6)
 }
 
 // Three-column current card. The card interior manually stacks
@@ -1027,17 +1208,17 @@ function drawCurrentCard(cardContainer, leftGutter, rightGutter,
   addGutterMarkerColumn(rightGutter, markerAtTop, "bar", p.accent)
 }
 
-function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past) {
+function drawNonCurrentCard(cardContainer, ev, groupById, selected, p, past, isCurrent) {
   // No border. Non-current cards are just tinted (light gray on
   // white) rounded rectangles, matching the current card's
   // border-less look so the whole widget reads as one system.
-  cardContainer.backgroundColor = p.cardBg
+  cardContainer.backgroundColor = isCurrent ? p.currentCardBg : p.cardBg
   cardContainer.cornerRadius = NONCURRENT_CARD_CORNER_RADIUS
   cardContainer.setPadding(
     NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
     NONCURRENT_CARD_PAD_V, CARD_INNER_PAD_H,
   )
-  buildCardContent(cardContainer, ev, groupById, selected, p, past, false)
+  buildCardContent(cardContainer, ev, groupById, selected, p, past, !!isCurrent)
 }
 
 // Bar drawn inside the current card, at the top or bottom pad zone.
@@ -1462,12 +1643,6 @@ function nowHM() {
   const h = d.getHours() % 12 || 12
   const ampm = d.getHours() >= 12 ? "PM" : "AM"
   return `${h}:${String(d.getMinutes()).padStart(2, "0")} ${ampm}`
-}
-
-function shortDate(iso) {
-  const [y, m, d] = iso.split("-").map(Number)
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-  return `${months[m - 1]} ${d}`
 }
 
 function renderNoEvents(w, p, stale, upcoming, footer) {
@@ -1901,8 +2076,7 @@ function renderUpcomingHeader(w, p, family) {
 }
 
 // One to three countdown cards (Medium always gets one; Large stacks
-// up to three), plus a "N more upcoming" footer for whatever didn't fit —
-// same convention as drawMoreActivitiesFooter for a day's activities.
+// up to three), plus a "N more upcoming" footer for whatever didn't fit.
 function renderCountdownState(w, p, upcoming, footer) {
   const family = config.widgetFamily || "medium"
   // Small and Medium are each one featured card, with no room for a
