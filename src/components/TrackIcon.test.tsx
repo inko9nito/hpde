@@ -33,11 +33,11 @@ describe('TrackIcon', () => {
 })
 
 describe('FadedTrack (#292)', () => {
-  it('masks a known track with its own shape, in the widget track color', () => {
+  it('masks a known track with its own shape, in the widget track color, at 50%', () => {
     const { container } = render(<FadedTrack trackId={TRACK_ICON_IDS[0]} />)
     expect(glyph(container)).toHaveAttribute('data-track-icon', TRACK_ICON_IDS[0])
     expect(glyph(container).style.maskImage).toContain(TRACK_ICON_IDS[0])
-    expect(glyph(container)).toHaveClass('bg-[#646872]/35')
+    expect(glyph(container)).toHaveClass('bg-[#646872]/50')
   })
 
   it.each([undefined, 'no-such-track'])('falls back to the checkered flag (trackId %s)', trackId => {

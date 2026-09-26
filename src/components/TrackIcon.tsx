@@ -153,8 +153,10 @@ export function fadedTrackMask(fade = FADED_TRACK_FADE, win = TRACK_WINDOW): str
  * running off its right edge and fading along a diagonal — all there at
  * its top right, gone by its bottom left — as on the widget's Medium
  * countdown. Fills its (relative, overflow-hidden) card; the shape is
- * the widget's track color, #646872 at 35%. An event with no track icon
- * gets the checkered flag, in the same color, as the widget does.
+ * the widget's track color, #646872, at 50% rather than the widget's
+ * 35%: a touch stronger on the app's darker ground. An event with no
+ * track icon gets the checkered flag, in the same color, as the widget
+ * does.
  */
 export function FadedTrack({ trackId }: { trackId?: string }) {
   const src = trackIconSrc(trackId)
@@ -178,7 +180,7 @@ export function FadedTrack({ trackId }: { trackId?: string }) {
       {/* The whole 437-unit frame, placed so the window fills the box. */}
       <span
         data-track-icon={src ? trackId : 'placeholder'}
-        className="absolute block bg-[#646872]/35"
+        className="absolute block bg-[#646872]/50"
         style={{
           left: `${(-TRACK_WINDOW.x / TRACK_WINDOW.w) * 100}%`,
           top: `${(-TRACK_WINDOW.y / TRACK_WINDOW.h) * 100}%`,
