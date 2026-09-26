@@ -73,6 +73,19 @@ permissions prompt. Delivery happens even when the widget itself hasn't
 refreshed at the moment of the alert — the widget only writes the schedule;
 iOS handles delivery from there.
 
+With more than one widget on the phone, each widget alerts for what it
+shows, filtered by its own Parameter: a Small set to `orange` and a
+Large set to `blue` alert for both, each alert at the longest lead time
+among the widgets that want it. A widget without `test` doesn't show the
+Test Event, so its filter doesn't touch the Test Event's alerts (#295).
+Scriptable gives a widget no id, so the widget's size stands in for one:
+editing a widget's Parameter replaces its old one on the next refresh,
+and two widgets of the same size share one entry, the one refreshed last
+deciding. A removed widget stops counting once it has gone 3 hours
+without a refresh, from the next refresh of a widget that's still there.
+Running the script in the Scriptable app only previews the widget; it
+leaves alerts alone.
+
 Notifications show up under Scriptable's app icon, not HPDE's. That's a
 Scriptable/iOS limitation — the icon is tied to the app that scheduled the
 notification, and there is no Scriptable API to override it. The only way

@@ -34,7 +34,12 @@ function num(v: unknown): number {
   return v
 }
 
-function installScriptableMocks(manifest: unknown, widgetParameter: string | null = null) {
+function installScriptableMocks(
+  manifest: unknown, widgetParameter: string | null = null,
+  // The device's files. Pass the same map to several runs to keep what
+  // one run writes (the alert state) for the next.
+  files = new Map<string, string>(),
+) {
   const g = globalThis as any
   g.Color = class { constructor(public hex?: string, public alpha?: number) {} }
   g.LinearGradient = class {
@@ -58,14 +63,18 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
     isUsingDarkAppearance: () => false,
     screenSize: () => ({ width: 390, height: 844 }),
   }
+  // The events cache the widget falls back to offline (Request below
+  // always fails).
+  files.set('/tmp/hpde-events.json', JSON.stringify(manifest))
+  g.__files = files
   g.FileManager = {
     iCloud: () => { throw new Error('no iCloud in test') },
     local: () => ({
       documentsDirectory: () => '/tmp',
       joinPath: (a: string, b: string) => `${a}/${b}`,
-      fileExists: () => true,
-      readString: () => JSON.stringify(manifest),
-      writeString: () => {},
+      fileExists: (p: string) => files.has(p),
+      readString: (p: string) => files.get(p),
+      writeString: (p: string, s: string) => { files.set(p, s) },
     }),
   }
   g.Request = class {
@@ -224,12 +233,14 @@ function installScriptableMocks(manifest: unknown, widgetParameter: string | nul
 
 async function runWidget(
   widgetFamily: string, manifest: unknown, widgetParameter: string | null = null,
-  // Adjusts the mocks before the widget runs (e.g. notifications denied).
+  // Adjusts the mocks before the widget runs (e.g. notifications denied,
+  // or a run in the Scriptable app instead of a widget).
   setup: () => void = () => {},
+  files?: Map<string, string>,
 ) {
-  installScriptableMocks(manifest, widgetParameter)
+  installScriptableMocks(manifest, widgetParameter, files)
+  ;(globalThis as any).config = { widgetFamily, runsInWidget: true }
   setup()
-  ;(globalThis as any).config = { widgetFamily, runsInWidget: false }
   // Widget script uses top-level await; wrap in an async IIFE so
   // it can be evaled and awaited from here.
   const wrapped = `(async () => { ${widgetSrc} })()`
@@ -785,6 +796,139 @@ describe('notifications', () => {
     await runWidget('medium', NO_EVENTS_MANIFEST, '')
     expect((globalThis as any).__scheduled).toBe(0)
   })
+
+  // Each refresh reschedules every widget's alerts, from state the widget
+  // keeps between runs; these run several refreshes against one device.
+  describe('across widgets and refreshes (#295)', () => {
+    const titles = () => ((globalThis as any).__notifs as Array<{ title: string }>).map(n => n.title)
+    // Today at `hhmm`, local time.
+    const at = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map(Number)
+      const d = new Date()
+      d.setHours(h, m, 0, 0)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(d)
+    }
+    afterEach(() => { vi.useRealTimers() })
+
+    // The feed on the day of #295: the Test Event, which a Large set to
+    // `test,green,blue,6m` showed, and a real event a week out with no
+    // schedule yet, which a Medium with no parameter counted down to.
+    const FEED = {
+      events: [{
+        id: 'test-live', name: 'Test Event',
+        runGroups: [
+          { id: 'red', label: 'Red', color: '#ef4444' },
+          { id: 'green', label: 'Green', color: '#22c55e' },
+          { id: 'orange', label: 'Orange', color: '#f97316' },
+          { id: 'blue', label: 'Blue', color: '#3b82f6' },
+        ],
+        days: [{
+          date: '2000-01-01', label: 'Today',
+          activities: [
+            { time: '11:45', type: 'session', onTrack: ['blue'], inClass: [] },
+            { time: '12:10', type: 'lunch', label: 'Lunch', subtitle: '60 minutes' },
+            { time: '13:10', type: 'session', onTrack: ['red'], inClass: ['orange'] },
+            { time: '13:30', type: 'session', onTrack: ['green'], inClass: [] },
+            { time: '14:10', type: 'session', onTrack: ['orange'], inClass: [] },
+            { time: '14:30', type: 'session', onTrack: ['blue'], inClass: [] },
+            { time: '15:25', type: 'session', onTrack: ['green'], inClass: [] },
+            { time: '17:00', type: 'general', label: 'Track is cold' },
+          ],
+        }],
+      }, {
+        id: 'tde-ecr', name: 'TDE at ECR 2.7 CW', runGroups: [],
+        days: [{ date: isoDate(7), label: 'Saturday', activities: [] }],
+      }],
+    }
+    const TEST_WIDGET_ALERTS = ['🟢 Green · in 6m', '🔵 Blue · in 6m', '🟢 Green · in 6m', 'Track is cold · in 6m']
+
+    it('alerts for the Test Event as the widget showing it is set, not as one that doesn\'t show it', async () => {
+      const files = new Map<string, string>()
+      at('12:31')
+      await runWidget('medium', FEED, null, () => {}, files)
+      await runWidget('large', FEED, 'test,green,blue,6m', () => {}, files)
+      expect(titles()).toEqual(TEST_WIDGET_ALERTS)
+    })
+
+    it('keeps the Test Event\'s alerts when a widget that doesn\'t show it refreshes', async () => {
+      const files = new Map<string, string>()
+      at('12:31')
+      await runWidget('large', FEED, 'test,green,blue,6m', () => {}, files)
+      at('12:40')
+      await runWidget('medium', FEED, null, () => {}, files)
+      expect(titles()).toEqual(TEST_WIDGET_ALERTS)
+    })
+
+    it('stops counting a widget that hasn\'t refreshed in 3 hours', async () => {
+      const files = new Map<string, string>()
+      at('09:00')
+      await runWidget('small', FUTURE_MANIFEST, 'orange', () => {}, files)
+      at('11:59')
+      await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+      expect(titles()).toContain('🟠 Orange · in 10m')
+      at('12:01')
+      await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+      expect(titles().filter(t => t.includes('Orange'))).toEqual([])
+    })
+
+    it('drops the old parameter\'s alerts once the widget\'s parameter is edited', async () => {
+      const files = new Map<string, string>()
+      await runWidget('large', FUTURE_MANIFEST, 'test', () => {}, files)
+      await runWidget('large', FUTURE_MANIFEST, 'test,blue,6m', () => {}, files)
+      // blue on-track + blue in-class + meeting + lunch, at the new lead
+      expect(titles()).toHaveLength(4)
+      expect(titles().filter(t => /Red|Orange/.test(t))).toEqual([])
+      for (const t of titles()) expect(t).toMatch(/· in 6m$/)
+    })
+
+    it('alerts for the groups of every widget size on the device', async () => {
+      const files = new Map<string, string>()
+      await runWidget('small', FUTURE_MANIFEST, 'orange', () => {}, files)
+      await runWidget('large', FUTURE_MANIFEST, 'blue,6m', () => {}, files)
+      // orange on-track + blue on-track + blue in-class + meeting + lunch;
+      // each at the longest lead among the widgets that want it
+      expect(titles()).toHaveLength(5)
+      expect(titles()).toContain('🟠 Orange · in 10m')
+      expect(titles()).toContain('🔵 Blue · in 6m')
+      expect(titles()).toContain('Drivers meeting · in 10m')
+    })
+
+    it('leaves alerts alone when run in the Scriptable app, which has no widget parameter', async () => {
+      const files = new Map<string, string>()
+      const inApp = () => { (globalThis as any).config = { widgetFamily: null, runsInWidget: false } }
+      await runWidget('medium', FUTURE_MANIFEST, null, inApp, files)
+      expect((globalThis as any).__scheduled).toBe(0)
+      // The widget's next refresh isn't joined by an "every group" entry.
+      await runWidget('large', FUTURE_MANIFEST, 'blue,6m', () => {}, files)
+      expect(titles()).toHaveLength(4)
+    })
+
+    it('keeps its state on this device and ignores the old state in iCloud', async () => {
+      // The v1 state that #295 reported: an entry for a parameter the
+      // widget no longer has (every group, default lead), in iCloud.
+      const icloud = new Map<string, string>([
+        ['/icloud/hpde-events.json', JSON.stringify(FUTURE_MANIFEST)],
+        ['/icloud/hpde-notif-state.json', JSON.stringify({
+          instances: { old: { params: 'test', groups: [], leadMinutes: 10, lastRefreshed: new Date().toISOString() } },
+        })],
+      ])
+      const withICloud = () => {
+        ;(globalThis as any).FileManager.iCloud = () => ({
+          documentsDirectory: () => '/icloud',
+          joinPath: (a: string, b: string) => `${a}/${b}`,
+          fileExists: (p: string) => icloud.has(p),
+          readString: (p: string) => icloud.get(p),
+          writeString: (p: string, s: string) => { icloud.set(p, s) },
+        })
+      }
+      await runWidget('large', FUTURE_MANIFEST, 'blue,6m', withICloud)
+      expect(titles()).toHaveLength(4)
+      expect([...icloud.keys()].sort()).toEqual(['/icloud/hpde-events.json', '/icloud/hpde-notif-state.json'])
+      expect(JSON.parse((globalThis as any).__files.get('/tmp/hpde-notif-state-v2.json')).instances)
+        .toEqual({ large: expect.objectContaining({ family: 'large', groups: ['blue'], leadMinutes: 6 }) })
+    })
+  })
 })
 
 describe('test-live fixture gating', () => {
@@ -818,6 +962,15 @@ describe('test-live fixture gating', () => {
   it('rewrites the test-live fixture to today when the `test` flag is set', async () => {
     await runWidget('medium', FIXTURE_MANIFEST, 'test')
     expect((globalThis as any).__scheduled).toBe(1)
+  })
+
+  it('shows the Test Event as today\'s with `test` and as the next one with `test-upcoming`', async () => {
+    await runWidget('large', FIXTURE_MANIFEST, 'test')
+    expect((globalThis as any).__texts).toContain('Test Event')
+    await runWidget('medium', FIXTURE_MANIFEST, 'test-upcoming-3d')
+    expect((globalThis as any).__texts).toContain('Test Event')
+    await runWidget('medium', FIXTURE_MANIFEST, '')
+    expect((globalThis as any).__texts).not.toContain('Test Event')
   })
 })
 
