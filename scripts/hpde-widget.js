@@ -385,8 +385,7 @@ function findRunGroup(event, manifest, id) {
 // the app's DateBlock month (red-600 light / red-400 dark) — for the
 // month, the countdown pill and the Small well;
 // `brandTint` (the app's LIVE badge background, red-500 at 10%) is the
-// pill's and the Small well's background. `chipBg` is the live view's
-// parameter chips (#291).
+// pill's and the Small well's background.
 function palette(dark) {
   return dark
     // Dark mode keeps its "cards are slightly LIGHTER than the
@@ -399,7 +398,6 @@ function palette(dark) {
         cardBg: new Color("#18181c"),
         currentCardBg: new Color("#122135"),
         divider: new Color("#26262c"),
-        chipBg: new Color("#26262c"),
         accent: new Color("#3b82f6"),
         brand: new Color("#f87171"), brandTint: new Color("#ef4444", 0.15),
         pastOpacity: 0.6 }
@@ -414,7 +412,6 @@ function palette(dark) {
         cardBg: new Color("#f9fafb"),
         currentCardBg: new Color("#eef4ff"),
         divider: new Color("#e5e7eb"),
-        chipBg: new Color("#e5e7eb"),
         accent: new Color("#3b82f6"),
         brand: new Color("#dc2626"), brandTint: new Color("#ef4444", 0.1),
         pastOpacity: 0.6 }
@@ -839,18 +836,18 @@ const CURRENT_CAPTION_OUTER_PAD = 4
 
 // ----- live view header (#291) -----
 //
-// The date and the event's name on one line, as the upcoming view has
-// them — the red month, the day, a red bar, then the name at the
-// countdown's title size (COUNTDOWN_TOKENS, the same numbers, not a
-// copy) — and under it, when the widget's parameter changes the view,
-// a row of chips saying how: the run groups it's filtered to, a
+// The date, bold, a light bar, then the event's name, on one line at
+// the countdown's title size (COUNTDOWN_TOKENS, the same number, not a
+// copy), so the live view reads like the upcoming one — and under it,
+// when the widget's parameter changes the view, a row of chips (on the
+// activity cards' ground) saying how: the run groups it's filtered to, a
 // warning for any of them with no sessions today, and the alert lead
 // time when it isn't the default, or that alerts are off. Filters sit
 // above the schedule in the app too. Offline, the line ends in
 // "Offline", as the old header's day did; the view has no status
 // footer (a Medium couldn't fit one under a two-row card).
 const LIVE_HEADER = {
-  dayGap: 3, barW: 2, barH: 14, barGap: 6,
+  barW: 2, barH: 14, barGap: 6,
   chipFont: 10, chipPadV: 3, chipPadH: 7, chipSpacing: 4,
   dotSize: 6, dotGap: 4, iconGap: 3,
   // For the row-fit budget: the header line and the chip row.
@@ -889,20 +886,12 @@ function renderHeader(w, event, day, p, stale, summary) {
   row.centerAlignContent()
 
   const [, m, d] = day.date.split("-").map(Number)
-  const month = row.addText(MONTH_ABBR[m - 1])
-  month.font = rMediumFont(c.monthFont)
-  month.textColor = p.brand
-  month.lineLimit = 1
-  row.addSpacer(t.dayGap)
-  const dayNum = row.addText(String(d))
-  dayNum.font = rSemiboldFont(c.titleFont)
-  dayNum.textColor = p.fg
-  dayNum.lineLimit = 1
+  addLiveText(row, `${MONTH_ABBR[m - 1]} ${d}`, rBoldFont(c.titleFont), p.fg)
 
   row.addSpacer(t.barGap)
   const bar = row.addStack()
   bar.size = new Size(t.barW, t.barH)
-  bar.backgroundColor = p.brand
+  bar.backgroundColor = p.muted
   bar.cornerRadius = 1
   row.addSpacer(t.barGap)
 
@@ -935,7 +924,7 @@ function drawParamChips(w, p, s) {
   // could be squeezed to "Ora…" / "Pur…" with room to spare. Small
   // chips each take what they need and pass the rest on.
   for (const g of s.groups) {
-    const chip = addParamChip(row, p.chipBg)
+    const chip = addParamChip(row, p.cardBg)
     const dot = chip.addStack()
     dot.size = new Size(t.dotSize, t.dotSize)
     dot.cornerRadius = t.dotSize / 2
@@ -963,7 +952,7 @@ function drawParamChips(w, p, s) {
     chip.addSpacer(t.iconGap)
     addLiveText(chip, "Notifications off", rMediumFont(t.chipFont), WARN_COLOR)
   } else if (s.lead != null) {
-    const chip = addParamChip(row, p.chipBg)
+    const chip = addParamChip(row, p.cardBg)
     addChipSymbol(chip, "bell", p.mutedStrong)
     chip.addSpacer(t.iconGap)
     const text = s.lead === 0 ? "At start" : `${s.lead}m`

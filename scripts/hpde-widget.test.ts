@@ -640,7 +640,7 @@ describe('live view header and parameter chips (#291)', () => {
     }],
   }
   // The header line (the test mocks are always offline), then the chips.
-  const HEADER = ['SEP', '12', 'TDE at MSRC', 'Offline']
+  const HEADER = ['SEP 12', 'TDE at MSRC', 'Offline']
 
   async function live(family: string, param: string | null, at = '10:05', setup?: () => void) {
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -649,35 +649,39 @@ describe('live view header and parameter chips (#291)', () => {
     return (globalThis as any).__texts as string[]
   }
   afterEach(() => { vi.useRealTimers() })
+  // The texts begin with the header line, then `rest` (chips, then cards).
+  function expectStart(texts: string[], ...rest: string[]) {
+    expect(texts.slice(0, HEADER.length + rest.length)).toEqual([...HEADER, ...rest])
+  }
 
   it('puts the date before the name, as the upcoming view does, and no chips without a parameter', async () => {
     const texts = await live('large', null)
-    expect(texts.slice(0, 5)).toEqual([...HEADER, '9:30'])
+    expectStart(texts, '9:30')
   })
 
   it('shows the groups it filters to and a non-default alert time', async () => {
     const texts = await live('large', 'orange,purple|15m')
-    expect(texts.slice(0, 7)).toEqual([...HEADER, 'Orange', 'Purple', '15m'])
+    expectStart(texts, 'Orange', 'Purple', '15m')
   })
 
   it('leaves the default alert time out', async () => {
     const texts = await live('large', 'orange|10m')
-    expect(texts.slice(0, 6)).toEqual([...HEADER, 'Orange', '9:30'])
+    expectStart(texts, 'Orange', '9:30')
   })
 
   it('says when alerts come at the start', async () => {
     const texts = await live('large', '0m')
-    expect(texts.slice(0, 5)).toEqual([...HEADER, 'At start'])
+    expectStart(texts, 'At start')
   })
 
   it('warns when a group it filters to has no sessions today', async () => {
     const texts = await live('large', 'orange,blue')
-    expect(texts.slice(0, 6)).toEqual([...HEADER, 'Orange', 'No Blue today'])
+    expectStart(texts, 'Orange', 'No Blue today')
   })
 
   it('shows a parameter it can\'t read as a chip, not a footer', async () => {
     const texts = await live('large', 'orange,blu')
-    expect(texts.slice(0, 6)).toEqual([...HEADER, 'Orange', 'Invalid parameter: blu'])
+    expectStart(texts, 'Orange', 'Invalid parameter: blu')
     expect(texts.filter(t => /Invalid/.test(t))).toHaveLength(1)
   })
 
@@ -685,7 +689,7 @@ describe('live view header and parameter chips (#291)', () => {
     const texts = await live('large', 'orange|15m', '10:05', () => {
       ;(globalThis as any).Notification.prototype.schedule = async () => { throw new Error('denied') }
     })
-    expect(texts.slice(0, 6)).toEqual([...HEADER, 'Orange', 'Notifications off'])
+    expectStart(texts, 'Orange', 'Notifications off')
     expect(texts).not.toContain('15m')
   })
 
@@ -699,7 +703,7 @@ describe('live view header and parameter chips (#291)', () => {
     expect(large).toContain('9:30')
     const medium = await live('medium', null)
     expect(medium).not.toContain('9:30')
-    expect(medium.slice(0, 5)).toEqual([...HEADER, '10:00'])
+    expectStart(medium, '10:00')
   })
 
   it('shows the last activity on Medium once the day is over', async () => {
@@ -713,7 +717,7 @@ describe('live view header and parameter chips (#291)', () => {
     vi.setSystemTime(new Date(`${DAY}T10:05:00`))
     await runWidget('large', empty, 'orange|15m')
     const texts = (globalThis as any).__texts as string[]
-    expect(texts.slice(0, 6)).toEqual([...HEADER, '15m', 'Schedule coming soon'])
+    expectStart(texts, '15m', 'Schedule coming soon')
   })
 })
 
