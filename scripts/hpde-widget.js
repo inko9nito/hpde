@@ -38,10 +38,11 @@ const NOTIF_THREAD_ID = "hpde"
 // one of Scriptable's built-in sound names.
 const NOTIF_SOUND = "event"
 const DEFAULT_LEAD_MIN = 10
-// Instance entries in the shared state file age out after this many days
-// without a widget refresh, so a widget instance that was removed stops
-// contributing its filter/lead to the merged notification set.
-const NOTIF_STALE_INSTANCE_DAYS = 3
+// A widget's entry in the alert state ages out after this many hours
+// without a refresh: that's how a removed widget stops alerting. The
+// slowest refresh the widget asks iOS for is hourly (the countdown), so
+// this allows for iOS running a couple of hours late.
+const NOTIF_STALE_INSTANCE_HOURS = 3
 // iOS caps pending notifications per app at 64; leave headroom under that
 // so the widget's own alerts don't crowd out anything else Scriptable
 // might schedule.
@@ -151,6 +152,18 @@ function rewriteFixtures(manifest, mode, upcomingDays, upcomingCount) {
       }
     }
   }
+  return manifest
+}
+
+// The manifest as a widget with these parameter `flags` shows it: a
+// rewritten copy when `test` or `test-upcoming` moves the fixture
+// events, else the feed itself. Alerts are worked out per widget from
+// this (#295), so it never rewrites the feed in place.
+function withFixtureFlags(manifest, flags) {
+  if (flags && flags["test-upcoming"]) {
+    return rewriteFixtures(JSON.parse(JSON.stringify(manifest)), "upcoming", flags.testUpcomingDays, flags.testUpcomingCount)
+  }
+  if (flags && flags.test) return rewriteFixtures(JSON.parse(JSON.stringify(manifest)), "today")
   return manifest
 }
 
@@ -2282,12 +2295,14 @@ function renderError(err) {
 // state regardless of order — two widgets covering the same session never
 // produce duplicate alerts. Cross-instance merge rules:
 //
-//   - A session is scheduled if ANY live instance's filter includes its
-//     group (or its filter is empty, i.e. "notify for all groups"). All-
-//     drivers events (activities without a run-group tag: meetings, lunch,
-//     etc.) are always scheduled, regardless of any instance's filter.
-//   - Its lead time is the MAX across the instances that want it, so the
-//     earliest warning wins.
+//   - Each instance wants the sessions its filter includes (every group
+//     when the filter is empty) and every all-drivers activity (no run-
+//     group tag: meetings, lunch, etc.) — in the events THAT widget
+//     shows. Its own `test` / `test-upcoming` flags decide whether that
+//     includes the Test Event, so a widget without them neither adds
+//     groups to the Test Event's alerts nor cancels them (#295).
+//   - A session any instance wants is scheduled once, at the longest lead
+//     among them that's still ahead, so the earliest warning wins.
 //
 // Instance state lives in NOTIF_STATE_FILENAME in this device's local
 // documents, not iCloud: alerts are scheduled per device, so another
@@ -2297,12 +2312,12 @@ function renderError(err) {
 // made a widget whose parameter was edited count as two — the old
 // parameter kept alerting for days. Two widgets of the SAME size share
 // one entry, and the one refreshed last wins. An entry ages out after
-// NOTIF_STALE_INSTANCE_DAYS without a refresh, which is how a removed
+// NOTIF_STALE_INSTANCE_HOURS without a refresh, which is how a removed
 // widget stops contributing.
 //
 // Only widget runs take part. A run in the Scriptable app has no widget
-// parameter, so it would register as "every group, default lead" and
-// leave that in the merge for days; it leaves alerts alone instead.
+// parameter, so it would register as "every group, default lead"; it
+// leaves alerts alone instead.
 
 function slug(s) {
   return String(s == null ? "" : s)
@@ -2459,33 +2474,29 @@ function buildNotifContent(target, leadMinutes) {
   return { title: `${titlePrefix} · in ${leadMinutes}m`, body }
 }
 
-function computeMergedSpecs(manifest, state, now) {
-  const targets = collectNotifTargets(manifest, now)
-  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_DAYS * 86400 * 1000
-  const liveInstances = []
+// `feed` is the manifest as served; each instance sees it through its
+// own fixture flags. `state` holds only live instances (see
+// refreshNotifications).
+function computeMergedSpecs(feed, state, now) {
+  const wanted = new Map()
   for (const inst of Object.values(state.instances || {})) {
-    if (!inst || typeof inst !== "object") continue
-    const t = Date.parse(inst.lastRefreshed || "")
-    if (isFinite(t) && t >= cutoffMs) liveInstances.push(inst)
-  }
-  const specs = []
-  for (const target of targets) {
-    let maxLead = -1
-    for (const inst of liveInstances) {
-      const groups = inst.groups || []
+    const groups = inst.groups || []
+    const lead = Number.isFinite(inst.leadMinutes) ? inst.leadMinutes : DEFAULT_LEAD_MIN
+    for (const target of collectNotifTargets(withFixtureFlags(feed, inst.flags), now)) {
       const wants =
         target.kind === "all" ||
         groups.length === 0 ||
         groups.includes(target.groupId)
-      if (wants) {
-        const lead = Number.isFinite(inst.leadMinutes) ? inst.leadMinutes : DEFAULT_LEAD_MIN
-        if (lead > maxLead) maxLead = lead
-      }
+      if (!wants) continue
+      const fireAt = new Date(target.when.getTime() - lead * 60 * 1000)
+      if (fireAt.getTime() <= now.getTime()) continue
+      const had = wanted.get(target.sessionKey)
+      if (!had || lead > had.lead) wanted.set(target.sessionKey, { target, lead, fireAt })
     }
-    if (maxLead < 0) continue
-    const fireAt = new Date(target.when.getTime() - maxLead * 60 * 1000)
-    if (fireAt.getTime() <= now.getTime()) continue
-    const { title, body } = buildNotifContent(target, maxLead)
+  }
+  const specs = []
+  for (const { target, lead, fireAt } of wanted.values()) {
+    const { title, body } = buildNotifContent(target, lead)
     specs.push({
       identifier: NOTIF_ID_PREFIX + target.sessionKey,
       title, body, fireAt,
@@ -2541,7 +2552,7 @@ async function scheduleSpecs(specs) {
   return { scheduled, denied }
 }
 
-async function refreshNotifications(manifest, parsed) {
+async function refreshNotifications(feed, parsed) {
   if (typeof Notification === "undefined" || !config.runsInWidget) {
     return { scheduled: 0, denied: false }
   }
@@ -2554,16 +2565,17 @@ async function refreshNotifications(manifest, parsed) {
     params: parsed.rawParam,
     groups: parsed.groups,
     leadMinutes: parsed.leadMinutes,
+    flags: parsed.flags,
     lastRefreshed: now.toISOString(),
   }
-  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_DAYS * 86400 * 1000
+  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_HOURS * 3600 * 1000
   for (const [k, v] of Object.entries(state.instances)) {
     const t = v && Date.parse(v.lastRefreshed || "")
     if (!isFinite(t) || t < cutoffMs) delete state.instances[k]
   }
   saveNotifState(state)
 
-  const specs = computeMergedSpecs(manifest, state, now)
+  const specs = computeMergedSpecs(feed, state, now)
   try {
     await cancelExistingHpdeNotifications()
   } catch (_) {}
@@ -2582,15 +2594,12 @@ try {
   // `test-upcoming` moves it into the future instead (for testing the
   // no-event-today countdown card). Real users' widgets are never
   // haunted by the Test Event this way.
-  if (parsedRaw.flags && parsedRaw.flags["test-upcoming"]) {
-    rewriteFixtures(data.manifest, "upcoming", parsedRaw.flags.testUpcomingDays, parsedRaw.flags.testUpcomingCount)
-  } else if (parsedRaw.flags && parsedRaw.flags.test) {
-    rewriteFixtures(data.manifest, "today")
-  }
+  const feed = data.manifest
+  data.manifest = withFixtureFlags(feed, parsedRaw.flags)
   const parsed = validateWidgetParameter(parsedRaw, data.manifest)
   let notifStatus = { scheduled: 0, denied: false }
   try {
-    notifStatus = await refreshNotifications(data.manifest, parsed)
+    notifStatus = await refreshNotifications(feed, parsed)
   } catch (_) {}
   widget = makeWidget(data, parsed, notifStatus)
 } catch (err) {

@@ -801,6 +801,76 @@ describe('notifications', () => {
   // keeps between runs; these run several refreshes against one device.
   describe('across widgets and refreshes (#295)', () => {
     const titles = () => ((globalThis as any).__notifs as Array<{ title: string }>).map(n => n.title)
+    // Today at `hhmm`, local time.
+    const at = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map(Number)
+      const d = new Date()
+      d.setHours(h, m, 0, 0)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(d)
+    }
+    afterEach(() => { vi.useRealTimers() })
+
+    // The feed on the day of #295: the Test Event, which a Large set to
+    // `test,green,blue,6m` showed, and a real event a week out with no
+    // schedule yet, which a Medium with no parameter counted down to.
+    const FEED = {
+      events: [{
+        id: 'test-live', name: 'Test Event',
+        runGroups: [
+          { id: 'red', label: 'Red', color: '#ef4444' },
+          { id: 'green', label: 'Green', color: '#22c55e' },
+          { id: 'orange', label: 'Orange', color: '#f97316' },
+          { id: 'blue', label: 'Blue', color: '#3b82f6' },
+        ],
+        days: [{
+          date: '2000-01-01', label: 'Today',
+          activities: [
+            { time: '11:45', type: 'session', onTrack: ['blue'], inClass: [] },
+            { time: '12:10', type: 'lunch', label: 'Lunch', subtitle: '60 minutes' },
+            { time: '13:10', type: 'session', onTrack: ['red'], inClass: ['orange'] },
+            { time: '13:30', type: 'session', onTrack: ['green'], inClass: [] },
+            { time: '14:10', type: 'session', onTrack: ['orange'], inClass: [] },
+            { time: '14:30', type: 'session', onTrack: ['blue'], inClass: [] },
+            { time: '15:25', type: 'session', onTrack: ['green'], inClass: [] },
+            { time: '17:00', type: 'general', label: 'Track is cold' },
+          ],
+        }],
+      }, {
+        id: 'tde-ecr', name: 'TDE at ECR 2.7 CW', runGroups: [],
+        days: [{ date: isoDate(7), label: 'Saturday', activities: [] }],
+      }],
+    }
+    const TEST_WIDGET_ALERTS = ['🟢 Green · in 6m', '🔵 Blue · in 6m', '🟢 Green · in 6m', 'Track is cold · in 6m']
+
+    it('alerts for the Test Event as the widget showing it is set, not as one that doesn\'t show it', async () => {
+      const files = new Map<string, string>()
+      at('12:31')
+      await runWidget('medium', FEED, null, () => {}, files)
+      await runWidget('large', FEED, 'test,green,blue,6m', () => {}, files)
+      expect(titles()).toEqual(TEST_WIDGET_ALERTS)
+    })
+
+    it('keeps the Test Event\'s alerts when a widget that doesn\'t show it refreshes', async () => {
+      const files = new Map<string, string>()
+      at('12:31')
+      await runWidget('large', FEED, 'test,green,blue,6m', () => {}, files)
+      at('12:40')
+      await runWidget('medium', FEED, null, () => {}, files)
+      expect(titles()).toEqual(TEST_WIDGET_ALERTS)
+    })
+
+    it('stops counting a widget that hasn\'t refreshed in 3 hours', async () => {
+      const files = new Map<string, string>()
+      at('09:00')
+      await runWidget('small', FUTURE_MANIFEST, 'orange', () => {}, files)
+      at('11:59')
+      await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+      expect(titles()).toContain('🟠 Orange · in 10m')
+      at('12:01')
+      await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+      expect(titles().filter(t => t.includes('Orange'))).toEqual([])
+    })
 
     it('drops the old parameter\'s alerts once the widget\'s parameter is edited', async () => {
       const files = new Map<string, string>()
@@ -892,6 +962,15 @@ describe('test-live fixture gating', () => {
   it('rewrites the test-live fixture to today when the `test` flag is set', async () => {
     await runWidget('medium', FIXTURE_MANIFEST, 'test')
     expect((globalThis as any).__scheduled).toBe(1)
+  })
+
+  it('shows the Test Event as today\'s with `test` and as the next one with `test-upcoming`', async () => {
+    await runWidget('large', FIXTURE_MANIFEST, 'test')
+    expect((globalThis as any).__texts).toContain('Test Event')
+    await runWidget('medium', FIXTURE_MANIFEST, 'test-upcoming-3d')
+    expect((globalThis as any).__texts).toContain('Test Event')
+    await runWidget('medium', FIXTURE_MANIFEST, '')
+    expect((globalThis as any).__texts).not.toContain('Test Event')
   })
 })
 
