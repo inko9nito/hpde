@@ -8,6 +8,9 @@ runs.
 
 ## Features
 
+- **Three tabs** along the bottom (#274): **Events** (the list and
+  calendar of events), **Tracks** (your lap times by track layout) and
+  **Garage** (coming soon)
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -171,15 +174,19 @@ Only they and admins can see them.
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab shows how many
   sessions have laps, e.g. *My notes (2)*.
-- **Track page (#274):** every session you've logged on one layout, at
-  `#/track/<layout>` (e.g. `#/track/msrc-1-7-cw`): the all-time best,
-  then each event's sessions, newest event first, with the same figures
-  and lap tables as My notes. The layout match is the same one *All time
-  best* uses. Open it from the *All time best* card, or from *See all my
-  MSRC 1.7 CW laps* under a session's saved laps in the sheet, which also
-  says how that session compares with the all-time best. It slides in
-  over the event, and Back returns there; tap an event's name to open its
-  My notes. Private: it needs a sign-in.
+- **Tracks tab and track pages (#274):** the Tracks tab (`#/tracks`)
+  lists every track layout the events are on, the one with the latest
+  event first, with your best lap and session count there once you're
+  signed in. Tap one for its track page (`#/track/<layout>`, e.g.
+  `#/track/msrc-1-7-cw`): every session you've logged on that layout,
+  the all-time best, then each event's sessions, newest event first,
+  with the same figures and lap tables as My notes. The layout match is
+  the same one *All time best* uses. A track page also opens from the
+  *All time best* card, and from *See all my MSRC 1.7 CW laps* under a
+  session's saved laps in the sheet, which also says how that session
+  compares with the all-time best; from there it slides in over the
+  event, and Back returns to it. Tap an event's name to open its My
+  notes. Lap times are private: they need a sign-in.
 - **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
   `?event=` it sums up each event's best, for the layout best; with
   `?events=<id>,<id>` it returns each of those events' sessions at once,

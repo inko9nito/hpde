@@ -9,7 +9,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
-import { eventBest, eventsOnLayout, layoutName, layoutSlug } from '../utils/trackStats'
+import { eventBest, eventsOnLayout, layoutName, layoutSlug, startDate } from '../utils/trackStats'
 import { formatLapTime } from '../utils/lapTimes'
 import { formatDateRange } from '../utils/time'
 import { opensElsewhere } from '../utils/links'
@@ -34,10 +34,6 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
   return name ? { name, trackId: named.trackId, track: named.track?.trim() || undefined } : null
 }
 
-function firstDay(event: EventConfig): string {
-  return event.days.map(d => d.date).sort()[0] ?? ''
-}
-
 interface Props {
   slug: string
   /** Every event, to find the ones on this layout. */
@@ -48,7 +44,8 @@ interface Props {
   onBack: () => void
   /** Opens one of the events, on its My notes tab. */
   onOpenEvent: (event: EventConfig) => void
-  onHome: () => void
+  /** To the Tracks tab. */
+  onAllTracks: () => void
 }
 
 /**
@@ -57,7 +54,7 @@ interface Props {
  * card counts them — grouped by event, newest first. Each session opens
  * onto its lap table, as on My notes. Private: it needs a sign-in.
  */
-export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOpenEvent, onHome }: Props) {
+export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOpenEvent, onAllTracks }: Props) {
   const { status: authStatus } = useAuth()
   const onLayout = useMemo(() => eventsOnLayout(slug, events), [slug, events])
   const title = trackPageTitle(slug, events)
@@ -77,7 +74,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
       const event = byId.get(eventId)
       return event && sessions.length ? [{ event, sessions }] : []
     })
-    .sort((a, b) => firstDay(b.event).localeCompare(firstDay(a.event)))
+    .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
   const allSessions = groups.flatMap(g => g.sessions)
   const best = eventBest(allSessions)
   // One set of columns for every table on the page, so they line up.
@@ -118,10 +115,10 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
         <p className="text-sm font-medium text-gray-700">No event is on this track</p>
         <p className="mt-1 text-xs text-gray-400">It may have been renamed or deleted.</p>
         <button
-          onClick={onHome}
+          onClick={onAllTracks}
           className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
         >
-          See all events
+          See all tracks
         </button>
       </div>
     )

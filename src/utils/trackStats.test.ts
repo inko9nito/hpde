@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutName, layoutSlug, sameLayout, trackShortName } from './trackStats'
+import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutLaps, layoutName, layoutSlug, layoutsOf, sameLayout, trackShortName } from './trackStats'
 import type { EventConfig } from '../types'
 
 const event = (id: string, fields: Partial<EventConfig> = {}): EventConfig => ({
@@ -100,5 +100,31 @@ describe('track pages (#274)', () => {
     expect(gapToBest(98_580, 98_540)).toBe('+0.04s')
     expect(gapToBest(104_000, 101_000)).toBe('+3s')
     expect(gapToBest(98_540, 98_540)).toBeNull()
+  })
+})
+
+describe('the Tracks tab (#274)', () => {
+  const upcoming = event('2026-10-03_ecr', { track: 'Eagles Canyon Raceway', trackId: 'ecr-2-7', configuration: '2.7 mile', days: [{ id: 'd', label: 'Day', date: '2026-10-03', activities: [] }] })
+  const noTrack = event('2026-04-01_x', { track: undefined, trackId: undefined })
+
+  it('lists each layout once, the one with the latest event first', () => {
+    const lastYear = { ...ccw, days: [{ id: 'd', label: 'Day', date: '2025-09-13', activities: [] }] }
+    const layouts = layoutsOf([lastYear, scca, tde, upcoming, noTrack])
+    expect(layouts.map(l => [l.slug, l.name, l.track, l.events.map(e => e.id)])).toEqual([
+      ['ecr-2-7-cw', 'ECR 2.7 CW', 'Eagles Canyon Raceway', [upcoming.id]],
+      ['msrc-1-7-cw', 'MSRC 1.7 CW', 'Motorsport Ranch - Cresson', [scca.id, tde.id]],
+      ['msrc-1-7-ccw', 'MSRC 1.7 CCW', 'Motorsport Ranch - Cresson', [lastYear.id]],
+    ])
+  })
+
+  it('sums up the driver’s laps on a layout', () => {
+    const [layout] = layoutsOf([scca, tde])
+    const summary = [
+      { eventId: scca.id, best: 99_000, sessions: 2 },
+      { eventId: tde.id, best: 98_540, sessions: 1 },
+      { eventId: ccw.id, best: 90_000, sessions: 3 },
+    ]
+    expect(layoutLaps(layout, summary)).toEqual({ best: 98_540, sessions: 3, events: 2 })
+    expect(layoutLaps(layout, [])).toEqual({ sessions: 0, events: 0 })
   })
 })

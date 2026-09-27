@@ -22,6 +22,9 @@ import { LapTimesSheet } from './components/LapTimesSheet'
 import type { SessionSlot } from './components/LapTimesSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
+import { GarageTab, HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
+import type { HomeTab } from './components/HomeTabs'
+import { TracksTab } from './components/TracksTab'
 import { DriverPicker } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useDrivers, driverName } from './data/drivers'
@@ -216,6 +219,12 @@ export default function App() {
   // The event whose page is showing: the route's, or the one under the track page.
   const pageEventId = routeEventId ?? trackOverEventId
   const eventPageOpen = pageEventId !== null
+  // The tab under everything (#274): Events, Tracks or Garage. A track page
+  // of its own (not over an event) is the Tracks tab's. Pages pushed over a
+  // tab leave it as it was, and go back to it.
+  const hashTab = homeTabFromHash(hash) ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
+  const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
+  if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // A link to an event we don't have (yet): an app-created one before the
   // fetch lands, or one that was deleted. Don't show some other event.
   const routeMissing = isOnEventRoute && !ALL_EVENTS.some(e => e.id === routeEventId)
@@ -326,13 +335,19 @@ export default function App() {
     setHash(LANDING_HASH)
   }
 
+  // Back from a pushed page: to the tab it was opened from.
+  function backToTab() {
+    setHash(HOME_TAB_HASH[homeTab])
+  }
+
   // From a track page, one of its events, on the laps it lists: My notes,
   // and whoever's laps they were. Already in place under the page (or put
   // there), so the track page slides away to reveal it.
   function openEventNotes(event: EventConfig) {
     // The event it was opened from keeps its day and filters.
     if (event.id !== activeEvent.id) {
-      const keep = lapDriver
+      // An admin looking at another driver's laps keeps looking at them.
+      const keep = trackOverEventId !== null ? lapDriver : null
       selectEvent(event)
       setLapDriver(keep)
     }
@@ -402,8 +417,14 @@ export default function App() {
   return (
     <>
     <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownOverlay}>
-      <LandingPage onOpenEvent={switchEvent} />
+      {/* Room at the bottom for the tab bar. */}
+      <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))` }}>
+        {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
+        {homeTab === 'tracks' && <TracksTab />}
+        {homeTab === 'garage' && <GarageTab />}
+      </div>
     </PullToRefresh>
+    <TabBar active={homeTab} />
     {pushMounted && (
     <PushPage
       open={eventPageOpen}
@@ -423,7 +444,7 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           notesCount={lapLog.sessions.length}
-          onBack={goHome}
+          onBack={backToTab}
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
@@ -557,13 +578,14 @@ export default function App() {
           slug={shownTrackSlug}
           events={ALL_EVENTS}
           eventsLoaded={eventsLoaded}
-          driver={driver}
+          // Another driver's laps only when opened from their laps on an event.
+          driver={trackOverEventId !== null ? driver : null}
           onBack={() => {
             if (trackOverEventId !== null) backToEvent(trackOverEventId)
-            else goHome()
+            else backToTab()
           }}
           onOpenEvent={openEventNotes}
-          onHome={goHome}
+          onAllTracks={() => setHash(HOME_TAB_HASH.tracks)}
         />
         </PullToRefresh>
       </PushPage>
@@ -591,7 +613,7 @@ export default function App() {
             }}
           />
         ) : shownOverlay.kind === 'widget' ? (
-          <WidgetSetupPage />
+          <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} />
         ) : shownOverlay.eventId !== undefined ? (
           <SharePage
             url={eventShareUrl(shownOverlay.eventId)}
@@ -599,7 +621,7 @@ export default function App() {
             closeHref={eventHash(shownOverlay.eventId)}
           />
         ) : (
-          <SharePage />
+          <SharePage closeHref={HOME_TAB_HASH[homeTab]} />
         )}
       </PushPage>
     )}
@@ -633,7 +655,8 @@ export default function App() {
         onClose={() => setLapSlot(null)}
       />
     )}
-    <Toast toast={toast} onDone={() => setToast(null)} />
+    {/* Clear of the tab bar while a tab is showing. */}
+    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackSlug !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>
   )
 }

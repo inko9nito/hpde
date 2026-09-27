@@ -118,7 +118,8 @@ function Accordion({ icon, title, children }: {
   )
 }
 
-export function WidgetSetupPage() {
+/** `closeHref`: where ✕ goes — the tab it was opened from. */
+export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {}) {
   const [preview, setPreview] = useState<PreviewId>('medium')
   const [showScript, setShowScript] = useState(false)
   const [scriptCopied, copyScript] = useCopy()
@@ -131,7 +132,7 @@ export function WidgetSetupPage() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-gray-900">iOS widget</h1>
           <a
-            href="#/"
+            href={closeHref}
             aria-label="Close"
             className="flex shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition-colors hover:border-gray-400 hover:text-gray-700"
             style={{ minWidth: 36, minHeight: 36 }}

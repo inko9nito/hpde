@@ -601,3 +601,42 @@ test('a track page slides in over the event from My notes, with every session on
   await expect(page.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
   await expect(card).toBeInViewport()
 })
+
+test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto('/#/')
+  const bar = page.getByRole('navigation', { name: 'Sections' })
+  // Pinned to the bottom of the screen, full width.
+  const viewport = page.viewportSize()!
+  await expect.poll(async () => {
+    const box = (await bar.boundingBox())!
+    return [Math.round(box.y + box.height), Math.round(box.width)]
+  }).toEqual([viewport.height, viewport.width])
+  await expect(bar.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
+
+  // The last event scrolls clear of the bar.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  const last = page.getByRole('button', { name: /Bravo HPDE/ })
+  const [lastBox, barBox] = [(await last.boundingBox())!, (await bar.boundingBox())!]
+  expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(barBox.y)
+
+  await bar.getByRole('link', { name: 'Tracks' }).click()
+  await expect(page).toHaveURL(/#\/tracks$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
+  // The one coming up first, then the rest.
+  const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
+  await expect(tracks).toHaveText([/^Charlie Raceway/, /^MSRC 2\.0 CW/, /^ECR/])
+
+  const slide = await trackSlide(page, () => tracks.nth(1).click(), 'MSRC 2.0 CW')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  // Signed out here, so it asks to sign in.
+  await expect(page.getByText('Sign in to see your lap times on this track')).toBeVisible()
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/tracks$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
+
+  await bar.getByRole('link', { name: 'Garage' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeVisible()
+  await expect(page.getByText('Coming soon')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
