@@ -6,11 +6,14 @@
 // A paste can be any of:
 //   - a comma-separated list, or a column:          1:39.42, 1:38.91, 1:39.08
 //   - rows copied from a spreadsheet (tab-separated), in the order
-//     lap, start crossing, finish crossing, lap time, note:
+//     lap, start crossing, finish crossing, lap time, top speed, average
+//     speed, note:
 //         Out   11:46:32 AM   11:48:51 AM   2:19   Behind the Fit
-//         1     11:48:51 AM   11:50:47 AM   1:56
+//         1     11:48:51 AM   11:50:47 AM   1:56   103.9   70.8
 //     Any of the columns can be missing. A lap with no lap time takes the
-//     gap between its crossings.
+//     gap between its crossings. Speeds are in mph (#298): the numbers
+//     right after the lap time, top speed first — unless a header row
+//     names them the other way round — or any cell marked "mph".
 //   - start/finish crossings: clock times (9:52:49 AM) or video timestamps
 //     (0:02:13), one after another, in a list or a column. Each gap is a lap.
 // Header, title and summary rows ("Lap  Start  Finish…", "Laps 10 Best
@@ -25,6 +28,10 @@ export interface Lap {
   start?: string
   end?: string
   note?: string
+  /** The lap's top speed, in mph, as a lap timer like a Garmin Catalyst records it (#298). */
+  topMph?: number
+  /** Its average speed over the lap, in mph. */
+  avgMph?: number
 }
 
 /** One session's laps, for one run group's slot in the schedule. */
@@ -67,6 +74,9 @@ export const MAX_LAPS = 200
 export const MAX_NOTE = 500
 export const MAX_SUMMARY = 1000
 const MAX_CROSSING = 24
+// Slowest and fastest speed the reader believes, in mph.
+export const MIN_MPH = 5
+export const MAX_MPH = 250
 
 /** "1:56", "1:39.42", "0:58.3". Whole seconds unless the time has more. */
 export function formatLapTime(ms: number, decimals?: number): string {
@@ -127,6 +137,11 @@ export function formatAverage(laps: Lap[], average: number): string {
   return formatLapTime(average, Math.min(3, decimals + 1))
 }
 
+/** A speed as a lap table shows it: to the tenth, as a lap timer records it. */
+export function formatSpeed(mph: number): string {
+  return mph.toFixed(1)
+}
+
 /** A lap's label in a list: its number among the laps that count, or Out / In. */
 export function lapLabels(laps: Lap[]): string[] {
   let n = 0
@@ -168,6 +183,7 @@ type Cell =
   | { type: 'crossing'; seconds: number; raw: string }
   | { type: 'number'; raw: string }
   | { type: 'kind'; kind: 'out' | 'in'; raw: string }
+  | { type: 'speed'; mph: number; raw: string }
   | { type: 'text'; raw: string }
 
 // 9:52:49 AM, ~2:32:44 pm, 2:30 PM — a time of day.
@@ -178,6 +194,18 @@ const HMS = /^(~)?\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
 const DURATION = /^(~)?\s*(?:(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?|(\d{1,3})\.(\d{1,3}))$/
 const LAP_NUMBER = /^(?:lap\s*)?#?\d{1,3}\.?$/i
 const KIND = /^(?:(out|in)(?:[\s-]*lap)?|(ol|il))$/i
+// 103.9 mph — a speed, marked as one.
+const SPEED = /^(\d{1,3}(?:\.\d{1,2})?)\s*mph$/i
+// 103.9, 92 — a speed in a row, where it follows the lap time.
+const BARE_SPEED = /^\d{1,3}(?:\.\d{1,2})?$/
+// Where a row has no top speed but has an average: "1:56  –  70.8".
+const NO_SPEED = /^[-–—]$/
+// Header cells naming speed columns: "Top speed (mph)", "Avg mph", "Max".
+const TOP_HEADER = /^(?:top|max|maximum|peak)(?:\s*speed)?(?:\s*\(?mph\)?)?$/i
+const AVG_HEADER = /^(?:avg|average|mean)(?:\s*speed)?(?:\s*\(?mph\)?)?$/i
+
+type Speed = 'top' | 'avg'
+const SPEED_ORDER: Speed[] = ['top', 'avg']
 
 function millis(fraction: string | undefined): number {
   return fraction ? Number(fraction.padEnd(3, '0')) : 0
@@ -211,6 +239,8 @@ function readCell(raw: string, readAs: ReadAs): Cell {
     }
   }
   if (LAP_NUMBER.test(raw)) return { type: 'number', raw }
+  m = SPEED.exec(raw)
+  if (m) return { type: 'speed', mph: Number(m[1]), raw }
   m = KIND.exec(raw)
   if (m) {
     const word = (m[1] ?? m[2]).toLowerCase()
@@ -229,7 +259,7 @@ function splitLine(line: string): { cells: string[]; joiner: string } {
   if (sep) return { cells: line.split(sep).map(c => c.trim()), joiner: `${sep === '|' ? ' |' : sep} ` }
   const cells: string[] = []
   for (const word of line.trim().split(/\s+/)) {
-    if (/^[ap]\.?m\.?$/i.test(word) && cells.length && /\d$/.test(cells[cells.length - 1])) {
+    if (/^(?:[ap]\.?m\.?|mph)$/i.test(word) && cells.length && /\d$/.test(cells[cells.length - 1])) {
       cells[cells.length - 1] += ` ${word}`
     } else if (cells.length && cells[cells.length - 1] === '~') {
       cells[cells.length - 1] += word
@@ -247,6 +277,36 @@ function checkLap(ms: number): string | null {
 }
 
 type Crossing = Extract<Cell, { type: 'crossing' }>
+
+/**
+ * The speed columns a header row names, in its order — "Lap time, Top
+ * speed (mph), Avg speed (mph)" — or null when it names none. Only cells
+ * that are nothing but a column's name count, so a sentence mentioning top
+ * speed stays a sentence; a line of words split by spaces has to start
+ * like a header ("Lap  Time  Top  Avg"). "Avg" alone could be the average
+ * lap: it's a speed when the header says speed or mph, or names a top.
+ */
+function speedColumns(line: string, cells: string[]): Speed[] | null {
+  const split = line.includes('\t') || /[,;|]/.test(line)
+  if (!split && !/^\s*laps?\b/i.test(line)) return null
+  const order = cells.flatMap((c): Speed[] => (TOP_HEADER.test(c) ? ['top'] : AVG_HEADER.test(c) ? ['avg'] : []))
+  if (!order.includes('top') && !/speed|mph/i.test(line)) return null
+  return order.length ? order : null
+}
+
+/** A cell that can be a speed where one belongs: after a row's lap time. */
+function speedSlot(cell: Cell): boolean {
+  if (cell.type === 'speed') return true
+  if (cell.type === 'text') return NO_SPEED.test(cell.raw)
+  return (cell.type === 'duration' || cell.type === 'number') && BARE_SPEED.test(cell.raw)
+}
+
+function checkSpeed(mph: number, which: Speed): string | null {
+  const name = which === 'top' ? 'a top speed' : 'an average speed'
+  if (mph < MIN_MPH) return `${mph} mph is too slow for ${name}.`
+  if (mph > MAX_MPH) return `${mph} mph is too fast for ${name}.`
+  return null
+}
 
 function gap(start: Crossing, end: Crossing): number {
   return Math.round((end.seconds - start.seconds) * 1000)
@@ -278,6 +338,8 @@ function read(text: string, readAs: ReadAs): Reading {
   // lap time summary; the session title isn't.
   let beforeLaps = true
   const summary: string[] = []
+  // The speed columns' order, once a header row names them.
+  let speedHeader: Speed[] | null = null
 
   const lines = text.split(/\r?\n/)
   lines.forEach((rawLine, i) => {
@@ -291,20 +353,38 @@ function read(text: string, readAs: ReadAs): Reading {
     const [first] = cells
     const labelled = first.type === 'number' || first.type === 'kind'
     const rest = labelled ? cells.slice(1) : cells
-    const durations = rest.filter(c => c.type === 'duration')
+    // Speeds: the run of numbers right after the lap time, and any cell
+    // marked mph.
+    const lapAt = rest.findIndex(c => c.type === 'duration')
+    const speeds = new Set<Cell>(rest.filter(c => c.type === 'speed'))
+    if (lapAt !== -1) {
+      for (const c of rest.slice(lapAt + 1)) {
+        if (!speedSlot(c)) break
+        speeds.add(c)
+      }
+    }
     const times = rest.filter((c): c is Crossing => c.type === 'crossing')
-    const others = rest.filter(c => c.type !== 'duration' && c.type !== 'crossing')
     // A spreadsheet row: a lap number or Out/In first, or crossings with a
-    // lap time, or a start and a finish on a line of their own.
+    // lap time, or a start and a finish on a line of their own — or, once
+    // a header has named speed columns, a lap time and its speeds. A line
+    // with a speed marked mph is one too.
     const isRow = labelled
-      || (times.length > 0 && durations.length > 0)
+      || (times.length > 0 && lapAt !== -1)
       || (times.length === 2 && cells.length === 2)
+      || rest.some(c => c.type === 'speed')
+      || (speedHeader !== null && lapAt === 0 && rest[0].raw.includes(':') && speeds.size > 0)
+    // Anywhere else, numbers after a lap time are more lap times.
+    if (!isRow) speeds.clear()
+    const durations = rest.filter(c => c.type === 'duration' && !speeds.has(c))
+    const others = rest.filter(c => c.type !== 'duration' && c.type !== 'crossing' && !speeds.has(c))
 
     // Titles, headers and totals start with a word. A line that starts
     // with something else, like a mistyped time, is flagged, not passed over.
     if (!isRow && first.type === 'text' && /^\p{L}/u.test(first.raw)) {
       const title = /^session\b/i.test(first.raw)
-      const header = /^laps?\b/i.test(first.raw)
+      const named = title ? null : speedColumns(rawLine, rawCells.filter(Boolean))
+      if (named) speedHeader = named
+      const header = /^laps?\b/i.test(first.raw) || named !== null
       if (title) sessionTitles++
       if (header) beforeLaps = false
       if (beforeLaps && !title) {
@@ -326,6 +406,20 @@ function read(text: string, readAs: ReadAs): Reading {
       if (ms === undefined) return problem('No lap time on this line.')
       const bad = checkLap(ms)
       if (bad) return problem(bad)
+      if (speeds.size > 2) return problem('More than a top and an average speed on this line.')
+      // Top speed first, unless the header has them the other way round.
+      const order = speedHeader && speedHeader.length >= speeds.size ? speedHeader : SPEED_ORDER
+      const mph: Partial<Record<Speed, number>> = {}
+      for (const [i, c] of rest.filter(c => speeds.has(c)).entries()) {
+        if (c.type === 'text') continue
+        const value = c.type === 'speed' ? c.mph : Number(c.raw)
+        const bad = checkSpeed(value, order[i])
+        if (bad) return problem(bad)
+        mph[order[i]] = value
+      }
+      if (mph.top !== undefined && mph.avg !== undefined && mph.avg > mph.top) {
+        return problem('The average speed is above the top speed.')
+      }
       const note = others.map(c => c.raw).join(joiner).trim()
       if (note.length > MAX_NOTE) return problem(`Notes can be up to ${MAX_NOTE} characters.`)
       const lap: Lap = { ms }
@@ -333,6 +427,8 @@ function read(text: string, readAs: ReadAs): Reading {
       if (times[0]) lap.start = times[0].raw
       if (times[1]) lap.end = times[1].raw
       if (note) lap.note = note
+      if (mph.top !== undefined) lap.topMph = mph.top
+      if (mph.avg !== undefined) lap.avgMph = mph.avg
       laps.push(lap)
       return
     }
@@ -421,14 +517,19 @@ function isTimestampList(text: string): boolean {
 /**
  * The laps as text the sheet can show for editing, which reads back as the
  * same laps: a comma-separated list when they're plain times, spreadsheet
- * rows (lap, start, finish, time, note) when there's more to them.
+ * rows (lap, start, finish, time, top speed, average speed, note) when
+ * there's more to them. A lap with an average speed but no top has a dash
+ * in its place.
  */
 export function lapsToText(laps: Lap[]): string {
-  const plain = laps.every(lap => !lap.kind && !lap.start && !lap.end && !lap.note)
+  const plain = laps.every(lap => !lap.kind && !lap.start && !lap.end && !lap.note && lap.topMph === undefined && lap.avgMph === undefined)
   if (plain) return laps.map(lap => formatLapTime(lap.ms)).join(', ')
   const labels = lapLabels(laps)
   return laps
-    .map((lap, i) => [labels[i], lap.start ?? '', lap.end ?? '', formatLapTime(lap.ms), lap.note ?? ''].join('\t').replace(/\t+$/, ''))
+    .map((lap, i) => {
+      const speeds = lap.avgMph !== undefined ? [lap.topMph ?? '–', lap.avgMph] : lap.topMph !== undefined ? [lap.topMph] : []
+      return [labels[i], lap.start ?? '', lap.end ?? '', formatLapTime(lap.ms), ...speeds.map(String), lap.note ?? ''].join('\t').replace(/\t+$/, '')
+    })
     .join('\n')
 }
 
@@ -457,6 +558,13 @@ function cleanLap(value: unknown): Lap | null {
     if (typeof lap.note !== 'string' || lap.note.length > MAX_NOTE) return null
     if (lap.note.trim()) out.note = lap.note.trim()
   }
+  for (const field of ['topMph', 'avgMph'] as const) {
+    const v = lap[field]
+    if (v === undefined) continue
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < MIN_MPH || v > MAX_MPH) return null
+    out[field] = Math.round(v * 100) / 100
+  }
+  if (out.topMph !== undefined && out.avgMph !== undefined && out.avgMph > out.topMph) return null
   return out
 }
 

@@ -275,8 +275,8 @@ export function LapTimesSheet({
             />
             <p className="mt-1.5 text-xs text-gray-500">
               Paste a list, a spreadsheet column, or rows from your timing sheet (lap, start, finish,
-              time, notes). Start and finish times work too. Mark out laps with “Out”. Laps, best and
-              average are worked out for you.
+              time, top and average speed in mph, notes). Start and finish times work too. Mark out
+              laps with “Out”. Laps, best and average are worked out for you.
             </p>
 
             {parsed.ambiguous && (

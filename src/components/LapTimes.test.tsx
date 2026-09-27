@@ -246,6 +246,59 @@ describe('lap times (#210)', () => {
     expect(lapCalls('GET').every(([url]) => !String(url).includes('driver='))).toBe(true)
   })
 
+  it('reads each lap’s top and average speed, saves them and shows them in the table (#298)', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue')
+    const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
+    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: [
+      'Lap #\tLap time\tTop speed (mph)\tAvg speed (mph)',
+      'Out\t2:19\t88\t55.5',
+      '1\t1:40.071\t92.0\t61.7',
+      '2\t1:28.551\t102.3\t69.6\tTraffic',
+    ].join('\n') } })
+
+    const read = within(sheet).getByRole('region', { name: 'Laps read' })
+    expect(rows(read)).toEqual([
+      ['Lap', 'Lap time', 'Top – mph', 'Avg – mph', 'Note'],
+      ['Out', '2:19', '88.0', '55.5', ''],
+      ['1', '1:40.071', '92.0', '61.7', ''],
+      ['2', '1:28.551', '102.3', '69.6', 'Traffic'],
+    ])
+    expect(within(read).getByRole('columnheader', { name: 'Top speed, mph' })).toBeInTheDocument()
+    expect(within(read).getByRole('columnheader', { name: 'Average speed, mph' })).toBeInTheDocument()
+
+    // Beside start and finish crossings, top stacks over average, as they do.
+    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '1\t8:33:20 AM\t8:35:12 AM\t1:52\t101.9\t68.2' } })
+    expect(rows(read)).toEqual([
+      ['Lap', 'From / To', 'Lap time', 'Top – Avg', ''],
+      ['1', '8:33:20 AM – 8:35:12 AM', '1:52', '101.9 – 68.2', ''],
+    ])
+    expect(within(read).getByRole('columnheader', { name: 'Top and average speed, mph' })).toBeInTheDocument()
+    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: [
+      'Lap #\tLap time\tTop speed (mph)\tAvg speed (mph)',
+      'Out\t2:19\t88\t55.5',
+      '1\t1:40.071\t92.0\t61.7',
+      '2\t1:28.551\t102.3\t69.6\tTraffic',
+    ].join('\n') } })
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
+    await waitFor(() => expect(lapCalls('PUT')).toHaveLength(1))
+    expect(JSON.parse(String(lapCalls('PUT')[0][1]!.body)).session.laps).toEqual([
+      { ms: 139_000, kind: 'out', topMph: 88, avgMph: 55.5 },
+      { ms: 100_071, topMph: 92, avgMph: 61.7 },
+      { ms: 88_551, topMph: 102.3, avgMph: 69.6, note: 'Traffic' },
+    ])
+
+    // Editing brings them back as rows, speeds after the lap time.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' }))
+    const again = screen.getByRole('dialog')
+    await userEvent.click(within(again).getByRole('button', { name: 'Edit' }))
+    expect(within(again).getByLabelText('Lap times or timestamps')).toHaveValue(
+      'Out\t\t\t2:19\t88\t55.5\n1\t\t\t1:40.071\t92\t61.7\n2\t\t\t1:28.551\t102.3\t69.6\tTraffic',
+    )
+  })
+
   it('asks which group when more than one is on track', async () => {
     openEvent()
     await tapSession('Lap times: 9:50 AM, Blue, Red')

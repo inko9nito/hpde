@@ -470,15 +470,17 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
     return Math.round(box.y + box.height)
   }).toBe(viewport.height)
 
+  // Every column, top and average speed too (#298): the widest a table gets.
   await sheet.getByLabel('Lap times or timestamps').fill([
-    'Lap\tStart Crossing\tFinish Crossing\tLap Time\tNotes',
-    'Out\t8:31:02 AM\t8:33:20 AM\t2:18\tCold tires',
-    '1\t8:33:20 AM\t8:35:12 AM\t1:52\t',
-    '2\t8:35:12 AM\t8:36:58 AM\t1:46\tClean lap',
+    'Lap\tStart Crossing\tFinish Crossing\tLap Time\tTop mph\tAvg mph\tNotes',
+    'Out\t8:31:02 AM\t8:33:20 AM\t2:18\t88.4\t55.1\tCold tires',
+    '1\t8:33:20 AM\t8:35:12 AM\t1:52\t101.9\t68.2\t',
+    '2\t8:35:12 AM\t8:36:58 AM\t1:46\t103.9\t70.8\tClean lap',
   ].join('\n'))
   const read = sheet.getByRole('region', { name: 'Laps read' })
   await expect(read.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
   await expect(read.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
+  await expect(read.getByRole('row', { name: /^2 / }).locator('[data-speed]')).toHaveText(['103.9', '70.8'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
 
