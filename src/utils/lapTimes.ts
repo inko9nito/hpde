@@ -192,7 +192,8 @@ const CLOCK = /^(~)?\s*(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?\s*([ap])\.
 const HMS = /^(~)?\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
 // 1:56, 1:39.42, 58.31 — a lap time.
 const DURATION = /^(~)?\s*(?:(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?|(\d{1,3})\.(\d{1,3}))$/
-const LAP_NUMBER = /^(?:lap\s*)?#?\d{1,3}\.?$/i
+// Garmin numbers the laps before its first full one -1 and 0 (#298).
+const LAP_NUMBER = /^(?:lap\s*)?#?-?\d{1,3}\.?$/i
 const KIND = /^(?:(out|in)(?:[\s-]*lap)?|(ol|il))$/i
 // 103.9 mph — a speed, marked as one.
 const SPEED = /^(\d{1,3}(?:\.\d{1,2})?)\s*mph$/i

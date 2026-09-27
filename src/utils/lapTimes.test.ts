@@ -217,6 +217,22 @@ describe('parseLapTimes: speeds (#298)', () => {
     expect(laps[0]).toEqual({ ms: 100_071, topMph: 92, avgMph: 61.7, note: 'Averaged lap' })
   })
 
+  it('reads laps Garmin numbers -1 and 0 as laps like the rest', () => {
+    const { laps, errors } = parseLapTimes([
+      'Lap #\tLap time\tTop speed (mph)\tAvg speed (mph)',
+      '-1\t1:26.846\t102.2\t70.9',
+      '0\t1:24.082\t103.9\t73.1',
+      '1\t1:40.071\t92.0\t61.7',
+    ].join('\n'))
+    expect(errors).toEqual([])
+    expect(laps).toEqual([
+      { ms: 86_846, topMph: 102.2, avgMph: 70.9 },
+      { ms: 84_082, topMph: 103.9, avgMph: 73.1 },
+      { ms: 100_071, topMph: 92, avgMph: 61.7 },
+    ])
+    expect(lapStats(laps).best).toBe(84_082)
+  })
+
   it('takes one speed as the top speed', () => {
     expect(laps('1\t1:56\t104.2\tTraffic')).toEqual([{ ms: 116_000, topMph: 104.2, note: 'Traffic' }])
   })
