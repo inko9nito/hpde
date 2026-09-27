@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
-import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapStats } from '../utils/lapTimes'
+import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
 
 /**
@@ -39,6 +39,31 @@ export function LapFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: n
       value: stats.best !== undefined ? <BestChip ms={stats.best} allTime={stats.best === allTimeBest} /> : '—',
     },
   ]} />
+}
+
+/**
+ * A session's top and average speed (#298), in a line under its figures —
+ * a fourth tile wouldn't fit a phone. Nothing without speeds.
+ */
+export function SpeedFigures({ laps }: { laps: Lap[] }) {
+  const { top, average } = lapSpeeds(laps)
+  if (top === undefined && average === undefined) return null
+  return (
+    <dl className="flex gap-3 text-xs" aria-label="Session speeds" data-speed-figures>
+      {top !== undefined && <Speedline label="Top" mph={top} />}
+      {average !== undefined && <Speedline label="Avg" mph={average} />}
+    </dl>
+  )
+}
+
+function Speedline({ label, mph }: { label: string; mph: number }) {
+  return (
+    <div className="flex items-baseline gap-1">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className="font-mono font-semibold tabular-nums text-gray-900">{formatSpeed(mph)}</dd>
+      <span className="text-gray-400">mph</span>
+    </div>
+  )
 }
 
 /**

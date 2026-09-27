@@ -123,6 +123,27 @@ export function lapStats(laps: Lap[]): LapStats {
   return count ? { count, best, bestIndex, average: total / count } : { count }
 }
 
+export interface SpeedStats {
+  /** The fastest any lap got. */
+  top?: number
+  /** The laps' average speeds, averaged. */
+  average?: number
+}
+
+/**
+ * A session's (or an event's) speeds (#298), from the laps that count, as
+ * the best and the average are: out and in laps left out.
+ */
+export function lapSpeeds(laps: Lap[]): SpeedStats {
+  const counted = laps.filter(lap => !lap.kind)
+  const tops = counted.flatMap(lap => (lap.topMph !== undefined ? [lap.topMph] : []))
+  const avgs = counted.flatMap(lap => (lap.avgMph !== undefined ? [lap.avgMph] : []))
+  return {
+    ...(tops.length ? { top: Math.max(...tops) } : {}),
+    ...(avgs.length ? { average: avgs.reduce((a, b) => a + b, 0) / avgs.length } : {}),
+  }
+}
+
 /**
  * The average to one decimal more than the laps themselves have, the way a
  * timing sheet shows it: 1:51.0 for whole-second laps, 1:39.137 for laps to

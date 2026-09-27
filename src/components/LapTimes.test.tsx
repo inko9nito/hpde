@@ -457,6 +457,30 @@ describe('lap times (#210)', () => {
     expect(readout).toHaveTextContent('Session 19:50 AM · Blue1:39.42Best1:40.210Average')
   })
 
+  it('shows each session’s top and average speed, and charts top speed on a right-hand axis (#298)', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1,
+        laps: [{ ms: 101_000, topMph: 103.9, avgMph: 69 }, { ms: 99_420, topMph: 104.5, avgMph: 70 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910 }, { ms: 99_300 }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    // Under the session's figures; nothing for a session without speeds.
+    expect(figures(screen.getByRole('region', { name: 'Session 1, 9:50 AM' }), 'Session speeds')).toEqual({ Top: '104.5', Avg: '69.5' })
+    expect(screen.getByRole('region', { name: 'Session 2, 11:45 AM' }).querySelector('[data-speed-figures]')).toBeNull()
+
+    const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order, with top speed in mph on the right: 2 sessions\./ })
+    const legend = chart.parentElement!
+    expect(legend).toHaveTextContent('Top speed, mph (right)')
+    expect(legend).toHaveTextContent('Lap times: lower is faster')
+    // One point: the session with speeds; its ticks on the lap times' grid lines.
+    expect(chart.querySelectorAll('[data-series="speed"] circle')).toHaveLength(1)
+    expect(chart.querySelectorAll('[data-speed-tick]')).toHaveLength(chart.querySelectorAll('svg line[stroke="#e5e7eb"]').length)
+    fireEvent.focus(chart)
+    fireEvent.keyDown(chart, { key: 'ArrowLeft' })
+    expect(within(chart).getByRole('status')).toHaveTextContent('104.5mph top speed')
+  })
+
   it('gives every session’s table the same columns, so they line up', async () => {
     saved = [
       { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] },
@@ -694,7 +718,16 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(screen.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('opens an event’s sessions from its card, over the track page, and back returns to it', async () => {
+  it('shows the fastest the driver went at each event, when speeds are logged (#298)', async () => {
+    saved = [{ ...at('2026-03-07', '11:45', 2, []), laps: [{ ms: 99_420, topMph: 104.5 }, { ms: 99_100, topMph: 106.6 }, { ms: 139_000, kind: 'in', topMph: 110 }] }]
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    await waitFor(async () => expect(figures(await card('Lap Day'), 'Event figures')).toEqual({ Best: '1:39.1', Avg: '1:39.260', Peak: '106.6' }))
+    expect(figures(await card('Earlier'), 'Event figures')).toEqual({ Best: '1:38.54', Avg: '1:39.913' })
+    expect(within(await trackPage()).getByRole('group', { name: /with top speed in mph on the right/ })).toBeInTheDocument()
+  })
+
+    it('opens an event’s sessions from its card, over the track page, and back returns to it', async () => {
     window.location.hash = TRACK
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
     await userEvent.click(await card('Earlier'))

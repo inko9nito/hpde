@@ -5,6 +5,7 @@ import {
   formatAverage,
   lapStats,
   lapLabels,
+  lapSpeeds,
   lapsToText,
   cleanSessionLaps,
   sessionKey,
@@ -327,6 +328,18 @@ describe('lapStats', () => {
   it('averages to one decimal more than the laps have', () => {
     const laps = parseLapTimes('1:39.42, 1:38.91').laps
     expect(formatAverage(laps, lapStats(laps).average!)).toBe('1:39.165')
+  })
+})
+
+describe('lapSpeeds (#298)', () => {
+  it('takes the fastest top speed and the mean of the averages, leaving out and in laps out', () => {
+    expect(lapSpeeds([
+      { ms: 139_000, kind: 'out', topMph: 110, avgMph: 50 },
+      { ms: 100_000, topMph: 103.9, avgMph: 70 },
+      { ms: 99_000, topMph: 106.3, avgMph: 71 },
+      { ms: 98_000 },
+    ])).toEqual({ top: 106.3, average: 70.5 })
+    expect(lapSpeeds([{ ms: 100_000 }])).toEqual({})
   })
 })
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapFigures, LapTable } from './LapList'
+import { LapFigures, LapTable, SpeedFigures } from './LapList'
 import type { LapColumns } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { formatTime, formatAmPm } from '../utils/time'
@@ -177,6 +177,7 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
               />
             </button>
           </div>
+          <SpeedFigures laps={session.laps} />
           {session.summary && (
             <p className="text-sm text-gray-700" data-lap-summary>{session.summary}</p>
           )}

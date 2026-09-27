@@ -478,7 +478,9 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
     '2\t8:35:12 AM\t8:36:58 AM\t1:46\t103.9\t70.8\tClean lap',
   ].join('\n'))
   const read = sheet.getByRole('region', { name: 'Laps read' })
-  await expect(read.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
+  await expect(read.getByLabel('Session figures').getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
+  // The session's top and average speed under them (#298), from the laps that count.
+  await expect(read.getByLabel('Session speeds').getByRole('definition')).toHaveText(['103.9', '69.5'])
   await expect(read.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   await expect(read.getByRole('row', { name: /^2 / }).locator('[data-speed]')).toHaveText(['103.9', '70.8'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -490,7 +492,8 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
-  await expect(card.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
+  await expect(card.getByLabel('Session figures').getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
+  await expect(card.getByLabel('Session speeds').getByRole('definition')).toHaveText(['103.9', '69.5'])
   // Tapping anywhere on the figures opens the laps (the toggle covers them).
   // Below the chart on a phone, so scrolled to first, as a thumb would.
   await card.getByRole('definition').first().scrollIntoViewIfNeeded()

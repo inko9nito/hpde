@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayLabel, labelled, lapTicks } from './LapTrendChart'
+import { dayLabel, labelled, lapTicks, speedTicks } from './LapTrendChart'
 
 describe('the track page’s chart (#274)', () => {
   it('ticks the lap times at clean steps, spanning every time', () => {
@@ -10,6 +10,15 @@ describe('the track page’s chart (#274)', () => {
     expect(close.min).toBeLessThanOrEqual(99_000)
     expect(close.max).toBeGreaterThanOrEqual(99_500)
     expect(close.ticks.every(t => t % 500 === 0)).toBe(true)
+  })
+
+  it('ticks top speed on the lap times’ grid lines, at the least clean step spanning every speed (#298)', () => {
+    expect(speedTicks(103.9, 106.6, 4)).toEqual({ ticks: [103, 104, 105, 106, 107], min: 103, max: 107 })
+    expect(speedTicks(92, 106.6, 3)).toEqual({ ticks: [80, 90, 100, 110], min: 80, max: 110 })
+    // One speed still gets a scale around it.
+    expect(speedTicks(104.2, 104.2, 4)).toEqual({ ticks: [102, 103, 104, 105, 106], min: 102, max: 106 })
+    // Never below zero.
+    expect(speedTicks(6, 8, 4).min).toBeGreaterThanOrEqual(0)
   })
 
   it('dates as many points as there’s room for, and always the latest', () => {
