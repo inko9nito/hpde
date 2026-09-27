@@ -490,11 +490,15 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   await expect(card.getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
   // Tapping anywhere on the figures opens the laps (the toggle covers them).
+  // Below the chart on a phone, so scrolled to first, as a thumb would.
+  await card.getByRole('definition').first().scrollIntoViewIfNeeded()
   const figure = (await card.getByRole('definition').first().boundingBox())!
   await page.mouse.click(figure.x + 4, figure.y + 4)
   await expect(card.getByRole('button', { name: 'Hide laps for Session 1' })).toHaveAttribute('aria-expanded', 'true')
   await expect(card.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:46')
+  // …and a chart of each session's best and average (#274), here just the one.
+  await expect(page.getByRole('group', { name: /^Best and average lap in each session/ })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
@@ -621,6 +625,9 @@ test('a track page slides in over the event from My notes, listing the layout’
   expect(slideIn).toEqual({ fromBelow: false, fromSide: true })
   const october = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Alpha in October' }) })
   await expect(october.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  // The top of My notes shows as it opens; the sessions are further down.
+  await expect(october.getByRole('group', { name: /^Best and average lap in each session/ })).toBeInViewport()
+  await october.getByRole('region', { name: 'Session 1, 8:30 AM' }).scrollIntoViewIfNeeded()
   await expect(october.getByRole('region', { name: 'Session 1, 8:30 AM' })).toBeInViewport()
   // …and its Back returns to the track page.
   await october.getByRole('button', { name: 'Back' }).click()

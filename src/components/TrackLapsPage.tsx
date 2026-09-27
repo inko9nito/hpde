@@ -9,7 +9,7 @@ import { groupFor } from './LapTimesSheet'
 import { CARD_SHELL, DateBlock } from './LandingPage'
 import { StatusBadge } from './EventHeader'
 import { PrivateTag, StatCard, plural, useSkeletonFade } from './LapSessions'
-import { LapTrendChart } from './LapTrendChart'
+import { LapTrendChart, dayLabel, fullDate } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
 import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
@@ -181,8 +181,9 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     const laps = sessions.flatMap(s => s.laps)
     const stats = lapStats(laps)
     if (stats.best === undefined || stats.average === undefined) return []
+    const date = startDate(event)
     return [{
-      key: event.id, name: event.name, date: startDate(event),
+      key: event.id, tick: dayLabel(date), tickGroup: date.slice(0, 4), title: event.name, subtitle: fullDate(date),
       best: stats.best, average: stats.average, averageText: formatAverage(laps, stats.average),
     }]
   })
@@ -266,8 +267,12 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
             ms={best}
             caption={`Across ${plural(allSessions.length, 'session', 'sessions')} at ${plural(withLaps.length, 'event', 'events')}`}
           >
-            {/* How it's come along: from a second event on. */}
-            {trend.length >= 2 && <LapTrendChart points={trend} />}
+            {/* How it's come along: a point per event, from the first. */}
+            {trend.length > 0 && (
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <LapTrendChart points={trend} label="Best and average lap at each event, oldest to newest" noun={['event', 'events']} />
+              </div>
+            )}
           </StatCard>
         </div>
         <section aria-labelledby="track-events-heading">

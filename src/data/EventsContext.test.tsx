@@ -114,8 +114,11 @@ describe('events cache (#231)', () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     await screen.findByRole('button', { name: /New Track Day/ })
-    const cached = JSON.parse(localStorage.getItem(EVENTS_CACHE_KEY)!)
-    expect(cached).toEqual([{ ...created, trackId: 'ecr-2-7' }])
+    // Written in an effect after that render commits (as below), so the
+    // card can show a beat before the cache is written.
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(EVENTS_CACHE_KEY)!)).toEqual([{ ...created, trackId: 'ecr-2-7' }]),
+    )
   })
 
   it('drops a cached event the fetch no longer returns', async () => {
