@@ -194,8 +194,10 @@ Only they and admins can see them.
   Netlify Blobs (store `laps`), one record per driver per event, keyed by
   their Identity user id. Every request needs a sign-in and only ever
   reaches the driver's own laps, except an admin's (below). A deploy
-  preview gets an empty store of its own, so laps saved on a preview
-  never touch the real ones, and they're gone with the next deploy.
+  preview gets a store of its own, which starts as a copy of your real
+  laps the first time you use them there (like the events), so you can
+  test with real data. Laps saved or removed on a preview stay on that
+  preview and never touch the real ones; the next deploy copies afresh.
 - **For another driver (admins, #288):** the lap sheet and My notes
   have a **Driver** picker: *Me*, or anyone who has signed in to the
   site. Pick someone to see, add, edit or remove their laps. They're
