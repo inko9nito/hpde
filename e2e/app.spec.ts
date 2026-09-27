@@ -653,6 +653,17 @@ test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks
   // The one coming up first, then the rest.
   const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
   await expect(tracks).toHaveText([/^Charlie Raceway/, /^MSRC 2\.0 CW/, /^ECR/])
+  // Each track's shape is on a panel wider than it's tall, flush with the
+  // card's left, top and bottom (inside its 1px border) — not an event
+  // card's square tile.
+  const [card, panel] = await tracks.nth(1).evaluate(a => [a, a.firstElementChild!].map(el => {
+    const { left, top, bottom, width, height } = el.getBoundingClientRect()
+    return { left, top, bottom, width, height }
+  }))
+  expect(panel.width).toBeGreaterThan(panel.height)
+  expect(panel.left - card.left).toBeCloseTo(1, 0)
+  expect(panel.top - card.top).toBeCloseTo(1, 0)
+  expect(card.bottom - panel.bottom).toBeCloseTo(1, 0)
 
   const slide = await trackSlide(page, () => tracks.nth(1).click(), 'MSRC 2.0 CW')
   expect(slide).toEqual({ fromBelow: false, fromSide: true })
