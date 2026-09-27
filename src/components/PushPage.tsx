@@ -34,6 +34,11 @@ interface Props {
    * event, Share, iOS widget (#278).
    */
   from?: 'right' | 'bottom'
+  /**
+   * Above the other pushed pages, whatever their order on the page: an
+   * event's page opened from a track page, over it (#274).
+   */
+  raised?: boolean
 }
 
 /**
@@ -43,7 +48,7 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true, from = 'right' }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true, from = 'right', raised = false }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
   // frame never paints and the transition doesn't fire. The one
@@ -81,6 +86,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       ref={scrollRef}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
+        zIndex: raised ? 31 : undefined,
         // Once in place, white is what Safari 26 samples to tint the
         // status bar — this fixed page is the element at the top edge —
         // so it matches the white header (#245). Gray-50 while sliding,

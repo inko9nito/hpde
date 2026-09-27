@@ -555,3 +555,115 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await page.getByLabel('Driver').selectOption({ label: 'Me' })
   await expect(page.getByText('No lap times yet')).toBeVisible()
 })
+
+test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {
+  // An earlier event on the same layout as Alpha.
+  const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }
+  await stubEvents(page, [...TEST_EVENTS, earlier])
+  await signInAsAdmin(page)
+  const session = (date: string, laps: object[]) => ({ key: `${date} 08:30 blue`, date, time: '08:30', group: 'blue', sessionNumber: 1, laps })
+  const laps: Record<string, object[]> = {
+    [alpha.id]: [session('2026-03-07', [{ ms: 112_000 }, { ms: 106_000, start: '8:35:12 AM', end: '8:36:58 AM', note: 'Clean lap' }])],
+    [earlier.id]: [session('2025-10-04', [{ ms: 108_400 }, { ms: 105_220 }])],
+  }
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('events')) {
+      const ids = params.get('events')!.split(',')
+      return route.fulfill({ json: { events: ids.filter(id => laps[id]).map(id => ({ eventId: id, sessions: laps[id] })) } })
+    }
+    if (!params.has('event')) return route.fulfill({ json: { events: [{ eventId: earlier.id, best: 105_220, sessions: 1 }] } })
+    return route.fulfill({ json: { sessions: laps[params.get('event')!] ?? [] } })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  const card = page.getByRole('group', { name: 'All time best' })
+  await expect(card).toContainText('1:45.22')
+  const slide = await trackSlide(page, () => card.getByRole('link', { name: 'See all my MSRC 2.0 CW laps' }).click(), 'MSRC 2.0 CW')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+
+  const track = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' }) })
+  await expect(track.getByRole('group', { name: 'All time best' })).toContainText('1:45.22')
+  // The layout's events, newest first, each with its run group, best and
+  // average; their sessions are a tap away, not on this page.
+  const events = track.getByRole('region', { name: 'Events' }).getByRole('link')
+  await expect(events).toHaveCount(2)
+  await expect(events.nth(0)).toContainText('Alpha Track Day')
+  await expect(events.nth(1)).toContainText('Alpha in October')
+  await expect(events.nth(1)).toContainText('Blue')
+  await expect(events.nth(1).getByRole('definition')).toHaveText(['1:45.22', '1:46.810'])
+  // Compact: one row each, like the Events list's.
+  expect((await events.nth(1).boundingBox())!.height).toBeLessThan(100)
+  await expect(track.getByRole('table')).toHaveCount(0)
+  // Above them, a chart of each event's best and average: the older one on
+  // the left, which the pointer reads out.
+  const chart = track.getByRole('group', { name: /^Best and average lap at each event/ })
+  const box = (await chart.boundingBox())!
+  await page.mouse.move(box.x + 60, box.y + box.height / 2)
+  await expect(chart.getByRole('status')).toContainText('Alpha in October')
+  await expect(chart.getByRole('status')).toContainText('1:45.22Best')
+  // Nothing runs off the side of the phone.
+  expect(await track.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Back slides it away, and the event is right where it was.
+  await track.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
+  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(card).toBeInViewport()
+
+  // An event's card slides its page in over the track page, on My notes…
+  await card.getByRole('link', { name: 'See all my MSRC 2.0 CW laps' }).click()
+  const slideIn = await trackSlide(page, () => events.nth(1).click(), 'Alpha in October')
+  expect(slideIn).toEqual({ fromBelow: false, fromSide: true })
+  const october = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Alpha in October' }) })
+  await expect(october.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(october.getByRole('region', { name: 'Session 1, 8:30 AM' })).toBeInViewport()
+  // …and its Back returns to the track page.
+  await october.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Alpha in October' })).toHaveCount(0)
+  await expect(events.nth(1)).toBeInViewport()
+})
+
+test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto('/#/')
+  const bar = page.getByRole('navigation', { name: 'Sections' })
+  // Pinned to the bottom of the screen, full width.
+  const viewport = page.viewportSize()!
+  await expect.poll(async () => {
+    const box = (await bar.boundingBox())!
+    return [Math.round(box.y + box.height), Math.round(box.width)]
+  }).toEqual([viewport.height, viewport.width])
+  await expect(bar.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
+
+  // The last event scrolls clear of the bar.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  const last = page.getByRole('button', { name: /Bravo HPDE/ })
+  const [lastBox, barBox] = [(await last.boundingBox())!, (await bar.boundingBox())!]
+  expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(barBox.y)
+
+  await bar.getByRole('link', { name: 'Tracks' }).click()
+  await expect(page).toHaveURL(/#\/tracks$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
+  // The one coming up first, then the rest.
+  const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
+  await expect(tracks).toHaveText([/^Charlie Raceway/, /^MSRC 2\.0 CW/, /^ECR/])
+
+  const slide = await trackSlide(page, () => tracks.nth(1).click(), 'MSRC 2.0 CW')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  // Signed out here, so it asks to sign in.
+  await expect(page.getByText('Sign in to see your lap times on this track')).toBeVisible()
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/tracks$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
+
+  await bar.getByRole('link', { name: 'Garage' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeVisible()
+  await expect(page.getByText('Coming soon')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})

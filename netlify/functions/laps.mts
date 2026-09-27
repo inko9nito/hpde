@@ -15,21 +15,30 @@ import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
 //   GET    ?event=               their laps for the event, by session
+//   GET    ?events=<id>,<id>     their laps for each of those events that
+//                                has any — a track page (#274), every event
+//                                on one layout in one request
 //   PUT    ?event=  {session}    saves one session's laps (replacing any)
 //   DELETE ?event=&session=<key> removes one session's laps
 //
 // Kept in Netlify Blobs, one record per driver per event, keyed
-// `<user id>/<event id>`. A deploy preview gets a store of its own that
-// starts empty, so trying the preview never touches anyone's real laps —
-// and what's saved there is gone with the next deploy.
+// `<user id>/<event id>`. A deploy preview gets a store of its own, which
+// starts as a copy of the driver's live laps the first time they're used
+// there (as the events do) — so a preview shows real laps, but saving or
+// removing laps there never touches the live ones. Each deploy copies
+// afresh.
 //
 // TypeScript (.mts) so it can share the lap checks in src/; Netlify bundles
 // it with esbuild (see netlify/lib/functionsLoad.test.ts).
 export const config = { path: '/api/laps' }
 
 export const LAPS_STORE = 'laps'
+// On a preview: which drivers' live laps have been copied in, keyed by user id.
+export const LAPS_META_STORE = 'laps-meta'
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
+// Events a track page can ask for at once: far more than one layout has.
+const MAX_EVENTS = 100
 
 interface EventLaps {
   eventId: string
@@ -43,12 +52,37 @@ type Deps = {
   identity?: Parameters<typeof findDriver>[1]
 }
 
-function openStore(context: unknown, deps: Deps) {
+type Store = ReturnType<typeof getStore>
+
+/**
+ * Production reads and writes the live laps. Anything else (a deploy
+ * preview, a branch deploy) gets stores of its own for that deploy;
+ * `live` is only read from, to copy the driver's laps in (ensureCopied).
+ */
+function openStores(context: unknown, deps: Deps): { laps: Store; meta?: Store; live?: Store } {
   const deployContext = (context as { deploy?: { context?: string } } | undefined)?.deploy?.context
-  const options = { name: LAPS_STORE, consistency: 'strong' as const }
-  return !deployContext || deployContext === 'production'
-    ? (deps.getStore ?? getStore)(options)
-    : (deps.getDeployStore ?? getDeployStore)(options)
+  const site = (name: string) => (deps.getStore ?? getStore)({ name, consistency: 'strong' })
+  const deploy = (name: string) => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
+  if (!deployContext || deployContext === 'production') return { laps: site(LAPS_STORE) }
+  return { laps: deploy(LAPS_STORE), meta: deploy(LAPS_META_STORE), live: site(LAPS_STORE) }
+}
+
+/**
+ * On a preview, copies the driver's live laps (as they are at that moment)
+ * into the deploy's own store the first time they're used there, and
+ * records that it did, so laps removed on the preview don't come back.
+ * Production has nothing to copy. Each copy only writes a record that
+ * isn't there yet, so one saved on the preview meanwhile is kept.
+ */
+async function ensureCopied({ laps, meta, live }: { laps: Store; meta?: Store; live?: Store }, driverId: string) {
+  if (!live || !meta) return
+  if (await meta.get(driverId, { type: 'json' })) return
+  const { blobs } = await live.list({ prefix: `${driverId}/` })
+  for (const { key } of blobs) {
+    const record = await live.get(key, { type: 'json' })
+    if (record) await laps.setJSON(key, record, { onlyIfNew: true })
+  }
+  await meta.setJSON(driverId, { at: new Date().toISOString() })
 }
 
 function inOrder(record: EventLaps | null): SessionLaps[] {
@@ -79,7 +113,21 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     driverId = driver.id
   }
 
-  const store = openStore(context, deps)
+  const stores = openStores(context, deps)
+  await ensureCopied(stores, driverId)
+  const store = stores.laps
+
+  if (req.method === 'GET' && params.has('events')) {
+    const eventIds = [...new Set((params.get('events') ?? '').split(',').filter(Boolean))]
+    if (eventIds.length > MAX_EVENTS) return json(400, { error: `At most ${MAX_EVENTS} events at once.` })
+    if (!eventIds.every(id => EVENT_ID.test(id))) return json(400, { error: 'Bad event id.' })
+    const records = await Promise.all(eventIds.map(id => store.get(`${driverId}/${id}`, { type: 'json' }) as Promise<EventLaps | null>))
+    const events = records.flatMap((record, i) => {
+      const sessions = inOrder(record)
+      return sessions.length ? [{ eventId: eventIds[i], sessions }] : []
+    })
+    return json(200, { events })
+  }
 
   if (req.method === 'GET' && !params.has('event')) {
     const { blobs } = await store.list({ prefix: `${driverId}/` })

@@ -8,8 +8,7 @@ import { todayLocalISO } from '../utils/time'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { FadedTrack, TrackIcon } from './TrackIcon'
-import { AccountButton } from './AccountButton'
-import { AppMenu } from './AppMenu'
+import { HomeHeader } from './HomeTabs'
 import { StatusBadge } from './EventHeader'
 import type { EventConfig } from '../types'
 
@@ -39,10 +38,13 @@ const CARD_SHADOW = 'shadow-[0_1px_2px_rgba(17,24,39,0.04),0_4px_12px_rgba(17,24
 // Inner padding of a card's date + title row.
 const CARD_PADDING = 'p-4'
 
+/** A card's box: border, padding, shadow. */
+const CARD_BOX = `w-full rounded-xl border border-gray-200 bg-white ${CARD_PADDING} ${CARD_SHADOW}`
+
 // Every compact row on the page — past event card, loading skeleton,
 // empty state — shares this shell (p-4 + 48px tile + border = 82px),
 // so swapping between them never shifts the page.
-const CARD_SHELL = `flex w-full items-center gap-4 rounded-xl border border-gray-200 bg-white ${CARD_PADDING} ${CARD_SHADOW}`
+export const CARD_SHELL = `flex items-center gap-4 ${CARD_BOX}`
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -50,7 +52,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  *  shows only its first day (#243). The year goes under the day, only
  *  when it isn't this year (#266). `dark` is for the featured card's
  *  near-black background (#276). */
-function DateBlock({ event, muted, dark = false }: { event: EventConfig; muted: boolean; dark?: boolean }) {
+export function DateBlock({ event, muted, dark = false }: { event: EventConfig; muted: boolean; dark?: boolean }) {
   if (event.days.length === 0) return <div className="w-10 shrink-0" />
   const [y, m, d] = firstDate(event).split('-').map(Number)
   const thisYear = Number(todayLocalISO().slice(0, 4))
@@ -71,7 +73,7 @@ function DateBlock({ event, muted, dark = false }: { event: EventConfig; muted: 
 }
 
 /** Event name (with a LIVE pill when it's on today) over its organizer. */
-function EventTitle({ event, live }: { event: EventConfig; live: boolean }) {
+export function EventTitle({ event, live }: { event: EventConfig; live: boolean }) {
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
@@ -183,7 +185,7 @@ function EventCardSkeleton() {
   )
 }
 
-function EmptyRow({ children }: { children: string }) {
+export function EmptyRow({ children }: { children: string }) {
   return (
     <div className={`${CARD_SHELL} h-[82px] justify-center text-sm text-gray-500`}>
       {children}
@@ -202,14 +204,7 @@ export function LandingPage({ onOpenEvent }: Props) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <div className="mb-8">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">HPDE Events</h1>
-            <div className="flex shrink-0 items-center gap-1">
-              <AppMenu />
-              <AccountButton reserveSpace={false} />
-            </div>
-          </div>
+        <HomeHeader title="HPDE Events">
           {/* List / calendar, under the title (#273), with Add event
               across from it (#279). */}
           <div className="mt-4 flex items-center justify-between gap-3">
@@ -237,7 +232,7 @@ export function LandingPage({ onOpenEvent }: Props) {
             </div>
             {isAdmin && <AddEventLink />}
           </div>
-        </div>
+        </HomeHeader>
 
         {view === 'list' ? (
           <div className="space-y-16">

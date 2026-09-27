@@ -116,6 +116,75 @@ export function useLapLog(eventId: string | null, driverId: string | null = null
   return { status, sessions, byKey, save, remove, reload }
 }
 
+/** One event's saved sessions, on a track page. */
+export interface EventLaps {
+  eventId: string
+  /** In schedule order. */
+  sessions: SessionLaps[]
+}
+
+export interface TrackLaps {
+  status: LapLogStatus
+  /** Only the events with laps. */
+  events: EventLaps[]
+  reload(): void
+}
+
+/**
+ * The driver's laps at each of these events, in one request — a track
+ * page's (#274). `eventIds` is null while there's nothing to ask for;
+ * `driverId` as for useLapLog.
+ */
+export function useTrackLaps(eventIds: string[] | null, driverId: string | null = null): TrackLaps {
+  const { status: authStatus, authedFetch } = useAuth()
+  const signedIn = authStatus === 'signed-in'
+  const active = signedIn && eventIds !== null
+  const [loaded, setLoaded] = useState<{ url: string; events: EventLaps[] } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const url = `${LAPS_URL}?events=${(eventIds ?? []).map(encodeURIComponent).join(',')}${driverQuery(driverId, '&')}`
+
+  useEffect(() => {
+    if (!signedIn) {
+      setLoaded(null)
+      return
+    }
+    if (!active) return
+    let cancelled = false
+    setFailed(false)
+    ;(async () => {
+      try {
+        // No events on the layout: nothing to ask for.
+        if (eventIds!.length === 0) {
+          if (!cancelled) setLoaded({ url, events: [] })
+          return
+        }
+        const res = await authedFetch(url)
+        if (!res.ok) throw await errorFrom(res)
+        const body = await res.json()
+        if (!cancelled) setLoaded({ url, events: Array.isArray(body?.events) ? body.events : [] })
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // The ids are in the url.
+  }, [signedIn, active, url, authedFetch, attempt])
+
+  // Another layout's or driver's laps never show here.
+  const current = loaded?.url === url
+  const events = useMemo(() => (active && current ? loaded!.events : []), [active, current, loaded])
+  const status: LapLogStatus = !active ? 'off'
+    : current ? 'ready'
+    : failed ? 'error'
+    : 'loading'
+  const reload = useCallback(() => setAttempt(a => a + 1), [])
+
+  return { status, events, reload }
+}
+
 /**
  * Every event the driver has laps for, with its best lap — for bests across
  * a track layout. Fetched while `active` (the My notes tab is open); null

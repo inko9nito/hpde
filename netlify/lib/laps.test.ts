@@ -142,6 +142,28 @@ describe('laps function (#210)', () => {
     ])
   })
 
+  it('reads several events’ laps in one go, for a track page (#274) — the driver’s own, events with laps only', async () => {
+    const tde = '2026-09-11_msrc-1-7'
+    await call('PUT', { token: 'vera-token', body: { session: session2 } })
+    await call('PUT', { token: 'vera-token', body: { session: session1 } })
+    await call('PUT', { token: 'vera-token', body: { session: { ...session1, date: '2026-09-11' } }, query: `?event=${tde}` })
+    await call('PUT', { token: 'jason-token', body: { session: session1 }, query: '?event=2026-06-06_msrc-1-7' })
+
+    expect((await call('GET', { query: `?events=${EVENT}` })).status).toBe(401)
+    const res = await call('GET', { token: 'vera-token', query: `?events=${EVENT},${tde},2026-06-06_msrc-1-7,${EVENT}` })
+    expect(res.status).toBe(200)
+    const { events } = await res.json()
+    // Each once, in the order asked; each event's sessions in schedule order.
+    expect(events.map((e: { eventId: string }) => e.eventId)).toEqual([EVENT, tde])
+    expect(events[0].sessions.map((s: { key: string }) => s.key)).toEqual(['2026-09-13 09:50 blue', '2026-09-13 11:45 blue'])
+    expect(events[1].sessions[0]).toMatchObject({ key: '2026-09-11 09:50 blue', laps: session1.laps })
+
+    expect(await (await call('GET', { token: 'vera-token', query: '?events=' })).json()).toEqual({ events: [] })
+    expect((await call('GET', { token: 'vera-token', query: '?events=../../jason/x' })).status).toBe(400)
+    const tooMany = Array.from({ length: 101 }, (_, i) => `e${i}`).join(',')
+    expect((await call('GET', { token: 'vera-token', query: `?events=${tooMany}` })).status).toBe(400)
+  })
+
   it('removes one session’s laps, and the record with the last one', async () => {
     await call('PUT', { token: 'vera-token', body: { session: session1 } })
     await call('PUT', { token: 'vera-token', body: { session: session2 } })
@@ -164,15 +186,33 @@ describe('laps function (#210)', () => {
     expect(store.size).toBe(0)
   })
 
-  it('on a deploy preview, uses a store of its own and never the live laps', async () => {
+  it('on a deploy preview, starts from a copy of the driver’s live laps, and never changes the live ones', async () => {
     const preview = { deploy: { context: 'deploy-preview' } }
+    const keys = (sessions: { key: string }[]) => sessions.map(s => s.key)
     await call('PUT', { token: 'vera-token', body: { session: session1 } })
+    await call('PUT', { token: 'vera-token', body: { session: session1 }, query: '?event=2026-09-11_msrc-1-7' })
+    await call('PUT', { token: 'jason-token', body: { session: session1 } })
+    const live = structuredClone([...store.entries()])
 
-    expect(await sessionsOf('vera-token', preview)).toEqual([])
+    // The preview shows the real laps: this event's, and across events.
+    expect(keys(await sessionsOf('vera-token', preview))).toEqual(['2026-09-13 09:50 blue'])
+    const summary = await (await call('GET', { token: 'vera-token', query: '', context: preview })).json()
+    expect(summary.events).toHaveLength(2)
+
+    // Saved and removed there, they change on the preview only…
     await call('PUT', { token: 'vera-token', body: { session: session2 }, context: preview })
-    expect((await sessionsOf('vera-token', preview)).map((s: { key: string }) => s.key)).toEqual(['2026-09-13 11:45 blue'])
-    // The live laps are exactly as they were.
-    expect((await sessionsOf('vera-token')).map((s: { key: string }) => s.key)).toEqual(['2026-09-13 09:50 blue'])
+    await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}&session=${encodeURIComponent('2026-09-13 09:50 blue')}`, context: preview })
+    expect(keys(await sessionsOf('vera-token', preview))).toEqual(['2026-09-13 11:45 blue'])
+    // …and a removed one doesn't come back from the live laps.
+    expect(keys(await sessionsOf('vera-token', preview))).toEqual(['2026-09-13 11:45 blue'])
+    expect([...store.entries()]).toEqual(live)
+
+    // Only the drivers whose laps were used there are copied in.
+    expect([...blobs.data('deploy:laps').keys()].every(key => key.startsWith('vera/'))).toBe(true)
+    // Production never opens a deploy's store.
+    blobs.opened.length = 0
+    await sessionsOf('vera-token')
+    expect(blobs.opened.every(o => o.kind === 'site')).toBe(true)
   })
 
   describe('an admin logging for another driver (#288)', () => {
@@ -199,6 +239,10 @@ describe('laps function (#210)', () => {
 
       const summary = await call('GET', { token: 'admin-token', query: forJason('') })
       expect((await summary.json()).events).toEqual([{ eventId: EVENT, sessions: 1, best: 104_000 }])
+
+      const track = await call('GET', { token: 'admin-token', query: forJason(`?events=${EVENT}`) })
+      expect((await track.json()).events.map((e: { eventId: string }) => e.eventId)).toEqual([EVENT])
+      expect((await call('GET', { token: 'vera-token', query: forJason(`?events=${EVENT}`) })).status).toBe(403)
 
       const del = await call('DELETE', {
         token: 'admin-token',

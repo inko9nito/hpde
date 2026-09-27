@@ -1,12 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Lock, X } from 'lucide-react'
+import { ChevronRight, Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { LapFigures, LapTable } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
-import { MAX_SUMMARY, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
+import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
+import { gapToBest } from '../utils/trackStats'
+import { opensElsewhere } from '../utils/links'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import type { RunGroupConfig } from '../types'
@@ -28,6 +30,10 @@ interface Props {
   saved: (key: string) => SessionLaps | undefined
   /** The best on this track layout across every event, to mark a lap that set it. */
   allTimeBest?: number
+  /** The layout's track page (#274), linked under saved laps. */
+  track?: { name: string; href: string }
+  /** Opens the track page (and closes the sheet). */
+  onOpenTrack?: () => void
   /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
   driver?: Driver | null
   /** Admins only: the Driver picker, under the heading (#288). */
@@ -54,7 +60,7 @@ export function shortDate(iso: string): string {
  * from the bottom like an iOS sheet.
  */
 export function LapTimesSheet({
-  slot, runGroups, showDate, saved, allTimeBest, driver = null, driverPicker, loading = false, onSave, onRemove, onClose,
+  slot, runGroups, showDate, saved, allTimeBest, track, onOpenTrack, driver = null, driverPicker, loading = false, onSave, onRemove, onClose,
 }: Props) {
   // With more than one group on track, start from the one that already has
   // laps; failing that, ask — laps saved under the wrong group would be lost.
@@ -243,6 +249,7 @@ export function LapTimesSheet({
             </div>
             {existing.summary && <p className="text-sm text-gray-700" data-lap-summary>{existing.summary}</p>}
             <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
+            {track && <TrackLink track={track} laps={existing} allTimeBest={allTimeBest} driver={driver} onOpen={onOpenTrack} />}
           </section>
         )}
 
@@ -376,5 +383,45 @@ export function LapTimesSheet({
       </div>
     </div>,
     document.body,
+  )
+}
+
+/**
+ * Under a session's saved laps (#274): how they compare with the all-time
+ * best on the layout, and the way to every session on it — the track page.
+ */
+function TrackLink({ track, laps, allTimeBest, driver, onOpen }: {
+  track: { name: string; href: string }
+  laps: SessionLaps
+  allTimeBest?: number
+  driver: Driver | null
+  onOpen?: () => void
+}) {
+  const { best } = lapStats(laps.laps)
+  const gap = best !== undefined && allTimeBest !== undefined ? gapToBest(best, allTimeBest) : undefined
+  return (
+    <div className="flex flex-col items-start gap-1.5 border-t border-gray-100 pt-3" data-track-link>
+      {best !== undefined && allTimeBest !== undefined && (
+        <p className="text-xs text-gray-500">
+          All time best on {track.name}:{' '}
+          <span className="font-mono font-semibold tabular-nums text-gray-900">{formatLapTime(allTimeBest)}</span>
+          {' · '}
+          {/* Wraps as one piece, never leaving "session" on a line of its own. */}
+          <span className="whitespace-nowrap">{gap ? `${gap} vs this session` : 'set this session'}</span>
+        </p>
+      )}
+      <a
+        href={track.href}
+        onClick={e => {
+          if (!onOpen || opensElsewhere(e)) return
+          e.preventDefault()
+          onOpen()
+        }}
+        className="flex items-center gap-0.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+      >
+        See all {driver ? `${driverName(driver)}’s` : 'my'} {track.name} laps
+        <ChevronRight size={16} aria-hidden="true" />
+      </a>
+    </div>
   )
 }

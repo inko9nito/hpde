@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bestOnLayout, layoutLabel, sameLayout, trackShortName } from './trackStats'
+import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutLaps, layoutName, layoutSlug, layoutsOf, sameLayout, trackShortName } from './trackStats'
 import type { EventConfig } from '../types'
 
 const event = (id: string, fields: Partial<EventConfig> = {}): EventConfig => ({
@@ -68,5 +68,63 @@ describe('bestOnLayout', () => {
     const summary = [{ eventId: 'gone', best: 50_000, sessions: 1 }, { eventId: tde.id, sessions: 1 }]
     expect(bestOnLayout(scca, events, summary, undefined)).toEqual({ events: 0 })
     expect(bestOnLayout(scca, events, summary, 101_000)).toEqual({ best: 101_000, events: 1 })
+  })
+})
+
+describe('track pages (#274)', () => {
+  it('names a layout "MSRC 1.7 CW", and gives it an id for its page', () => {
+    expect(layoutName(scca)).toBe('MSRC 1.7 CW')
+    expect(layoutSlug(scca)).toBe('msrc-1-7-cw')
+    expect(layoutSlug(tde)).toBe('msrc-1-7-cw')
+    expect(layoutSlug(noDirection)).toBe('msrc-1-7')
+    expect(layoutSlug(event('x', { trackId: undefined, track: 'Harris Hill', configuration: undefined, direction: 'CCW' })))
+      .toBe('harris-hill-ccw')
+    expect(layoutSlug(event('x', { trackId: undefined, track: undefined }))).toBeNull()
+  })
+
+  it('finds every event on the layout a page names, as the All time best card counts them', () => {
+    const events = [scca, tde, ccw, noDirection, longCourse, ecr]
+    expect(eventsOnLayout('msrc-1-7-cw', events)).toEqual([scca, tde])
+    expect(eventsOnLayout('msrc-1-7-ccw', events)).toEqual([ccw])
+    expect(eventsOnLayout('ecr-2-7-cw', events)).toEqual([ecr])
+    expect(eventsOnLayout('nowhere', events)).toEqual([])
+  })
+
+  it('keeps an event whose layout is named only by its icon id', () => {
+    const iconOnly = event('y', { track: undefined })
+    expect(eventsOnLayout('msrc-1-7-cw', [iconOnly])).toEqual([iconOnly])
+  })
+
+  it('says how far a session’s best is off the all-time best', () => {
+    expect(gapToBest(101_040, 98_540)).toBe('+2.5s')
+    expect(gapToBest(98_580, 98_540)).toBe('+0.04s')
+    expect(gapToBest(104_000, 101_000)).toBe('+3s')
+    expect(gapToBest(98_540, 98_540)).toBeNull()
+  })
+})
+
+describe('the Tracks tab (#274)', () => {
+  const upcoming = event('2026-10-03_ecr', { track: 'Eagles Canyon Raceway', trackId: 'ecr-2-7', configuration: '2.7 mile', days: [{ id: 'd', label: 'Day', date: '2026-10-03', activities: [] }] })
+  const noTrack = event('2026-04-01_x', { track: undefined, trackId: undefined })
+
+  it('lists each layout once, the one with the latest event first', () => {
+    const lastYear = { ...ccw, days: [{ id: 'd', label: 'Day', date: '2025-09-13', activities: [] }] }
+    const layouts = layoutsOf([lastYear, scca, tde, upcoming, noTrack])
+    expect(layouts.map(l => [l.slug, l.name, l.track, l.events.map(e => e.id)])).toEqual([
+      ['ecr-2-7-cw', 'ECR 2.7 CW', 'Eagles Canyon Raceway', [upcoming.id]],
+      ['msrc-1-7-cw', 'MSRC 1.7 CW', 'Motorsport Ranch - Cresson', [scca.id, tde.id]],
+      ['msrc-1-7-ccw', 'MSRC 1.7 CCW', 'Motorsport Ranch - Cresson', [lastYear.id]],
+    ])
+  })
+
+  it('sums up the driver’s laps on a layout', () => {
+    const [layout] = layoutsOf([scca, tde])
+    const summary = [
+      { eventId: scca.id, best: 99_000, sessions: 2 },
+      { eventId: tde.id, best: 98_540, sessions: 1 },
+      { eventId: ccw.id, best: 90_000, sessions: 3 },
+    ]
+    expect(layoutLaps(layout, summary)).toEqual({ best: 98_540, sessions: 3, events: 2 })
+    expect(layoutLaps(layout, [])).toEqual({ sessions: 0, events: 0 })
   })
 })

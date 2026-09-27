@@ -8,6 +8,9 @@ runs.
 
 ## Features
 
+- **Three tabs** along the bottom (#274): **Events** (the list and
+  calendar of events), **Tracks** (your lap times by track layout) and
+  **Garage** (coming soon)
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -171,13 +174,34 @@ Only they and admins can see them.
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab shows how many
   sessions have laps, e.g. *My notes (2)*.
+- **Tracks tab and track pages (#274):** the Tracks tab (`#/tracks`)
+  lists every track layout the events are on, the one with the latest
+  event first, with your best lap and session count there once you're
+  signed in. Tap one for its track page (`#/track/<layout>`, e.g.
+  `#/track/msrc-1-7-cw`): your all-time best on that layout, with a
+  chart of your best (black, like the best-lap chip) and average lap at
+  each event there (from a second event on), so you can see how you've
+  come along, then the events you have laps at there, newest first, as
+  compact cards like the Events list's with your run group, best and
+  average lap at each. Tap an event
+  for its sessions: its page slides in over the track page on *My notes*,
+  and Back returns to the track page. The layout match is the same one
+  *All time best* uses. A track page also opens from the *All time best*
+  card, and from *See all my MSRC 1.7 CW laps* under a session's saved
+  laps in the sheet, which also says how that session compares with the
+  all-time best; from there it slides in over the event, and Back
+  returns to it. Lap times are private: they need a sign-in.
 - **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
-  `?event=` it sums up each event's best, for the layout best) in
+  `?event=` it sums up each event's best, for the layout best; with
+  `?events=<id>,<id>` it returns each of those events' sessions at once,
+  for a track page) in
   Netlify Blobs (store `laps`), one record per driver per event, keyed by
   their Identity user id. Every request needs a sign-in and only ever
   reaches the driver's own laps, except an admin's (below). A deploy
-  preview gets an empty store of its own, so laps saved on a preview
-  never touch the real ones, and they're gone with the next deploy.
+  preview gets a store of its own, which starts as a copy of your real
+  laps the first time you use them there (like the events), so you can
+  test with real data. Laps saved or removed on a preview stay on that
+  preview and never touch the real ones; the next deploy copies afresh.
 - **For another driver (admins, #288):** the lap sheet and My notes
   have a **Driver** picker: *Me*, or anyone who has signed in to the
   site. Pick someone to see, add, edit or remove their laps. They're

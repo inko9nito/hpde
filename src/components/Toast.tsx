@@ -11,6 +11,8 @@ interface Props {
   toast: ToastMessage | null
   onDone: () => void
   durationMs?: number
+  /** Room to leave at the bottom for a bar there (the tab bar, #274). */
+  bottomInset?: number
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * created"), announced to screen readers, gone after a few seconds. Text
  * too long for one line (a driver's email, #288) wraps inside the screen.
  */
-export function Toast({ toast, onDone, durationMs = 3000 }: Props) {
+export function Toast({ toast, onDone, durationMs = 3000, bottomInset = 0 }: Props) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export function Toast({ toast, onDone, durationMs = 3000 }: Props) {
       role="status"
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+      style={bottomInset ? { bottom: bottomInset } : undefined}
     >
       {toast && (
         <div

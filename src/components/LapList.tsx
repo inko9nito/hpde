@@ -29,16 +29,31 @@ export function BestChip({ ms, allTime, aligned }: { ms: number; allTime?: boole
  */
 export function LapFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: number }) {
   const stats = lapStats(laps)
-  const figures: { label: string; value: ReactNode }[] = [
+  // Laps is a number or two; the best, with the all-time best's timer in
+  // its chip, needs the most room.
+  return <Figures label="Session figures" columns="grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,2.4fr)]" figures={[
     { label: 'Laps', value: String(stats.count) },
     { label: 'Average', value: stats.average !== undefined ? formatAverage(laps, stats.average) : '—' },
     {
       label: 'Best',
       value: stats.best !== undefined ? <BestChip ms={stats.best} allTime={stats.best === allTimeBest} /> : '—',
     },
-  ]
+  ]} />
+}
+
+/**
+ * Three figures in gray tiles, side by side: a session's, or an event's on
+ * a track page (#274). `columns` sizes them for what they hold — the same
+ * on every card, so the tiles line up down the page.
+ */
+export function Figures({ label, figures, columns }: {
+  label: string
+  figures: { label: string; value: ReactNode }[]
+  /** A Tailwind grid-cols-[…] class. */
+  columns: string
+}) {
   return (
-    <dl className="grid flex-1 grid-cols-3 gap-2" aria-label="Session figures">
+    <dl className={`grid flex-1 gap-2 ${columns}`} aria-label={label}>
       {figures.map(f => (
         <div key={f.label} className="min-w-0 rounded-lg bg-gray-50 px-2.5 py-2">
           <dt className="text-[11px] font-medium text-gray-500">{f.label}</dt>
