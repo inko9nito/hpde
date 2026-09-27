@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { LapFigures, LapTable } from './LapList'
@@ -21,12 +22,16 @@ export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
 }
 
-/** A best lap in a card. With `link`, the whole card opens it (a chevron says so). */
-export function StatCard({ label, ms, caption, link }: {
+/**
+ * A best lap in a card. With `link`, the whole card opens it (a chevron
+ * says so); `children` go under it (a track page's chart, #274).
+ */
+export function StatCard({ label, ms, caption, link, children }: {
   label: string
   ms: number | undefined
   caption: string
   link?: { href: string; label: string }
+  children?: ReactNode
 }) {
   return (
     <div
@@ -37,6 +42,7 @@ export function StatCard({ label, ms, caption, link }: {
       <p className="truncate text-[13px] font-semibold text-gray-500">{label}</p>
       <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-gray-900">{ms !== undefined ? formatLapTime(ms) : '—'}</p>
       <p className={`mt-1 text-xs text-gray-400 ${link ? 'pr-4' : ''}`}>{caption}</p>
+      {children}
       {link && (
         <a
           href={link.href}

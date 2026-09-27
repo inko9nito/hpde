@@ -8,6 +8,8 @@ import { BestChip, Figures } from './LapList'
 import { groupFor } from './LapTimesSheet'
 import { CARD_BOX, DateBlock, EventTitle } from './LandingPage'
 import { PrivateTag, StatCard, plural, useSkeletonFade } from './LapSessions'
+import { LapTrendChart } from './LapTrendChart'
+import type { TrendPoint } from './LapTrendChart'
 import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
 import { driverName } from '../data/drivers'
@@ -179,6 +181,16 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
   const allSessions = withLaps.flatMap(g => g.sessions)
   const best = eventBest(allSessions)
+  // Each event's best and average, oldest first, for the chart.
+  const trend = [...withLaps].reverse().flatMap(({ event, sessions }): TrendPoint[] => {
+    const laps = sessions.flatMap(s => s.laps)
+    const stats = lapStats(laps)
+    if (stats.best === undefined || stats.average === undefined) return []
+    return [{
+      key: event.id, name: event.name, date: startDate(event),
+      best: stats.best, average: stats.average, averageText: formatAverage(laps, stats.average),
+    }]
+  })
 
   const header = (
     <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
@@ -258,7 +270,10 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
             label="All time best"
             ms={best}
             caption={`Across ${plural(allSessions.length, 'session', 'sessions')} at ${plural(withLaps.length, 'event', 'events')}`}
-          />
+          >
+            {/* How it's come along: from a second event on. */}
+            {trend.length >= 2 && <LapTrendChart points={trend} />}
+          </StatCard>
         </div>
         <section aria-labelledby="track-events-heading">
           {/* Headed like the Events list's Past. */}

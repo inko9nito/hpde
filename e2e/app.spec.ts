@@ -594,6 +594,13 @@ test('a track page slides in over the event from My notes, listing the layout’
   await expect(events.nth(1)).toContainText('Alpha in October')
   await expect(events.nth(1).getByRole('definition')).toHaveText(['Blue', '1:46.810', '1:45.22'])
   await expect(track.getByRole('table')).toHaveCount(0)
+  // Above them, a chart of each event's best and average: the older one on
+  // the left, which the pointer reads out.
+  const chart = track.getByRole('group', { name: /^Best and average lap at each event/ })
+  const box = (await chart.boundingBox())!
+  await page.mouse.move(box.x + 60, box.y + box.height / 2)
+  await expect(chart.getByRole('status')).toContainText('Alpha in October')
+  await expect(chart.getByRole('status')).toContainText('1:45.22Best')
   // Nothing runs off the side of the phone.
   expect(await track.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

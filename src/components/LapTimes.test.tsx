@@ -600,6 +600,22 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(within(page).getByText('Private')).toBeInTheDocument()
     expect(document.title).toBe('MSRC 1.7 CW')
 
+    // A chart of each event's best and average, oldest to newest, in the
+    // best-lap card: the latest best at the end of its line (the average
+    // there is too close to it to label as well).
+    const chart = within(page).getByRole('group', { name: /^Best and average lap at each event, oldest to newest: 2 events/ })
+    expect(within(page).getByRole('group', { name: 'All time best' })).toContainElement(chart)
+    expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:39.1')
+    expect(chart.querySelector('[data-end-label="average"]')).toBeNull()
+    // Read point by point from the keyboard: the latest first.
+    fireEvent.focus(chart)
+    const readout = within(chart).getByRole('status')
+    expect(readout).toHaveTextContent('Lap DayMar 7, 20261:39.1Best1:39.260Average')
+    fireEvent.keyDown(chart, { key: 'ArrowLeft' })
+    expect(readout).toHaveTextContent('EarlierFeb 7, 20261:38.54Best1:39.913Average')
+    fireEvent.keyDown(chart, { key: 'Escape' })
+    expect(readout).toBeEmptyDOMElement()
+
     // Back to the event, on the tab it was opened from.
     await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe(`#/event/${event.id}`)
@@ -710,6 +726,8 @@ describe('a track page: the events on one layout (#274)', () => {
     const page = await trackPage()
     expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
     expect(await within(page).findByRole('group', { name: 'All time best' })).toHaveTextContent('1:24.42Across 1 session at 1 event')
+    // One event: nothing to chart yet.
+    expect(within(page).queryByRole('group', { name: /^Best and average lap/ })).not.toBeInTheDocument()
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
     expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
