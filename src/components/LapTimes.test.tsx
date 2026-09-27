@@ -71,6 +71,8 @@ const DRIVERS = [
 // The laps function, in memory: the signed-in driver's laps, and Jason's.
 let saved: SessionLaps[] = []
 let jasonSaved: SessionLaps[] = []
+// Their laps at the other events, for a track page (#274).
+let elsewhere: Record<string, SessionLaps[]> = {}
 let failSaves = false
 // While set, reading the laps waits for it.
 let holdLaps: Promise<void> | null = null
@@ -92,6 +94,11 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     if (params.has('driver')) {
       expect(roles).toContain('admin')
       expect(params.get('driver')).toBe(JASON)
+    }
+    if (params.has('events')) {
+      const ids = params.get('events')!.split(',')
+      const at = (id: string) => (id === event.id ? (forJason ? jasonSaved : saved) : forJason ? [] : elsewhere[id] ?? [])
+      return json({ events: ids.filter(id => at(id).length).map(id => ({ eventId: id, sessions: at(id) })) })
     }
     if (!params.has('event')) return json({ events: forJason ? [] : summary })
     // Nothing saved at the earlier event.
@@ -153,6 +160,7 @@ beforeEach(() => {
   roles = []
   saved = []
   jasonSaved = []
+  elsewhere = {}
   summary = []
   holdLaps = null
   failSaves = false
@@ -534,5 +542,150 @@ describe('LapTimesSheet', () => {
     box.focus()
     rerender(<LapTimesSheet {...props} onClose={() => {}} />)
     expect(box).toHaveFocus()
+  })
+})
+
+describe('a track page: every session on one layout (#274)', () => {
+  const at = (date: string, time: string, sessionNumber: number, laps: number[]): SessionLaps => ({
+    key: `${date} ${time} blue`, date, time, group: 'blue', sessionNumber, laps: laps.map(ms => ({ ms })),
+  })
+  const TRACK = '#/track/msrc-1-7-cw'
+  // The track page, as opposed to the event page under it.
+  const trackPage = async () => (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
+
+  beforeEach(() => {
+    saved = [at('2026-03-07', '11:45', 2, [99_420, 99_100])]
+    elsewhere = {
+      [sameLayout.id]: [at('2026-02-07', '09:50', 1, [101_000, 98_540]), at('2026-02-07', '11:45', 2, [100_200])],
+      [otherWay.id]: [at('2026-01-10', '09:50', 1, [90_000])],
+    }
+    summary = [
+      { eventId: sameLayout.id, best: 98_540, sessions: 2 },
+      { eventId: otherWay.id, best: 90_000, sessions: 1 },
+    ]
+  })
+
+  it('opens from the All time best card, lists the layout’s sessions by event, newest first, and goes back', async () => {
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    await waitFor(() => expect(screen.getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54'))
+    await userEvent.click(screen.getByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
+    expect(window.location.hash).toBe(TRACK)
+
+    const page = await trackPage()
+    expect(page).toHaveTextContent('Motorsport Ranch - Cresson')
+    // One request for every event on the layout — not the one run the other way.
+    await within(page).findByRole('group', { name: 'All time best' })
+    const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
+    expect(new URL(String(url), 'https://x').searchParams.get('events')!.split(',')).toEqual([sameLayout.id, event.id])
+    expect(within(page).getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54Across 3 sessions at 2 events')
+
+    // Newest event first, with its date and best.
+    expect(within(page).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Lap Day', 'Earlier'])
+    const lapDay = within(page).getByRole('region', { name: 'Lap Day' })
+    const earlier = within(page).getByRole('region', { name: 'Earlier' })
+    expect(lapDay).toHaveTextContent('Mar 7, 2026 · Best 1:39.1')
+    expect(within(earlier).getAllByRole('region').map(r => r.getAttribute('aria-label'))).toEqual(['Session 1, 9:50 AM', 'Session 2, 11:45 AM'])
+    expect(figures(within(earlier).getByRole('region', { name: 'Session 1, 9:50 AM' }))).toEqual({ Laps: '2', Average: '1:39.770', Best: '1:38.54' })
+    // The lap that set the all-time best says so; read-only here.
+    expect(earlier.querySelector('[data-all-time-best]')).not.toBeNull()
+    expect(lapDay.querySelector('[data-all-time-best]')).toBeNull()
+    expect(within(page).queryByRole('button', { name: /^Edit/ })).not.toBeInTheDocument()
+    expect(within(page).getByText('Private')).toBeInTheDocument()
+    expect(document.title).toBe('MSRC 1.7 CW')
+
+    // Laps folded away, all opened at once.
+    expect(within(page).queryAllByRole('table')).toHaveLength(0)
+    await userEvent.click(within(page).getByRole('button', { name: 'Expand all' }))
+    expect(within(page).getAllByRole('table')).toHaveLength(3)
+
+    // Back to the event, on the tab it was opened from.
+    await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe(`#/event/${event.id}`)
+    expect(screen.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('links from a session’s saved laps, saying how they compare with the all-time best', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue (saved)')
+    const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
+    const link = within(sheet).getByRole('link', { name: 'See all my MSRC 1.7 CW laps' })
+    // Once every event's best is in.
+    await waitFor(() => expect(link.parentElement).toHaveTextContent('All time best on MSRC 1.7 CW: 1:38.54 · +0.56s vs this session'))
+
+    await userEvent.click(link)
+    expect(window.location.hash).toBe(TRACK)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await within(await trackPage()).findByRole('region', { name: 'Earlier' })
+
+    // Back on the event, the sheet stays closed.
+    await userEvent.click(within(await trackPage()).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe(`#/event/${event.id}`)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('says when a session set the all-time best', async () => {
+    summary = [{ eventId: sameLayout.id, best: 99_500, sessions: 2 }]
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue (saved)')
+    const link = within(screen.getByRole('dialog')).getByRole('link', { name: 'See all my MSRC 1.7 CW laps' })
+    await waitFor(() => expect(link.parentElement).toHaveTextContent('All time best on MSRC 1.7 CW: 1:39.1 · set this session'))
+  })
+
+  it('opens one of its events on My notes', async () => {
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    const page = await trackPage()
+    await userEvent.click(await within(page).findByRole('link', { name: /^Earlier/ }))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: /^My notes/, selected: true })).toBeInTheDocument()
+  })
+
+  it('opened from its link, back goes to the list of events', async () => {
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    await within(await trackPage()).findByRole('region', { name: 'Lap Day' })
+    await userEvent.click(within(await trackPage()).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe('#/')
+  })
+
+  it('asks anyone signed out to sign in, and fetches nothing', async () => {
+    signedIn = false
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    expect(await within(await trackPage()).findByText('Sign in to see your lap times on this track')).toBeInTheDocument()
+    expect(lapCalls('GET')).toHaveLength(0)
+  })
+
+  it('says when there are no laps on the layout yet', async () => {
+    saved = []
+    elsewhere = {}
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    expect(await within(await trackPage()).findByText('No lap times on MSRC 1.7 CW yet')).toBeInTheDocument()
+  })
+
+  it('says when no event is on the track it names', async () => {
+    window.location.hash = '#/track/nowhere'
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    expect(await screen.findByText('No event is on this track')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'See all events' }))
+    expect(window.location.hash).toBe('#/')
+  })
+
+  it('shows the driver an admin picked (#288)', async () => {
+    roles = ['admin']
+    jasonSaved = [at('2026-03-07', '11:45', 2, [84_420])]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
+    await userEvent.click(await screen.findByRole('link', { name: 'See all Jason’s MSRC 1.7 CW laps' }))
+
+    const page = await trackPage()
+    expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
+    expect(await within(page).findByRole('group', { name: 'All time best' })).toHaveTextContent('1:24.42Across 1 session at 1 event')
+    const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
+    expect(String(url)).toContain(`driver=${JASON}`)
+    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
   })
 })

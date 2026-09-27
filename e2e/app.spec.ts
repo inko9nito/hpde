@@ -555,3 +555,49 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await page.getByLabel('Driver').selectOption({ label: 'Me' })
   await expect(page.getByText('No lap times yet')).toBeVisible()
 })
+
+test('a track page slides in over the event from My notes, with every session on the layout (#274)', async ({ page }) => {
+  // An earlier event on the same layout as Alpha.
+  const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }
+  await stubEvents(page, [...TEST_EVENTS, earlier])
+  await signInAsAdmin(page)
+  const session = (date: string, laps: object[]) => ({ key: `${date} 08:30 blue`, date, time: '08:30', group: 'blue', sessionNumber: 1, laps })
+  const laps: Record<string, object[]> = {
+    [alpha.id]: [session('2026-03-07', [{ ms: 112_000 }, { ms: 106_000, start: '8:35:12 AM', end: '8:36:58 AM', note: 'Clean lap' }])],
+    [earlier.id]: [session('2025-10-04', [{ ms: 108_400 }, { ms: 105_220 }])],
+  }
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('events')) {
+      const ids = params.get('events')!.split(',')
+      return route.fulfill({ json: { events: ids.filter(id => laps[id]).map(id => ({ eventId: id, sessions: laps[id] })) } })
+    }
+    if (!params.has('event')) return route.fulfill({ json: { events: [{ eventId: earlier.id, best: 105_220, sessions: 1 }] } })
+    return route.fulfill({ json: { sessions: laps[params.get('event')!] ?? [] } })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  const card = page.getByRole('group', { name: 'All time best' })
+  await expect(card).toContainText('1:45.22')
+  const slide = await trackSlide(page, () => card.getByRole('link', { name: 'See all my MSRC 2.0 CW laps' }).click(), 'MSRC 2.0 CW')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+
+  const track = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' }) })
+  await expect(track.getByRole('heading', { level: 2 })).toHaveText(['Alpha Track Day', 'Alpha in October'])
+  await expect(track.getByRole('group', { name: 'All time best' })).toContainText('1:45.22')
+  await track.getByRole('button', { name: 'Expand all' }).click()
+  await expect(track.getByRole('table')).toHaveCount(2)
+  await expect(track.getByRole('row', { name: /^2 / }).first()).toContainText('Clean lap')
+  // Nothing runs off the side of the phone.
+  expect(await track.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Back slides it away, and the event is right where it was.
+  await track.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
+  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(card).toBeInViewport()
+})

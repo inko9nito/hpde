@@ -21,11 +21,12 @@ import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventP
 import { LapTimesSheet } from './components/LapTimesSheet'
 import type { SessionSlot } from './components/LapTimesSheet'
 import { MyLapTimes } from './components/MyLapTimes'
+import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import { DriverPicker } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useDrivers, driverName } from './data/drivers'
 import type { Driver } from './data/drivers'
-import { bestOnLayout, eventBest } from './utils/trackStats'
+import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -177,6 +178,7 @@ export default function App() {
   const [storedTab, setActiveTab] = useLocalStorage<EventTabId>('hpde:activeTab', 'schedule')
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
+  const trackScrollRef = useRef<HTMLDivElement>(null)
   // The session whose lap times are open in the sheet (#210), if any.
   const [lapSlot, setLapSlot] = useState<SessionSlot | null>(null)
   // An admin can log another driver's lap times (#288): whose the sheet,
@@ -201,6 +203,19 @@ export default function App() {
 
   const routeEventId = eventIdFromHash(hash)
   const isOnEventRoute = routeEventId !== null
+  // A layout's track page (#274). Opened from an event's page, it slides in
+  // over that page, which stays open under it until it's gone back to.
+  const trackSlug = trackSlugFromHash(hash)
+  const [trackFrom, setTrackFrom] = useState<{ hash: string; eventId: string | null }>(
+    () => ({ hash, eventId: null }),
+  )
+  if (trackFrom.hash !== hash) {
+    setTrackFrom({ hash, eventId: trackSlug === null ? null : eventIdFromHash(trackFrom.hash) ?? trackFrom.eventId })
+  }
+  const trackOverEventId = trackSlug !== null ? trackFrom.eventId : null
+  // The event whose page is showing: the route's, or the one under the track page.
+  const pageEventId = routeEventId ?? trackOverEventId
+  const eventPageOpen = pageEventId !== null
   // A link to an event we don't have (yet): an app-created one before the
   // fetch lands, or one that was deleted. Don't show some other event.
   const routeMissing = isOnEventRoute && !ALL_EVENTS.some(e => e.id === routeEventId)
@@ -209,8 +224,16 @@ export default function App() {
   // becomes false again only after PushPage's onExited fires.
   const [pushMounted, setPushMounted] = useState(isOnEventRoute)
   useEffect(() => {
-    if (isOnEventRoute) setPushMounted(true)
-  }, [isOnEventRoute])
+    if (eventPageOpen) setPushMounted(true)
+  }, [eventPageOpen])
+
+  // The track page stays mounted through its slide-out too.
+  const [lastTrackSlug, setLastTrackSlug] = useState(trackSlug)
+  useEffect(() => {
+    if (trackSlug) setLastTrackSlug(trackSlug)
+  }, [trackSlug])
+  const shownTrackSlug = trackSlug ?? lastTrackSlug
+  const [trackEntered, setTrackEntered] = useState(false)
 
   // Same for New event / Share / iOS widget: the last one opened stays
   // mounted through its slide-out.
@@ -241,25 +264,32 @@ export default function App() {
   // While an event's page is open, the tab shows its name and track shape
   // (#233) — and so do iOS Favorites / Home Screen bookmarks made from it.
   const routeEvent = ALL_EVENTS.find(e => e.id === routeEventId)
-  useTrackFavicon(routeEvent?.trackId)
-  useDocumentTitle(routeEvent?.name)
+  // …and a track page, its layout's (#274).
+  const trackTitle = trackSlug !== null ? trackPageTitle(trackSlug, ALL_EVENTS) : null
+  useTrackFavicon(routeEvent?.trackId ?? trackTitle?.trackId)
+  useDocumentTitle(routeEvent?.name ?? trackTitle?.name)
   // …and the status bar above it matches its white header (#245) — once
   // the page has slid in, not while it's still on its way — until a
   // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
-  useChromeColor(isOnEventRoute && pushEntered && !overlayEntered ? HEADER_CHROME_COLOR : null)
+  useChromeColor(((eventPageOpen && pushEntered) || trackEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
 
   const eventStatus = classifyEvent(activeEvent)
 
   // The signed-in driver's lap times for this event (#210).
   // Fetched only while this event's page is open.
-  const lapLog = useLapLog(routeEventId !== null && routeEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
+  const lapLog = useLapLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
   const savedLapKeys = new Set(lapLog.byKey.keys())
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
   const layoutBest = bestOnLayout(activeEvent, ALL_EVENTS, lapSummary ?? [], eventBest(lapLog.sessions))
   const allTimeBest = lapSummary ? layoutBest.best : undefined
+  // The track page for this event's layout, which the All time best card
+  // and a session's saved laps link to (#274).
+  const activeLayout = layoutName(activeEvent)
+  const activeLayoutSlug = layoutSlug(activeEvent)
+  const trackLink = activeLayout && activeLayoutSlug ? { name: activeLayout, href: trackHash(activeLayoutSlug) } : undefined
 
   // Who else an admin can pick, fetched once they open the laps.
   const drivers = useDrivers(isAdminUser && isOnEventRoute && (lapSlot !== null || activeTab === 'notes'))
@@ -294,6 +324,21 @@ export default function App() {
 
   function goHome() {
     setHash(LANDING_HASH)
+  }
+
+  // From a track page, one of its events, on the laps it lists: My notes,
+  // and whoever's laps they were. Already in place under the page (or put
+  // there), so the track page slides away to reveal it.
+  function openEventNotes(event: EventConfig) {
+    // The event it was opened from keeps its day and filters.
+    if (event.id !== activeEvent.id) {
+      const keep = lapDriver
+      selectEvent(event)
+      setLapDriver(keep)
+    }
+    setActiveTab('notes')
+    skipPushEnterAnimationRef.current = true
+    setHash(eventHash(event.id))
   }
 
   // Keep the URL in sync with the active event: a direct link to
@@ -356,12 +401,12 @@ export default function App() {
 
   return (
     <>
-    <PullToRefresh disabled={pushMounted || !!shownOverlay}>
+    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownOverlay}>
       <LandingPage onOpenEvent={switchEvent} />
     </PullToRefresh>
     {pushMounted && (
     <PushPage
-      open={isOnEventRoute}
+      open={eventPageOpen}
       onExited={() => setPushMounted(false)}
       onEnteredChange={setPushEntered}
       scrollRef={pushScrollRef}
@@ -478,6 +523,7 @@ export default function App() {
               log={lapLog}
               layoutBest={layoutBest}
               allTimeBest={allTimeBest}
+              track={trackLink}
               driver={driver}
               driverPicker={driverPicker}
               onEdit={session => setLapSlot({
@@ -496,6 +542,31 @@ export default function App() {
     </div>
     </PullToRefresh>
     </PushPage>
+    )}
+    {shownTrackSlug && (
+      <PushPage
+        key={shownTrackSlug}
+        open={trackSlug !== null}
+        onExited={() => setLastTrackSlug(null)}
+        onEnteredChange={setTrackEntered}
+        scrollRef={trackScrollRef}
+        skipEnterAnimation={bootHashRef.current !== null}
+      >
+        <PullToRefresh disabled={trackSlug === null || !!shownOverlay} scrollContainerRef={trackScrollRef}>
+        <TrackLapsPage
+          slug={shownTrackSlug}
+          events={ALL_EVENTS}
+          eventsLoaded={eventsLoaded}
+          driver={driver}
+          onBack={() => {
+            if (trackOverEventId !== null) backToEvent(trackOverEventId)
+            else goHome()
+          }}
+          onOpenEvent={openEventNotes}
+          onHome={goHome}
+        />
+        </PullToRefresh>
+      </PushPage>
     )}
     {shownOverlay && (
       <PushPage
@@ -541,6 +612,11 @@ export default function App() {
         showDate={multiDay}
         saved={key => lapLog.byKey.get(key)}
         allTimeBest={allTimeBest}
+        track={trackLink}
+        onOpenTrack={() => {
+          setLapSlot(null)
+          if (trackLink) setHash(trackLink.href)
+        }}
         driver={driver}
         driverPicker={driverPicker}
         loading={lapLog.status === 'loading'}

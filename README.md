@@ -171,8 +171,19 @@ Only they and admins can see them.
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab shows how many
   sessions have laps, e.g. *My notes (2)*.
+- **Track page (#274):** every session you've logged on one layout, at
+  `#/track/<layout>` (e.g. `#/track/msrc-1-7-cw`): the all-time best,
+  then each event's sessions, newest event first, with the same figures
+  and lap tables as My notes. The layout match is the same one *All time
+  best* uses. Open it from the *All time best* card, or from *See all my
+  MSRC 1.7 CW laps* under a session's saved laps in the sheet, which also
+  says how that session compares with the all-time best. It slides in
+  over the event, and Back returns there; tap an event's name to open its
+  My notes. Private: it needs a sign-in.
 - **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
-  `?event=` it sums up each event's best, for the layout best) in
+  `?event=` it sums up each event's best, for the layout best; with
+  `?events=<id>,<id>` it returns each of those events' sessions at once,
+  for a track page) in
   Netlify Blobs (store `laps`), one record per driver per event, keyed by
   their Identity user id. Every request needs a sign-in and only ever
   reaches the driver's own laps, except an admin's (below). A deploy

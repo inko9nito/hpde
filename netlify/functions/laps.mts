@@ -15,6 +15,9 @@ import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
 //   GET    ?event=               their laps for the event, by session
+//   GET    ?events=<id>,<id>     their laps for each of those events that
+//                                has any — a track page (#274), every event
+//                                on one layout in one request
 //   PUT    ?event=  {session}    saves one session's laps (replacing any)
 //   DELETE ?event=&session=<key> removes one session's laps
 //
@@ -30,6 +33,8 @@ export const config = { path: '/api/laps' }
 export const LAPS_STORE = 'laps'
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
+// Events a track page can ask for at once: far more than one layout has.
+const MAX_EVENTS = 100
 
 interface EventLaps {
   eventId: string
@@ -80,6 +85,18 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   }
 
   const store = openStore(context, deps)
+
+  if (req.method === 'GET' && params.has('events')) {
+    const eventIds = [...new Set((params.get('events') ?? '').split(',').filter(Boolean))]
+    if (eventIds.length > MAX_EVENTS) return json(400, { error: `At most ${MAX_EVENTS} events at once.` })
+    if (!eventIds.every(id => EVENT_ID.test(id))) return json(400, { error: 'Bad event id.' })
+    const records = await Promise.all(eventIds.map(id => store.get(`${driverId}/${id}`, { type: 'json' }) as Promise<EventLaps | null>))
+    const events = records.flatMap((record, i) => {
+      const sessions = inOrder(record)
+      return sessions.length ? [{ eventId: eventIds[i], sessions }] : []
+    })
+    return json(200, { events })
+  }
 
   if (req.method === 'GET' && !params.has('event')) {
     const { blobs } = await store.list({ prefix: `${driverId}/` })

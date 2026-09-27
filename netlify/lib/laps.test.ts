@@ -142,6 +142,28 @@ describe('laps function (#210)', () => {
     ])
   })
 
+  it('reads several events’ laps in one go, for a track page (#274) — the driver’s own, events with laps only', async () => {
+    const tde = '2026-09-11_msrc-1-7'
+    await call('PUT', { token: 'vera-token', body: { session: session2 } })
+    await call('PUT', { token: 'vera-token', body: { session: session1 } })
+    await call('PUT', { token: 'vera-token', body: { session: { ...session1, date: '2026-09-11' } }, query: `?event=${tde}` })
+    await call('PUT', { token: 'jason-token', body: { session: session1 }, query: '?event=2026-06-06_msrc-1-7' })
+
+    expect((await call('GET', { query: `?events=${EVENT}` })).status).toBe(401)
+    const res = await call('GET', { token: 'vera-token', query: `?events=${EVENT},${tde},2026-06-06_msrc-1-7,${EVENT}` })
+    expect(res.status).toBe(200)
+    const { events } = await res.json()
+    // Each once, in the order asked; each event's sessions in schedule order.
+    expect(events.map((e: { eventId: string }) => e.eventId)).toEqual([EVENT, tde])
+    expect(events[0].sessions.map((s: { key: string }) => s.key)).toEqual(['2026-09-13 09:50 blue', '2026-09-13 11:45 blue'])
+    expect(events[1].sessions[0]).toMatchObject({ key: '2026-09-11 09:50 blue', laps: session1.laps })
+
+    expect(await (await call('GET', { token: 'vera-token', query: '?events=' })).json()).toEqual({ events: [] })
+    expect((await call('GET', { token: 'vera-token', query: '?events=../../jason/x' })).status).toBe(400)
+    const tooMany = Array.from({ length: 101 }, (_, i) => `e${i}`).join(',')
+    expect((await call('GET', { token: 'vera-token', query: `?events=${tooMany}` })).status).toBe(400)
+  })
+
   it('removes one session’s laps, and the record with the last one', async () => {
     await call('PUT', { token: 'vera-token', body: { session: session1 } })
     await call('PUT', { token: 'vera-token', body: { session: session2 } })
@@ -199,6 +221,10 @@ describe('laps function (#210)', () => {
 
       const summary = await call('GET', { token: 'admin-token', query: forJason('') })
       expect((await summary.json()).events).toEqual([{ eventId: EVENT, sessions: 1, best: 104_000 }])
+
+      const track = await call('GET', { token: 'admin-token', query: forJason(`?events=${EVENT}`) })
+      expect((await track.json()).events.map((e: { eventId: string }) => e.eventId)).toEqual([EVENT])
+      expect((await call('GET', { token: 'vera-token', query: forJason(`?events=${EVENT}`) })).status).toBe(403)
 
       const del = await call('DELETE', {
         token: 'admin-token',

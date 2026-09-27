@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bestOnLayout, layoutLabel, sameLayout, trackShortName } from './trackStats'
+import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutName, layoutSlug, sameLayout, trackShortName } from './trackStats'
 import type { EventConfig } from '../types'
 
 const event = (id: string, fields: Partial<EventConfig> = {}): EventConfig => ({
@@ -68,5 +68,37 @@ describe('bestOnLayout', () => {
     const summary = [{ eventId: 'gone', best: 50_000, sessions: 1 }, { eventId: tde.id, sessions: 1 }]
     expect(bestOnLayout(scca, events, summary, undefined)).toEqual({ events: 0 })
     expect(bestOnLayout(scca, events, summary, 101_000)).toEqual({ best: 101_000, events: 1 })
+  })
+})
+
+describe('track pages (#274)', () => {
+  it('names a layout "MSRC 1.7 CW", and gives it an id for its page', () => {
+    expect(layoutName(scca)).toBe('MSRC 1.7 CW')
+    expect(layoutSlug(scca)).toBe('msrc-1-7-cw')
+    expect(layoutSlug(tde)).toBe('msrc-1-7-cw')
+    expect(layoutSlug(noDirection)).toBe('msrc-1-7')
+    expect(layoutSlug(event('x', { trackId: undefined, track: 'Harris Hill', configuration: undefined, direction: 'CCW' })))
+      .toBe('harris-hill-ccw')
+    expect(layoutSlug(event('x', { trackId: undefined, track: undefined }))).toBeNull()
+  })
+
+  it('finds every event on the layout a page names, as the All time best card counts them', () => {
+    const events = [scca, tde, ccw, noDirection, longCourse, ecr]
+    expect(eventsOnLayout('msrc-1-7-cw', events)).toEqual([scca, tde])
+    expect(eventsOnLayout('msrc-1-7-ccw', events)).toEqual([ccw])
+    expect(eventsOnLayout('ecr-2-7-cw', events)).toEqual([ecr])
+    expect(eventsOnLayout('nowhere', events)).toEqual([])
+  })
+
+  it('keeps an event whose layout is named only by its icon id', () => {
+    const iconOnly = event('y', { track: undefined })
+    expect(eventsOnLayout('msrc-1-7-cw', [iconOnly])).toEqual([iconOnly])
+  })
+
+  it('says how far a session’s best is off the all-time best', () => {
+    expect(gapToBest(101_040, 98_540)).toBe('+2.5s')
+    expect(gapToBest(98_580, 98_540)).toBe('+0.04s')
+    expect(gapToBest(104_000, 101_000)).toBe('+3s')
+    expect(gapToBest(98_540, 98_540)).toBeNull()
   })
 })
