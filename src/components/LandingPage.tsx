@@ -38,8 +38,11 @@ const CARD_SHADOW = 'shadow-[0_1px_2px_rgba(17,24,39,0.04),0_4px_12px_rgba(17,24
 // Inner padding of a card's date + title row.
 const CARD_PADDING = 'p-4'
 
-/** A card's box: border, padding, shadow. */
-const CARD_BOX = `w-full rounded-xl border border-gray-200 bg-white ${CARD_PADDING} ${CARD_SHADOW}`
+/** A card's frame: border, corners, shadow — the Tracks tab's rows too (#274). */
+export const CARD_FRAME = `w-full rounded-xl border border-gray-200 bg-white ${CARD_SHADOW}`
+
+/** A card's box: its frame and padding. */
+const CARD_BOX = `${CARD_FRAME} ${CARD_PADDING}`
 
 // Every compact row on the page — past event card, loading skeleton,
 // empty state — shares this shell (p-4 + 48px tile + border = 82px),
