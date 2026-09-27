@@ -585,13 +585,13 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(new URL(String(url), 'https://x').searchParams.get('events')!.split(',')).toEqual([sameLayout.id, event.id])
     expect(within(page).getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54Across 3 sessions at 2 events')
 
-    // Cards like the Events list's, newest first, with the event's figures
-    // across every session: no sessions of their own here.
+    // Compact cards like the Events list's, newest first: the run group, and
+    // the best and average across every session. No sessions here.
     const [lapDay, earlier] = await cards()
-    expect(lapDay).toHaveTextContent('Lap Day')
-    expect(earlier).toHaveTextContent('Earlier')
-    expect(figures(lapDay, 'Event figures')).toEqual({ 'Run group': 'Blue', Average: '1:39.260', Best: '1:39.1' })
-    expect(figures(earlier, 'Event figures')).toEqual({ 'Run group': 'Blue', Average: '1:39.913', Best: '1:38.54' })
+    expect(lapDay).toHaveTextContent('Lap DayBlue')
+    expect(earlier).toHaveTextContent('EarlierBlue')
+    expect(figures(lapDay, 'Event figures')).toEqual({ Best: '1:39.1', Avg: '1:39.260' })
+    expect(figures(earlier, 'Event figures')).toEqual({ Best: '1:38.54', Avg: '1:39.913' })
     // The best that's the all-time best says so.
     expect(earlier.querySelector('[data-all-time-best]')).not.toBeNull()
     expect(lapDay.querySelector('[data-all-time-best]')).toBeNull()

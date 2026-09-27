@@ -4,9 +4,10 @@ import { BackButton } from './EventHeader'
 import { TrackIcon } from './TrackIcon'
 import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
-import { BestChip, Figures } from './LapList'
+import { BestChip } from './LapList'
 import { groupFor } from './LapTimesSheet'
-import { CARD_BOX, DateBlock, EventTitle } from './LandingPage'
+import { CARD_SHELL, DateBlock } from './LandingPage'
+import { StatusBadge } from './EventHeader'
 import { PrivateTag, StatCard, plural, useSkeletonFade } from './LapSessions'
 import { LapTrendChart } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
@@ -41,8 +42,9 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
 }
 
 /**
- * One event on the track page (#274): the Events list's card — date, name,
- * organizer — over the driver's run group, average and best lap there,
+ * One event on the track page (#274), compact like the Events list's rows:
+ * the date; the name over the driver's run group and the organizer; and
+ * their best lap there (the black chip, as everywhere) over their average,
  * across every session. Opens the event, on My notes, for its sessions.
  */
 function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
@@ -64,34 +66,31 @@ function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
         e.preventDefault()
         onOpen()
       }}
-      className={`${CARD_BOX} flex flex-col gap-3 transition-colors hover:border-gray-400`}
+      className={`${CARD_SHELL} transition-colors hover:border-gray-400`}
     >
-      <div className="flex items-center gap-4">
-        <DateBlock event={event} muted={status === 'past'} />
-        <EventTitle event={event} live={status === 'live'} />
+      <DateBlock event={event} muted={status === 'past'} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{event.name}</span>
+          {status === 'live' && <StatusBadge status="live" size="sm" />}
+        </div>
+        <div className="mt-1 flex min-w-0 items-center gap-2">
+          {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
+          {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
+        </div>
       </div>
-      <div className="flex border-t border-gray-100 pt-3">
-        {/* The run group's badge is narrower than the average, and that than the best. */}
-        <Figures
-          label="Event figures"
-          columns="grid-cols-[minmax(0,4fr)_minmax(0,5fr)_minmax(0,6fr)]"
-          figures={[
-            {
-              label: groups.length > 1 ? 'Run groups' : 'Run group',
-              value: (
-                <span className="flex flex-wrap gap-1 font-sans">
-                  {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
-                </span>
-              ),
-            },
-            { label: 'Average', value: average !== undefined ? formatAverage(laps, average) : '—' },
-            {
-              label: 'Best',
-              value: best !== undefined ? <BestChip ms={best} allTime={best === allTimeBest} /> : '—',
-            },
-          ]}
-        />
-      </div>
+      <dl className="flex shrink-0 flex-col items-end gap-1" aria-label="Event figures">
+        <div className="flex">
+          <dt className="sr-only">Best</dt>
+          <dd className="font-mono text-sm">
+            {best !== undefined ? <BestChip ms={best} allTime={best === allTimeBest} /> : '—'}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-1 text-xs">
+          <dt className="text-gray-400">Avg</dt>
+          <dd className="font-mono tabular-nums text-gray-600">{average !== undefined ? formatAverage(laps, average) : '—'}</dd>
+        </div>
+      </dl>
     </a>
   )
 }
@@ -108,19 +107,15 @@ function TrackSkeleton({ leaving, label }: { leaving: boolean; label: string }) 
         <div className={`mt-3 h-2.5 w-1/2 ${bar}`} />
       </div>
       <div className={`mb-2 ml-1 h-2.5 w-14 ${bar}`} />
-      <div className="space-y-4">
-        {[0, 1].map(i => (
-          <div key={i} className={`${CARD_BOX} flex flex-col gap-3`}>
-            <div className="flex items-center gap-4">
-              <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-gray-100" />
-              <div className="flex-1 space-y-2">
-                <div className={`h-3.5 w-2/5 ${bar}`} />
-                <div className={`h-3 w-1/4 ${bar}`} />
-              </div>
+      <div className="space-y-3">
+        {[0, 1, 2].map(i => (
+          <div key={i} className={CARD_SHELL}>
+            <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-gray-100" />
+            <div className="flex-1 space-y-2">
+              <div className={`h-3.5 w-3/5 ${bar}`} />
+              <div className={`h-3 w-2/5 ${bar}`} />
             </div>
-            <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
-              {[0, 1, 2].map(j => <div key={j} className="h-[52px] animate-pulse rounded-lg bg-gray-50" />)}
-            </div>
+            <div className="h-6 w-16 shrink-0 animate-pulse rounded-md bg-gray-100" />
           </div>
         ))}
       </div>
@@ -280,7 +275,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
           <h2 id="track-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
             Events
           </h2>
-          <ul className="space-y-4">
+          <ul className="space-y-3">
             {withLaps.map(({ event, sessions }) => (
               <li key={event.id}>
                 <EventLapsCard event={event} sessions={sessions} allTimeBest={best} onOpen={() => onOpenEvent(event)} />

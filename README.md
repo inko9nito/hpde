@@ -179,10 +179,11 @@ Only they and admins can see them.
   event first, with your best lap and session count there once you're
   signed in. Tap one for its track page (`#/track/<layout>`, e.g.
   `#/track/msrc-1-7-cw`): your all-time best on that layout, with a
-  chart of your best and average lap at each event there (from a second
-  event on), so you can see how you've come along, then the
-  events you have laps at there, newest first, as cards like the Events
-  list's with your run group, average and best lap at each. Tap an event
+  chart of your best (black, like the best-lap chip) and average lap at
+  each event there (from a second event on), so you can see how you've
+  come along, then the events you have laps at there, newest first, as
+  compact cards like the Events list's with your run group, best and
+  average lap at each. Tap an event
   for its sessions: its page slides in over the track page on *My notes*,
   and Back returns to the track page. The layout match is the same one
   *All time best* uses. A track page also opens from the *All time best*

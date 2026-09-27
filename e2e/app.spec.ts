@@ -586,13 +586,16 @@ test('a track page slides in over the event from My notes, listing the layout’
 
   const track = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' }) })
   await expect(track.getByRole('group', { name: 'All time best' })).toContainText('1:45.22')
-  // The layout's events, newest first, each with its run group, average
-  // and best; their sessions are a tap away, not on this page.
+  // The layout's events, newest first, each with its run group, best and
+  // average; their sessions are a tap away, not on this page.
   const events = track.getByRole('region', { name: 'Events' }).getByRole('link')
   await expect(events).toHaveCount(2)
   await expect(events.nth(0)).toContainText('Alpha Track Day')
   await expect(events.nth(1)).toContainText('Alpha in October')
-  await expect(events.nth(1).getByRole('definition')).toHaveText(['Blue', '1:46.810', '1:45.22'])
+  await expect(events.nth(1)).toContainText('Blue')
+  await expect(events.nth(1).getByRole('definition')).toHaveText(['1:45.22', '1:46.810'])
+  // Compact: one row each, like the Events list's.
+  expect((await events.nth(1).boundingBox())!.height).toBeLessThan(100)
   await expect(track.getByRole('table')).toHaveCount(0)
   // Above them, a chart of each event's best and average: the older one on
   // the left, which the pointer reads out.

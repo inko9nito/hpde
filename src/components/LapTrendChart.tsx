@@ -7,11 +7,12 @@ import { formatLapTime } from '../utils/lapTimes'
 // they can see how they've come along. One axis (both are lap times);
 // lower is faster.
 //
-// Best leads, in the accent (violet: "fastest" on a timing screen); the
-// average is context, in a quieter gray. Checked with the data-viz palette
-// validator on the white card: 24+ ΔE apart for every kind of color
-// vision, both at least 3:1 against the card. Every value is also on the
-// event cards below, so the tooltip never holds anything back.
+// Best leads, in black like the best-lap chip everywhere else; the average
+// is context, in a quieter gray. Checked with the data-viz palette
+// validator on the white card: 45 ΔE apart for every kind of color vision
+// (they differ in lightness, which no color blindness takes away), both
+// at least 3:1 against the card. Every value is also on the event cards
+// below, so the tooltip never holds anything back.
 
 export interface TrendPoint {
   /** The event's id. */
@@ -26,7 +27,7 @@ export interface TrendPoint {
 }
 
 const SERIES = {
-  best: { label: 'Best', color: '#4a3aa7' },
+  best: { label: 'Best', color: '#111827' },
   average: { label: 'Average', color: '#8b93a1' },
 } as const
 const GRID = '#e5e7eb'
