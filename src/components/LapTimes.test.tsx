@@ -476,6 +476,8 @@ describe('lap times (#210)', () => {
     // One point: the session with speeds; its ticks on the lap times' grid lines.
     expect(chart.querySelectorAll('[data-series="speed"] circle')).toHaveLength(1)
     expect(chart.querySelectorAll('[data-speed-tick]')).toHaveLength(chart.querySelectorAll('svg line[stroke="#e5e7eb"]').length)
+    // The right edge is the speed axis's: no lap time labelled beside its ticks.
+    expect(chart.querySelector('[data-end-label]')).toBeNull()
     fireEvent.focus(chart)
     fireEvent.keyDown(chart, { key: 'ArrowLeft' })
     expect(within(chart).getByRole('status')).toHaveTextContent('104.5mph top speed')

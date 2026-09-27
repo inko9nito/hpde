@@ -60,9 +60,11 @@ const PLOT_HEIGHT = 136
 const X_AXIS = 22
 const X_AXIS_GROUPED = 34
 const LEFT = 38
-// Room for the end values, "1:38.54" — and past them, the speed axis's ticks.
+// Room for the end values, "1:38.54". With a speed axis (#298), its ticks
+// take the right edge instead, and there are no end values: beside the mph
+// ticks, a lap time there would read as belonging to them.
 const RIGHT = 50
-const SPEED_AXIS = 28
+const SPEED_AXIS = 34
 // Keeps the first and last points off the plot's edges.
 const INSET = 10
 const TICK_STEPS = [500, 1000, 2000, 5000, 10_000, 15_000, 30_000, 60_000]
@@ -177,7 +179,7 @@ export function LapTrendChart({ points, label, noun }: {
 
   const n = points.length
   const hasSpeed = points.some(p => p.topSpeed !== undefined)
-  const right = RIGHT + (hasSpeed ? SPEED_AXIS : 0)
+  const right = hasSpeed ? SPEED_AXIS : RIGHT
   const plotW = width - LEFT - right
   const x = (i: number) => LEFT + INSET + (n === 1 ? (plotW - 2 * INSET) / 2 : (i * (plotW - 2 * INSET)) / (n - 1))
   const { ticks, min, max } = lapTicks(Math.min(...points.map(p => p.best)), Math.max(...points.map(p => p.average)))
@@ -200,7 +202,8 @@ export function LapTrendChart({ points, label, noun }: {
 
   // End values: the best always; the average too, unless the two would collide.
   const last = points[n - 1]
-  const showAverageEnd = Math.abs(y(last.average) - y(last.best)) >= 13
+  const showBestEnd = !hasSpeed
+  const showAverageEnd = showBestEnd && Math.abs(y(last.average) - y(last.best)) >= 13
 
   function pick(e: PointerEvent<HTMLDivElement>) {
     const box = e.currentTarget.getBoundingClientRect()
@@ -304,9 +307,11 @@ export function LapTrendChart({ points, label, noun }: {
               ))}
             </g>
           )}
-          <text x={x(n - 1) + 9} y={y(last.best)} dy="0.32em" fontSize={11} fontWeight={600} fill={INK} className="font-mono tabular-nums" data-end-label="best">
-            {formatLapTime(last.best)}
-          </text>
+          {showBestEnd && (
+            <text x={x(n - 1) + 9} y={y(last.best)} dy="0.32em" fontSize={11} fontWeight={600} fill={INK} className="font-mono tabular-nums" data-end-label="best">
+              {formatLapTime(last.best)}
+            </text>
+          )}
           {showAverageEnd && (
             <text x={x(n - 1) + 9} y={y(last.average)} dy="0.32em" fontSize={11} fill={MUTED} className="font-mono tabular-nums" data-end-label="average">
               {last.averageText}
