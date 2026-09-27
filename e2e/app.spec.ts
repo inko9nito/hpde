@@ -556,7 +556,7 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await expect(page.getByText('No lap times yet')).toBeVisible()
 })
 
-test('a track page slides in over the event from My notes, with every session on the layout (#274)', async ({ page }) => {
+test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {
   // An earlier event on the same layout as Alpha.
   const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }
   await stubEvents(page, [...TEST_EVENTS, earlier])
@@ -585,11 +585,15 @@ test('a track page slides in over the event from My notes, with every session on
   await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
 
   const track = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' }) })
-  await expect(track.getByRole('heading', { level: 2 })).toHaveText(['Alpha Track Day', 'Alpha in October'])
   await expect(track.getByRole('group', { name: 'All time best' })).toContainText('1:45.22')
-  await track.getByRole('button', { name: 'Expand all' }).click()
-  await expect(track.getByRole('table')).toHaveCount(2)
-  await expect(track.getByRole('row', { name: /^2 / }).first()).toContainText('Clean lap')
+  // The layout's events, newest first, each with its run group, average
+  // and best; their sessions are a tap away, not on this page.
+  const events = track.getByRole('region', { name: 'Events' }).getByRole('link')
+  await expect(events).toHaveCount(2)
+  await expect(events.nth(0)).toContainText('Alpha Track Day')
+  await expect(events.nth(1)).toContainText('Alpha in October')
+  await expect(events.nth(1).getByRole('definition')).toHaveText(['Blue', '1:46.810', '1:45.22'])
+  await expect(track.getByRole('table')).toHaveCount(0)
   // Nothing runs off the side of the phone.
   expect(await track.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -600,6 +604,19 @@ test('a track page slides in over the event from My notes, with every session on
   await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
   await expect(page.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
   await expect(card).toBeInViewport()
+
+  // An event's card slides its page in over the track page, on My notes…
+  await card.getByRole('link', { name: 'See all my MSRC 2.0 CW laps' }).click()
+  const slideIn = await trackSlide(page, () => events.nth(1).click(), 'Alpha in October')
+  expect(slideIn).toEqual({ fromBelow: false, fromSide: true })
+  const october = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Alpha in October' }) })
+  await expect(october.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(october.getByRole('region', { name: 'Session 1, 8:30 AM' })).toBeInViewport()
+  // …and its Back returns to the track page.
+  await october.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Alpha in October' })).toHaveCount(0)
+  await expect(events.nth(1)).toBeInViewport()
 })
 
 test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {

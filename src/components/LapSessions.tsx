@@ -9,9 +9,9 @@ import { formatLapTime } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { RunGroupConfig } from '../types'
 
-// The pieces My notes (#210) and a track page (#274) both list saved laps
-// with: the best-lap cards, the Expand all / Private bar, a session's card
-// and the loading skeleton.
+// The pieces My notes (#210) lists saved laps with — the best-lap cards,
+// the Expand all / Private bar, a session's card and the loading skeleton
+// — some of which a track page (#274) shares.
 
 export function sessionTitle(s: SessionLaps): string {
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
@@ -89,13 +89,20 @@ export function LapsToolbar({ keys, open, onOpen, whose }: {
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
-      <span
-        className="flex shrink-0 items-center gap-1"
-        title={whose ? `Only ${whose} and admins can see these lap times` : 'Only you and admins can see your lap times'}
-      >
-        <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
-      </span>
+      <PrivateTag whose={whose} />
     </div>
+  )
+}
+
+/** "Private", with who can see the laps on hover. `whose` names another driver, for an admin (#288). */
+export function PrivateTag({ whose }: { whose: string | null }) {
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1"
+      title={whose ? `Only ${whose} and admins can see these lap times` : 'Only you and admins can see your lap times'}
+    >
+      <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
+    </span>
   )
 }
 
@@ -202,13 +209,9 @@ export function useSkeletonFade(loading: boolean): boolean {
 
 const bar = 'animate-pulse rounded bg-gray-100'
 
-/**
- * Stand-in for the stat cards and a session card while the laps load —
- * under an event's heading, on a track page.
- */
-export function LapsSkeleton({ cards, eventHeading = false, leaving, label }: {
+/** Stand-in for the stat cards and a session card while the laps load. */
+export function LapsSkeleton({ cards, leaving, label }: {
   cards: 1 | 2
-  eventHeading?: boolean
   leaving: boolean
   label: string
 }) {
@@ -223,12 +226,6 @@ export function LapsSkeleton({ cards, eventHeading = false, leaving, label }: {
           </div>
         ))}
       </div>
-      {eventHeading && (
-        <div className="mb-3 flex flex-col gap-2 px-1">
-          <div className={`h-4 w-1/2 ${bar}`} />
-          <div className={`h-2.5 w-1/3 ${bar}`} />
-        </div>
-      )}
       <div className={`mb-2 ml-1 h-2.5 w-20 ${bar}`} />
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-3">

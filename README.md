@@ -178,15 +178,16 @@ Only they and admins can see them.
   lists every track layout the events are on, the one with the latest
   event first, with your best lap and session count there once you're
   signed in. Tap one for its track page (`#/track/<layout>`, e.g.
-  `#/track/msrc-1-7-cw`): every session you've logged on that layout,
-  the all-time best, then each event's sessions, newest event first,
-  with the same figures and lap tables as My notes. The layout match is
-  the same one *All time best* uses. A track page also opens from the
-  *All time best* card, and from *See all my MSRC 1.7 CW laps* under a
-  session's saved laps in the sheet, which also says how that session
-  compares with the all-time best; from there it slides in over the
-  event, and Back returns to it. Tap an event's name to open its My
-  notes. Lap times are private: they need a sign-in.
+  `#/track/msrc-1-7-cw`): your all-time best on that layout, then the
+  events you have laps at there, newest first, as cards like the Events
+  list's with your run group, average and best lap at each. Tap an event
+  for its sessions: its page slides in over the track page on *My notes*,
+  and Back returns to the track page. The layout match is the same one
+  *All time best* uses. A track page also opens from the *All time best*
+  card, and from *See all my MSRC 1.7 CW laps* under a session's saved
+  laps in the sheet, which also says how that session compares with the
+  all-time best; from there it slides in over the event, and Back
+  returns to it. Lap times are private: they need a sign-in.
 - **Where they live:** `netlify/functions/laps.mts` (`/api/laps`; with no
   `?event=` it sums up each event's best, for the layout best; with
   `?events=<id>,<id>` it returns each of those events' sessions at once,

@@ -22,6 +22,7 @@ import { LapTimesSheet } from './components/LapTimesSheet'
 import type { SessionSlot } from './components/LapTimesSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
+import { emptyPageStack, nextPageStack } from './utils/pageStack'
 import { GarageTab, HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
 import type { HomeTab } from './components/HomeTabs'
 import { TracksTab } from './components/TracksTab'
@@ -100,6 +101,13 @@ function eventIdFromHash(hash: string): string | null {
  *  (#273, #278): New event, Share (the site, or one event) or the iOS
  *  widget setup. */
 type Overlay = { kind: 'new-event' } | { kind: 'widget' } | { kind: 'share'; eventId?: string }
+
+// What the page stack (#274) reads from a hash: the event it's a page of —
+// its own, a sub-page or an editor — and the track page it is.
+const PAGE_HASHES = {
+  event: (hash: string) => eventIdFromHash(hash) ?? eventIdFromEditScheduleHash(hash) ?? eventIdFromEditEventHash(hash),
+  track: trackSlugFromHash,
+}
 
 function overlayFromHash(hash: string): Overlay | null {
   if (hash === NEW_EVENT_HASH) return { kind: 'new-event' }
@@ -206,19 +214,23 @@ export default function App() {
 
   const routeEventId = eventIdFromHash(hash)
   const isOnEventRoute = routeEventId !== null
-  // A layout's track page (#274). Opened from an event's page, it slides in
-  // over that page, which stays open under it until it's gone back to.
+  // A layout's track page (#274), and which of it and an event's page is
+  // over the other: each opens from the other, sliding in over it, and
+  // Back returns to the one underneath (see pageStack).
   const trackSlug = trackSlugFromHash(hash)
-  const [trackFrom, setTrackFrom] = useState<{ hash: string; eventId: string | null }>(
-    () => ({ hash, eventId: null }),
-  )
-  if (trackFrom.hash !== hash) {
-    setTrackFrom({ hash, eventId: trackSlug === null ? null : eventIdFromHash(trackFrom.hash) ?? trackFrom.eventId })
-  }
-  const trackOverEventId = trackSlug !== null ? trackFrom.eventId : null
+  const [stack, setStack] = useState(() => emptyPageStack<Driver>(hash))
+  if (stack.hash !== hash) setStack(nextPageStack(stack, hash, driver, PAGE_HASHES))
+  const trackOverEventId = trackSlug !== null ? stack.eventUnderTrack : null
+  const trackUnderEvent = isOnEventRoute ? stack.trackUnderEvent : null
   // The event whose page is showing: the route's, or the one under the track page.
   const pageEventId = routeEventId ?? trackOverEventId
   const eventPageOpen = pageEventId !== null
+  // The track page showing: the route's, or the one under the event's page.
+  const trackPageSlug = trackSlug ?? trackUnderEvent
+  // An event's page opened from a track page goes over it — kept through
+  // its slide-out.
+  const [eventOverTrack, setEventOverTrack] = useState(trackUnderEvent !== null)
+  if (isOnEventRoute && eventOverTrack !== (trackUnderEvent !== null)) setEventOverTrack(trackUnderEvent !== null)
   // The tab under everything (#274): Events, Tracks or Garage. A track page
   // of its own (not over an event) is the Tracks tab's. Pages pushed over a
   // tab leave it as it was, and go back to it.
@@ -237,11 +249,11 @@ export default function App() {
   }, [eventPageOpen])
 
   // The track page stays mounted through its slide-out too.
-  const [lastTrackSlug, setLastTrackSlug] = useState(trackSlug)
+  const [lastTrackSlug, setLastTrackSlug] = useState(trackPageSlug)
   useEffect(() => {
-    if (trackSlug) setLastTrackSlug(trackSlug)
-  }, [trackSlug])
-  const shownTrackSlug = trackSlug ?? lastTrackSlug
+    if (trackPageSlug) setLastTrackSlug(trackPageSlug)
+  }, [trackPageSlug])
+  const shownTrackSlug = trackPageSlug ?? lastTrackSlug
   const [trackEntered, setTrackEntered] = useState(false)
 
   // Same for New event / Share / iOS widget: the last one opened stays
@@ -340,19 +352,16 @@ export default function App() {
     setHash(HOME_TAB_HASH[homeTab])
   }
 
-  // From a track page, one of its events, on the laps it lists: My notes,
-  // and whoever's laps they were. Already in place under the page (or put
-  // there), so the track page slides away to reveal it.
+  // From a track page, one of its events, for its sessions: My notes, with
+  // whoever's laps the track page showed. It slides in over the track page
+  // — except the event the track page was opened from, already in place
+  // under it, which the track page slides away to reveal.
   function openEventNotes(event: EventConfig) {
     // The event it was opened from keeps its day and filters.
-    if (event.id !== activeEvent.id) {
-      // An admin looking at another driver's laps keeps looking at them.
-      const keep = trackOverEventId !== null ? lapDriver : null
-      selectEvent(event)
-      setLapDriver(keep)
-    }
+    if (event.id !== activeEvent.id) selectEvent(event)
+    setLapDriver(stack.trackDriver)
     setActiveTab('notes')
-    skipPushEnterAnimationRef.current = true
+    skipPushEnterAnimationRef.current = event.id === trackOverEventId
     setHash(eventHash(event.id))
   }
 
@@ -427,6 +436,9 @@ export default function App() {
     <TabBar active={homeTab} />
     {pushMounted && (
     <PushPage
+      // A fresh page when it goes over the track page, so it slides in.
+      key={eventOverTrack ? 'event over track' : 'event'}
+      raised={eventOverTrack}
       open={eventPageOpen}
       onExited={() => setPushMounted(false)}
       onEnteredChange={setPushEntered}
@@ -444,7 +456,7 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           notesCount={lapLog.sessions.length}
-          onBack={backToTab}
+          onBack={trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent)) : backToTab}
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
@@ -567,7 +579,7 @@ export default function App() {
     {shownTrackSlug && (
       <PushPage
         key={shownTrackSlug}
-        open={trackSlug !== null}
+        open={trackPageSlug !== null}
         onExited={() => setLastTrackSlug(null)}
         onEnteredChange={setTrackEntered}
         scrollRef={trackScrollRef}
@@ -579,7 +591,8 @@ export default function App() {
           events={ALL_EVENTS}
           eventsLoaded={eventsLoaded}
           // Another driver's laps only when opened from their laps on an event.
-          driver={trackOverEventId !== null ? driver : null}
+          driver={stack.trackDriver}
+          active={trackSlug !== null}
           onBack={() => {
             if (trackOverEventId !== null) backToEvent(trackOverEventId)
             else backToTab()
@@ -656,7 +669,7 @@ export default function App() {
       />
     )}
     {/* Clear of the tab bar while a tab is showing. */}
-    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackSlug !== null || overlay !== null ? 0 : TAB_BAR_PX} />
+    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>
   )
 }

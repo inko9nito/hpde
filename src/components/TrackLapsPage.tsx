@@ -1,17 +1,21 @@
-import { useMemo } from 'react'
-import { ChevronRight, Timer } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
+import { Timer } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { TrackIcon } from './TrackIcon'
 import { SignInPrompt } from './SignInPrompt'
-import { lapColumns } from './LapList'
-import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, useOpenSessions, useSkeletonFade } from './LapSessions'
+import { GroupBadge } from './GroupBadge'
+import { BestChip, Figures } from './LapList'
+import { groupFor } from './LapTimesSheet'
+import { CARD_BOX, DateBlock, EventTitle } from './LandingPage'
+import { PrivateTag, StatCard, plural, useSkeletonFade } from './LapSessions'
 import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import { eventBest, eventsOnLayout, layoutName, layoutSlug, startDate } from '../utils/trackStats'
-import { formatLapTime } from '../utils/lapTimes'
-import { formatDateRange } from '../utils/time'
+import { formatAverage, lapStats } from '../utils/lapTimes'
+import type { SessionLaps } from '../utils/lapTimes'
+import { classifyEvent } from '../utils/eventClass'
 import { opensElsewhere } from '../utils/links'
 import type { EventConfig } from '../types'
 
@@ -34,6 +38,94 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
   return name ? { name, trackId: named.trackId, track: named.track?.trim() || undefined } : null
 }
 
+/**
+ * One event on the track page (#274): the Events list's card — date, name,
+ * organizer — over the driver's run group, average and best lap there,
+ * across every session. Opens the event, on My notes, for its sessions.
+ */
+function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
+  event: EventConfig
+  sessions: SessionLaps[]
+  allTimeBest?: number
+  onOpen: () => void
+}) {
+  const status = classifyEvent(event)
+  const laps = sessions.flatMap(s => s.laps)
+  const { average, best } = lapStats(laps)
+  // The group(s) they drove in, as the schedule lists them.
+  const groups = [...new Set(sessions.map(s => s.group))]
+  return (
+    <a
+      href={`#/event/${encodeURIComponent(event.id)}`}
+      onClick={e => {
+        if (opensElsewhere(e)) return
+        e.preventDefault()
+        onOpen()
+      }}
+      className={`${CARD_BOX} flex flex-col gap-3 transition-colors hover:border-gray-400`}
+    >
+      <div className="flex items-center gap-4">
+        <DateBlock event={event} muted={status === 'past'} />
+        <EventTitle event={event} live={status === 'live'} />
+      </div>
+      <div className="flex border-t border-gray-100 pt-3">
+        {/* The run group's badge is narrower than the average, and that than the best. */}
+        <Figures
+          label="Event figures"
+          columns="grid-cols-[minmax(0,4fr)_minmax(0,5fr)_minmax(0,6fr)]"
+          figures={[
+            {
+              label: groups.length > 1 ? 'Run groups' : 'Run group',
+              value: (
+                <span className="flex flex-wrap gap-1 font-sans">
+                  {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
+                </span>
+              ),
+            },
+            { label: 'Average', value: average !== undefined ? formatAverage(laps, average) : '—' },
+            {
+              label: 'Best',
+              value: best !== undefined ? <BestChip ms={best} allTime={best === allTimeBest} /> : '—',
+            },
+          ]}
+        />
+      </div>
+    </a>
+  )
+}
+
+const bar = 'animate-pulse rounded bg-gray-100'
+
+/** Stand-in for the best-lap card and two event cards while the laps load. */
+function TrackSkeleton({ leaving, label }: { leaving: boolean; label: string }) {
+  return (
+    <div className={leaving ? 'fade-out' : 'fade-in'} aria-busy="true" aria-label={label}>
+      <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
+        <div className={`h-3 w-1/3 ${bar}`} />
+        <div className={`mt-3 h-6 w-1/3 ${bar}`} />
+        <div className={`mt-3 h-2.5 w-1/2 ${bar}`} />
+      </div>
+      <div className={`mb-2 ml-1 h-2.5 w-14 ${bar}`} />
+      <div className="space-y-4">
+        {[0, 1].map(i => (
+          <div key={i} className={`${CARD_BOX} flex flex-col gap-3`}>
+            <div className="flex items-center gap-4">
+              <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-gray-100" />
+              <div className="flex-1 space-y-2">
+                <div className={`h-3.5 w-2/5 ${bar}`} />
+                <div className={`h-3 w-1/4 ${bar}`} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+              {[0, 1, 2].map(j => <div key={j} className="h-[52px] animate-pulse rounded-lg bg-gray-50" />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   slug: string
   /** Every event, to find the ones on this layout. */
@@ -41,6 +133,8 @@ interface Props {
   eventsLoaded: boolean
   /** Whose laps: another driver's, for an admin (#288); null for your own. */
   driver: Driver | null
+  /** On top, not under an event opened from it: back on top, its laps are fetched again. */
+  active: boolean
   onBack: () => void
   /** Opens one of the events, on its My notes tab. */
   onOpenEvent: (event: EventConfig) => void
@@ -49,37 +143,42 @@ interface Props {
 }
 
 /**
- * A track page (#274): every session the driver has logged on one layout
- * — the same track, configuration and direction, as the All time best
- * card counts them — grouped by event, newest first. Each session opens
- * onto its lap table, as on My notes. Private: it needs a sign-in.
+ * A track page (#274): the events on one layout — the same track,
+ * configuration and direction, as the All time best card counts them —
+ * that the driver has laps at, newest first, under their all-time best
+ * there. Each event opens its own page for its sessions. Private: it needs
+ * a sign-in.
  */
-export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOpenEvent, onAllTracks }: Props) {
+export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBack, onOpenEvent, onAllTracks }: Props) {
   const { status: authStatus } = useAuth()
   const onLayout = useMemo(() => eventsOnLayout(slug, events), [slug, events])
   const title = trackPageTitle(slug, events)
   const eventIds = useMemo(() => (onLayout.length ? onLayout.map(e => e.id).sort() : null), [onLayout])
   const laps = useTrackLaps(eventIds, driver?.id ?? null)
-  const { open, setOpen, toggle } = useOpenSessions()
   const name = driver ? driverName(driver) : null
   const whose = name ? `${name}’s` : 'your'
+
+  // Back from an event opened from here, where its laps may have changed.
+  const wasActive = useRef(active)
+  const { reload } = laps
+  useEffect(() => {
+    if (active && !wasActive.current) reload()
+    wasActive.current = active
+  }, [active, reload])
 
   const loading = authStatus === 'signed-in' && (laps.status === 'loading' || (laps.status === 'off' && !eventsLoaded))
   const leaving = useSkeletonFade(loading)
 
-  // The newest event first; within one, its sessions in schedule order.
+  // The newest event first.
   const byId = new Map(onLayout.map(e => [e.id, e]))
-  const groups = laps.events
+  const withLaps = laps.events
     .flatMap(({ eventId, sessions }) => {
       const event = byId.get(eventId)
       return event && sessions.length ? [{ event, sessions }] : []
     })
     .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
-  const allSessions = groups.flatMap(g => g.sessions)
+  const allSessions = withLaps.flatMap(g => g.sessions)
   const best = eventBest(allSessions)
-  // One set of columns for every table on the page, so they line up.
-  const columns = lapColumns(allSessions.flatMap(s => s.laps))
-  const keyOf = (eventId: string, sessionKey: string) => `${eventId} ${sessionKey}`
 
   const header = (
     <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
@@ -125,7 +224,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
   } else if (authStatus !== 'signed-in') {
     body = <SignInPrompt reason="see your lap times on this track" />
   } else if (loading || leaving) {
-    body = <LapsSkeleton cards={1} eventHeading leaving={leaving} label={`Loading ${whose} lap times`} />
+    body = <TrackSkeleton leaving={leaving} label={`Loading ${whose} lap times`} />
   } else if (laps.status === 'error') {
     body = (
       <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
@@ -139,7 +238,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
         </button>
       </div>
     )
-  } else if (groups.length === 0) {
+  } else if (withLaps.length === 0) {
     body = (
       <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
         <Timer size={20} className="mx-auto text-gray-400" aria-hidden="true" />
@@ -154,59 +253,26 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
   } else {
     body = (
       <div className="fade-in">
-        <div className="mb-6">
+        <div className="mb-8">
           <StatCard
             label="All time best"
             ms={best}
-            caption={`Across ${plural(allSessions.length, 'session', 'sessions')} at ${plural(groups.length, 'event', 'events')}`}
+            caption={`Across ${plural(allSessions.length, 'session', 'sessions')} at ${plural(withLaps.length, 'event', 'events')}`}
           />
         </div>
-        <div className="flex flex-col gap-8">
-          {groups.map(({ event, sessions }) => {
-            const headingId = `track-event-${event.id.replace(/[^a-z0-9]+/gi, '-')}`
-            const days = new Set(sessions.map(s => s.date))
-            const eventBestMs = eventBest(sessions)
-            return (
-              <section key={event.id} aria-labelledby={headingId} className="flex flex-col gap-4">
-                {/* Opens the event's own page, where its laps can be edited. */}
-                <a
-                  href={`#/event/${encodeURIComponent(event.id)}`}
-                  onClick={e => {
-                    if (opensElsewhere(e)) return
-                    e.preventDefault()
-                    onOpenEvent(event)
-                  }}
-                  className="group flex items-center gap-3 px-1"
-                >
-                  <div className="min-w-0 flex-1">
-                    <h2 id={headingId} className="truncate font-rubik text-base font-bold leading-tight text-gray-900">{event.name}</h2>
-                    <p className="mt-1 truncate text-xs text-gray-500">
-                      {formatDateRange(event.days)}
-                      {eventBestMs !== undefined && ` · Best ${formatLapTime(eventBestMs)}`}
-                    </p>
-                  </div>
-                  <ChevronRight size={18} className="shrink-0 text-gray-400 group-hover:text-gray-600" aria-hidden="true" />
-                </a>
-                {sessions.map(session => {
-                  const key = keyOf(event.id, session.key)
-                  return (
-                    <SessionLapsCard
-                      key={key}
-                      session={session}
-                      runGroups={event.runGroups}
-                      showDate={days.size > 1}
-                      columns={columns}
-                      allTimeBest={best}
-                      expanded={open.has(key)}
-                      onToggle={() => toggle(key)}
-                      tableId={`laps-${key.replace(/[^a-z0-9]+/gi, '-')}`}
-                    />
-                  )
-                })}
-              </section>
-            )
-          })}
-        </div>
+        <section aria-labelledby="track-events-heading">
+          {/* Headed like the Events list's Past. */}
+          <h2 id="track-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+            Events
+          </h2>
+          <ul className="space-y-4">
+            {withLaps.map(({ event, sessions }) => (
+              <li key={event.id}>
+                <EventLapsCard event={event} sessions={sessions} allTimeBest={best} onOpen={() => onOpenEvent(event)} />
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     )
   }
@@ -216,12 +282,9 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, onBack, onOp
       {header}
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         {title && authStatus === 'signed-in' && (
-          <LapsToolbar
-            keys={!loading && !leaving && laps.status === 'ready' ? groups.flatMap(g => g.sessions.map(s => keyOf(g.event.id, s.key))) : []}
-            open={open}
-            onOpen={setOpen}
-            whose={name}
-          />
+          <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
+            <PrivateTag whose={name} />
+          </div>
         )}
         {body}
       </div>

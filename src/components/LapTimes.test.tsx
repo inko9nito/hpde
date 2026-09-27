@@ -101,8 +101,10 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       return json({ events: ids.filter(id => at(id).length).map(id => ({ eventId: id, sessions: at(id) })) })
     }
     if (!params.has('event')) return json({ events: forJason ? [] : summary })
-    // Nothing saved at the earlier event.
-    if (params.get('event') === sameLayout.id && !init?.method) return json({ sessions: [] })
+    // The other events' laps, as a track page sees them.
+    if (params.get('event') !== event.id && !init?.method) {
+      return json({ sessions: forJason ? [] : elsewhere[params.get('event')!] ?? [] })
+    }
     expect(params.get('event')).toBe(event.id)
     const laps = forJason ? jasonSaved : saved
     const keep = (next: SessionLaps[]) => { if (forJason) jasonSaved = next; else saved = next }
@@ -136,8 +138,8 @@ async function tapSession(name: string) {
 }
 
 // The figures above a table of laps, by label.
-function figures(el: HTMLElement): Record<string, string> {
-  const dl = el.querySelector('dl[aria-label="Session figures"]')!
+function figures(el: HTMLElement, label = 'Session figures'): Record<string, string> {
+  const dl = el.querySelector(`dl[aria-label="${label}"]`)!
   const out: Record<string, string> = {}
   dl.querySelectorAll('dt').forEach(dt => { out[dt.textContent!] = dt.nextElementSibling!.textContent! })
   return out
@@ -545,13 +547,16 @@ describe('LapTimesSheet', () => {
   })
 })
 
-describe('a track page: every session on one layout (#274)', () => {
+describe('a track page: the events on one layout (#274)', () => {
   const at = (date: string, time: string, sessionNumber: number, laps: number[]): SessionLaps => ({
     key: `${date} ${time} blue`, date, time, group: 'blue', sessionNumber, laps: laps.map(ms => ({ ms })),
   })
   const TRACK = '#/track/msrc-1-7-cw'
-  // The track page, as opposed to the event page under it.
+  // The track page, as opposed to the event page under or over it.
   const trackPage = async () => (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
+  // Its event cards, newest first.
+  const cards = async () => within(await within(await trackPage()).findByRole('region', { name: 'Events' })).getAllByRole('link')
+  const card = async (name: string) => (await cards()).find(c => c.textContent!.includes(name))!
 
   beforeEach(() => {
     saved = [at('2026-03-07', '11:45', 2, [99_420, 99_100])]
@@ -565,7 +570,7 @@ describe('a track page: every session on one layout (#274)', () => {
     ]
   })
 
-  it('opens from the All time best card, lists the layout’s sessions by event, newest first, and goes back', async () => {
+  it('opens from the All time best card: the layout’s events, newest first, each with its run group, average and best', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     await waitFor(() => expect(screen.getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54'))
@@ -580,27 +585,56 @@ describe('a track page: every session on one layout (#274)', () => {
     expect(new URL(String(url), 'https://x').searchParams.get('events')!.split(',')).toEqual([sameLayout.id, event.id])
     expect(within(page).getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54Across 3 sessions at 2 events')
 
-    // Newest event first, with its date and best.
-    expect(within(page).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Lap Day', 'Earlier'])
-    const lapDay = within(page).getByRole('region', { name: 'Lap Day' })
-    const earlier = within(page).getByRole('region', { name: 'Earlier' })
-    expect(lapDay).toHaveTextContent('Mar 7, 2026 · Best 1:39.1')
-    expect(within(earlier).getAllByRole('region').map(r => r.getAttribute('aria-label'))).toEqual(['Session 1, 9:50 AM', 'Session 2, 11:45 AM'])
-    expect(figures(within(earlier).getByRole('region', { name: 'Session 1, 9:50 AM' }))).toEqual({ Laps: '2', Average: '1:39.770', Best: '1:38.54' })
-    // The lap that set the all-time best says so; read-only here.
+    // Cards like the Events list's, newest first, with the event's figures
+    // across every session: no sessions of their own here.
+    const [lapDay, earlier] = await cards()
+    expect(lapDay).toHaveTextContent('Lap Day')
+    expect(earlier).toHaveTextContent('Earlier')
+    expect(figures(lapDay, 'Event figures')).toEqual({ 'Run group': 'Blue', Average: '1:39.260', Best: '1:39.1' })
+    expect(figures(earlier, 'Event figures')).toEqual({ 'Run group': 'Blue', Average: '1:39.913', Best: '1:38.54' })
+    // The best that's the all-time best says so.
     expect(earlier.querySelector('[data-all-time-best]')).not.toBeNull()
     expect(lapDay.querySelector('[data-all-time-best]')).toBeNull()
-    expect(within(page).queryByRole('button', { name: /^Edit/ })).not.toBeInTheDocument()
+    expect(within(page).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(page).queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument()
     expect(within(page).getByText('Private')).toBeInTheDocument()
     expect(document.title).toBe('MSRC 1.7 CW')
 
-    // Laps folded away, all opened at once.
-    expect(within(page).queryAllByRole('table')).toHaveLength(0)
-    await userEvent.click(within(page).getByRole('button', { name: 'Expand all' }))
-    expect(within(page).getAllByRole('table')).toHaveLength(3)
-
     // Back to the event, on the tab it was opened from.
     await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe(`#/event/${event.id}`)
+    expect(screen.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('opens an event’s sessions from its card, over the track page, and back returns to it', async () => {
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    await userEvent.click(await card('Earlier'))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: 'My notes (2)', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Session 1, 9:50 AM' })).toBeInTheDocument()
+
+    // The event's Back returns to the track page, which fetches its laps again.
+    const before = lapCalls('GET').filter(([u]) => String(u).includes('events=')).length
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' })[0])
+    expect(window.location.hash).toBe(TRACK)
+    await waitFor(() => expect(lapCalls('GET').filter(([u]) => String(u).includes('events=')).length).toBe(before + 1))
+    // …and its own Back, to the Tracks tab.
+    await userEvent.click(within(await trackPage()).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe('#/tracks')
+  })
+
+  it('opened from one event, opens another over it; the event it came from is where it was', async () => {
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    await userEvent.click(screen.getByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
+    await userEvent.click(await card('Earlier'))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' })[0])
+    expect(window.location.hash).toBe(TRACK)
+
+    // The event it was opened from: back under the track page, on My notes.
+    await userEvent.click(await card('Lap Day'))
     expect(window.location.hash).toBe(`#/event/${event.id}`)
     expect(screen.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
   })
@@ -616,7 +650,7 @@ describe('a track page: every session on one layout (#274)', () => {
     await userEvent.click(link)
     expect(window.location.hash).toBe(TRACK)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    await within(await trackPage()).findByRole('region', { name: 'Earlier' })
+    await card('Earlier')
 
     // Back on the event, the sheet stays closed.
     await userEvent.click(within(await trackPage()).getByRole('button', { name: 'Back' }))
@@ -632,19 +666,10 @@ describe('a track page: every session on one layout (#274)', () => {
     await waitFor(() => expect(link.parentElement).toHaveTextContent('All time best on MSRC 1.7 CW: 1:39.1 · set this session'))
   })
 
-  it('opens one of its events on My notes', async () => {
-    window.location.hash = TRACK
-    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
-    const page = await trackPage()
-    await userEvent.click(await within(page).findByRole('link', { name: /^Earlier/ }))
-    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
-    expect(await screen.findByRole('tab', { name: /^My notes/, selected: true })).toBeInTheDocument()
-  })
-
   it('opened from its link, back goes to the Tracks tab', async () => {
     window.location.hash = TRACK
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
-    await within(await trackPage()).findByRole('region', { name: 'Lap Day' })
+    await card('Lap Day')
     await userEvent.click(within(await trackPage()).getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe('#/tracks')
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
@@ -674,7 +699,7 @@ describe('a track page: every session on one layout (#274)', () => {
     expect(window.location.hash).toBe('#/tracks')
   })
 
-  it('shows the driver an admin picked (#288)', async () => {
+  it('shows the driver an admin picked, and keeps showing them on the event it opens (#288)', async () => {
     roles = ['admin']
     jasonSaved = [at('2026-03-07', '11:45', 2, [84_420])]
     openEvent()
@@ -688,6 +713,9 @@ describe('a track page: every session on one layout (#274)', () => {
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
     expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+
+    await userEvent.click(await card('Lap Day'))
+    expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
   })
 })
 
@@ -726,20 +754,12 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     await userEvent.click(tracks()[0])
     expect(window.location.hash).toBe('#/track/msrc-1-7-cw')
     const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
-    await within(page).findByRole('region', { name: 'Earlier' })
+    await within(page).findByRole('region', { name: 'Events' })
 
     await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe('#/tracks')
   })
 
-  it('goes back to Tracks from an event opened there', async () => {
-    openAt('#/track/msrc-1-7-cw')
-    const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
-    await userEvent.click(await within(page).findByRole('link', { name: /^Earlier/ }))
-    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
-    await userEvent.click(screen.getAllByRole('button', { name: 'Back' })[0])
-    expect(window.location.hash).toBe('#/tracks')
-  })
 
   it('lists the tracks for anyone signed out, without lap times', async () => {
     signedIn = false
