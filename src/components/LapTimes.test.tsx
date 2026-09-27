@@ -385,6 +385,25 @@ describe('lap times (#210)', () => {
     expect(second.querySelector('[data-all-time-best]')).toBeNull()
   })
 
+  it('charts each session’s best and average on My notes, in schedule order (#274)', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 101_000 }, { ms: 99_420 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910 }, { ms: 99_300 }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order: 2 sessions\./ })
+    expect(chart.closest('div.rounded-2xl')).toHaveTextContent(/^Lap times by session/)
+    // Session by session, under their numbers; the latest best at the end.
+    expect([...chart.querySelectorAll('svg > text')].map(t => t.textContent).filter(t => /^S\d/.test(t!))).toEqual(['S1', 'S2'])
+    expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:38.91')
+    fireEvent.focus(chart)
+    const readout = within(chart).getByRole('status')
+    expect(readout).toHaveTextContent('Session 211:45 AM · Blue1:38.91Best1:39.105Average')
+    fireEvent.keyDown(chart, { key: 'ArrowLeft' })
+    expect(readout).toHaveTextContent('Session 19:50 AM · Blue1:39.42Best1:40.210Average')
+  })
+
   it('gives every session’s table the same columns, so they line up', async () => {
     saved = [
       { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 99_420 }] },
@@ -726,8 +745,9 @@ describe('a track page: the events on one layout (#274)', () => {
     const page = await trackPage()
     expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
     expect(await within(page).findByRole('group', { name: 'All time best' })).toHaveTextContent('1:24.42Across 1 session at 1 event')
-    // One event: nothing to chart yet.
-    expect(within(page).queryByRole('group', { name: /^Best and average lap/ })).not.toBeInTheDocument()
+    // One event is still a chart: its best and average, labelled.
+    const chart = within(page).getByRole('group', { name: /^Best and average lap at each event, oldest to newest: 1 event\./ })
+    expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:24.42')
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
     expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')

@@ -2,27 +2,30 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent } from 'react'
 import { formatLapTime } from '../utils/lapTimes'
 
-// A track page's progress chart (#274): the driver's best and average lap
-// at each event on the layout, oldest to newest, one point per event — so
-// they can see how they've come along. One axis (both are lap times);
-// lower is faster.
+// The driver's best and average lap, point by point, so they can see how
+// they've come along (#274): at each event on a track page, oldest to
+// newest, and in each session on an event's My notes. One axis (both are
+// lap times); lower is faster.
 //
 // Best leads, in black like the best-lap chip everywhere else; the average
 // is context, in a quieter gray. Checked with the data-viz palette
 // validator on the white card: 45 ΔE apart for every kind of color vision
 // (they differ in lightness, which no color blindness takes away), both
-// at least 3:1 against the card. Every value is also on the event cards
-// below, so the tooltip never holds anything back.
+// at least 3:1 against the card. Every value is also on the cards below
+// it, so the tooltip never holds anything back.
 
 export interface TrendPoint {
-  /** The event's id. */
   key: string
-  name: string
-  /** Its first day, "YYYY-MM-DD". */
-  date: string
+  /** Under the point: "Sep 13", "S2". */
+  tick: string
+  /** Under that, on the first tick and wherever it changes: the year, the day. */
+  tickGroup?: string
+  /** The readout's heading and the line under it. */
+  title: string
+  subtitle: string
   best: number
   average: number
-  /** The average as the event's card shows it: "1:40.697". */
+  /** The average as the card below shows it: "1:40.697". */
   averageText: string
 }
 
@@ -36,8 +39,9 @@ const INK = '#111827'
 const MUTED = '#6b7280'
 
 const PLOT_HEIGHT = 136
-// Two lines of dates: the day, then the year where it changes.
-const X_AXIS = 34
+// Room under the plot for one line of ticks, or two with their groups.
+const X_AXIS = 22
+const X_AXIS_GROUPED = 34
 const LEFT = 38
 // Room for the end values, "1:38.54".
 const RIGHT = 50
@@ -53,8 +57,8 @@ export function dayLabel(iso: string): string {
   return `${MONTHS[m - 1]} ${d}`
 }
 
-/** "Sep 13, 2025": the tooltip's. */
-function fullDate(iso: string): string {
+/** "Sep 13, 2025". */
+export function fullDate(iso: string): string {
   return `${dayLabel(iso)}, ${iso.slice(0, 4)}`
 }
 
@@ -114,7 +118,15 @@ function LineKey({ color }: { color: string }) {
   return <span aria-hidden="true" className="inline-block h-0.5 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
 }
 
-export function LapTrendChart({ points }: { points: TrendPoint[] }) {
+/**
+ * `label` says what each point is ("…at each event, oldest to newest"),
+ * and `noun` counts them, for the chart's accessible name.
+ */
+export function LapTrendChart({ points, label, noun }: {
+  points: TrendPoint[]
+  label: string
+  noun: [one: string, many: string]
+}) {
   const [ref, measured] = useWidth()
   // Before it's measured (or where nothing can be, as in tests), a phone's width.
   const width = measured || 300
@@ -126,12 +138,13 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
   const { ticks, min, max } = lapTicks(Math.min(...points.map(p => p.best)), Math.max(...points.map(p => p.average)))
   const y = (ms: number) => ((ms - min) / (max - min)) * -PLOT_HEIGHT + PLOT_HEIGHT
   const path = (key: 'best' | 'average') => points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p[key])}`).join(' ')
-  const shownDates = labelled(points.map((_, i) => x(i)), points.map(p => dayLabel(p.date)))
-  // The year goes under the first date shown, and wherever it changes.
-  const years = new Map(shownDates.map((i, k) => {
-    const year = points[i].date.slice(0, 4)
-    return [i, k === 0 || year !== points[shownDates[k - 1]].date.slice(0, 4) ? year : null]
+  const shownTicks = labelled(points.map((_, i) => x(i)), points.map(p => p.tick))
+  // A tick's group goes under the first tick shown, and wherever it changes.
+  const groups = new Map(shownTicks.map((i, k) => {
+    const group = points[i].tickGroup
+    return [i, group && (k === 0 || group !== points[shownTicks[k - 1]].tickGroup) ? group : null]
   }))
+  const xAxis = points.some(p => p.tickGroup) ? X_AXIS_GROUPED : X_AXIS
 
   // End values: the best always; the average too, unless the two would collide.
   const last = points[n - 1]
@@ -160,7 +173,7 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
   const tooltipLeft = active !== null ? Math.max(0, Math.min(width - TOOLTIP_W, x(active) - TOOLTIP_W / 2)) : 0
 
   return (
-    <div className="mt-4 border-t border-gray-100 pt-3">
+    <div>
       <div className="mb-2 flex items-center justify-between gap-3 text-xs text-gray-500">
         <div className="flex items-center gap-3">
           {(['best', 'average'] as const).map(key => (
@@ -177,7 +190,7 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
         className="relative touch-pan-y select-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
         tabIndex={0}
         role="group"
-        aria-label={`Best and average lap at each event, oldest to newest: ${n} events. Left and right arrows step through them.`}
+        aria-label={`${label}: ${n} ${n === 1 ? noun[0] : noun[1]}. Left and right arrows step through them.`}
         onPointerMove={pick}
         onPointerDown={pick}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setActive(null) }}
@@ -185,7 +198,7 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
         onFocus={() => setActive(a => a ?? n - 1)}
         onBlur={() => setActive(null)}
       >
-        <svg width={width} height={PLOT_HEIGHT + X_AXIS} className="block overflow-visible" aria-hidden="true">
+        <svg width={width} height={PLOT_HEIGHT + xAxis} className="block overflow-visible" aria-hidden="true">
           {ticks.map(t => (
             <g key={t}>
               <line x1={LEFT} x2={width - RIGHT} y1={y(t)} y2={y(t)} stroke={GRID} strokeWidth={1} shapeRendering="crispEdges" />
@@ -194,10 +207,10 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
               </text>
             </g>
           ))}
-          {points.map((p, i) => years.has(i) && (
+          {points.map((p, i) => groups.has(i) && (
             <text key={p.key} x={x(i)} y={PLOT_HEIGHT + 15} textAnchor="middle" fontSize={10} fill={MUTED} className="tabular-nums">
-              {dayLabel(p.date)}
-              {years.get(i) && <tspan x={x(i)} dy={12}>{years.get(i)}</tspan>}
+              {p.tick}
+              {groups.get(i) && <tspan x={x(i)} dy={12}>{groups.get(i)}</tspan>}
             </text>
           ))}
           {active !== null && (
@@ -236,8 +249,8 @@ export function LapTrendChart({ points }: { points: TrendPoint[] }) {
         >
           {shown && (
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-lg">
-              <p className="truncate font-medium text-gray-900">{shown.name}</p>
-              <p className="text-gray-500">{fullDate(shown.date)}</p>
+              <p className="truncate font-medium text-gray-900">{shown.title}</p>
+              <p className="truncate text-gray-500">{shown.subtitle}</p>
               {(['best', 'average'] as const).map(key => (
                 <p key={key} className="mt-1 flex items-center gap-1.5">
                   <LineKey color={SERIES[key].color} />

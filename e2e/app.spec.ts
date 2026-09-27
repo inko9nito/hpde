@@ -495,6 +495,8 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await expect(card.getByRole('button', { name: 'Hide laps for Session 1' })).toHaveAttribute('aria-expanded', 'true')
   await expect(card.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:46')
+  // …and a chart of each session's best and average (#274), here just the one.
+  await expect(page.getByRole('group', { name: /^Best and average lap in each session/ })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 

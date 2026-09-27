@@ -173,15 +173,16 @@ Only they and admins can see them.
   tap the figures to open its lap table, or use *Expand all*. The tables'
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab shows how many
-  sessions have laps, e.g. *My notes (2)*.
+  sessions have laps, e.g. *My notes (2)*. Under the two best-lap cards,
+  *Lap times by session* charts each session's best and average, in
+  schedule order (#274).
 - **Tracks tab and track pages (#274):** the Tracks tab (`#/tracks`)
   lists every track layout the events are on, the one with the latest
   event first, with your best lap and session count there once you're
   signed in. Tap one for its track page (`#/track/<layout>`, e.g.
   `#/track/msrc-1-7-cw`): your all-time best on that layout, with a
   chart of your best (black, like the best-lap chip) and average lap at
-  each event there (from a second event on), so you can see how you've
-  come along, then the events you have laps at there, newest first, as
+  each event there, so you can see how you've come along, then the events you have laps at there, newest first, as
   compact cards like the Events list's with your run group, best and
   average lap at each. Tap an event
   for its sessions: its page slides in over the track page on *My notes*,

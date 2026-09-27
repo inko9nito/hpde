@@ -1,8 +1,13 @@
 import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
 import { lapColumns } from './LapList'
-import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, useOpenSessions, useSkeletonFade } from './LapSessions'
+import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
+import { LapTrendChart } from './LapTrendChart'
+import type { TrendPoint } from './LapTrendChart'
+import { groupFor, shortDate } from './LapTimesSheet'
 import { eventBest, trackShortName } from '../utils/trackStats'
+import { formatAverage, lapStats } from '../utils/lapTimes'
+import { formatTime, formatAmPm } from '../utils/time'
 import type { LapLog } from '../data/lapLog'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
@@ -92,6 +97,20 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
   const days = new Set(log.sessions.map(s => s.date))
   // One set of columns for every session's table, so they line up.
   const columns = lapColumns(log.sessions.flatMap(s => s.laps))
+  // Each session's best and average, in schedule order, for the chart (#274).
+  const trend = log.sessions.flatMap((s): TrendPoint[] => {
+    const { best, average } = lapStats(s.laps)
+    if (best === undefined || average === undefined) return []
+    const day = days.size > 1 ? shortDate(s.date) : undefined
+    return [{
+      key: s.key,
+      tick: s.sessionNumber !== undefined ? `S${s.sessionNumber}` : formatTime(s.time),
+      tickGroup: day,
+      title: sessionTitle(s),
+      subtitle: [`${formatTime(s.time)} ${formatAmPm(s.time)}`, groupFor(s.group, runGroups).label, day].filter(Boolean).join(' · '),
+      best, average, averageText: formatAverage(s.laps, average),
+    }]
+  })
 
   return (
     <>
@@ -115,6 +134,12 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
             />
           )}
         </div>
+        {trend.length > 0 && (
+          <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="mb-3 text-[13px] font-semibold text-gray-500">Lap times by session</p>
+            <LapTrendChart points={trend} label="Best and average lap in each session, in schedule order" noun={['session', 'sessions']} />
+          </div>
+        )}
         <div className="flex flex-col gap-5">
           {log.sessions.map(session => (
             <SessionLapsCard
