@@ -677,9 +677,14 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(alphaTrack).toContainText('1:24.072')
   expect(asked).toContain('test-account')
 
-  // Still on it after a reload; its laps show with each lap's speeds.
-  await page.goto(`/#/event/${alpha.id}`)
+  // Still on it after a reload — once its laps are in, so the reload
+  // doesn't cut off requests on their way.
   await page.reload()
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
+  await expect(alphaTrack).toContainText('1:24.072')
+
+  // Its laps show with each lap's speeds.
+  await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   await card.getByRole('button', { name: 'Show laps for Session 1' }).click()
