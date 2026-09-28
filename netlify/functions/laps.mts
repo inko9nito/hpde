@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getStore, getDeployStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { isAdmin } from '../lib/newEvent.mjs'
@@ -5,7 +6,7 @@ import { findDriver } from '../lib/drivers.mjs'
 import { cleanSessionLaps, lapStats } from '../../src/utils/lapTimes.ts'
 import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
-import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
+import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
 
 // A signed-in driver's own lap times (#210), private to them: every request
 // needs their sign-in, and only ever reaches their own laps — the key is
@@ -14,7 +15,8 @@ import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures
 // read and write that driver's laps instead (#288) — the id is checked
 // against Identity, and a session saved that way records who saved it.
 // An admin can also name the test account (`driver=test-account`, #309),
-// which starts out full of sample laps (see ensureSeeded).
+// which starts out full of sample laps (see ensureSeeded). The driver those
+// laps belong to gets them in their own account too (see ensureOwnLaps).
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
@@ -56,6 +58,8 @@ type Deps = {
   getDeployStore?: typeof getDeployStore
   fetch?: typeof fetch
   identity?: Parameters<typeof findDriver>[1]
+  /** Stands in for SAMPLE_DRIVER_EMAIL_SHA256 in tests. */
+  sampleDriverSha256?: string
 }
 
 type Store = ReturnType<typeof getStore>
@@ -110,6 +114,34 @@ async function ensureSeeded({ laps, meta }: { laps: Store; meta: Store }) {
   await meta.setJSON(TEST_SEED_KEY, { version: TEST_ACCOUNT_VERSION, at: new Date().toISOString() })
 }
 
+/** Whose the sample laps are: a SHA-256 of their sign-in email, lowercased. */
+export function isSampleDriver(email: string | undefined | null, sha256 = SAMPLE_DRIVER_EMAIL_SHA256): boolean {
+  if (!email) return false
+  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex') === sha256
+}
+
+/**
+ * The sample laps are one real driver's (#310): the first time their laps
+ * are used — by them, or an admin who picks them — they're filled into
+ * their own account, once, in this store (production's, or a preview's
+ * own). A session they already have is kept as it is; the record of the
+ * fill lists those. Removed afterwards, laps stay removed.
+ */
+async function ensureOwnLaps({ laps, meta }: { laps: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
+  if (!isSampleDriver(email, sha256)) return
+  const doneKey = `filled-own-laps:${driverId}`
+  if (await meta.get(doneKey, { type: 'json' })) return
+  const kept: string[] = []
+  for (const record of TEST_ACCOUNT_LAPS) {
+    const key = `${driverId}/${record.eventId}`
+    const existing = (await laps.get(key, { type: 'json' })) as EventLaps | null
+    const sessions = { ...record.sessions, ...existing?.sessions }
+    for (const k of Object.keys(record.sessions)) if (existing?.sessions[k]) kept.push(`${record.eventId} ${k}`)
+    await laps.setJSON(key, { eventId: record.eventId, sessions })
+  }
+  await meta.setJSON(doneKey, { at: new Date().toISOString(), kept })
+}
+
 function inOrder(record: EventLaps | null): SessionLaps[] {
   return Object.values(record?.sessions ?? {}).sort((a, b) => a.key.localeCompare(b.key))
 }
@@ -124,6 +156,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
 
   // Whose laps: the signed-in driver's, or for an admin, the driver asked for.
   let driverId = user.id
+  let driverEmail: string | undefined = user.email
   const asked = params.get('driver')
   if (asked === TEST_DRIVER_ID) {
     if (!isAdmin(user)) return json(403, { error: 'Only admins can use the test account.' })
@@ -139,11 +172,15 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     }
     if (!driver) return json(404, { error: 'There’s no driver with that id.' })
     driverId = driver.id
+    driverEmail = driver.email
   }
 
   const stores = openStores(context, deps)
   if (driverId === TEST_DRIVER_ID) await ensureSeeded(stores)
-  else await ensureCopied(stores, driverId)
+  else {
+    await ensureCopied(stores, driverId)
+    await ensureOwnLaps(stores, driverId, driverEmail, deps.sampleDriverSha256)
+  }
   const store = stores.laps
 
   if (req.method === 'GET' && params.has('events')) {

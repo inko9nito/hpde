@@ -233,6 +233,12 @@ Only they and admins can see them.
     takes `driver=test-account` from admins only and fills it from there
     the first time it's used, and again whenever `TEST_ACCOUNT_VERSION`
     goes up. A deploy preview starts its own from the sample.
+  - The sample is one real driver's laps. The first time that driver's
+    laps are used (by them, or an admin who picks them), they're filled
+    into their own account too, once (#310). Sessions they already had
+    are kept as they were. The driver is matched by a SHA-256 of their
+    sign-in email (`SAMPLE_DRIVER_EMAIL_SHA256`), so the address isn't in
+    the repo.
 
 ---
 
