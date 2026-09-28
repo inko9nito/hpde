@@ -872,6 +872,8 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
       'MSRC 1.7 CCW1 event1:30Best lap',
       'MSRC 1.7 CW2 events1:38.54Best lap',
     ]))
+    // Each thumbnail shows which way round it goes (#307).
+    expect(tracks().map(t => t.querySelector('[data-direction]')?.getAttribute('data-direction'))).toEqual(['ccw', 'cw'])
     // One track, both its layouts under its name (#314).
     const track = screen.getByRole('region', { name: 'Motorsport Ranch - Cresson' })
     expect(within(track).getByRole('heading', { level: 2, name: 'Motorsport Ranch - Cresson' })).toBeInTheDocument()

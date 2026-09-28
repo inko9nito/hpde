@@ -86,6 +86,8 @@ export interface Layout {
   /** Where the track is: "Cresson, TX". */
   city?: string
   trackId?: string
+  /** Which way round it's driven, when the events say (#307). */
+  direction?: 'cw' | 'ccw'
   /** Every event on it, as its track page finds them. */
   events: EventConfig[]
 }
@@ -102,14 +104,18 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
     if (slug && !named.has(slug)) named.set(slug, e)
   }
   const latest = (layout: Layout) => layout.events.map(startDate).sort().at(-1) ?? ''
-  return [...named].map(([slug, e]): Layout => ({
-    slug,
-    name: layoutName(e)!,
-    track: e.track?.trim() || undefined,
-    city: e.city?.trim() || undefined,
-    trackId: e.trackId,
-    events: eventsOnLayout(slug, events),
-  })).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))
+  return [...named].map(([slug, e]): Layout => {
+    const direction = directionKey(e.direction)
+    return {
+      slug,
+      name: layoutName(e)!,
+      track: e.track?.trim() || undefined,
+      city: e.city?.trim() || undefined,
+      trackId: e.trackId,
+      ...(direction === 'cw' || direction === 'ccw' ? { direction } : {}),
+      events: eventsOnLayout(slug, events),
+    }
+  }).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))
 }
 
 /** A track and its layouts, for the Tracks tab's groups (#314). */

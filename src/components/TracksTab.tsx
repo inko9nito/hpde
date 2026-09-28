@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, RotateCcw, RotateCw } from 'lucide-react'
 import { HomeHeader } from './HomeTabs'
 import { TrackIcon } from './TrackIcon'
 import { CARD_FRAME, EmptyRow } from './LandingPage'
@@ -17,6 +17,9 @@ import { formatLapTime } from '../utils/lapTimes'
 // list's rows (82px); a little narrower on the narrowest phones, to leave
 // the name room.
 const THUMB = 'w-24 min-[375px]:w-28 min-h-[80px]'
+// The track icon's square frame, in px: the shape fills about four fifths
+// of its width (#314).
+const ICON = 84
 
 /**
  * One layout: its shape on a wide dark panel along the card's left edge,
@@ -25,14 +28,29 @@ const THUMB = 'w-24 min-[375px]:w-28 min-h-[80px]'
  */
 function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | null }) {
   const laps = summary ? layoutLaps(layout, summary) : null
+  const DirectionIcon = layout.direction === 'ccw' ? RotateCcw : RotateCw
   return (
     <a
       href={trackHash(layout.slug)}
       className={`${CARD_FRAME} flex items-stretch overflow-hidden transition-colors hover:border-gray-400`}
     >
       {/* Flush with the card's left, top and bottom; its corners are the card's. */}
-      <div className={`${THUMB} grid shrink-0 place-items-center bg-gray-900`}>
-        <TrackIcon trackId={layout.trackId} tone="dark" size={64} padding={0} radius="rounded-none" />
+      <div className={`${THUMB} relative shrink-0 overflow-hidden bg-gray-900`}>
+        {/* Taller than the panel, but the shape is a band across its middle:
+            placed over the panel, so it doesn't stretch the card. */}
+        <div className="absolute inset-0 grid place-items-center">
+          <TrackIcon trackId={layout.trackId} tone="dark" size={ICON} padding={0} radius="rounded-none" />
+        </div>
+        {/* Which way round it's driven (#307); the name says so too, as CW or CCW. */}
+        {layout.direction && (
+          <DirectionIcon
+            size={14}
+            strokeWidth={2.25}
+            data-direction={layout.direction}
+            className="absolute bottom-1.5 right-1.5 text-white/60"
+            aria-hidden="true"
+          />
+        )}
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-4 pr-3">
         <div className="min-w-0 flex-1">

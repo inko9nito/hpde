@@ -134,6 +134,16 @@ describe('the Tracks tab (#274)', () => {
     ])
   })
 
+  it('says which way round each layout is driven, when its events say (#307)', () => {
+    const noWay = event('2025-11-07_msrc-3-1', { trackId: 'msrc-3-1', configuration: '3.1 mile', direction: undefined })
+    const byName = (ls: ReturnType<typeof layoutsOf>) => ls.map(l => [l.name, l.direction]).sort()
+    expect(byName(layoutsOf([scca, { ...ccw, direction: 'counterclockwise' }, noWay]))).toEqual([
+      ['MSRC 1.7 CCW', 'ccw'],
+      ['MSRC 1.7 CW', 'cw'],
+      ['MSRC 3.1', undefined],
+    ])
+  })
+
   it('sums up the driver’s laps on a layout', () => {
     const [layout] = layoutsOf([scca, tde])
     const summary = [
