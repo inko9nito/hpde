@@ -864,13 +864,13 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     elsewhere = { [sameLayout.id]: [at('2026-02-07', [101_000, 98_540])] }
   })
 
-  it('lists every track layout under its track, with its events and your best there, the latest event’s first', async () => {
+  it('lists every track layout under its track, A–Z, with the events you have sessions at and your best there', async () => {
     openAt('#/tracks')
     expect(screen.getByRole('heading', { level: 1, name: 'Tracks' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CW2 events1:38.54Best lap',
       'MSRC 1.7 CCW1 event1:30Best lap',
+      'MSRC 1.7 CW2 events1:38.54Best lap',
     ]))
     // One track, both its layouts under its name (#314).
     const track = screen.getByRole('region', { name: 'Motorsport Ranch - Cresson' })
@@ -878,10 +878,19 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     expect(within(track).getAllByRole('link')).toHaveLength(2)
   })
 
+  it('says so on a layout you have no sessions at', async () => {
+    summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
+    openAt('#/tracks')
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
+      'MSRC 1.7 CCWNo sessions yet',
+      'MSRC 1.7 CW1 event1:39.1Best lap',
+    ]))
+  })
+
   it('opens a track’s page, and goes back to the list', async () => {
     openAt('#/tracks')
     await waitFor(() => expect(tracks()).toHaveLength(2))
-    await userEvent.click(tracks()[0])
+    await userEvent.click(tracks()[1])
     expect(window.location.hash).toBe('#/track/msrc-1-7-cw')
     const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
     await within(page).findByRole('region', { name: 'Events' })
@@ -896,8 +905,8 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     openAt('#/tracks')
     expect(await screen.findByText('Sign in to see your lap times at each track, across every event.')).toBeInTheDocument()
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CW2 events',
-      'MSRC 1.7 CCW1 event',
+      'MSRC 1.7 CCW',
+      'MSRC 1.7 CW',
     ]))
     expect(lapCalls('GET')).toHaveLength(0)
   })

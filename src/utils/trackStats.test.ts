@@ -117,7 +117,7 @@ describe('the Tracks tab (#274)', () => {
     ])
   })
 
-  it('groups the layouts by track, however it’s spelled, the track with the latest event first (#314)', () => {
+  it('groups the layouts by track, however it’s spelled, the track with the latest event first, its layouts A–Z (#314)', () => {
     const at = (e: EventConfig, date: string, city?: string) => ({ ...e, city, days: [{ id: 'd', label: 'Day', date, activities: [] }] })
     const layouts = layoutsOf([
       at(ccw, '2025-09-13', 'Cresson, TX'),
@@ -129,7 +129,7 @@ describe('the Tracks tab (#274)', () => {
     ])
     expect(trackGroups(layouts).map(g => [g.name, g.city, g.layouts.map(l => l.name)])).toEqual([
       ['Eagles Canyon Raceway', 'Decatur, TX', ['ECR 2.7 CCW', 'ECR 2.7 CW']],
-      ['Motorsport Ranch - Cresson', 'Cresson, TX', ['MSRC 1.7 CW', 'MSRC 3.1 CW', 'MSRC 1.7 CCW']],
+      ['Motorsport Ranch - Cresson', 'Cresson, TX', ['MSRC 1.7 CCW', 'MSRC 1.7 CW', 'MSRC 3.1 CW']],
       ['XYZ', undefined, ['XYZ 1.7 CW']],
     ])
   })

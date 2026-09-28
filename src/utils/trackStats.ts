@@ -123,7 +123,7 @@ export interface TrackGroup {
 /**
  * The layouts grouped by their track (#314), however its name is spelled —
  * each group where its first layout falls, so the track with the latest
- * event comes first, and its layouts in the order they came.
+ * event comes first, and its layouts in alphabetical order.
  */
 export function trackGroups(layouts: Layout[]): TrackGroup[] {
   const groups = new Map<string, TrackGroup>()
@@ -138,7 +138,8 @@ export function trackGroups(layouts: Layout[]): TrackGroup[] {
       groups.set(key, { name, city: layout.city, layouts: [layout] })
     }
   }
-  return [...groups.values()]
+  const byName = (a: Layout, b: Layout) => a.name.localeCompare(b.name, undefined, { numeric: true })
+  return [...groups.values()].map(g => ({ ...g, layouts: g.layouts.sort(byName) }))
 }
 
 /** The driver's laps on a layout, from the laps function's summary: best lap, sessions, and events with laps. */
