@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
-import { formatLapTime, formatAverage, lapLabels, lapStats } from '../utils/lapTimes'
+import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
 
 /**
@@ -42,6 +42,31 @@ export function LapFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: n
 }
 
 /**
+ * A session's top and average speed (#298), in a line under its figures —
+ * a fourth tile wouldn't fit a phone. Nothing without speeds.
+ */
+export function SpeedFigures({ laps }: { laps: Lap[] }) {
+  const { top, average } = lapSpeeds(laps)
+  if (top === undefined && average === undefined) return null
+  return (
+    <dl className="flex gap-3 text-xs" aria-label="Session speeds" data-speed-figures>
+      {top !== undefined && <Speedline label="Top" mph={top} />}
+      {average !== undefined && <Speedline label="Avg" mph={average} />}
+    </dl>
+  )
+}
+
+function Speedline({ label, mph }: { label: string; mph: number }) {
+  return (
+    <div className="flex items-baseline gap-1">
+      <dt className="text-gray-500">{label}</dt>
+      <dd className="font-mono font-semibold tabular-nums text-gray-900">{formatSpeed(mph)}</dd>
+      <span className="text-gray-400">mph</span>
+    </div>
+  )
+}
+
+/**
  * Three figures in gray tiles, side by side: a session's, or an event's on
  * a track page (#274). `columns` sizes them for what they hold — the same
  * on every card, so the tiles line up down the page.
@@ -68,6 +93,9 @@ export function Figures({ label, figures, columns }: {
 export interface LapColumns {
   start: boolean
   finish: boolean
+  /** Top and average speed (#298). */
+  top: boolean
+  avg: boolean
   note: boolean
 }
 
@@ -76,6 +104,8 @@ export function lapColumns(laps: Lap[]): LapColumns {
   return {
     start: laps.some(lap => lap.start),
     finish: laps.some(lap => lap.end),
+    top: laps.some(lap => lap.topMph !== undefined),
+    avg: laps.some(lap => lap.avgMph !== undefined),
     note: laps.some(lap => lap.note),
   }
 }
@@ -83,10 +113,16 @@ export function lapColumns(laps: Lap[]): LapColumns {
 /**
  * A session's laps, one row each, in the order a timing sheet has them
  * (#210): lap, from and to (the start and finish crossings, stacked in one
- * column, leaving room for notes), lap time, note. Every column has a fixed width, so tables for
+ * column, leaving room for notes), lap time, top and average speed in mph
+ * (#298), note. Every column has a fixed width, so tables for
  * different sessions line up down the page, and there's a gap before the
  * lap time so it stands apart from the crossings. The best lap's time is
  * in a chip; out and in laps are dimmed, since they don't count.
+ *
+ * Beside the crossings, which make every row two lines tall already, the
+ * top and average speed stack in one column too, so a phone still has room
+ * for notes. Without notes, an empty last column takes the spare width, so
+ * the speeds stay by the lap time.
  */
 export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
   laps: Lap[]
@@ -97,6 +133,8 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
   const { bestIndex } = lapStats(laps)
   const crossings = columns.start || columns.finish
   const crossingsLabel = columns.start && columns.finish ? 'From / To' : columns.start ? 'From' : 'To'
+  const stacked = crossings && columns.top && columns.avg
+  const filler = (columns.top || columns.avg) && !columns.note
   return (
     <table className="w-full table-fixed border-collapse text-left text-xs" aria-label="Laps">
       <colgroup>
@@ -104,14 +142,23 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
         {/* Wider screens spread the from/to times away from the lap time. */}
         {crossings && <col className="w-20 min-[480px]:w-36" />}
         <col className={crossings ? 'w-[5.75rem]' : 'w-[4.75rem]'} />
-        {columns.note && <col />}
+        {stacked ? <col className="w-12" /> : <>
+          {columns.top && <col className="w-12" />}
+          {columns.avg && <col className="w-12" />}
+        </>}
+        {(columns.note || filler) && <col />}
       </colgroup>
       <thead className="text-[10px] uppercase tracking-wide text-gray-400">
         <tr>
           <th scope="col" className="whitespace-nowrap py-1 pr-2 align-bottom font-medium">Lap</th>
           {crossings && <th scope="col" className="whitespace-nowrap py-1 pr-2 align-bottom font-medium">{crossingsLabel}</th>}
           <th scope="col" className={`whitespace-nowrap py-1 pr-2 align-bottom font-medium ${crossings ? 'pl-4' : ''}`}>Lap time</th>
+          {stacked ? <SpeedHeader lines={['Top', 'Avg']} title="Top and average speed, mph" /> : <>
+            {columns.top && <SpeedHeader lines={['Top', 'mph']} title="Top speed, mph" />}
+            {columns.avg && <SpeedHeader lines={['Avg', 'mph']} title="Average speed, mph" />}
+          </>}
           {columns.note && <th scope="col" className="py-1 align-bottom font-medium">Note</th>}
+          {filler && <td aria-hidden="true" />}
         </tr>
       </thead>
       <tbody>
@@ -129,10 +176,37 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
                 ? <BestChip ms={lap.ms} allTime={lap.ms === allTimeBest} aligned />
                 : <span className={`font-mono tabular-nums ${lap.kind ? '' : 'text-gray-900'}`}>{formatLapTime(lap.ms)}</span>}
             </td>
+            {stacked ? (
+              <td className={`py-1.5 pr-2 text-right font-mono leading-4 tabular-nums ${lap.kind ? '' : 'text-gray-900'}`}>
+                <Speed mph={lap.topMph} />
+                <Speed mph={lap.avgMph} />
+              </td>
+            ) : <>
+              {columns.top && <td className={speedCell(lap)}><Speed mph={lap.topMph} /></td>}
+              {columns.avg && <td className={speedCell(lap)}><Speed mph={lap.avgMph} /></td>}
+            </>}
             {columns.note && <td className="py-1.5">{lap.note}</td>}
+            {filler && <td aria-hidden="true" />}
           </tr>
         ))}
       </tbody>
     </table>
   )
+}
+
+/** A speed column's heading, on two lines: its name over the unit, or top over average. */
+function SpeedHeader({ lines, title }: { lines: [string, string]; title: string }) {
+  return (
+    <th scope="col" className="py-1 pr-2 text-right align-bottom font-medium" aria-label={title} title={title}>
+      {lines.map(line => <span key={line} className={`block ${line === 'mph' ? 'normal-case' : ''}`}>{line}</span>)}
+    </th>
+  )
+}
+
+// Level with the lap time beside it.
+const speedCell = (lap: Lap) => `whitespace-nowrap py-1 pr-2 text-right font-mono leading-4 tabular-nums ${lap.kind ? '' : 'text-gray-900'}`
+
+/** A speed on a line of its own, which keeps its height without one. */
+function Speed({ mph }: { mph?: number }) {
+  return <span className="block h-4" data-speed>{mph !== undefined ? formatSpeed(mph) : ''}</span>
 }

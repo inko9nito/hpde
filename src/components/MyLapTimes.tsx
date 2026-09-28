@@ -2,11 +2,11 @@ import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
 import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
-import { LapTrendChart } from './LapTrendChart'
+import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { eventBest, trackShortName } from '../utils/trackStats'
-import { formatAverage, lapStats } from '../utils/lapTimes'
+import { formatAverage, lapSpeeds, lapStats } from '../utils/lapTimes'
 import { formatTime, formatAmPm } from '../utils/time'
 import type { LapLog } from '../data/lapLog'
 import { driverName } from '../data/drivers'
@@ -109,6 +109,7 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
       title: sessionTitle(s),
       subtitle: [`${formatTime(s.time)} ${formatAmPm(s.time)}`, groupFor(s.group, runGroups).label, day].filter(Boolean).join(' · '),
       best, average, averageText: formatAverage(s.laps, average),
+      ...withTopSpeed(lapSpeeds(s.laps).top),
     }]
   })
 

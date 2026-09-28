@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight, Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapFigures, LapTable } from './LapList'
+import { LapFigures, LapTable, SpeedFigures } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
@@ -247,6 +247,7 @@ export function LapTimesSheet({
                 Edit
               </button>
             </div>
+            <SpeedFigures laps={existing.laps} />
             {existing.summary && <p className="text-sm text-gray-700" data-lap-summary>{existing.summary}</p>}
             <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
             {track && <TrackLink track={track} laps={existing} allTimeBest={allTimeBest} driver={driver} onOpen={onOpenTrack} />}
@@ -275,8 +276,8 @@ export function LapTimesSheet({
             />
             <p className="mt-1.5 text-xs text-gray-500">
               Paste a list, a spreadsheet column, or rows from your timing sheet (lap, start, finish,
-              time, notes). Start and finish times work too. Mark out laps with “Out”. Laps, best and
-              average are worked out for you.
+              time, top and average speed in mph, notes). Start and finish times work too. Mark out
+              laps with “Out”. Laps, best and average are worked out for you.
             </p>
 
             {parsed.ambiguous && (
@@ -298,6 +299,7 @@ export function LapTimesSheet({
             {parsed.laps.length > 0 && (
               <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
                 <LapFigures laps={parsed.laps} allTimeBest={allTimeBest} />
+                <SpeedFigures laps={parsed.laps} />
                 <LapTable laps={parsed.laps} allTimeBest={allTimeBest} />
               </section>
             )}

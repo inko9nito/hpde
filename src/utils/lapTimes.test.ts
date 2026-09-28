@@ -5,6 +5,7 @@ import {
   formatAverage,
   lapStats,
   lapLabels,
+  lapSpeeds,
   lapsToText,
   cleanSessionLaps,
   sessionKey,
@@ -185,6 +186,117 @@ describe('parseLapTimes (#210)', () => {
   })
 })
 
+// Laps as a Garmin Catalyst records them (#298), copied from a driver's
+// spreadsheet — lap, record class, lap time, top and average speed — with
+// its header row. The laps are made up.
+const GARMIN_LAPS = [
+  'Lap #\tRecord class\tLap time\tTop speed (mph)\tAvg speed (mph)',
+  '1\tAveraged lap\t1:40.071\t92.0\t61.7',
+  '2\tAveraged lap\t1:28.551\t102.3\t69.6',
+  '3\tAveraged lap\t1:26.989\t103.5\t70.8',
+].join('\n')
+
+describe('parseLapTimes: speeds (#298)', () => {
+  const laps = (text: string) => parseLapTimes(text).laps
+
+  it('reads the top and average speed after a row’s lap time', () => {
+    expect(laps('1\t1:40.071\t92.0\t61.7\n2\t1:28.551\t102.3\t69.6')).toEqual([
+      { ms: 100_071, topMph: 92, avgMph: 61.7 },
+      { ms: 88_551, topMph: 102.3, avgMph: 69.6 },
+    ])
+    // Whole numbers, and a row split by spaces.
+    expect(laps('Out 2:19 88 55\n1 1:56 104 72')).toEqual([
+      { ms: 139_000, kind: 'out', topMph: 88, avgMph: 55 },
+      { ms: 116_000, topMph: 104, avgMph: 72 },
+    ])
+  })
+
+  it('reads rows copied from a lap timer’s export, with its header', () => {
+    const { laps, errors, skipped } = parseLapTimes(GARMIN_LAPS)
+    expect(errors).toEqual([])
+    expect(skipped.map(s => s.line)).toEqual([1])
+    expect(laps[0]).toEqual({ ms: 100_071, topMph: 92, avgMph: 61.7, note: 'Averaged lap' })
+  })
+
+  it('reads laps Garmin numbers -1 and 0 as laps like the rest', () => {
+    const { laps, errors } = parseLapTimes([
+      'Lap #\tLap time\tTop speed (mph)\tAvg speed (mph)',
+      '-1\t1:26.846\t102.2\t70.9',
+      '0\t1:24.082\t103.9\t73.1',
+      '1\t1:40.071\t92.0\t61.7',
+    ].join('\n'))
+    expect(errors).toEqual([])
+    expect(laps).toEqual([
+      { ms: 86_846, topMph: 102.2, avgMph: 70.9 },
+      { ms: 84_082, topMph: 103.9, avgMph: 73.1 },
+      { ms: 100_071, topMph: 92, avgMph: 61.7 },
+    ])
+    expect(lapStats(laps).best).toBe(84_082)
+  })
+
+  it('takes one speed as the top speed', () => {
+    expect(laps('1\t1:56\t104.2\tTraffic')).toEqual([{ ms: 116_000, topMph: 104.2, note: 'Traffic' }])
+  })
+
+  it('keeps crossings, speeds and a note apart', () => {
+    expect(laps('1\t11:48:51 AM\t11:50:47 AM\t1:56\t104.2\t70.1\tPassed on the back straight')).toEqual([
+      { ms: 116_000, start: '11:48:51 AM', end: '11:50:47 AM', topMph: 104.2, avgMph: 70.1, note: 'Passed on the back straight' },
+    ])
+  })
+
+  it('follows a header that has the average first', () => {
+    expect(laps('Lap\tTime\tAvg mph\tTop mph\n1\t1:56\t70.1\t104.2')).toEqual([{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }])
+    expect(laps('Lap  Time  Avg  Top\n1  1:56  70.1  104.2')).toEqual([{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }])
+    // Only an average named: the one speed is the average.
+    expect(laps('Lap\tLap time\tAverage speed\n1\t1:56\t70.1')).toEqual([{ ms: 116_000, avgMph: 70.1 }])
+  })
+
+  it('reads a lap time and its speeds without a lap number once a header names them', () => {
+    expect(laps('Lap time\tTop speed (mph)\tAvg speed (mph)\n1:40.071\t92.0\t61.7\n1:28.551\t102.3\t69.6')).toEqual([
+      { ms: 100_071, topMph: 92, avgMph: 61.7 },
+      { ms: 88_551, topMph: 102.3, avgMph: 69.6 },
+    ])
+  })
+
+  it('reads speeds marked mph anywhere', () => {
+    expect(laps('1:56 104.2 mph 70.1mph')).toEqual([{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }])
+    expect(laps('1 1:56 104.2 70.1 mph')).toEqual([{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }])
+  })
+
+  it('reads a dash as no top speed', () => {
+    expect(laps('1\t1:56\t–\t70.1')).toEqual([{ ms: 116_000, avgMph: 70.1 }])
+  })
+
+  it('still reads a plain list of lap times, bare seconds included, as laps', () => {
+    expect(laps('1:02.3, 59.8, 1:01.4')).toEqual([{ ms: 62_300 }, { ms: 59_800 }, { ms: 61_400 }])
+    expect(laps('1:02.3\t59.8\t1:01.4')).toEqual([{ ms: 62_300 }, { ms: 59_800 }, { ms: 61_400 }])
+    // A sub-minute lap in a row is still the lap time.
+    expect(laps('1\t58.31\t55.2')).toEqual([{ ms: 58_310, topMph: 55.2 }])
+  })
+
+  it('keeps a number after the note in the note', () => {
+    expect(laps('3 1:56 behind car 21')).toEqual([{ ms: 116_000, note: 'behind car 21' }])
+  })
+
+  it('doesn’t take a sentence about speed, or a totals row, as a header', () => {
+    const text = 'SESSION 1\nTop speed was down; tires were hot.\nLap\tTime\n1\t1:56\t104\t70\nLaps\t1\tBest\t1:56\tAverage: 1:56'
+    const { laps, summary } = parseLapTimes(text)
+    expect(summary).toBe('Top speed was down; tires were hot.')
+    expect(laps).toEqual([{ ms: 116_000, topMph: 104, avgMph: 70 }])
+  })
+
+  it('flags speeds that can’t be right', () => {
+    const { laps, errors } = parseLapTimes('1\t1:56\t70.1\t104.2\n2\t1:57\t300\t70\n3\t1:58\t104\t3\n4\t1:59\t104\t70\t69\n5\t2:00\t104\t70')
+    expect(errors.map(e => [e.line, e.message])).toEqual([
+      [1, 'The average speed is above the top speed.'],
+      [2, '300 mph is too fast for a top speed.'],
+      [3, '3 mph is too slow for an average speed.'],
+      [4, 'More than a top and an average speed on this line.'],
+    ])
+    expect(laps).toEqual([{ ms: 120_000, topMph: 104, avgMph: 70 }])
+  })
+})
+
 describe('formatLapTime', () => {
   it('shows whole seconds as m:ss, and fractions as written', () => {
     expect(formatLapTime(116_000)).toBe('1:56')
@@ -219,6 +331,18 @@ describe('lapStats', () => {
   })
 })
 
+describe('lapSpeeds (#298)', () => {
+  it('takes the fastest top speed and the mean of the averages, leaving out and in laps out', () => {
+    expect(lapSpeeds([
+      { ms: 139_000, kind: 'out', topMph: 110, avgMph: 50 },
+      { ms: 100_000, topMph: 103.9, avgMph: 70 },
+      { ms: 99_000, topMph: 106.3, avgMph: 71 },
+      { ms: 98_000 },
+    ])).toEqual({ top: 106.3, average: 70.5 })
+    expect(lapSpeeds([{ ms: 100_000 }])).toEqual({})
+  })
+})
+
 describe('lapLabels', () => {
   it('numbers the laps that count, and names the rest', () => {
     expect(lapLabels(parseLapTimes(SHEET_SESSION).laps)).toEqual(['Out', '1', '2', '3'])
@@ -241,6 +365,26 @@ describe('lapsToText', () => {
     const laps = [{ ms: 116_000 }, { ms: 108_000, note: 'Traffic' }, { ms: 109_500, start: '0:05:57' }, { ms: 140_000, kind: 'in' as const }]
     expect(parseLapTimes(lapsToText(laps)).laps).toEqual(laps)
   })
+
+  it('writes speeds after the lap time, and reads them back (#298)', () => {
+    const laps = [
+      { ms: 139_000, kind: 'out' as const, topMph: 88, avgMph: 55.5, note: 'Traffic' },
+      { ms: 116_000, topMph: 104.2 },
+      { ms: 108_000, avgMph: 70.1 },
+      { ms: 109_000 },
+      { ms: 110_000, start: '11:48:51 AM', topMph: 103.9, avgMph: 70.8 },
+    ]
+    const text = lapsToText(laps)
+    expect(text.split('\n')).toEqual([
+      'Out\t\t\t2:19\t88\t55.5\tTraffic',
+      '1\t\t\t1:56\t104.2',
+      '2\t\t\t1:48\t–\t70.1',
+      '3\t\t\t1:49',
+      '4\t11:48:51 AM\t\t1:50\t103.9\t70.8',
+    ])
+    expect(parseLapTimes(text)).toMatchObject({ laps, errors: [], skipped: [] })
+    expect(parseLapTimes(lapsToText(parseLapTimes(GARMIN_LAPS).laps)).laps).toEqual(parseLapTimes(GARMIN_LAPS).laps)
+  })
 })
 
 describe('cleanSessionLaps', () => {
@@ -258,6 +402,21 @@ describe('cleanSessionLaps', () => {
         laps: [{ ms: 116_000, note: 'Traffic' }],
       },
     })
+  })
+
+  it('keeps a lap’s speeds (#298)', () => {
+    expect(cleanSessionLaps({ ...valid, laps: [{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }, { ms: 117_000, avgMph: 70 }] }))
+      .toMatchObject({ session: { laps: [{ ms: 116_000, topMph: 104.2, avgMph: 70.1 }, { ms: 117_000, avgMph: 70 }] } })
+  })
+
+  it('refuses speeds that can’t be right', () => {
+    for (const lap of [
+      { ms: 116_000, topMph: '104' },
+      { ms: 116_000, topMph: 999 },
+      { ms: 116_000, avgMph: 1 },
+      { ms: 116_000, avgMph: Number.NaN },
+      { ms: 116_000, topMph: 70, avgMph: 104 },
+    ]) expect(cleanSessionLaps({ ...valid, laps: [lap] })).toHaveProperty('error')
   })
 
   it('keeps a summary, trimmed, and drops a blank one', () => {

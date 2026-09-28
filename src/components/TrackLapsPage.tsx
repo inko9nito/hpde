@@ -9,14 +9,14 @@ import { groupFor } from './LapTimesSheet'
 import { CARD_SHELL, DateBlock } from './LandingPage'
 import { StatusBadge } from './EventHeader'
 import { PrivateTag, StatCard, plural, useSkeletonFade } from './LapSessions'
-import { LapTrendChart, dayLabel, fullDate } from './LapTrendChart'
+import { LapTrendChart, dayLabel, fullDate, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
 import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import { eventBest, eventsOnLayout, layoutName, layoutSlug, startDate } from '../utils/trackStats'
-import { formatAverage, lapStats } from '../utils/lapTimes'
+import { formatAverage, formatSpeed, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import { classifyEvent } from '../utils/eventClass'
 import { opensElsewhere } from '../utils/links'
@@ -45,7 +45,8 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
  * One event on the track page (#274), compact like the Events list's rows:
  * the date; the name over the driver's run group and the organizer; and
  * their best lap there (the black chip, as everywhere) over their average,
- * across every session. Opens the event, on My notes, for its sessions.
+ * across every session, and the fastest they went there (#298). Opens the
+ * event, on My notes, for its sessions.
  */
 function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
   event: EventConfig
@@ -56,6 +57,7 @@ function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
   const status = classifyEvent(event)
   const laps = sessions.flatMap(s => s.laps)
   const { average, best } = lapStats(laps)
+  const peak = lapSpeeds(laps).top
   // The group(s) they drove in, as the schedule lists them.
   const groups = [...new Set(sessions.map(s => s.group))]
   return (
@@ -90,6 +92,13 @@ function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
           <dt className="text-gray-400">Avg</dt>
           <dd className="font-mono tabular-nums text-gray-600">{average !== undefined ? formatAverage(laps, average) : '—'}</dd>
         </div>
+        {peak !== undefined && (
+          <div className="flex items-baseline gap-1 text-xs" data-peak>
+            <dt className="text-gray-400">Peak</dt>
+            <dd className="font-mono tabular-nums text-gray-600">{formatSpeed(peak)}</dd>
+            <span className="text-gray-400">mph</span>
+          </div>
+        )}
       </dl>
     </a>
   )
@@ -185,6 +194,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     return [{
       key: event.id, tick: dayLabel(date), tickGroup: date.slice(0, 4), title: event.name, subtitle: fullDate(date),
       best: stats.best, average: stats.average, averageText: formatAverage(laps, stats.average),
+      ...withTopSpeed(lapSpeeds(laps).top),
     }]
   })
 
