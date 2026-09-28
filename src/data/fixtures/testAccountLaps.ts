@@ -3,14 +3,14 @@ import type { Lap, SessionLaps } from '../../utils/lapTimes'
 
 // The test account's laps (#309): what an admin sees after "Switch to test
 // account" in the menu. Anonymous sample laps from a lap timer, each with
-// its top and average speed (#298), in the Orange (Yellow in Nov 2025)
-// sessions of five events. A one-time fill for testing, not kept in step
-// with anything.
+// its top and average speed (#298), in one run group's sessions at eight
+// events — three of them added after the fact (#310). A one-time fill for
+// testing, not kept in step with anything.
 //
 // The laps function writes these into the test account the first time it's
 // used, and again whenever TEST_ACCOUNT_VERSION goes up — so bump it after
 // changing anything here.
-export const TEST_ACCOUNT_VERSION = 1
+export const TEST_ACCOUNT_VERSION = 2
 
 interface FixtureEvent {
   eventId: string
@@ -18,6 +18,236 @@ interface FixtureEvent {
 }
 
 const EVENTS: FixtureEvent[] = [
+  {
+    eventId: '2025-07-19_tde-at-ecr-2-7-cw',
+    sessions: [
+      {
+        date: '2025-07-19', time: '09:20', group: 'orange', sessionNumber: 1,
+        laps: [
+          { ms: 156268, topMph: 106.5, avgMph: 60.5 },
+          { ms: 226311, topMph: 113.9, avgMph: 42.4 },
+          { ms: 149776, topMph: 112.3, avgMph: 63.1 },
+          { ms: 153380, topMph: 103.9, avgMph: 61.6 },
+          { ms: 145892, topMph: 110.9, avgMph: 64.8 },
+          { ms: 146702, topMph: 112.1, avgMph: 64.5 },
+          { ms: 140725, topMph: 112.0, avgMph: 67.2 },
+          { ms: 151322, topMph: 111.0, avgMph: 62.7 },
+          { ms: 142422, topMph: 111.3, avgMph: 66.4 },
+        ],
+      },
+      {
+        date: '2025-07-19', time: '13:00', group: 'orange', sessionNumber: 2,
+        laps: [
+          { ms: 156241, topMph: 103.8, avgMph: 60.3 },
+          { ms: 147423, topMph: 107.2, avgMph: 63.9 },
+          { ms: 148431, topMph: 102.4, avgMph: 63.6 },
+          { ms: 142332, topMph: 111.6, avgMph: 66.4 },
+          { ms: 141482, topMph: 112.3, avgMph: 66.8 },
+          { ms: 143284, topMph: 110.6, avgMph: 66.1 },
+          { ms: 142664, topMph: 109.9, avgMph: 66.2 },
+          { ms: 150555, topMph: 109.4, avgMph: 62.9 },
+        ],
+      },
+      {
+        date: '2025-07-19', time: '15:25', group: 'orange', sessionNumber: 3,
+        laps: [
+          { ms: 157828, topMph: 101.7, avgMph: 59.7 },
+          { ms: 148202, topMph: 113.4, avgMph: 63.6 },
+          { ms: 140920, topMph: 112.9, avgMph: 67.0 },
+          { ms: 164448, topMph: 98.3, avgMph: 57.4 },
+          { ms: 144676, topMph: 109.9, avgMph: 65.2 },
+          { ms: 139027, topMph: 113.2, avgMph: 67.7 },
+          { ms: 138675, topMph: 112.7, avgMph: 68.1 },
+        ],
+      },
+    ],
+  },
+  {
+    eventId: '2025-09-13_tde-at-msrc-1-7-ccw',
+    sessions: [
+      {
+        date: '2025-09-13', time: '09:20', group: 'orange', sessionNumber: 1,
+        laps: [
+          { ms: 108746, topMph: 97.3, avgMph: 56.7 },
+          { ms: 104324, topMph: 102.7, avgMph: 59.2 },
+          { ms: 110341, topMph: 84.3, avgMph: 56.0 },
+          { ms: 94020, topMph: 106.2, avgMph: 65.6 },
+          { ms: 107790, topMph: 95.3, avgMph: 57.4 },
+          { ms: 95423, topMph: 107.0, avgMph: 64.6 },
+          { ms: 89809, topMph: 109.8, avgMph: 68.9 },
+          { ms: 90951, topMph: 110.4, avgMph: 68.0 },
+          { ms: 97493, topMph: 109.7, avgMph: 63.5 },
+          { ms: 96766, topMph: 102.5, avgMph: 64.0 },
+          { ms: 86969, topMph: 108.9, avgMph: 71.1 },
+          { ms: 92834, topMph: 109.8, avgMph: 66.6 },
+          { ms: 97046, topMph: 110.7, avgMph: 63.9 },
+          { ms: 127045, topMph: 98.1, avgMph: 49.0 },
+        ],
+      },
+      {
+        date: '2025-09-13', time: '11:10', group: 'orange', sessionNumber: 2,
+        laps: [
+          { ms: 89875, topMph: 109.2, avgMph: 68.7 },
+          { ms: 96164, topMph: 107.7, avgMph: 64.2 },
+          { ms: 88062, topMph: 109.4, avgMph: 70.3 },
+          { ms: 88050, topMph: 109.5, avgMph: 70.1 },
+          { ms: 87943, topMph: 110.1, avgMph: 70.5 },
+          { ms: 89784, topMph: 108.9, avgMph: 68.8 },
+          { ms: 96865, topMph: 109.4, avgMph: 64.0 },
+          { ms: 89722, topMph: 109.2, avgMph: 68.9 },
+          { ms: 87378, topMph: 109.9, avgMph: 70.8 },
+          { ms: 89264, topMph: 108.1, avgMph: 69.3 },
+          { ms: 89855, topMph: 109.8, avgMph: 68.9 },
+          { ms: 95986, topMph: 105.5, avgMph: 64.7 },
+          { ms: 119180, topMph: 85.3, avgMph: 52.1 },
+        ],
+      },
+      {
+        date: '2025-09-13', time: '13:30', group: 'orange', sessionNumber: 3,
+        laps: [
+          { ms: 90631, topMph: 109.4, avgMph: 68.5 },
+          { ms: 88587, topMph: 110.0, avgMph: 69.9 },
+          { ms: 87720, topMph: 109.7, avgMph: 70.5 },
+          { ms: 87328, topMph: 110.8, avgMph: 70.8 },
+          { ms: 89734, topMph: 111.1, avgMph: 69.0 },
+          { ms: 91406, topMph: 108.0, avgMph: 67.7 },
+          { ms: 88016, topMph: 110.1, avgMph: 70.4 },
+          { ms: 94325, topMph: 110.3, avgMph: 65.7 },
+          { ms: 97826, topMph: 109.1, avgMph: 63.2 },
+          { ms: 87407, topMph: 109.1, avgMph: 71.0 },
+          { ms: 89028, topMph: 106.7, avgMph: 69.6 },
+          { ms: 88894, topMph: 109.4, avgMph: 69.5 },
+          { ms: 87903, topMph: 109.5, avgMph: 70.4 },
+          { ms: 89553, topMph: 109.1, avgMph: 69.2 },
+          { ms: 85977, topMph: 110.0, avgMph: 72.0 },
+          { ms: 88384, topMph: 110.6, avgMph: 70.1 },
+          { ms: 87081, topMph: 109.7, avgMph: 71.2 },
+          { ms: 123704, topMph: 110.3, avgMph: 50.3 },
+        ],
+      },
+      {
+        date: '2025-09-13', time: '15:15', group: 'orange', sessionNumber: 4,
+        laps: [
+          { ms: 88113, topMph: 109.0, avgMph: 70.0 },
+          { ms: 86483, topMph: 109.8, avgMph: 71.5 },
+          { ms: 87394, topMph: 109.7, avgMph: 70.8 },
+          { ms: 86512, topMph: 109.3, avgMph: 71.4 },
+          { ms: 86582, topMph: 109.4, avgMph: 71.3 },
+          { ms: 88616, topMph: 111.4, avgMph: 69.7 },
+          { ms: 91683, topMph: 107.8, avgMph: 67.5 },
+          { ms: 87258, topMph: 109.7, avgMph: 71.0 },
+          { ms: 89485, topMph: 109.8, avgMph: 68.9 },
+          { ms: 86565, topMph: 108.5, avgMph: 71.4 },
+          { ms: 95981, topMph: 108.4, avgMph: 64.6 },
+          { ms: 119680, topMph: 82.0, avgMph: 51.9 },
+        ],
+      },
+      {
+        date: '2025-09-13', time: '16:25', group: 'orange', sessionNumber: 5,
+        laps: [
+          { ms: 87447, topMph: 109.7, avgMph: 65.7, kind: 'in' },
+          { ms: 85903, topMph: 107.8, avgMph: 68.4, kind: 'in' },
+          { ms: 85457, topMph: 110.9, avgMph: 72.3 },
+          { ms: 86642, topMph: 111.2, avgMph: 71.3 },
+          { ms: 89724, topMph: 108.9, avgMph: 68.9 },
+          { ms: 85026, topMph: 112.6, avgMph: 72.6 },
+          { ms: 88274, topMph: 112.8, avgMph: 70.1 },
+          { ms: 86294, topMph: 111.7, avgMph: 71.6 },
+          { ms: 86370, topMph: 110.9, avgMph: 71.6 },
+          { ms: 118458, topMph: 110.2, avgMph: 52.4 },
+        ],
+      },
+    ],
+  },
+  {
+    eventId: '2025-10-04_tde-at-ecr-2-7-ccw',
+    sessions: [
+      {
+        date: '2025-10-04', time: '10:10', group: 'blue', sessionNumber: 1,
+        laps: [
+          { ms: 139335, topMph: 115.6, avgMph: 67.7 },
+          { ms: 147727, topMph: 107.2, avgMph: 63.7 },
+          { ms: 140843, topMph: 117.7, avgMph: 67.2 },
+          { ms: 157384, topMph: 115.6, avgMph: 60.1 },
+          { ms: 140632, topMph: 118.4, avgMph: 67.2 },
+          { ms: 137915, topMph: 118.0, avgMph: 68.5 },
+          { ms: 135685, topMph: 117.2, avgMph: 69.6 },
+        ],
+      },
+      {
+        date: '2025-10-04', time: '12:25', group: 'blue', sessionNumber: 2,
+        laps: [
+          { ms: 142286, topMph: 104.3, avgMph: 66.4 },
+          { ms: 138223, topMph: 116.9, avgMph: 68.3 },
+          { ms: 135578, topMph: 119.0, avgMph: 69.7 },
+          { ms: 137784, topMph: 114.9, avgMph: 68.6 },
+          { ms: 140330, topMph: 116.9, avgMph: 67.4 },
+          { ms: 151328, topMph: 109.5, avgMph: 62.5 },
+          { ms: 134787, topMph: 120.0, avgMph: 70.1 },
+        ],
+      },
+      {
+        date: '2025-10-04', time: '14:30', group: 'blue', sessionNumber: 3,
+        laps: [
+          { ms: 148590, topMph: 99.7, avgMph: 63.6 },
+          { ms: 138246, topMph: 115.6, avgMph: 68.4 },
+          { ms: 141960, topMph: 109.7, avgMph: 66.7 },
+          { ms: 133393, topMph: 116.3, avgMph: 70.9 },
+          { ms: 138620, topMph: 116.5, avgMph: 68.3 },
+          { ms: 136558, topMph: 117.8, avgMph: 69.4 },
+          { ms: 139571, topMph: 116.7, avgMph: 67.7 },
+        ],
+      },
+      {
+        date: '2025-10-04', time: '16:40', group: 'blue', sessionNumber: 4,
+        laps: [
+          { ms: 136482, topMph: 116.5, avgMph: 69.0 },
+          { ms: 142904, topMph: 108.0, avgMph: 65.9 },
+          { ms: 141160, topMph: 115.1, avgMph: 67.0 },
+          { ms: 136015, topMph: 112.7, avgMph: 69.4 },
+          { ms: 133517, topMph: 117.7, avgMph: 70.7 },
+          { ms: 138697, topMph: 116.9, avgMph: 68.1 },
+          { ms: 223129, topMph: 118.0, avgMph: 43.0, kind: 'in' },
+        ],
+      },
+      {
+        date: '2025-10-05', time: '12:20', group: 'blue', sessionNumber: 1,
+        laps: [
+          { ms: 152113, topMph: 102.1, avgMph: 62.1 },
+          { ms: 153982, topMph: 89.2, avgMph: 61.2 },
+          { ms: 156610, topMph: 102.0, avgMph: 60.1 },
+          { ms: 154770, topMph: 105.0, avgMph: 61.0 },
+          { ms: 144410, topMph: 113.3, avgMph: 65.1 },
+          { ms: 134044, topMph: 114.8, avgMph: 70.3 },
+          { ms: 135600, topMph: 113.5, avgMph: 69.4 },
+          { ms: 134744, topMph: 117.7, avgMph: 69.9 },
+        ],
+      },
+      {
+        date: '2025-10-05', time: '14:55', group: 'blue', sessionNumber: 2,
+        laps: [
+          { ms: 134450, topMph: 115.2, avgMph: 70.0 },
+          { ms: 139720, topMph: 106.6, avgMph: 67.3 },
+          { ms: 132697, topMph: 115.1, avgMph: 70.9 },
+          { ms: 132290, topMph: 117.1, avgMph: 71.0 },
+          { ms: 132610, topMph: 115.8, avgMph: 70.9 },
+          { ms: 132603, topMph: 116.5, avgMph: 70.9 },
+          { ms: 132679, topMph: 116.7, avgMph: 71.0 },
+        ],
+      },
+      {
+        date: '2025-10-05', time: '16:25', group: 'blue', sessionNumber: 3,
+        laps: [
+          { ms: 134014, topMph: 116.4, avgMph: 70.3 },
+          { ms: 136444, topMph: 116.0, avgMph: 69.1 },
+          { ms: 133115, topMph: 117.9, avgMph: 70.8 },
+          { ms: 131609, topMph: 117.2, avgMph: 71.8 },
+          { ms: 132111, topMph: 118.5, avgMph: 71.4 },
+          { ms: 137578, topMph: 111.6, avgMph: 68.7 },
+        ],
+      },
+    ],
+  },
   {
     eventId: '2025-11-07_msrc-3-1',
     sessions: [

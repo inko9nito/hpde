@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { buildEvent, editDetails, isAdmin, slugify } from './newEvent.mjs'
 import handler from '../functions/events.mts'
 import { fakeBlobs } from './fakeBlobs'
+import { IMPORTED_KEY } from './pastEvents.mjs'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:events')
@@ -112,7 +113,14 @@ describe('isAdmin', () => {
 })
 
 describe('events function', () => {
-  beforeEach(() => blobs.clear())
+  // As every store is once its first read has added the past events (#310,
+  // tested in pastEvents.test.ts): these start from what's in them.
+  const imported = { at: '2026-09-28T00:00:00.000Z', imported: [] }
+  beforeEach(() => {
+    blobs.clear()
+    blobs.data('site:events-meta').set(IMPORTED_KEY, imported)
+    blobs.data('deploy:events-meta').set(IMPORTED_KEY, imported)
+  })
 
   const ids = async () => (await (await call('GET')).json()).events.map((e: { id: string }) => e.id)
 
@@ -125,7 +133,7 @@ describe('events function', () => {
     store.set(liveEvent.id, liveEvent)
     expect(await ids()).toEqual([liveEvent.id])
     expect([...store.keys()]).toEqual([liveEvent.id])
-    expect(blobs.data('site:events-meta').size).toBe(0)
+    expect([...blobs.data('site:events-meta').keys()]).toEqual([IMPORTED_KEY])
   })
 
   it('starts a deploy preview from a copy of the live events, and keeps its changes to itself', async () => {
@@ -145,7 +153,7 @@ describe('events function', () => {
     expect(after).not.toContain(liveEvent.id)
     // …and the live store is exactly as it was.
     expect([...store.keys()]).toEqual([liveEvent.id])
-    expect(blobs.data('site:events-meta').size).toBe(0)
+    expect([...blobs.data('site:events-meta').keys()]).toEqual([IMPORTED_KEY])
     const siteOpens = blobs.opened.filter(o => o.kind === 'site').map(o => (o.options as { name: string }).name)
     expect(new Set(siteOpens)).toEqual(new Set(['events']))
   })
