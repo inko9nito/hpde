@@ -4,6 +4,8 @@ import { isAdmin } from '../lib/newEvent.mjs'
 import { findDriver } from '../lib/drivers.mjs'
 import { cleanSessionLaps, lapStats } from '../../src/utils/lapTimes.ts'
 import type { SessionLaps } from '../../src/utils/lapTimes.ts'
+import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
+import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
 
 // A signed-in driver's own lap times (#210), private to them: every request
 // needs their sign-in, and only ever reaches their own laps — the key is
@@ -11,6 +13,8 @@ import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 // exception is an admin, who can add `driver=<user id>` to any of these to
 // read and write that driver's laps instead (#288) — the id is checked
 // against Identity, and a session saved that way records who saved it.
+// An admin can also name the test account (`driver=test-account`, #309),
+// which starts out full of sample laps (see ensureSeeded).
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
@@ -33,8 +37,10 @@ import type { SessionLaps } from '../../src/utils/lapTimes.ts'
 export const config = { path: '/api/laps' }
 
 export const LAPS_STORE = 'laps'
-// On a preview: which drivers' live laps have been copied in, keyed by user id.
+// On a preview: which drivers' live laps have been copied in, keyed by user
+// id. Anywhere: which version of the test account's laps it has.
 export const LAPS_META_STORE = 'laps-meta'
+export const TEST_SEED_KEY = `seeded:${TEST_DRIVER_ID}`
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
 // Events a track page can ask for at once: far more than one layout has.
@@ -59,11 +65,11 @@ type Store = ReturnType<typeof getStore>
  * preview, a branch deploy) gets stores of its own for that deploy;
  * `live` is only read from, to copy the driver's laps in (ensureCopied).
  */
-function openStores(context: unknown, deps: Deps): { laps: Store; meta?: Store; live?: Store } {
+function openStores(context: unknown, deps: Deps): { laps: Store; meta: Store; live?: Store } {
   const deployContext = (context as { deploy?: { context?: string } } | undefined)?.deploy?.context
   const site = (name: string) => (deps.getStore ?? getStore)({ name, consistency: 'strong' })
   const deploy = (name: string) => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
-  if (!deployContext || deployContext === 'production') return { laps: site(LAPS_STORE) }
+  if (!deployContext || deployContext === 'production') return { laps: site(LAPS_STORE), meta: site(LAPS_META_STORE) }
   return { laps: deploy(LAPS_STORE), meta: deploy(LAPS_META_STORE), live: site(LAPS_STORE) }
 }
 
@@ -74,8 +80,8 @@ function openStores(context: unknown, deps: Deps): { laps: Store; meta?: Store; 
  * Production has nothing to copy. Each copy only writes a record that
  * isn't there yet, so one saved on the preview meanwhile is kept.
  */
-async function ensureCopied({ laps, meta, live }: { laps: Store; meta?: Store; live?: Store }, driverId: string) {
-  if (!live || !meta) return
+async function ensureCopied({ laps, meta, live }: { laps: Store; meta: Store; live?: Store }, driverId: string) {
+  if (!live) return
   if (await meta.get(driverId, { type: 'json' })) return
   const { blobs } = await live.list({ prefix: `${driverId}/` })
   for (const { key } of blobs) {
@@ -83,6 +89,25 @@ async function ensureCopied({ laps, meta, live }: { laps: Store; meta?: Store; l
     if (record) await laps.setJSON(key, record, { onlyIfNew: true })
   }
   await meta.setJSON(driverId, { at: new Date().toISOString() })
+}
+
+/**
+ * Fills the test account with its sample laps (#309) the first time it's
+ * used in this store — production's, or a preview's own — and again when
+ * the sample changes (TEST_ACCOUNT_VERSION), replacing whatever it had:
+ * laps saved or removed there last only until then. A preview never copies
+ * production's test account; it starts from the sample.
+ */
+async function ensureSeeded({ laps, meta }: { laps: Store; meta: Store }) {
+  const seeded = (await meta.get(TEST_SEED_KEY, { type: 'json' })) as { version?: number } | null
+  if (seeded?.version === TEST_ACCOUNT_VERSION) return
+  // Written over, never deleted first, so a request that comes in meanwhile
+  // (the app asks for several things at once) never finds them missing.
+  const keys = new Set(TEST_ACCOUNT_LAPS.map(record => `${TEST_DRIVER_ID}/${record.eventId}`))
+  for (const record of TEST_ACCOUNT_LAPS) await laps.setJSON(`${TEST_DRIVER_ID}/${record.eventId}`, record)
+  const { blobs } = await laps.list({ prefix: `${TEST_DRIVER_ID}/` })
+  for (const { key } of blobs) if (!keys.has(key)) await laps.delete(key)
+  await meta.setJSON(TEST_SEED_KEY, { version: TEST_ACCOUNT_VERSION, at: new Date().toISOString() })
 }
 
 function inOrder(record: EventLaps | null): SessionLaps[] {
@@ -100,7 +125,10 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   // Whose laps: the signed-in driver's, or for an admin, the driver asked for.
   let driverId = user.id
   const asked = params.get('driver')
-  if (asked && asked !== user.id) {
+  if (asked === TEST_DRIVER_ID) {
+    if (!isAdmin(user)) return json(403, { error: 'Only admins can use the test account.' })
+    driverId = TEST_DRIVER_ID
+  } else if (asked && asked !== user.id) {
     if (!isAdmin(user)) return json(403, { error: 'Only admins can log lap times for other drivers.' })
     let driver
     try {
@@ -114,7 +142,8 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   }
 
   const stores = openStores(context, deps)
-  await ensureCopied(stores, driverId)
+  if (driverId === TEST_DRIVER_ID) await ensureSeeded(stores)
+  else await ensureCopied(stores, driverId)
   const store = stores.laps
 
   if (req.method === 'GET' && params.has('events')) {

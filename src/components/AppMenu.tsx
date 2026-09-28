@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, Menu, Share, Smartphone } from 'lucide-react'
+import { ChevronRight, FlaskConical, Menu, Share, Smartphone, UserRound } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { ICON_BUTTON } from './iconButton'
+import { ADMIN_ROLE } from './NewEventPage'
 import { SHARE_HASH } from './SharePage'
 
 const ITEMS = [
@@ -9,13 +11,18 @@ const ITEMS = [
   { href: '#/widget-setup', label: 'Get iOS widget', Icon: Smartphone },
 ] as const
 
+const ITEM = 'flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left text-[15px] font-medium text-gray-900 transition-colors hover:bg-gray-50 active:bg-gray-100'
+
 /**
  * The landing page's menu button (#273). Opens a sheet from the bottom
  * with the app-wide pages — Share and the iOS widget — which then slide
- * up from the bottom too (#278).
+ * up from the bottom too (#278). Admins also get the switch to the test
+ * account and back (#309).
  */
 export function AppMenu() {
   const [open, setOpen] = useState(false)
+  const { status, user, testAccount, setTestAccount } = useAuth()
+  const isAdmin = status === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
 
   useEffect(() => {
     if (!open) return
@@ -52,13 +59,28 @@ export function AppMenu() {
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-3 py-3.5 text-[15px] font-medium text-gray-900 transition-colors hover:bg-gray-50 active:bg-gray-100"
+                  className={ITEM}
                 >
                   <Icon size={20} aria-hidden="true" className="shrink-0 text-gray-500" />
                   <span className="flex-1">{label}</span>
                   <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-gray-300" />
                 </a>
               ))}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTestAccount(!testAccount)
+                    setOpen(false)
+                  }}
+                  className={ITEM}
+                >
+                  {testAccount
+                    ? <UserRound size={20} aria-hidden="true" className="shrink-0 text-gray-500" />
+                    : <FlaskConical size={20} aria-hidden="true" className="shrink-0 text-gray-500" />}
+                  <span className="flex-1">{testAccount ? 'Switch back to my account' : 'Switch to test account'}</span>
+                </button>
+              )}
             </nav>
           </div>
         </div>,

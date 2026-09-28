@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { ChevronDown, UserRound } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { driverName } from '../data/drivers'
 import type { Driver, DriversStatus } from '../data/drivers'
 
@@ -19,6 +20,8 @@ interface Props {
  */
 export function DriverPicker({ driver, onChange, drivers, selfId, className = '' }: Props) {
   const id = useId()
+  // On the test account (#309), "Me" is it.
+  const { testAccount } = useAuth()
   const others = drivers.drivers.filter(d => d.id !== selfId)
   // Still listed while the list loads (or if it can't), so the picker
   // never shows someone other than who's picked.
@@ -36,7 +39,7 @@ export function DriverPicker({ driver, onChange, drivers, selfId, className = ''
           onChange={e => onChange(others.find(d => d.id === e.target.value) ?? null)}
           className="block h-8 w-full min-w-0 max-w-64 appearance-none truncate rounded-lg border border-gray-200 bg-white pl-2.5 pr-7 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm"
         >
-          <option value="">Me</option>
+          <option value="">{testAccount ? 'Test account' : 'Me'}</option>
           {others.map(d => (
             <option key={d.id} value={d.id}>{driverName(d)}</option>
           ))}

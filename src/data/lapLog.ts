@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventBest } from '../utils/trackStats'
+import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's own lap times for one event (#210), from the laps
 // function — or, for an admin, another driver's (#288). Nothing is fetched
@@ -11,6 +12,15 @@ export const LAPS_URL = `${import.meta.env.BASE_URL}api/laps`
 /** `?driver=` for another driver's laps; nothing for your own. */
 function driverQuery(driverId: string | null, first: '?' | '&'): string {
   return driverId ? `${first}driver=${encodeURIComponent(driverId)}` : ''
+}
+
+/**
+ * Whose laps to ask for: the driver picked, or with none, the test
+ * account's while an admin has switched to it (#309) — else your own.
+ */
+function useDriverId(driverId: string | null): string | null {
+  const { testAccount } = useAuth()
+  return driverId ?? (testAccount ? TEST_DRIVER_ID : null)
 }
 
 export type LapLogStatus = 'off' | 'loading' | 'ready' | 'error'
@@ -43,12 +53,13 @@ async function errorFrom(res: Response): Promise<Error> {
  */
 export function useLapLog(eventId: string | null, driverId: string | null = null): LapLog {
   const { status: authStatus, authedFetch } = useAuth()
+  const who = useDriverId(driverId)
   const signedIn = authStatus === 'signed-in'
   const active = signedIn && eventId !== null
   const [loaded, setLoaded] = useState<{ url: string; eventId: string; sessions: SessionLaps[] } | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const url = `${LAPS_URL}?event=${encodeURIComponent(eventId ?? '')}${driverQuery(driverId, '&')}`
+  const url = `${LAPS_URL}?event=${encodeURIComponent(eventId ?? '')}${driverQuery(who, '&')}`
 
   useEffect(() => {
     // Signed out: forget them, so the next person to sign in on this
@@ -137,12 +148,13 @@ export interface TrackLaps {
  */
 export function useTrackLaps(eventIds: string[] | null, driverId: string | null = null): TrackLaps {
   const { status: authStatus, authedFetch } = useAuth()
+  const who = useDriverId(driverId)
   const signedIn = authStatus === 'signed-in'
   const active = signedIn && eventIds !== null
   const [loaded, setLoaded] = useState<{ url: string; events: EventLaps[] } | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const url = `${LAPS_URL}?events=${(eventIds ?? []).map(encodeURIComponent).join(',')}${driverQuery(driverId, '&')}`
+  const url = `${LAPS_URL}?events=${(eventIds ?? []).map(encodeURIComponent).join(',')}${driverQuery(who, '&')}`
 
   useEffect(() => {
     if (!signedIn) {
@@ -192,9 +204,10 @@ export function useTrackLaps(eventIds: string[] | null, driverId: string | null 
  */
 export function useLapSummary(active: boolean, driverId: string | null = null): EventBest[] | null {
   const { status: authStatus, authedFetch } = useAuth()
+  const who = useDriverId(driverId)
   const signedIn = authStatus === 'signed-in'
   const [loaded, setLoaded] = useState<{ url: string; events: EventBest[] } | null>(null)
-  const url = `${LAPS_URL}${driverQuery(driverId, '?')}`
+  const url = `${LAPS_URL}${driverQuery(who, '?')}`
 
   useEffect(() => {
     if (!signedIn) {

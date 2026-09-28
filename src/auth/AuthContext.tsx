@@ -35,9 +35,34 @@ interface AuthValue {
   // fetch() with the signed-in user's token attached, for calls to the
   // personal-data functions (notes, garage).
   authedFetch(input: RequestInfo, init?: RequestInit): Promise<Response>
+  // An admin has switched to the test account (#309): their own laps
+  // everywhere are its sample laps instead, until they switch back.
+  testAccount: boolean
+  setTestAccount(on: boolean): void
 }
 
 const AuthContext = createContext<AuthValue | null>(null)
+
+// Who switched to the test account (#309), by user id, so it's only ever
+// theirs: someone else signing in on this device starts on their own.
+const TEST_ACCOUNT_KEY = 'hpde:testAccount'
+
+function readTestAccount(): string | null {
+  try {
+    return localStorage.getItem(TEST_ACCOUNT_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeTestAccount(userId: string | null) {
+  try {
+    if (userId) localStorage.setItem(TEST_ACCOUNT_KEY, userId)
+    else localStorage.removeItem(TEST_ACCOUNT_KEY)
+  } catch {
+    // Private browsing: it lasts until the page is closed.
+  }
+}
 
 /**
  * authedFetch couldn't get a token: the sign-in has lapsed. It's renewed
@@ -67,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [identityUser, setIdentityUser] = useState<IdentityUser | null>(null)
   const [widget, setWidget] = useState<IdentityWidget | null>(null)
+  const [testAccountOf, setTestAccountOf] = useState<string | null>(readTestAccount)
 
   useEffect(() => {
     let cancelled = false
@@ -179,16 +205,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [identityUser, renew],
   )
 
+  // Signed out: back on their own account next time.
+  useEffect(() => {
+    if (status !== 'signed-out' || testAccountOf === null) return
+    setTestAccountOf(null)
+    writeTestAccount(null)
+  }, [status, testAccountOf])
+
+  const user = useMemo(() => (identityUser ? toAuthUser(identityUser) : null), [identityUser])
+  // The admin role (ADMIN_ROLE); the laps function checks it too.
+  const isAdmin = status === 'signed-in' && !!user?.roles.includes('admin')
+  const testAccount = isAdmin && testAccountOf === user?.id
+  const userId = user?.id ?? null
+  const setTestAccount = useCallback((on: boolean) => {
+    const next = on && isAdmin ? userId : null
+    setTestAccountOf(next)
+    writeTestAccount(next)
+  }, [isAdmin, userId])
+
   const value = useMemo<AuthValue>(
-    () => ({
-      status,
-      user: identityUser ? toAuthUser(identityUser) : null,
-      signIn,
-      openAccount,
-      signOut,
-      authedFetch,
-    }),
-    [status, identityUser, signIn, openAccount, signOut, authedFetch],
+    () => ({ status, user, signIn, openAccount, signOut, authedFetch, testAccount, setTestAccount }),
+    [status, user, signIn, openAccount, signOut, authedFetch, testAccount, setTestAccount],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -201,6 +238,8 @@ const SIGNED_OUT_FALLBACK: AuthValue = {
   openAccount: () => {},
   signOut: () => {},
   authedFetch: () => Promise.reject(new SignedOutError()),
+  testAccount: false,
+  setTestAccount: () => {},
 }
 
 // Components rendered without a provider (isolated tests) behave as if
