@@ -8,8 +8,8 @@ import { plural } from './LapSessions'
 import { useEvents } from '../data/EventsContext'
 import { useAuth } from '../auth/AuthContext'
 import { useLapSummary } from '../data/lapLog'
-import { layoutLaps, layoutsOf } from '../utils/trackStats'
-import type { EventBest, Layout } from '../utils/trackStats'
+import { layoutLaps, layoutsOf, trackGroups } from '../utils/trackStats'
+import type { EventBest, Layout, TrackGroup } from '../utils/trackStats'
 import { formatLapTime } from '../utils/lapTimes'
 
 // The track's panel: wider than tall, unlike an event card's square tile,
@@ -20,7 +20,8 @@ const THUMB = 'w-24 min-[375px]:w-28 min-h-[80px]'
 
 /**
  * One layout: its shape on a wide dark panel along the card's left edge,
- * its name, and your best lap there. Opens its track page.
+ * its name, how many events are on it, and your best lap there. Opens its
+ * track page.
  */
 function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | null }) {
   const laps = summary ? layoutLaps(layout, summary) : null
@@ -36,20 +37,43 @@ function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | 
       <div className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-4 pr-3">
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{layout.name}</div>
+          {/* Events, not your sessions: sessions per event vary too much to compare (#314). */}
           <div className="mt-0.5 truncate text-sm text-gray-500">
-            {layout.track ?? plural(layout.events.length, 'event', 'events')}
+            {plural(layout.events.length, 'event', 'events')}
           </div>
         </div>
         {/* Only with laps to show, leaving the track's name room otherwise. */}
         {laps?.best !== undefined && (
           <div className="flex shrink-0 flex-col items-end">
             <span className="font-mono text-[15px] font-semibold tabular-nums text-gray-900">{formatLapTime(laps.best)}</span>
-            <span className="mt-0.5 text-xs text-gray-400">{plural(laps.sessions, 'session', 'sessions')}</span>
+            {/* Your best, not an average (#314). */}
+            <span className="mt-0.5 text-xs text-gray-400">Best lap</span>
           </div>
         )}
         <ChevronRight size={18} className="-ml-2 shrink-0 text-gray-300" aria-hidden="true" />
       </div>
     </a>
+  )
+}
+
+/** A track's layouts under its name and where it is (#314). */
+function TrackSection({ group, summary }: { group: TrackGroup; summary: EventBest[] | null }) {
+  return (
+    <section aria-label={group.name}>
+      <div className="mb-2 flex items-baseline gap-2">
+        <h2 className="min-w-0 truncate font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+          {group.name}
+        </h2>
+        {group.city && <span className="shrink-0 text-xs text-gray-400">{group.city}</span>}
+      </div>
+      <ul className="space-y-4">
+        {group.layouts.map(layout => (
+          <li key={layout.slug}>
+            <TrackRow layout={layout} summary={summary} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -66,14 +90,14 @@ function TrackRowSkeleton() {
 }
 
 /**
- * The Tracks tab (#274): every track layout the events are on, with the
- * driver's best lap on each once they're signed in. Each opens its track
- * page, with every session they've logged there.
+ * The Tracks tab (#274): every track layout the events are on, grouped by
+ * track (#314), with the driver's best lap on each once they're signed in.
+ * Each opens its track page, with every session they've logged there.
  */
 export function TracksTab() {
   const { events, loaded } = useEvents()
   const { status } = useAuth()
-  const layouts = useMemo(() => layoutsOf(events), [events])
+  const groups = useMemo(() => trackGroups(layoutsOf(events)), [events])
   const summary = useLapSummary(status === 'signed-in')
 
   return (
@@ -86,13 +110,13 @@ export function TracksTab() {
               : 'Sign in to see your lap times at each track, across every event.'}
           </p>
         </HomeHeader>
-        {layouts.length === 0 ? (
+        {groups.length === 0 ? (
           loaded ? <EmptyRow>No tracks yet.</EmptyRow> : <TrackRowSkeleton />
         ) : (
-          <ul className="space-y-4" aria-label="Tracks">
-            {layouts.map(layout => (
-              <li key={layout.slug}>
-                <TrackRow layout={layout} summary={summary} />
+          <ul className="space-y-6" aria-label="Tracks">
+            {groups.map(group => (
+              <li key={group.name}>
+                <TrackSection group={group} summary={summary} />
               </li>
             ))}
           </ul>

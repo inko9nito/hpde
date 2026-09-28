@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutLaps, layoutName, layoutSlug, layoutsOf, sameLayout, trackShortName } from './trackStats'
+import { bestOnLayout, eventsOnLayout, gapToBest, layoutLabel, layoutLaps, layoutName, layoutSlug, layoutsOf, sameLayout, trackGroups, trackShortName } from './trackStats'
 import type { EventConfig } from '../types'
 
 const event = (id: string, fields: Partial<EventConfig> = {}): EventConfig => ({
@@ -114,6 +114,23 @@ describe('the Tracks tab (#274)', () => {
       ['ecr-2-7-cw', 'ECR 2.7 CW', 'Eagles Canyon Raceway', [upcoming.id]],
       ['msrc-1-7-cw', 'MSRC 1.7 CW', 'Motorsport Ranch - Cresson', [scca.id, tde.id]],
       ['msrc-1-7-ccw', 'MSRC 1.7 CCW', 'Motorsport Ranch - Cresson', [lastYear.id]],
+    ])
+  })
+
+  it('groups the layouts by track, however it’s spelled, the track with the latest event first (#314)', () => {
+    const at = (e: EventConfig, date: string, city?: string) => ({ ...e, city, days: [{ id: 'd', label: 'Day', date, activities: [] }] })
+    const layouts = layoutsOf([
+      at(ccw, '2025-09-13', 'Cresson, TX'),
+      at({ ...longCourse, track: 'Motorsport Ranch Cresson' }, '2025-11-07'),
+      at(ecr, '2026-05-30', 'Decatur, TX'),
+      at(scca, '2026-09-13', 'Cresson, TX'),
+      at(event('2026-10-03_ecr', { ...ecr, direction: 'CCW' }), '2026-10-03', 'Decatur, TX'),
+      at(event('2026-08-01_x', { track: undefined, trackId: 'xyz-1' }), '2026-08-01'),
+    ])
+    expect(trackGroups(layouts).map(g => [g.name, g.city, g.layouts.map(l => l.name)])).toEqual([
+      ['Eagles Canyon Raceway', 'Decatur, TX', ['ECR 2.7 CCW', 'ECR 2.7 CW']],
+      ['Motorsport Ranch - Cresson', 'Cresson, TX', ['MSRC 1.7 CW', 'MSRC 3.1 CW', 'MSRC 1.7 CCW']],
+      ['XYZ', undefined, ['XYZ 1.7 CW']],
     ])
   })
 

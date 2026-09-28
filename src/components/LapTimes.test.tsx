@@ -864,14 +864,18 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     elsewhere = { [sameLayout.id]: [at('2026-02-07', [101_000, 98_540])] }
   })
 
-  it('lists every track layout with your best there, the latest event’s first', async () => {
+  it('lists every track layout under its track, with its events and your best there, the latest event’s first', async () => {
     openAt('#/tracks')
     expect(screen.getByRole('heading', { level: 1, name: 'Tracks' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CWMotorsport Ranch - Cresson1:38.543 sessions',
-      'MSRC 1.7 CCWMotorsport Ranch - Cresson1:301 session',
+      'MSRC 1.7 CW2 events1:38.54Best lap',
+      'MSRC 1.7 CCW1 event1:30Best lap',
     ]))
+    // One track, both its layouts under its name (#314).
+    const track = screen.getByRole('region', { name: 'Motorsport Ranch - Cresson' })
+    expect(within(track).getByRole('heading', { level: 2, name: 'Motorsport Ranch - Cresson' })).toBeInTheDocument()
+    expect(within(track).getAllByRole('link')).toHaveLength(2)
   })
 
   it('opens a track’s page, and goes back to the list', async () => {
@@ -892,8 +896,8 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     openAt('#/tracks')
     expect(await screen.findByText('Sign in to see your lap times at each track, across every event.')).toBeInTheDocument()
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CWMotorsport Ranch - Cresson',
-      'MSRC 1.7 CCWMotorsport Ranch - Cresson',
+      'MSRC 1.7 CW2 events',
+      'MSRC 1.7 CCW1 event',
     ]))
     expect(lapCalls('GET')).toHaveLength(0)
   })
