@@ -42,7 +42,7 @@ describe('rsvps function (#235)', () => {
   it('needs a sign-in for everything', async () => {
     expect((await call('GET', { query: '' })).status).toBe(401)
     expect((await call('GET', { token: 'forged', query: '' })).status).toBe(401)
-    expect((await call('PUT', { body: { going: true } })).status).toBe(401)
+    expect((await call('PUT', { body: { status: 'going' } })).status).toBe(401)
     expect((await call('DELETE')).status).toBe(401)
     expect(store.size).toBe(0)
   })
@@ -60,34 +60,37 @@ describe('rsvps function (#235)', () => {
   })
 
   it('saves an answer with a run group, and lists every answer by event', async () => {
-    const res = await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
+    const res = await call('PUT', { token: 'vera-token', body: { status: 'going', runGroup: 'blue' } })
     expect(res.status).toBe(200)
     const { rsvp } = await res.json()
-    expect(rsvp).toMatchObject({ going: true, runGroup: 'blue' })
+    expect(rsvp).toMatchObject({ status: 'going', runGroup: 'blue' })
     expect(typeof rsvp.updatedAt).toBe('string')
-    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { going: false } })
+    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { status: 'not-going' } })
 
     const rsvps = await rsvpsOf('vera-token')
-    expect(rsvps[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
-    expect(rsvps[OTHER]).toMatchObject({ going: false })
+    expect(rsvps[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
+    expect(rsvps[OTHER]).toMatchObject({ status: 'not-going' })
     expect(rsvps[OTHER].runGroup).toBeUndefined()
+    // Maybe (undecided, or on the waitlist) keeps a run group too.
+    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { status: 'maybe', runGroup: 'red' } })
+    expect((await rsvpsOf('vera-token'))[OTHER]).toMatchObject({ status: 'maybe', runGroup: 'red' })
     expect([...store.keys()]).toEqual(['vera'])
   })
 
   it('replaces an answer when it changes; not going drops the run group', async () => {
-    await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
-    await call('PUT', { token: 'vera-token', body: { going: false, runGroup: 'blue' } })
-    expect((await rsvpsOf('vera-token'))[EVENT]).toEqual({ going: false, updatedAt: expect.any(String) })
+    await call('PUT', { token: 'vera-token', body: { status: 'going', runGroup: 'blue' } })
+    await call('PUT', { token: 'vera-token', body: { status: 'not-going', runGroup: 'blue' } })
+    expect((await rsvpsOf('vera-token'))[EVENT]).toEqual({ status: 'not-going', updatedAt: expect.any(String) })
   })
 
   it('keeps each driver’s answers to themselves', async () => {
-    await call('PUT', { token: 'vera-token', body: { going: true } })
+    await call('PUT', { token: 'vera-token', body: { status: 'going' } })
     expect(await rsvpsOf('jason-token')).toEqual({})
   })
 
   it('takes an answer back', async () => {
-    await call('PUT', { token: 'vera-token', body: { going: true } })
-    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { going: true } })
+    await call('PUT', { token: 'vera-token', body: { status: 'going' } })
+    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { status: 'going' } })
     expect((await call('DELETE', { token: 'vera-token' })).status).toBe(200)
     expect(Object.keys(await rsvpsOf('vera-token'))).toEqual([OTHER])
     await call('DELETE', { token: 'vera-token', query: `?event=${OTHER}` })
@@ -97,28 +100,28 @@ describe('rsvps function (#235)', () => {
   })
 
   it('turns away a bad answer or event', async () => {
-    for (const body of [{}, { going: 'yes' }, { going: true, runGroup: 'has space' }, { going: true, runGroup: 7 }]) {
+    for (const body of [{}, { going: true }, { status: 'yes' }, { status: 'going', runGroup: 'has space' }, { status: 'going', runGroup: 7 }]) {
       const res = await call('PUT', { token: 'vera-token', body })
       expect(res.status).toBe(400)
     }
     expect((await call('PUT', { token: 'vera-token', body: 'not json' })).status).toBe(400)
-    expect((await call('PUT', { token: 'vera-token', query: '?event=../x', body: { going: true } })).status).toBe(400)
-    expect((await call('PUT', { token: 'vera-token', query: '', body: { going: true } })).status).toBe(400)
-    expect((await call('POST', { token: 'vera-token', body: { going: true } })).status).toBe(405)
+    expect((await call('PUT', { token: 'vera-token', query: '?event=../x', body: { status: 'going' } })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', query: '', body: { status: 'going' } })).status).toBe(400)
+    expect((await call('POST', { token: 'vera-token', body: { status: 'going' } })).status).toBe(405)
     expect(store.size).toBe(0)
   })
 
   it('on a preview, starts from the driver’s live answers, and never changes them', async () => {
     const preview = { deploy: { context: 'deploy-preview' } }
-    await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
+    await call('PUT', { token: 'vera-token', body: { status: 'going', runGroup: 'blue' } })
 
-    expect((await rsvpsOf('vera-token', preview))[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
-    await call('PUT', { token: 'vera-token', body: { going: false }, context: preview })
+    expect((await rsvpsOf('vera-token', preview))[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
+    await call('PUT', { token: 'vera-token', body: { status: 'not-going' }, context: preview })
     await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}`, context: preview })
 
     // Taken back on the preview: stays taken back there…
     expect(await rsvpsOf('vera-token', preview)).toEqual({})
     // …and live, it's as it was.
-    expect((await rsvpsOf('vera-token'))[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
+    expect((await rsvpsOf('vera-token'))[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
   })
 })

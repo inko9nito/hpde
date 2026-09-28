@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cleanRsvp, myEvents, myRunGroup, needsAnswer } from './rsvp'
+import { answerFor, cleanRsvp, myEvents, myRunGroup, needsAnswer } from './rsvp'
 import type { EventConfig } from '../types'
 
 const event = (id: string, date: string): EventConfig => ({
@@ -16,15 +16,16 @@ const soon = event('soon', '2026-10-18')
 const later = event('later', '2026-11-08')
 
 describe('cleanRsvp (#235)', () => {
-  it('takes going or not, and a run group only for going', () => {
-    expect(cleanRsvp({ going: true })).toEqual({ rsvp: { going: true } })
-    expect(cleanRsvp({ going: true, runGroup: 'blue' })).toEqual({ rsvp: { going: true, runGroup: 'blue' } })
-    expect(cleanRsvp({ going: true, runGroup: null })).toEqual({ rsvp: { going: true } })
-    expect(cleanRsvp({ going: false, runGroup: 'blue' })).toEqual({ rsvp: { going: false } })
+  it('takes going, maybe or not going, and a run group only for going or maybe', () => {
+    expect(cleanRsvp({ status: 'going' })).toEqual({ rsvp: { status: 'going' } })
+    expect(cleanRsvp({ status: 'going', runGroup: 'blue' })).toEqual({ rsvp: { status: 'going', runGroup: 'blue' } })
+    expect(cleanRsvp({ status: 'maybe', runGroup: 'blue' })).toEqual({ rsvp: { status: 'maybe', runGroup: 'blue' } })
+    expect(cleanRsvp({ status: 'going', runGroup: null })).toEqual({ rsvp: { status: 'going' } })
+    expect(cleanRsvp({ status: 'not-going', runGroup: 'blue' })).toEqual({ rsvp: { status: 'not-going' } })
   })
 
   it('turns away anything else', () => {
-    for (const body of [null, {}, { going: 'yes' }, { going: 1 }, { going: true, runGroup: '' }, { going: true, runGroup: 'a b' }]) {
+    for (const body of [null, {}, { going: true }, { status: 'yes' }, { status: 'going', runGroup: '' }, { status: 'going', runGroup: 'a b' }]) {
       expect(cleanRsvp(body)).toHaveProperty('error')
     }
   })
@@ -37,19 +38,28 @@ describe('My events (#235)', () => {
     expect(needsAnswer(soon, {}, TODAY)).toBe(true)
     expect(needsAnswer(live, {}, TODAY)).toBe(true)
     expect(needsAnswer(past, {}, TODAY)).toBe(false)
-    expect(needsAnswer(soon, { soon: { going: false } }, TODAY)).toBe(false)
+    expect(needsAnswer(soon, { soon: { status: 'maybe' } }, TODAY)).toBe(false)
   })
 
-  it('holds the events they’re going to or went to, and the ones waiting on an answer', () => {
-    const rsvps = { past: { going: true }, soon: { going: false } }
+  it('holds the events they’re going to, went to or might go to, and the ones waiting on an answer', () => {
+    const rsvps = { past: { status: 'going' as const }, soon: { status: 'not-going' as const }, live: { status: 'maybe' as const } }
     expect(myEvents(events, rsvps, TODAY).map(e => e.id)).toEqual(['later', 'live', 'past'])
-    expect(myEvents(events, { later: { going: false }, live: { going: false }, soon: { going: false } }, TODAY)).toEqual([])
+    const none = { later: { status: 'not-going' as const }, live: { status: 'not-going' as const }, soon: { status: 'not-going' as const } }
+    expect(myEvents(events, none, TODAY)).toEqual([])
+  })
+
+  it('once it’s over, a maybe is no answer: it only counts if they drove', () => {
+    expect(answerFor(past, { past: { status: 'maybe' } }, TODAY)).toBeNull()
+    expect(answerFor(soon, { soon: { status: 'maybe' } }, TODAY)).toBe('maybe')
+    expect(myEvents([past], { past: { status: 'maybe' } }, TODAY)).toEqual([])
   })
 
   it('knows their run group, if it’s still one of the event’s', () => {
-    expect(myRunGroup(soon, { going: true, runGroup: 'blue' })).toBe('blue')
-    expect(myRunGroup(soon, { going: true, runGroup: 'red' })).toBeNull()
-    expect(myRunGroup(soon, { going: true })).toBeNull()
+    expect(myRunGroup(soon, { status: 'going', runGroup: 'blue' })).toBe('blue')
+    expect(myRunGroup(soon, { status: 'maybe', runGroup: 'blue' })).toBe('blue')
+    expect(myRunGroup(soon, { status: 'not-going', runGroup: 'blue' })).toBeNull()
+    expect(myRunGroup(soon, { status: 'going', runGroup: 'red' })).toBeNull()
+    expect(myRunGroup(soon, { status: 'going' })).toBeNull()
     expect(myRunGroup(soon, undefined)).toBeNull()
   })
 })

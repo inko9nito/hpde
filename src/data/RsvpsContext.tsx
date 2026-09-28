@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import { RSVP_STATUSES } from '../utils/rsvp'
 import type { Rsvp, Rsvps } from '../utils/rsvp'
 
 // The signed-in driver's answers to "are you going?" (#235), from the rsvps
@@ -27,8 +28,10 @@ async function errorFrom(res: Response): Promise<Error> {
   return new Error('Couldn’t reach the server. Check your connection and try again.')
 }
 
-function isRsvps(v: unknown): v is Rsvps {
-  return !!v && typeof v === 'object' && !Array.isArray(v)
+// Only answers in the current shape; anything else reads as no answer.
+function parseRsvps(v: unknown): Rsvps {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  return Object.fromEntries(Object.entries(v).filter(([, r]) => RSVP_STATUSES.includes(r?.status)))
 }
 
 const RsvpsContext = createContext<RsvpsValue | null>(null)
@@ -53,7 +56,7 @@ export function RsvpsProvider({ children }: { children: ReactNode }) {
         const res = await authedFetch(RSVPS_URL)
         if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw await errorFrom(res)
         const body = await res.json()
-        if (!cancelled) setLoaded({ userId, rsvps: isRsvps(body?.rsvps) ? body.rsvps : {} })
+        if (!cancelled) setLoaded({ userId, rsvps: parseRsvps(body?.rsvps) })
       } catch {
         if (!cancelled) setFailed(true)
       }

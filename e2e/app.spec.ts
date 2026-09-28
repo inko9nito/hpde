@@ -754,7 +754,7 @@ test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('a driver says they’re going and picks their run group; My events has theirs, and asks about new ones (#235)', async ({ page }) => {
+test('a driver joins events from the list or the event’s header — going, maybe or not — with their run group; My events has theirs (#235)', async ({ page }) => {
   const withGroups: EventConfig = {
     id: `${isoInDays(20)}_group-day`,
     name: 'Group Day',
@@ -764,9 +764,9 @@ test('a driver says they’re going and picks their run group; My events has the
   await stubEvents(page, [withGroups, upcoming, ...TEST_EVENTS])
   await signInAsAdmin(page)
   // Went to Alpha; not going to Bravo.
-  const rsvps: Record<string, { going: boolean; runGroup?: string }> = {
-    [alpha.id]: { going: true },
-    [TEST_EVENTS[1].id]: { going: false },
+  const rsvps: Record<string, { status: string; runGroup?: string }> = {
+    [alpha.id]: { status: 'going' },
+    [TEST_EVENTS[1].id]: { status: 'not-going' },
   }
   await page.route(/\/api\/rsvps(\?|$)/, async route => {
     const req = route.request()
@@ -779,45 +779,68 @@ test('a driver says they’re going and picks their run group; My events has the
     return route.fulfill({ json: { rsvps } })
   })
 
+  // An event's own page, over the list.
+  const eventPage = (name: string) => page.locator('div.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name }) })
+
   await page.goto('/#/')
-  // Both upcoming events are waiting on an answer.
-  await expect(page.getByRole('button', { name: /Group Day.*Going\?/ })).toBeVisible()
+  // Both upcoming events are waiting on an answer: Join event on each.
+  const join = page.getByRole('button', { name: 'Join event' })
+  await expect(join).toHaveCount(2)
+  // The soonest first: Upcoming Track Day. Maybe — it's on the waitlist.
+  await join.first().click()
+  const choices = page.getByRole('dialog', { name: 'Are you going?' })
+  await expect(choices.getByRole('radio')).toHaveText(['Going', /^Maybe/, 'Not going'])
+  await choices.getByRole('radio', { name: /^Maybe/ }).click()
+  await expect(choices).toBeHidden()
+  expect(rsvps[upcoming.id]).toEqual({ status: 'maybe' })
+  // It stays on the list, in sentence case, and didn't open the event.
+  await expect(page.getByRole('button', { name: /Upcoming Track Day.*Maybe$/ })).toBeVisible()
+  await expect(page).toHaveURL(/#\/$/)
+  await expect(join).toHaveCount(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
   await page.getByRole('button', { name: 'My events' }).click()
   await expect(page.getByRole('button', { name: 'My events' })).toHaveAttribute('aria-pressed', 'true')
-  // Theirs: the upcoming ones still asking, and Alpha — not Bravo.
+  // Theirs: maybe, still asking, and Alpha — not Bravo.
   await expect(page.getByRole('button', { name: /Group Day/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toBeVisible()
   await expect(page.getByRole('button', { name: new RegExp(alpha.name) })).toBeVisible()
   await expect(page.getByRole('button', { name: new RegExp(TEST_EVENTS[1].name) })).toHaveCount(0)
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
+  // In the event's header: Join event, then going, and their run group.
   await page.getByRole('button', { name: /Group Day/ }).click()
-  const card = page.getByRole('region', { name: 'Your RSVP' })
-  await expect(card.getByRole('heading', { name: 'Are you going?' })).toBeVisible()
-  await card.getByRole('button', { name: 'Going', exact: true }).click()
-  await expect(card.getByRole('heading', { name: 'You’re going' })).toBeVisible()
-  await expect(card.getByRole('button', { name: 'Going', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await card.getByRole('radio', { name: 'Blue' }).click()
-  await expect(card.getByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true')
-  expect(rsvps[withGroups.id]).toEqual({ going: true, runGroup: 'blue' })
+  const groupDay = eventPage('Group Day')
+  await groupDay.getByRole('button', { name: 'Join event' }).click()
+  await choices.getByRole('radio', { name: 'Going', exact: true }).click()
+  // Stays open for the run group.
+  await choices.getByRole('radio', { name: 'Blue' }).click()
+  await expect(choices).toBeHidden()
+  expect(rsvps[withGroups.id]).toEqual({ status: 'going', runGroup: 'blue' })
+  await expect(groupDay.getByRole('button', { name: /^Going.*Blue/ })).toBeVisible()
   // The schedule shows their group's sessions.
-  await expect(page.getByRole('button', { name: /All run groups/ })).toHaveCount(0)
+  await expect(groupDay.getByRole('button', { name: /All run groups/ })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Back on the list, it's theirs: going, not asking.
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByRole('button', { name: /Group Day.*Going$/ })).toBeVisible()
+  await expect(join).toHaveCount(0)
 
-  // Not going to the other: it leaves My events.
+  // Not going to the other after all: it leaves My events.
   await page.getByRole('button', { name: /Upcoming Track Day/ }).click()
-  await card.getByRole('button', { name: 'Not going' }).click()
-  await expect(card.getByRole('heading', { name: 'You’re not going' })).toBeVisible()
+  const upcomingPage = eventPage('Upcoming Track Day')
+  await upcomingPage.getByRole('button', { name: /^Maybe/ }).click()
+  await choices.getByRole('radio', { name: 'Not going' }).click()
+  await expect(upcomingPage.getByRole('button', { name: /^Not going/ })).toBeVisible()
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByRole('button', { name: /Group Day/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toHaveCount(0)
 
-  // A past event asks whether they drove it.
+  // A past event: whether they drove it.
   await page.getByRole('button', { name: 'All', exact: true }).click()
   await page.getByRole('button', { name: new RegExp(TEST_EVENTS[1].name) }).click()
-  await expect(card.getByRole('heading', { name: 'You didn’t drive this event' })).toBeVisible()
+  const bravo = eventPage(TEST_EVENTS[1].name)
+  await bravo.getByRole('button', { name: /^Didn’t drive/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Did you drive this event?' }).getByRole('radio'))
+    .toHaveText(['I drove', 'I didn’t drive'])
 })

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Calendar as CalendarIcon, Check, List, Plus } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, CircleHelp, List, Plus } from 'lucide-react'
 import { useEvents } from '../data/EventsContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { myEvents, needsAnswer } from '../utils/rsvp'
+import { answerFor, myEvents, needsAnswer } from '../utils/rsvp'
+import { RsvpPicker } from './RsvpPicker'
 import { useAuth } from '../auth/AuthContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { firstDate, partitionEvents } from '../utils/eventClass'
@@ -135,48 +136,60 @@ function FeaturedEventCard({
 }: {
   event: EventConfig
   live: boolean
-  /** Theirs, signed in (#235): going, waiting on their answer, or neither. */
-  rsvp?: 'going' | 'ask'
+  /**
+   * Signed in (#235): their answer, as a badge — or 'ask', waiting on it,
+   * with a Join event button in the corner that offers the choices.
+   */
+  rsvp?: 'going' | 'maybe' | 'ask'
   onClick: () => void
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="relative flex aspect-[364/170] w-full flex-col justify-end overflow-hidden rounded-2xl border border-gray-900 bg-gray-900 text-left shadow-[0_2px_4px_rgba(17,24,39,0.08),0_12px_28px_rgba(17,24,39,0.18)] transition-colors hover:border-gray-500"
-    >
-      <FadedTrack trackId={event.trackId} />
-      {/* Same left inset and date column as the past cards, so the date
-          stacks line up down the page; painted above the track. */}
-      <div className={`relative flex items-center gap-4 ${CARD_PADDING}`}>
-        <DateBlock event={event} muted={false} dark />
-        <div aria-hidden="true" className="w-px self-stretch bg-gray-700" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-rubik text-[17px] font-semibold leading-tight text-white">
-            {event.name}
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-2.5">
-            <span className="truncate text-sm text-gray-400">
-              {event.organizer ?? 'Organizer not set'}
-            </span>
-            {live && <StatusBadge status="live" />}
-            {rsvp && <RsvpBadge rsvp={rsvp} />}
+    <div className="relative">
+      <button
+        onClick={onClick}
+        className="relative flex aspect-[364/170] w-full flex-col justify-end overflow-hidden rounded-2xl border border-gray-900 bg-gray-900 text-left shadow-[0_2px_4px_rgba(17,24,39,0.08),0_12px_28px_rgba(17,24,39,0.18)] transition-colors hover:border-gray-500"
+      >
+        <FadedTrack trackId={event.trackId} />
+        {/* Same left inset and date column as the past cards, so the date
+            stacks line up down the page; painted above the track. Clear
+            of the Join event button when there is one. */}
+        <div className={`relative flex items-center gap-4 ${CARD_PADDING} ${rsvp === 'ask' ? 'pr-32' : ''}`}>
+          <DateBlock event={event} muted={false} dark />
+          <div aria-hidden="true" className="w-px self-stretch bg-gray-700" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-rubik text-[17px] font-semibold leading-tight text-white">
+              {event.name}
+            </div>
+            <div className="mt-1 flex min-w-0 items-center gap-2.5">
+              <span className="truncate text-sm text-gray-400">
+                {event.organizer ?? 'Organizer not set'}
+              </span>
+              {live && <StatusBadge status="live" />}
+              {(rsvp === 'going' || rsvp === 'maybe') && <RsvpBadge rsvp={rsvp} />}
+            </div>
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+      {/* Beside the card's button, not in it: a button can't hold another. */}
+      {rsvp === 'ask' && (
+        <div className="absolute bottom-4 right-4">
+          <RsvpPicker event={event} status={live ? 'live' : 'upcoming'} variant="card" />
+        </div>
+      )}
+    </div>
   )
 }
 
-/** On a dark featured card: "Going", or a nudge to answer (#235). */
-function RsvpBadge({ rsvp }: { rsvp: 'going' | 'ask' }) {
+/** On a dark featured card: Going or Maybe (#235). */
+function RsvpBadge({ rsvp }: { rsvp: 'going' | 'maybe' }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-rubik text-[10px] font-medium uppercase leading-none ${
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-rubik text-[11px] font-medium leading-none ${
         rsvp === 'going' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-amber-400/15 text-amber-300'
       }`}
     >
-      {rsvp === 'going' && <Check size={10} strokeWidth={3} aria-hidden="true" />}
-      {rsvp === 'going' ? 'Going' : 'Going?'}
+      {rsvp === 'going' ? <Check size={11} strokeWidth={3} aria-hidden="true" /> : <CircleHelp size={11} strokeWidth={2.5} aria-hidden="true" />}
+      {rsvp === 'going' ? 'Going' : 'Maybe'}
     </span>
   )
 }
@@ -256,10 +269,12 @@ export function LandingPage({ onOpenEvent }: Props) {
   const shown = mine ? myEvents(EVENTS, rsvps) : EVENTS
   const { live, upcoming, past } = partitionEvents(shown)
   const upcomingRows = [...live, ...upcoming]
-  const rsvpOf = (e: EventConfig) => !rsvpsReady ? undefined
-    : rsvps[e.id]?.going ? 'going' as const
-    : needsAnswer(e, rsvps) ? 'ask' as const
-    : undefined
+  const rsvpOf = (e: EventConfig) => {
+    if (!rsvpsReady) return undefined
+    const answer = answerFor(e, rsvps)
+    if (answer === 'going' || answer === 'maybe') return answer
+    return needsAnswer(e, rsvps) ? 'ask' as const : undefined
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

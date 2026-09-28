@@ -7,7 +7,8 @@ import type { Rsvp, Rsvps } from '../../src/utils/rsvp.ts'
 // every request needs their sign-in, and only ever reaches their own — the
 // key is who the token says they are, never anything sent.
 //   GET                         every answer they've given, by event id
-//   PUT    ?event=  {going, runGroup?}  answers for one event (replacing any)
+//   PUT    ?event=  {status, runGroup?}  answers for one event (replacing
+//                                any): going, maybe or not-going
 //   DELETE ?event=              takes the answer back: not answered again
 //
 // Kept in Netlify Blobs, one record per driver, keyed by user id. A deploy

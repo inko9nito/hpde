@@ -37,7 +37,6 @@ import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { useRsvps } from './data/RsvpsContext'
 import { myRunGroup } from './utils/rsvp'
-import { RsvpCard } from './components/RsvpCard'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
@@ -462,6 +461,7 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           notesCount={lapLog.sessions.length}
+          onRunGroup={id => setSelectedGroups([id])}
           onBack={trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent)) : backToTab}
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)
@@ -471,8 +471,6 @@ export default function App() {
         />
 
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        {/* Going? Above every tab (#235). */}
-        <RsvpCard event={activeEvent} status={eventStatus} onRunGroup={id => setSelectedGroups([id])} />
         {/* Tab panel. Keyed on activeTab so a fresh element mounts on
             change — CSS keyframe (see index.css) plays a ~10 ms fade,
             matching iOS's near-instant tab switch. */}
