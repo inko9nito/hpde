@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import handler from '../functions/laps.mts'
+import handler, { TEST_SEED_KEY } from '../functions/laps.mts'
 import { fakeBlobs } from './fakeBlobs'
+import { TEST_DRIVER_ID } from '../../src/data/testAccount'
+import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps'
+import { cleanSessionLaps } from '../../src/utils/lapTimes'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:laps')
@@ -286,6 +289,65 @@ describe('laps function (#210)', () => {
       expect(error).toHaveBeenCalled()
       error.mockRestore()
       expect(store.size).toBe(0)
+    })
+  })
+
+  describe('the test account (#309)', () => {
+    const asTest = (q = `?event=${EVENT}`) => `${q}${q ? '&' : '?'}driver=${TEST_DRIVER_ID}`
+    const meta = blobs.data('site:laps-meta')
+
+    it('starts full of the sample laps, with each lap’s speeds, for admins', async () => {
+      const res = await call('GET', { token: 'admin-token', query: asTest() })
+      expect(res.status).toBe(200)
+      const sessions = (await res.json()).sessions
+      const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!
+      expect(sessions).toEqual(Object.values(sample.sessions))
+      expect(sessions[0].laps[0]).toMatchObject({ topMph: expect.any(Number), avgMph: expect.any(Number) })
+
+      const summary = (await (await call('GET', { token: 'admin-token', query: asTest('') })).json()).events
+      expect(summary.map((e: { eventId: string }) => e.eventId).sort()).toEqual(TEST_ACCOUNT_LAPS.map(e => e.eventId).sort())
+      // The admin's own laps are untouched.
+      expect(await sessionsOf('admin-token')).toEqual([])
+    })
+
+    it('is for admins only', async () => {
+      expect((await call('GET', { token: 'vera-token', query: asTest() })).status).toBe(403)
+      expect((await call('PUT', { token: 'vera-token', body: { session: session1 }, query: asTest() })).status).toBe(403)
+      expect((await call('GET', { query: asTest() })).status).toBe(401)
+      expect(store.size).toBe(0)
+    })
+
+    it('keeps what’s saved there, until the sample changes', async () => {
+      await call('PUT', { token: 'admin-token', body: { session: session1 }, query: asTest() })
+      await call('PUT', { token: 'admin-token', body: { session: session1 }, query: asTest('?event=2026-10-03_elsewhere') })
+      const keys = async () => (await (await call('GET', { token: 'admin-token', query: asTest() })).json()).sessions.map((s: { key: string }) => s.key)
+      expect(await keys()).toContain('2026-09-13 09:50 blue')
+
+      // A new sample replaces it all.
+      meta.set(TEST_SEED_KEY, { version: TEST_ACCOUNT_VERSION - 1 })
+      expect(await keys()).not.toContain('2026-09-13 09:50 blue')
+      expect(store.has(`${TEST_DRIVER_ID}/2026-10-03_elsewhere`)).toBe(false)
+      expect(meta.get(TEST_SEED_KEY)).toMatchObject({ version: TEST_ACCOUNT_VERSION })
+    })
+
+    it('on a deploy preview, starts from the sample in its own store', async () => {
+      const preview = { deploy: { context: 'deploy-preview' } }
+      await call('PUT', { token: 'admin-token', body: { session: session1 }, query: asTest() })
+      const res = await call('GET', { token: 'admin-token', query: asTest(), context: preview })
+      const sessions = (await res.json()).sessions
+      expect(sessions).toEqual(Object.values(TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!.sessions))
+      expect([...blobs.data('deploy:laps').keys()].every(key => key.startsWith(`${TEST_DRIVER_ID}/`))).toBe(true)
+    })
+
+    it('has sample laps the laps function would save as they are', () => {
+      expect(TEST_ACCOUNT_LAPS.length).toBeGreaterThan(0)
+      for (const event of TEST_ACCOUNT_LAPS) {
+        for (const [key, session] of Object.entries(event.sessions)) {
+          expect(key).toBe(session.key)
+          expect(cleanSessionLaps(session)).toEqual({ session })
+          expect(session.laps.every(lap => lap.topMph !== undefined && lap.avgMph !== undefined)).toBe(true)
+        }
+      }
     })
   })
 })

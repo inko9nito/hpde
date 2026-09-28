@@ -244,6 +244,10 @@ test('the landing menu slides up, and Share slides up over the list (#273, #278)
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  // The test account is for admins (#309).
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Switch to test account' })).toHaveCount(0)
 })
 
 test('anyone can share an event’s own link from its menu (#273)', async ({ page }) => {
@@ -639,6 +643,63 @@ test('a track page slides in over the event from My notes, listing the layout’
   await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Alpha in October' })).toHaveCount(0)
   await expect(events.nth(1)).toBeInViewport()
+})
+
+test('an admin switches to the test account from the menu, sees its laps and speeds, and switches back (#309)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  const testSession = {
+    key: '2026-03-07 08:30 blue', date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+    laps: [{ ms: 100_071, topMph: 92, avgMph: 61.7 }, { ms: 84_072, topMph: 106.3, avgMph: 69.5 }],
+  }
+  const asked: (string | null)[] = []
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const params = new URL(route.request().url()).searchParams
+    const driver = params.get('driver')
+    asked.push(driver)
+    const test = driver === 'test-account'
+    if (!params.has('event')) {
+      return route.fulfill({ json: { events: test ? [{ eventId: alpha.id, best: 84_072, sessions: 1 }] : [] } })
+    }
+    return route.fulfill({ json: { sessions: test && params.get('event') === alpha.id ? [testSession] : [] } })
+  })
+
+  await page.goto('/#/tracks')
+  const alphaTrack = page.getByRole('list', { name: 'Tracks' }).getByRole('link', { name: /^MSRC 2\.0 CW/ })
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
+  await expect(alphaTrack).not.toContainText('1:24.072')
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch to test account' }).click()
+  await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0)
+  // The account button says so, and the test account's laps show.
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
+  await expect(alphaTrack).toContainText('1:24.072')
+  expect(asked).toContain('test-account')
+
+  // Still on it after a reload — once its laps are in, so the reload
+  // doesn't cut off requests on their way.
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
+  await expect(alphaTrack).toContainText('1:24.072')
+
+  // Its laps show with each lap's speeds.
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
+  await card.getByRole('button', { name: 'Show laps for Session 1' }).click()
+  const table = card.getByRole('table', { name: 'Laps' })
+  await expect(table.getByRole('columnheader', { name: 'Top speed, mph' })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: 'Average speed, mph' })).toBeVisible()
+  await expect(table.getByRole('row', { name: /^2 / })).toHaveText(/1:24\.072\s*106\.3\s*69\.5/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Back the same way.
+  await page.goto('/#/tracks')
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch back to my account' }).click()
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
+  await expect(alphaTrack).not.toContainText('1:24.072')
 })
 
 test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {

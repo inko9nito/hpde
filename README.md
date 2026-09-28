@@ -216,6 +216,18 @@ Only they and admins can see them.
     `/api/laps` takes `driver=<user id>` from admins only, checks the id
     against Identity, and notes the admin's email on each session saved
     that way (`loggedBy`).
+- **Test account (admins, #309):** menu → **Switch to test account**
+  shows a sample driver's laps in place of your own everywhere (Tracks,
+  track pages, My notes, the lap sheet): anonymous sample laps with
+  each lap's top and average speed (#298), at five of the events. A flask on your
+  account picture says you're on it; **Switch back to my account** in
+  the same menu returns. It stays on through reloads, until you switch
+  back or sign out. All admins share it, and you can add, edit or remove
+  its laps; they're kept until the sample changes.
+  - The sample is `src/data/fixtures/testAccountLaps.ts`; `/api/laps`
+    takes `driver=test-account` from admins only and fills it from there
+    the first time it's used, and again whenever `TEST_ACCOUNT_VERSION`
+    goes up. A deploy preview starts its own from the sample.
 
 ---
 

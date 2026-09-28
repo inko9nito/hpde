@@ -1,4 +1,4 @@
-import { UserRound } from 'lucide-react'
+import { FlaskConical, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 /**
@@ -10,7 +10,7 @@ import { useAuth } from '../auth/AuthContext'
  * picker) don't shift — or nothing, when `reserveSpace` is false.
  */
 export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean }) {
-  const { status, user, signIn, openAccount } = useAuth()
+  const { status, user, signIn, openAccount, testAccount } = useAuth()
   const base =
     'inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors'
 
@@ -19,8 +19,8 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
     return (
       <button
         onClick={openAccount}
-        aria-label={`Account: ${user.email}`}
-        className={`${base} hover:bg-gray-100`}
+        aria-label={testAccount ? `Account: ${user.email}, on the test account` : `Account: ${user.email}`}
+        className={`${base} relative hover:bg-gray-100`}
       >
         {user.avatarUrl ? (
           <img
@@ -32,6 +32,16 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
         ) : (
           <span className="grid h-7 w-7 place-items-center rounded-full bg-gray-900 text-xs font-semibold text-white">
             {initial}
+          </span>
+        )}
+        {/* On the test account (#309): its laps are showing, not theirs. */}
+        {testAccount && (
+          <span
+            className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-amber-400 text-gray-900 ring-2 ring-white"
+            data-test-account
+            title="Test account"
+          >
+            <FlaskConical size={10} strokeWidth={2.5} aria-hidden="true" />
           </span>
         )}
       </button>
