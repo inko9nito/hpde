@@ -32,7 +32,7 @@ export function sameLayout(a: EventConfig, b: EventConfig): boolean {
 }
 
 /** "MSRC" from the track icon id (msrc-1-7), otherwise the track's name. */
-export function trackShortName(event: EventConfig): string | null {
+export function trackShortName(event: Pick<EventConfig, 'track' | 'trackId'>): string | null {
   const fromIcon = event.trackId?.match(/^([a-z]+)-/)?.[1]
   if (fromIcon) return fromIcon.toUpperCase()
   return event.track?.trim() || null
@@ -83,7 +83,11 @@ export interface Layout {
   name: string
   /** The track's full name: "Motorsport Ranch - Cresson". */
   track?: string
+  /** Where the track is: "Cresson, TX". */
+  city?: string
   trackId?: string
+  /** Which way round it's driven, when the events say (#307). */
+  direction?: 'cw' | 'ccw'
   /** Every event on it, as its track page finds them. */
   events: EventConfig[]
 }
@@ -100,13 +104,48 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
     if (slug && !named.has(slug)) named.set(slug, e)
   }
   const latest = (layout: Layout) => layout.events.map(startDate).sort().at(-1) ?? ''
-  return [...named].map(([slug, e]): Layout => ({
-    slug,
-    name: layoutName(e)!,
-    track: e.track?.trim() || undefined,
-    trackId: e.trackId,
-    events: eventsOnLayout(slug, events),
-  })).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))
+  return [...named].map(([slug, e]): Layout => {
+    const direction = directionKey(e.direction)
+    return {
+      slug,
+      name: layoutName(e)!,
+      track: e.track?.trim() || undefined,
+      city: e.city?.trim() || undefined,
+      trackId: e.trackId,
+      ...(direction === 'cw' || direction === 'ccw' ? { direction } : {}),
+      events: eventsOnLayout(slug, events),
+    }
+  }).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))
+}
+
+/** A track and its layouts, for the Tracks tab's groups (#314). */
+export interface TrackGroup {
+  /** The track's full name, or its short one when no event names it: "Motorsport Ranch - Cresson". */
+  name: string
+  city?: string
+  layouts: Layout[]
+}
+
+/**
+ * The layouts grouped by their track (#314), however its name is spelled —
+ * each group where its first layout falls, so the track with the latest
+ * event comes first, and its layouts in alphabetical order.
+ */
+export function trackGroups(layouts: Layout[]): TrackGroup[] {
+  const groups = new Map<string, TrackGroup>()
+  for (const layout of layouts) {
+    const name = layout.track ?? trackShortName(layout) ?? layout.name
+    const key = compact(name)
+    const group = groups.get(key)
+    if (group) {
+      group.layouts.push(layout)
+      group.city ??= layout.city
+    } else {
+      groups.set(key, { name, city: layout.city, layouts: [layout] })
+    }
+  }
+  const byName = (a: Layout, b: Layout) => a.name.localeCompare(b.name, undefined, { numeric: true })
+  return [...groups.values()].map(g => ({ ...g, layouts: g.layouts.sort(byName) }))
 }
 
 /** The driver's laps on a layout, from the laps function's summary: best lap, sessions, and events with laps. */

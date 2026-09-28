@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, RotateCcw, RotateCw } from 'lucide-react'
 import { HomeHeader } from './HomeTabs'
 import { TrackIcon } from './TrackIcon'
 import { CARD_FRAME, EmptyRow } from './LandingPage'
@@ -8,48 +8,82 @@ import { plural } from './LapSessions'
 import { useEvents } from '../data/EventsContext'
 import { useAuth } from '../auth/AuthContext'
 import { useLapSummary } from '../data/lapLog'
-import { layoutLaps, layoutsOf } from '../utils/trackStats'
-import type { EventBest, Layout } from '../utils/trackStats'
-import { formatLapTime } from '../utils/lapTimes'
+import { layoutLaps, layoutsOf, trackGroups } from '../utils/trackStats'
+import type { EventBest, Layout, TrackGroup } from '../utils/trackStats'
 
 // The track's panel: wider than tall, unlike an event card's square tile,
 // so a track row doesn't read as an event (#274). As tall as the Events
 // list's rows (82px); a little narrower on the narrowest phones, to leave
 // the name room.
 const THUMB = 'w-24 min-[375px]:w-28 min-h-[80px]'
+// The track icon's square frame, in px: the shape fills about four fifths
+// of its width (#314).
+const ICON = 84
 
 /**
  * One layout: its shape on a wide dark panel along the card's left edge,
- * its name, and your best lap there. Opens its track page.
+ * its name, and how many events you have sessions at there. Opens its
+ * track page, with your laps.
  */
 function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | null }) {
   const laps = summary ? layoutLaps(layout, summary) : null
+  const DirectionIcon = layout.direction === 'ccw' ? RotateCcw : RotateCw
   return (
     <a
       href={trackHash(layout.slug)}
       className={`${CARD_FRAME} flex items-stretch overflow-hidden transition-colors hover:border-gray-400`}
     >
       {/* Flush with the card's left, top and bottom; its corners are the card's. */}
-      <div className={`${THUMB} grid shrink-0 place-items-center bg-gray-900`}>
-        <TrackIcon trackId={layout.trackId} tone="dark" size={64} padding={0} radius="rounded-none" />
+      <div className={`${THUMB} relative shrink-0 overflow-hidden bg-gray-900`}>
+        {/* Taller than the panel, but the shape is a band across its middle:
+            placed over the panel, so it doesn't stretch the card. */}
+        <div className="absolute inset-0 grid place-items-center">
+          <TrackIcon trackId={layout.trackId} tone="dark" size={ICON} padding={0} radius="rounded-none" />
+        </div>
+        {/* Which way round it's driven (#307); the name says so too, as CW or CCW. */}
+        {layout.direction && (
+          <DirectionIcon
+            size={14}
+            strokeWidth={2.25}
+            data-direction={layout.direction}
+            className="absolute bottom-1.5 right-1.5 text-white/60"
+            aria-hidden="true"
+          />
+        )}
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-4 pr-3">
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{layout.name}</div>
-          <div className="mt-0.5 truncate text-sm text-gray-500">
-            {layout.track ?? plural(layout.events.length, 'event', 'events')}
-          </div>
+          {/* The events you have sessions at, not the sessions (#314); nothing until your laps are in. */}
+          {laps && (laps.events ? (
+            <div className="mt-0.5 truncate text-sm text-gray-500">{plural(laps.events, 'event', 'events')}</div>
+          ) : (
+            // Faded: a note, not a count to read.
+            <div className="mt-0.5 truncate text-xs text-gray-400">No sessions yet</div>
+          ))}
         </div>
-        {/* Only with laps to show, leaving the track's name room otherwise. */}
-        {laps?.best !== undefined && (
-          <div className="flex shrink-0 flex-col items-end">
-            <span className="font-mono text-[15px] font-semibold tabular-nums text-gray-900">{formatLapTime(laps.best)}</span>
-            <span className="mt-0.5 text-xs text-gray-400">{plural(laps.sessions, 'session', 'sessions')}</span>
-          </div>
-        )}
         <ChevronRight size={18} className="-ml-2 shrink-0 text-gray-300" aria-hidden="true" />
       </div>
     </a>
+  )
+}
+
+/** A track's layouts under its name and where it is (#314). */
+function TrackSection({ group, summary }: { group: TrackGroup; summary: EventBest[] | null }) {
+  return (
+    <section aria-label={group.name}>
+      <div className="mb-2">
+        <h2 className="truncate font-rubik text-sm font-semibold text-gray-700">{group.name}</h2>
+        {group.city && <div className="truncate text-xs text-gray-500">{group.city}</div>}
+      </div>
+      <ul className="space-y-4">
+        {group.layouts.map(layout => (
+          <li key={layout.slug}>
+            <TrackRow layout={layout} summary={summary} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -66,33 +100,27 @@ function TrackRowSkeleton() {
 }
 
 /**
- * The Tracks tab (#274): every track layout the events are on, with the
- * driver's best lap on each once they're signed in. Each opens its track
- * page, with every session they've logged there.
+ * The Tracks tab (#274): every track layout the events are on, grouped by
+ * track (#314), with the driver's best lap on each once they're signed in.
+ * Each opens its track page, with every session they've logged there.
  */
 export function TracksTab() {
   const { events, loaded } = useEvents()
   const { status } = useAuth()
-  const layouts = useMemo(() => layoutsOf(events), [events])
+  const groups = useMemo(() => trackGroups(layoutsOf(events)), [events])
   const summary = useLapSummary(status === 'signed-in')
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <HomeHeader title="Tracks">
-          <p className="mt-2 text-sm text-gray-500">
-            {status === 'signed-in'
-              ? 'Your lap times at each track, across every event.'
-              : 'Sign in to see your lap times at each track, across every event.'}
-          </p>
-        </HomeHeader>
-        {layouts.length === 0 ? (
+        <HomeHeader title="Tracks" />
+        {groups.length === 0 ? (
           loaded ? <EmptyRow>No tracks yet.</EmptyRow> : <TrackRowSkeleton />
         ) : (
-          <ul className="space-y-4" aria-label="Tracks">
-            {layouts.map(layout => (
-              <li key={layout.slug}>
-                <TrackRow layout={layout} summary={summary} />
+          <ul className="space-y-6" aria-label="Tracks">
+            {groups.map(group => (
+              <li key={group.name}>
+                <TrackSection group={group} summary={summary} />
               </li>
             ))}
           </ul>
