@@ -1,6 +1,7 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { buildEvent, editDetails, isAdmin } from '../lib/newEvent.mjs'
 import { openStores, listEvents, ensureCopied } from '../lib/eventsStore.mjs'
+import { ensurePastEvents } from '../lib/pastEvents.mjs'
 import { applySchedule } from '../../src/utils/scheduleEditor.ts'
 
 // Every event (#232), kept in a Netlify Blobs store keyed by event id. GET
@@ -43,6 +44,11 @@ export default async function handler(req: Request, context: unknown, deps: Reco
   } catch (err) {
     // Not fatal: work with what's there, and the next request tries again.
     console.error('events: copying the live events failed:', err)
+  }
+  try {
+    await ensurePastEvents(stores)
+  } catch (err) {
+    console.error('events: adding the past events failed:', err)
   }
 
   if (req.method === 'GET') {

@@ -117,6 +117,11 @@ their own events. No extra Netlify setup is needed for Blobs.
   the live ones. A later push makes a new deploy with a fresh copy.
 - The events that used to live in the repo (`src/data/schedules/*.md`)
   were imported into the live store once, in #252.
+- Three past events (Jul 19, Sep 13 and Oct 4–5, 2025) are added the
+  same way, once, on the first read after #310
+  (`netlify/lib/pastEvents.mjs`). With no organizer's schedule, each
+  lists only one run group's sessions, at the times its laps started.
+  After that they're ordinary events: edit or delete them in the app.
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.
