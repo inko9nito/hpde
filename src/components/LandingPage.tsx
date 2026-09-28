@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Calendar as CalendarIcon, List, Plus } from 'lucide-react'
+import { Calendar as CalendarIcon, Check, List, Plus } from 'lucide-react'
 import { useEvents } from '../data/EventsContext'
+import { useRsvps } from '../data/RsvpsContext'
+import { myEvents, needsAnswer } from '../utils/rsvp'
 import { useAuth } from '../auth/AuthContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { firstDate, partitionEvents } from '../utils/eventClass'
@@ -128,10 +130,13 @@ function EventCard({
 function FeaturedEventCard({
   event,
   live,
+  rsvp,
   onClick,
 }: {
   event: EventConfig
   live: boolean
+  /** Theirs, signed in (#235): going, waiting on their answer, or neither. */
+  rsvp?: 'going' | 'ask'
   onClick: () => void
 }) {
   return (
@@ -154,10 +159,52 @@ function FeaturedEventCard({
               {event.organizer ?? 'Organizer not set'}
             </span>
             {live && <StatusBadge status="live" />}
+            {rsvp && <RsvpBadge rsvp={rsvp} />}
           </div>
         </div>
       </div>
     </button>
+  )
+}
+
+/** On a dark featured card: "Going", or a nudge to answer (#235). */
+function RsvpBadge({ rsvp }: { rsvp: 'going' | 'ask' }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-rubik text-[10px] font-medium uppercase leading-none ${
+        rsvp === 'going' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-amber-400/15 text-amber-300'
+      }`}
+    >
+      {rsvp === 'going' && <Check size={10} strokeWidth={3} aria-hidden="true" />}
+      {rsvp === 'going' ? 'Going' : 'Going?'}
+    </span>
+  )
+}
+
+type EventsFilter = 'all' | 'mine'
+
+/** Every event, or only theirs (#235) — signed in. */
+function FilterToggle({ filter, onChange }: { filter: EventsFilter; onChange: (f: EventsFilter) => void }) {
+  const options: { id: EventsFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'mine', label: 'My events' },
+  ]
+  return (
+    <div role="group" aria-label="Which events" className="inline-flex gap-1 rounded-lg bg-gray-100 p-1">
+      {options.map(o => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          aria-pressed={filter === o.id}
+          className={`rounded-md px-3 font-rubik text-sm transition-colors ${
+            filter === o.id ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+          style={{ minHeight: 36 }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -198,40 +245,53 @@ export function EmptyRow({ children }: { children: string }) {
 
 export function LandingPage({ onOpenEvent }: Props) {
   const [view, setView] = useLocalStorage<LandingView>('hpde:landingView', 'list')
+  const [filter, setFilter] = useLocalStorage<EventsFilter>('hpde:eventsFilter', 'all')
   const { events: EVENTS, loaded } = useEvents()
   const { user } = useAuth()
+  const { status: rsvpsStatus, rsvps } = useRsvps()
   const isAdmin = !!user?.roles.includes(ADMIN_ROLE)
-  const { live, upcoming, past } = partitionEvents(EVENTS)
+  // Theirs only (#235), once we know which those are.
+  const rsvpsReady = rsvpsStatus === 'ready'
+  const mine = rsvpsReady && filter === 'mine'
+  const shown = mine ? myEvents(EVENTS, rsvps) : EVENTS
+  const { live, upcoming, past } = partitionEvents(shown)
   const upcomingRows = [...live, ...upcoming]
+  const rsvpOf = (e: EventConfig) => !rsvpsReady ? undefined
+    : rsvps[e.id]?.going ? 'going' as const
+    : needsAnswer(e, rsvps) ? 'ask' as const
+    : undefined
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="HPDE Events">
-          {/* List / calendar, under the title (#273), with Add event
-              across from it (#279). */}
+          {/* List / calendar, under the title (#273), then All / My
+              events (#235), with Add event across from them (#279). */}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="inline-flex gap-1 rounded-lg bg-gray-100 p-1">
-              <button
-                onClick={() => setView('list')}
-                className={`rounded-md p-2 transition-colors ${
-                  view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                }`}
-                style={{ minWidth: 36, minHeight: 36 }}
-                aria-label="List view"
-              >
-                <List size={18} />
-              </button>
-              <button
-                onClick={() => setView('calendar')}
-                className={`rounded-md p-2 transition-colors ${
-                  view === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                }`}
-                style={{ minWidth: 36, minHeight: 36 }}
-                aria-label="Calendar view"
-              >
-                <CalendarIcon size={18} />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex gap-1 rounded-lg bg-gray-100 p-1">
+                <button
+                  onClick={() => setView('list')}
+                  className={`rounded-md p-2 transition-colors ${
+                    view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  style={{ minWidth: 36, minHeight: 36 }}
+                  aria-label="List view"
+                >
+                  <List size={18} />
+                </button>
+                <button
+                  onClick={() => setView('calendar')}
+                  className={`rounded-md p-2 transition-colors ${
+                    view === 'calendar' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                  style={{ minWidth: 36, minHeight: 36 }}
+                  aria-label="Calendar view"
+                >
+                  <CalendarIcon size={18} />
+                </button>
+              </div>
+              {rsvpsReady && <FilterToggle filter={filter} onChange={setFilter} />}
             </div>
             {isAdmin && <AddEventLink />}
           </div>
@@ -244,7 +304,7 @@ export function LandingPage({ onOpenEvent }: Props) {
               {upcomingRows.length === 0 ? (
                 // Created events are fetched after load and are usually the
                 // upcoming ones — don't flash "No upcoming events" meanwhile.
-                loaded ? <EmptyRow>No upcoming events.</EmptyRow> : <EventCardSkeleton />
+                loaded ? <EmptyRow>{mine ? 'You’re not going to any upcoming events.' : 'No upcoming events.'}</EmptyRow> : <EventCardSkeleton />
               ) : (
                 <div className="space-y-4">
                   {upcomingRows.map(e => (
@@ -252,6 +312,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                       key={e.id}
                       event={e}
                       live={live.includes(e)}
+                      rsvp={rsvpOf(e)}
                       onClick={() => onOpenEvent(e)}
                     />
                   ))}
@@ -263,7 +324,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                 Past
               </h2>
               {past.length === 0 ? (
-                <EmptyRow>No past events.</EmptyRow>
+                <EmptyRow>{mine ? 'No past events of yours.' : 'No past events.'}</EmptyRow>
               ) : (
                 <div className="space-y-4">
                   {past.map(e => (
@@ -280,7 +341,7 @@ export function LandingPage({ onOpenEvent }: Props) {
             </section>
           </div>
         ) : (
-          <EventCalendar events={EVENTS} onOpenEvent={onOpenEvent} />
+          <EventCalendar events={shown} onOpenEvent={onOpenEvent} />
         )}
       </div>
       <Footer />

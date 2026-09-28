@@ -1,0 +1,124 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import handler from '../functions/rsvps.mts'
+import { fakeBlobs } from './fakeBlobs'
+
+const blobs = fakeBlobs()
+const store = blobs.data('site:rsvps')
+
+// Stands in for Netlify Identity's /user endpoint: one token per user.
+const identityUsers: Record<string, unknown> = {
+  'vera-token': { id: 'vera', email: 'vera@example.com' },
+  'jason-token': { id: 'jason', email: 'jason@example.com' },
+}
+const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
+  expect(String(url)).toBe('https://site.example/.netlify/identity/user')
+  const u = identityUsers[init.headers.Authorization.replace('Bearer ', '')]
+  return u ? new Response(JSON.stringify(u)) : new Response('{}', { status: 401 })
+}
+
+const EVENT = '2026-10-18_msr-scca'
+const OTHER = '2026-11-08_ecr-hpde'
+
+const call = (
+  method: string,
+  { token, body, query = `?event=${EVENT}`, context = {} }: { token?: string; body?: unknown; query?: string; context?: unknown } = {},
+) =>
+  handler(
+    new Request(`https://site.example/api/rsvps${query}`, {
+      method,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
+    }),
+    context,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch } as never,
+  )
+
+const rsvpsOf = async (token: string, context?: unknown) =>
+  (await (await call('GET', { token, query: '', context })).json()).rsvps
+
+describe('rsvps function (#235)', () => {
+  beforeEach(() => blobs.clear())
+
+  it('needs a sign-in for everything', async () => {
+    expect((await call('GET', { query: '' })).status).toBe(401)
+    expect((await call('GET', { token: 'forged', query: '' })).status).toBe(401)
+    expect((await call('PUT', { body: { going: true } })).status).toBe(401)
+    expect((await call('DELETE')).status).toBe(401)
+    expect(store.size).toBe(0)
+  })
+
+  it('starts with no answers, never cached', async () => {
+    const res = await call('GET', { token: 'vera-token', query: '' })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(await res.json()).toEqual({ rsvps: {} })
+  })
+
+  it('reads with strong consistency, so an answer shows up on refresh', async () => {
+    await call('GET', { token: 'vera-token', query: '' })
+    expect(blobs.opened).toContainEqual({ kind: 'site', options: { name: 'rsvps', consistency: 'strong' } })
+  })
+
+  it('saves an answer with a run group, and lists every answer by event', async () => {
+    const res = await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
+    expect(res.status).toBe(200)
+    const { rsvp } = await res.json()
+    expect(rsvp).toMatchObject({ going: true, runGroup: 'blue' })
+    expect(typeof rsvp.updatedAt).toBe('string')
+    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { going: false } })
+
+    const rsvps = await rsvpsOf('vera-token')
+    expect(rsvps[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
+    expect(rsvps[OTHER]).toMatchObject({ going: false })
+    expect(rsvps[OTHER].runGroup).toBeUndefined()
+    expect([...store.keys()]).toEqual(['vera'])
+  })
+
+  it('replaces an answer when it changes; not going drops the run group', async () => {
+    await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
+    await call('PUT', { token: 'vera-token', body: { going: false, runGroup: 'blue' } })
+    expect((await rsvpsOf('vera-token'))[EVENT]).toEqual({ going: false, updatedAt: expect.any(String) })
+  })
+
+  it('keeps each driver’s answers to themselves', async () => {
+    await call('PUT', { token: 'vera-token', body: { going: true } })
+    expect(await rsvpsOf('jason-token')).toEqual({})
+  })
+
+  it('takes an answer back', async () => {
+    await call('PUT', { token: 'vera-token', body: { going: true } })
+    await call('PUT', { token: 'vera-token', query: `?event=${OTHER}`, body: { going: true } })
+    expect((await call('DELETE', { token: 'vera-token' })).status).toBe(200)
+    expect(Object.keys(await rsvpsOf('vera-token'))).toEqual([OTHER])
+    await call('DELETE', { token: 'vera-token', query: `?event=${OTHER}` })
+    expect(store.size).toBe(0)
+    // Nothing to take back is fine too.
+    expect((await call('DELETE', { token: 'vera-token' })).status).toBe(200)
+  })
+
+  it('turns away a bad answer or event', async () => {
+    for (const body of [{}, { going: 'yes' }, { going: true, runGroup: 'has space' }, { going: true, runGroup: 7 }]) {
+      const res = await call('PUT', { token: 'vera-token', body })
+      expect(res.status).toBe(400)
+    }
+    expect((await call('PUT', { token: 'vera-token', body: 'not json' })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', query: '?event=../x', body: { going: true } })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', query: '', body: { going: true } })).status).toBe(400)
+    expect((await call('POST', { token: 'vera-token', body: { going: true } })).status).toBe(405)
+    expect(store.size).toBe(0)
+  })
+
+  it('on a preview, starts from the driver’s live answers, and never changes them', async () => {
+    const preview = { deploy: { context: 'deploy-preview' } }
+    await call('PUT', { token: 'vera-token', body: { going: true, runGroup: 'blue' } })
+
+    expect((await rsvpsOf('vera-token', preview))[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
+    await call('PUT', { token: 'vera-token', body: { going: false }, context: preview })
+    await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}`, context: preview })
+
+    // Taken back on the preview: stays taken back there…
+    expect(await rsvpsOf('vera-token', preview)).toEqual({})
+    // …and live, it's as it was.
+    expect((await rsvpsOf('vera-token'))[EVENT]).toMatchObject({ going: true, runGroup: 'blue' })
+  })
+})

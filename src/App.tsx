@@ -35,6 +35,9 @@ import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
+import { useRsvps } from './data/RsvpsContext'
+import { myRunGroup } from './utils/rsvp'
+import { RsvpCard } from './components/RsvpCard'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
@@ -178,6 +181,7 @@ export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus, user } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
+  const { rsvps } = useRsvps()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -332,7 +336,9 @@ export default function App() {
     skipPushEnterAnimationRef.current = false
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
-    setSelectedGroups([])
+    // Their own run group's sessions, when they've said which it is (#235).
+    const mine = myRunGroup(event, rsvps[event.id])
+    setSelectedGroups(mine ? [mine] : [])
     setActiveTab('schedule')
     setLapSlot(null)
     setLapDriver(null)
@@ -465,6 +471,8 @@ export default function App() {
         />
 
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
+        {/* Going? Above every tab (#235). */}
+        <RsvpCard event={activeEvent} status={eventStatus} onRunGroup={id => setSelectedGroups([id])} />
         {/* Tab panel. Keyed on activeTab so a fresh element mounts on
             change — CSS keyframe (see index.css) plays a ~10 ms fade,
             matching iOS's near-instant tab switch. */}
