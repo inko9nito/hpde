@@ -864,13 +864,13 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     elsewhere = { [sameLayout.id]: [at('2026-02-07', [101_000, 98_540])] }
   })
 
-  it('lists every track layout under its track, A–Z, with the events you have sessions at and your best there', async () => {
+  it('lists every track layout under its track, A–Z, with the events you have sessions at there', async () => {
     openAt('#/tracks')
     expect(screen.getByRole('heading', { level: 1, name: 'Tracks' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCW1 event1:30Best lap',
-      'MSRC 1.7 CW2 events1:38.54Best lap',
+      'MSRC 1.7 CCW1 event',
+      'MSRC 1.7 CW2 events',
     ]))
     // Each thumbnail shows which way round it goes (#307).
     expect(tracks().map(t => t.querySelector('[data-direction]')?.getAttribute('data-direction'))).toEqual(['ccw', 'cw'])
@@ -885,7 +885,7 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
       'MSRC 1.7 CCWNo sessions yet',
-      'MSRC 1.7 CW1 event1:39.1Best lap',
+      'MSRC 1.7 CW1 event',
     ]))
   })
 

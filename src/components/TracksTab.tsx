@@ -10,7 +10,6 @@ import { useAuth } from '../auth/AuthContext'
 import { useLapSummary } from '../data/lapLog'
 import { layoutLaps, layoutsOf, trackGroups } from '../utils/trackStats'
 import type { EventBest, Layout, TrackGroup } from '../utils/trackStats'
-import { formatLapTime } from '../utils/lapTimes'
 
 // The track's panel: wider than tall, unlike an event card's square tile,
 // so a track row doesn't read as an event (#274). As tall as the Events
@@ -23,8 +22,8 @@ const ICON = 84
 
 /**
  * One layout: its shape on a wide dark panel along the card's left edge,
- * its name, how many events you have sessions at there, and your best lap
- * there. Opens its track page.
+ * its name, and how many events you have sessions at there. Opens its
+ * track page, with your laps.
  */
 function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | null }) {
   const laps = summary ? layoutLaps(layout, summary) : null
@@ -59,18 +58,10 @@ function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | 
           {laps && (laps.events ? (
             <div className="mt-0.5 truncate text-sm text-gray-500">{plural(laps.events, 'event', 'events')}</div>
           ) : (
-            // Faded, like "Best lap": a note, not a count to read.
+            // Faded: a note, not a count to read.
             <div className="mt-0.5 truncate text-xs text-gray-400">No sessions yet</div>
           ))}
         </div>
-        {/* Only with laps to show, leaving the track's name room otherwise. */}
-        {laps?.best !== undefined && (
-          <div className="flex shrink-0 flex-col items-end">
-            <span className="font-mono text-[15px] font-semibold tabular-nums text-gray-900">{formatLapTime(laps.best)}</span>
-            {/* Your best, not an average (#314). */}
-            <span className="mt-0.5 text-xs text-gray-400">Best lap</span>
-          </div>
-        )}
         <ChevronRight size={18} className="-ml-2 shrink-0 text-gray-300" aria-hidden="true" />
       </div>
     </a>

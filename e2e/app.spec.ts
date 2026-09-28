@@ -667,21 +667,21 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await page.goto('/#/tracks')
   const alphaTrack = page.getByRole('list', { name: 'Tracks' }).getByRole('link', { name: /^MSRC 2\.0 CW/ })
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).not.toContainText('1:24.072')
+  await expect(alphaTrack).toContainText('No sessions yet')
 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch to test account' }).click()
   await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0)
   // The account button says so, and the test account's laps show.
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
-  await expect(alphaTrack).toContainText('1:24.072')
+  await expect(alphaTrack).toContainText('1 event')
   expect(asked).toContain('test-account')
 
   // Still on it after a reload — once its laps are in, so the reload
   // doesn't cut off requests on their way.
   await page.reload()
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
-  await expect(alphaTrack).toContainText('1:24.072')
+  await expect(alphaTrack).toContainText('1 event')
 
   // Its laps show with each lap's speeds.
   await page.goto(`/#/event/${alpha.id}`)
@@ -699,7 +699,7 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch back to my account' }).click()
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).not.toContainText('1:24.072')
+  await expect(alphaTrack).toContainText('No sessions yet')
 })
 
 test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {
