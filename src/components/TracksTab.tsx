@@ -103,13 +103,7 @@ export function TracksTab() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <HomeHeader title="Tracks">
-          <p className="mt-2 text-sm text-gray-500">
-            {status === 'signed-in'
-              ? 'Your lap times at each track, across every event.'
-              : 'Sign in to see your lap times at each track, across every event.'}
-          </p>
-        </HomeHeader>
+        <HomeHeader title="Tracks" />
         {groups.length === 0 ? (
           loaded ? <EmptyRow>No tracks yet.</EmptyRow> : <TrackRowSkeleton />
         ) : (

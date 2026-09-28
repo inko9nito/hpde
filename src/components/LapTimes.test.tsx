@@ -903,7 +903,6 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
   it('lists the tracks for anyone signed out, without lap times', async () => {
     signedIn = false
     openAt('#/tracks')
-    expect(await screen.findByText('Sign in to see your lap times at each track, across every event.')).toBeInTheDocument()
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
       'MSRC 1.7 CCW',
       'MSRC 1.7 CW',
