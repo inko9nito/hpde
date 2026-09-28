@@ -12,6 +12,13 @@ import type { Lap, SessionLaps } from '../../utils/lapTimes'
 // changing anything here.
 export const TEST_ACCOUNT_VERSION = 2
 
+/**
+ * The driver these laps are, by the SHA-256 of their sign-in email
+ * (lowercased) — so the address isn't written here. They're filled into
+ * that driver's own account too, once (#310; see the laps function).
+ */
+export const SAMPLE_DRIVER_EMAIL_SHA256 = '4312f7aa6c9195b8f9fe0ba8f7981b2244e50ee4f5b6591d47dadea86185ce51'
+
 interface FixtureEvent {
   eventId: string
   sessions: (Omit<SessionLaps, 'key' | 'laps'> & { laps: Lap[] })[]

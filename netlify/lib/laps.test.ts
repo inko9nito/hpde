@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import handler, { TEST_SEED_KEY } from '../functions/laps.mts'
+import { createHash } from 'node:crypto'
+import handler, { TEST_SEED_KEY, isSampleDriver } from '../functions/laps.mts'
 import { fakeBlobs } from './fakeBlobs'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount'
 import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps'
@@ -36,6 +37,9 @@ const identity = {
 
 const EVENT = '2026-09-13_msr-scca'
 
+// Whose the sample laps are, for these tests: nobody, unless one sets it.
+let sampleDriverSha256 = ''
+
 const call = (
   method: string,
   { token, body, query = `?event=${EVENT}`, context = {} }: { token?: string; body?: unknown; query?: string; context?: unknown } = {},
@@ -47,7 +51,7 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity } as never,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, sampleDriverSha256 } as never,
   )
 
 const session1 = { date: '2026-09-13', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 116_000 }, { ms: 108_000 }] }
@@ -63,6 +67,7 @@ describe('laps function (#210)', () => {
   beforeEach(() => {
     blobs.clear()
     identityDown = false
+    sampleDriverSha256 = ''
   })
 
   it('needs a sign-in for everything', async () => {
@@ -348,6 +353,52 @@ describe('laps function (#210)', () => {
           expect(session.laps.every(lap => lap.topMph !== undefined && lap.avgMph !== undefined)).toBe(true)
         }
       }
+    })
+  })
+
+  describe('the sample laps’ own driver (#310)', () => {
+    const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
+    const sampleEvents = TEST_ACCOUNT_LAPS.map(e => e.eventId).sort()
+    const summary = async (token: string, query = '') =>
+      (await (await call('GET', { token, query })).json()).events.map((e: { eventId: string }) => e.eventId).sort()
+    beforeEach(() => {
+      sampleDriverSha256 = sha256('jason@example.com')
+    })
+
+    it('gets them in their own account the first time they use their laps, once', async () => {
+      expect(await summary('jason-token')).toEqual(sampleEvents)
+      const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!
+      expect(await sessionsOf('jason-token')).toEqual(Object.values(sample.sessions))
+
+      // Removed afterwards, they stay removed.
+      const key = Object.keys(sample.sessions)[0]
+      await call('DELETE', { token: 'jason-token', query: `?event=${EVENT}&session=${encodeURIComponent(key)}` })
+      expect((await sessionsOf('jason-token')).map((s: { key: string }) => s.key)).not.toContain(key)
+    })
+
+    it('keeps a session they already have as it is', async () => {
+      const mine = { key: '2026-09-13 09:30 orange', date: '2026-09-13', time: '09:30', group: 'orange', sessionNumber: 1, laps: [{ ms: 90_000 }] }
+      store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [mine.key]: mine } })
+      const sessions = await sessionsOf('jason-token')
+      expect(sessions.find((s: { key: string }) => s.key === mine.key)).toEqual(mine)
+      expect(sessions.length).toBeGreaterThan(1)
+      expect(blobs.data('site:laps-meta').get(`filled-own-laps:${JASON}`)).toMatchObject({ kept: [`${EVENT} ${mine.key}`] })
+    })
+
+    it('fills them when an admin picks the driver too', async () => {
+      expect(await summary('admin-token', `?driver=${JASON}`)).toEqual(sampleEvents)
+      expect([...store.keys()].every(key => key.startsWith(`${JASON}/`))).toBe(true)
+    })
+
+    it('matches the email however it’s written, and nobody else', async () => {
+      expect(isSampleDriver(' Jason@Example.COM', sha256('jason@example.com'))).toBe(true)
+      expect(isSampleDriver(undefined, sha256('jason@example.com'))).toBe(false)
+
+      sampleDriverSha256 = sha256('someone@example.com')
+      await call('GET', { token: 'vera-token' })
+      await call('GET', { token: 'admin-token', query: `?driver=${JASON}` })
+      expect(await summary('jason-token')).toEqual([])
+      expect(store.size).toBe(0)
     })
   })
 })
