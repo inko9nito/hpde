@@ -472,7 +472,7 @@ describe('lap times (#210)', () => {
     const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order, with top speed in mph on the right: 2 sessions\./ })
     const legend = chart.parentElement!
     expect(legend).toHaveTextContent('Top speed, mph (right)')
-    expect(legend).toHaveTextContent('Lap times: lower is faster')
+    expect(legend).not.toHaveTextContent(/lower is faster/i)
     // One point: the session with speeds; its ticks on the lap times' grid lines.
     expect(chart.querySelectorAll('[data-series="speed"] circle')).toHaveLength(1)
     expect(chart.querySelectorAll('[data-speed-tick]')).toHaveLength(chart.querySelectorAll('svg line[stroke="#e5e7eb"]').length)

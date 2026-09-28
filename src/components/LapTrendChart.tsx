@@ -5,7 +5,7 @@ import { formatLapTime, formatSpeed } from '../utils/lapTimes'
 // The driver's best and average lap, point by point, so they can see how
 // they've come along (#274): at each event on a track page, oldest to
 // newest, and in each session on an event's My notes. One axis (both are
-// lap times); lower is faster.
+// lap times); lower is faster, as the times on its axis say.
 //
 // Best leads, in black like the best-lap chip everywhere else; the average
 // is context, in a quieter gray. Checked with the data-viz palette
@@ -230,22 +230,19 @@ export function LapTrendChart({ points, label, noun }: {
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-gray-500">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {(['best', 'average'] as const).map(key => (
-            <span key={key} className="flex items-center gap-1.5">
-              <LineKey color={SERIES[key].color} />
-              {SERIES[key].label}
-            </span>
-          ))}
-          {hasSpeed && (
-            <span className="flex items-center gap-1.5" data-legend="speed">
-              <LineKey color={SERIES.speed.color} dashed />
-              Top speed, mph (right)
-            </span>
-          )}
-        </div>
-        <span className="text-gray-400">{hasSpeed ? 'Lap times: lower is faster' : 'Lower is faster'}</span>
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+        {(['best', 'average'] as const).map(key => (
+          <span key={key} className="flex items-center gap-1.5">
+            <LineKey color={SERIES[key].color} />
+            {SERIES[key].label}
+          </span>
+        ))}
+        {hasSpeed && (
+          <span className="flex items-center gap-1.5" data-legend="speed">
+            <LineKey color={SERIES.speed.color} dashed />
+            Top speed, mph (right)
+          </span>
+        )}
       </div>
       <div
         ref={ref}
