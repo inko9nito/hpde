@@ -35,6 +35,8 @@ import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
+import { useRsvps } from './data/RsvpsContext'
+import { myRunGroup } from './utils/rsvp'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
@@ -178,6 +180,7 @@ export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus, user } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
+  const { rsvps } = useRsvps()
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -332,7 +335,9 @@ export default function App() {
     skipPushEnterAnimationRef.current = false
     setActiveEventId(event.id)
     setActiveDayId(defaultDay(event).id)
-    setSelectedGroups([])
+    // Their own run group's sessions, when they've said which it is (#235).
+    const mine = myRunGroup(event, rsvps[event.id])
+    setSelectedGroups(mine ? [mine] : [])
     setActiveTab('schedule')
     setLapSlot(null)
     setLapDriver(null)
@@ -456,6 +461,7 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           notesCount={lapLog.sessions.length}
+          onRunGroup={id => setSelectedGroups([id])}
           onBack={trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent)) : backToTab}
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)

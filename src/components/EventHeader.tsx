@@ -5,6 +5,7 @@ import { TrackIcon } from './TrackIcon'
 import { EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
+import { RsvpPicker } from './RsvpPicker'
 import { ICON_BUTTON } from './iconButton'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import type { EventStatus } from '../utils/eventClass'
@@ -59,6 +60,8 @@ interface Props {
   onTabChange: (id: EventTabId) => void
   /** Sessions with lap times saved, shown on the My notes tab (#210). */
   notesCount?: number
+  /** They picked their run group in the RSVP (#235). */
+  onRunGroup?: (id: string) => void
   onBack: () => void
   onDeleted: () => void
   /** The page's scroll container — drives the collapse. */
@@ -84,7 +87,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onBack, onDeleted, scrollRef }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -141,6 +144,10 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="truncate text-[13px] leading-tight text-gray-500">{date}</span>
               <StatusBadge status={status} />
+              {/* Join event, or their answer (#235), across from the date. */}
+              <div className="ml-auto flex shrink-0">
+                <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
+              </div>
             </div>
           </div>
         </div>
