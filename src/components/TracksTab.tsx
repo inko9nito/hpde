@@ -38,11 +38,12 @@ function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | 
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{layout.name}</div>
           {/* The events you have sessions at, not the sessions (#314); nothing until your laps are in. */}
-          {laps && (
-            <div className="mt-0.5 truncate text-sm text-gray-500">
-              {laps.events ? plural(laps.events, 'event', 'events') : 'No sessions yet'}
-            </div>
-          )}
+          {laps && (laps.events ? (
+            <div className="mt-0.5 truncate text-sm text-gray-500">{plural(laps.events, 'event', 'events')}</div>
+          ) : (
+            // Faded, like "Best lap": a note, not a count to read.
+            <div className="mt-0.5 truncate text-xs text-gray-400">No sessions yet</div>
+          ))}
         </div>
         {/* Only with laps to show, leaving the track's name room otherwise. */}
         {laps?.best !== undefined && (
