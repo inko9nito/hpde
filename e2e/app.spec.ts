@@ -669,7 +669,7 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await page.goto('/#/tracks')
   const alphaTrack = page.getByRole('list', { name: 'Tracks' }).getByRole('link', { name: /^MSRC 2\.0 CW/ })
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No sessions yet')
+  await expect(alphaTrack).toContainText('No events yet')
 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch to test account' }).click()
@@ -701,7 +701,7 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch back to my account' }).click()
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No sessions yet')
+  await expect(alphaTrack).toContainText('No events yet')
 })
 
 test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {

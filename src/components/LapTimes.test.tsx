@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { AuthProvider } from '../auth/AuthContext'
 import { EventsProvider } from '../data/EventsContext'
+import { RsvpsProvider } from '../data/RsvpsContext'
+import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 import type { SessionLaps } from '../utils/lapTimes'
 import { LapTimesSheet } from './LapTimesSheet'
@@ -48,6 +50,9 @@ const SHEET_ROWS = [
 const sameLayout: EventConfig = { ...event, id: '2026-02-07_earlier', name: 'Earlier', days: [{ ...event.days[0], date: '2026-02-07' }] }
 const otherWay: EventConfig = { ...sameLayout, id: '2026-01-10_ccw', name: 'CCW', direction: 'Counter-clockwise' }
 let summary: { eventId: string; best?: number; sessions: number }[] = []
+// The driver's answers to "are you going?" (#235), and events beyond the three above.
+let rsvps: Rsvps = {}
+let moreEvents: EventConfig[] = []
 
 // identity.ts caches the first widget it loads, so every test shares one
 // fake; signedIn decides whether it reports a user, roles what they are.
@@ -82,7 +87,8 @@ const json = (body: unknown, status = 200) =>
 const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   const url = String(input)
   if (url.includes('/.netlify/identity/settings')) return json({})
-  if (url.includes('api/events')) return json({ events: [event, sameLayout, otherWay] })
+  if (url.includes('api/events')) return json({ events: [event, sameLayout, otherWay, ...moreEvents] })
+  if (url.includes('api/rsvps')) return json({ rsvps })
   if (url.includes('api/drivers')) {
     expect(roles).toContain('admin')
     return json({ drivers: DRIVERS })
@@ -164,6 +170,8 @@ beforeEach(() => {
   jasonSaved = []
   elsewhere = {}
   summary = []
+  rsvps = {}
+  moreEvents = []
   holdLaps = null
   failSaves = false
   fetchMock.mockClear()
@@ -814,6 +822,46 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(await within(await trackPage()).findByText('No lap times on MSRC 1.7 CW yet')).toBeInTheDocument()
   })
 
+  it('lists the events they said they’re going to, laps or not (#320)', async () => {
+    // Laps at Lap Day only; going to Earlier, and to one still to come, in Red.
+    elsewhere = {}
+    const coming: EventConfig = { ...event, id: '2099-05-02_coming', name: 'Coming Up', days: [{ ...event.days[0], date: '2099-05-02' }] }
+    moreEvents = [coming]
+    rsvps = { [sameLayout.id]: { status: 'going' }, [coming.id]: { status: 'going', runGroup: 'red' }, [otherWay.id]: { status: 'going' } }
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+
+    await waitFor(async () => expect((await cards()).map(c => c.textContent)).toEqual([
+      expect.stringMatching(/Coming Up.*Red.*Going$/),
+      expect.stringContaining('Lap Day'),
+      expect.stringMatching(/Earlier.*No laps$/),
+    ]))
+    const page = await trackPage()
+    // The best is still only from the laps.
+    expect(within(page).getByRole('group', { name: 'All time best' })).toHaveTextContent('1:39.1Across 1 session at 1 event')
+    expect(figures(await card('Lap Day'), 'Event figures')).toEqual({ Best: '1:39.1', Avg: '1:39.260' })
+    expect((await card('Coming Up')).querySelector('[aria-label="Event figures"]')).toBeNull()
+    expect((await card('Earlier')).querySelector('[aria-label="Event figures"]')).toBeNull()
+
+    // With no laps there, it opens on the Schedule, where they're added.
+    await userEvent.click(await card('Earlier'))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: 'Schedule', selected: true })).toBeInTheDocument()
+  })
+
+  it('lists them under the note that there are no laps yet (#320)', async () => {
+    saved = []
+    elsewhere = {}
+    rsvps = { [sameLayout.id]: { status: 'going' }, [event.id]: { status: 'maybe' } }
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    const page = await trackPage()
+    expect(await within(page).findByText('No lap times on MSRC 1.7 CW yet')).toBeInTheDocument()
+    // A past maybe never became a yes.
+    expect((await cards()).map(c => c.textContent)).toEqual([expect.stringMatching(/Earlier.*No laps$/)])
+    expect(within(page).queryByRole('group', { name: 'All time best' })).not.toBeInTheDocument()
+  })
+
   it('says when no event is on the track it names', async () => {
     window.location.hash = '#/track/nowhere'
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
@@ -880,12 +928,24 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     expect(within(track).getAllByRole('link')).toHaveLength(2)
   })
 
-  it('says so on a layout you have no sessions at', async () => {
+  it('says so on a layout you have no events at', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCWNo sessions yet',
+      'MSRC 1.7 CCWNo events yet',
       'MSRC 1.7 CW1 event',
+    ]))
+  })
+
+  it('counts the events you said you’re going to as well as the ones with sessions, each once (#320)', async () => {
+    summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
+    // Going to both CW events — one with sessions too — and not to the CCW one.
+    rsvps = { [event.id]: { status: 'going' }, [sameLayout.id]: { status: 'going' }, [otherWay.id]: { status: 'not-going' } }
+    window.location.hash = '#/tracks'
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
+      'MSRC 1.7 CCWNo events yet',
+      'MSRC 1.7 CW2 events',
     ]))
   })
 

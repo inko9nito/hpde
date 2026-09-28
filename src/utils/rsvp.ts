@@ -72,6 +72,14 @@ export function myEvents(events: EventConfig[], rsvps: Rsvps, today: string = to
   })
 }
 
+/**
+ * The events they said they're going to, or went to (#320): a yes, not a
+ * maybe — once it's over, only a yes means they drove it.
+ */
+export function goingIds(events: EventConfig[], rsvps: Rsvps, today: string = todayLocalISO()): Set<string> {
+  return new Set(events.filter(e => answerFor(e, rsvps, today) === 'going').map(e => e.id))
+}
+
 /** Their run group at this event, if they've said and it's still one of its groups. */
 export function myRunGroup(event: EventConfig, rsvp: Rsvp | undefined): string | null {
   const id = rsvp && rsvp.status !== 'not-going' ? rsvp.runGroup : undefined
