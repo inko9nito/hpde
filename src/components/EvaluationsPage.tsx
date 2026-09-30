@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight, ClipboardCheck } from 'lucide-react'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
 import { groupFor } from './LapTimesSheet'
-import { CARD_SHELL } from './LandingPage'
+import { CARD_FRAME, CARD_SHELL } from './LandingPage'
 import { DateBlock } from './DateBlock'
-import { PrivateTag, plural, useSkeletonFade } from './LapSessions'
+import { PrivateTag, plural, sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 import { useAuth } from '../auth/AuthContext'
@@ -17,7 +18,10 @@ import { isTdeEvent } from '../utils/evaluation'
 import { myRunGroup } from '../utils/rsvp'
 import { startDate } from '../utils/trackStats'
 import { opensElsewhere } from '../utils/links'
+import { formatAmPm, formatTime } from '../utils/time'
 import type { EventConfig } from '../types'
+
+const weekday = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })
 
 /** One event's evaluations, and the event. */
 interface Evaluated {
@@ -49,12 +53,30 @@ export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
       : [])
 }
 
+/** One piece of an instructor's feedback: what it's of, who said it, and what they said. */
+function Feedback({ label, instructor, text, children }: {
+  label: string
+  instructor?: string
+  text?: string
+  children?: ReactNode
+}) {
+  return (
+    <li className="min-w-0" data-feedback>
+      <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
+        <span className="font-semibold text-gray-900">{label}</span>
+        {children}
+        {instructor && <span className="text-gray-500">· {instructor}</span>}
+      </p>
+      {text && <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-gray-900">{text}</p>}
+    </li>
+  )
+}
+
 /**
- * One event on the page, compact like the Events list's rows: the date;
- * the name over the run group they drove in and who their instructor was;
- * and what's there — the report card (or the whole event's evaluation),
- * and how many sessions have one. Opens the event on My notes, where they
- * are.
+ * One event on the page, TDE or not: the date, name and run group, which
+ * open the event on My notes; and under them, what the instructors said —
+ * about the whole event (on a TDE event, the report card's notes) and each
+ * session, in schedule order — so it can all be read here.
  */
 function EvaluationEventCard({ event, notes, runGroup, onOpen }: {
   event: EventConfig
@@ -64,38 +86,52 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen }: {
   onOpen: () => void
 }) {
   const groups = notes.sessions.length ? [...new Set(notes.sessions.map(s => s.group))] : runGroup ? [runGroup] : []
-  const instructors = [...new Set([notes.evaluation?.instructor, ...notes.sessions.map(s => s.evaluation.instructor)]
-    .filter((n): n is string => !!n))]
   const tde = isTdeEvent(event)
+  const evaluation = notes.evaluation
+  const scored = evaluation?.skills ? Object.keys(evaluation.skills).length : 0
+  const multiDay = event.days.length > 1
   return (
-    <a
-      href={`#/event/${encodeURIComponent(event.id)}`}
-      onClick={e => {
-        if (opensElsewhere(e)) return
-        e.preventDefault()
-        onOpen()
-      }}
-      className={`${CARD_SHELL} transition-colors hover:border-gray-400`}
-    >
-      <DateBlock event={event} muted />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{event.name}</div>
-        <div className="mt-1 flex min-w-0 items-center gap-2">
-          {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
-          <span className="truncate text-sm text-gray-500">{instructors.join(', ') || event.organizer}</span>
+    <article aria-label={event.name} className={`${CARD_FRAME} overflow-hidden`}>
+      <a
+        href={`#/event/${encodeURIComponent(event.id)}`}
+        onClick={e => {
+          if (opensElsewhere(e)) return
+          e.preventDefault()
+          onOpen()
+        }}
+        className="flex items-center gap-4 p-4 transition-colors hover:bg-gray-50"
+      >
+        <DateBlock event={event} muted />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{event.name}</div>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
+            {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
+          </div>
         </div>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1 text-xs text-gray-600">
-        {notes.evaluation && (
-          <span className="flex items-center gap-1 font-medium text-gray-900">
-            <ClipboardCheck size={12} aria-hidden="true" />
-            {tde ? 'Report card' : 'Evaluation'}
-          </span>
+        <ChevronRight size={16} className="shrink-0 text-gray-300" aria-hidden="true" />
+      </a>
+      <ul className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3" aria-label="Feedback">
+        {evaluation && (
+          <Feedback label={tde ? 'Report card' : 'Whole event'} instructor={evaluation.instructor} text={evaluation.notes}>
+            {tde && scored > 0 && (
+              <span className="inline-flex items-center gap-1 text-gray-500">
+                <ClipboardCheck size={12} aria-hidden="true" />
+                {plural(scored, 'skill', 'skills')} scored
+              </span>
+            )}
+          </Feedback>
         )}
-        {notes.sessions.length > 0 && <span>{plural(notes.sessions.length, 'session', 'sessions')}</span>}
-      </div>
-      <ChevronRight size={16} className="-ml-2 shrink-0 text-gray-300" aria-hidden="true" />
-    </a>
+        {notes.sessions.map(s => (
+          <Feedback
+            key={s.key}
+            label={`${sessionTitle(s)} · ${multiDay ? `${weekday(s.date)} ` : ''}${formatTime(s.time)} ${formatAmPm(s.time)}`}
+            instructor={s.evaluation.instructor}
+            text={s.evaluation.feedback}
+          />
+        ))}
+      </ul>
+    </article>
   )
 }
 
@@ -207,7 +243,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
         )}
         <section aria-labelledby="evaluations-events-heading">
           <h2 id="evaluations-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
-            Events
+            Feedback by event
           </h2>
           <ul className="space-y-3">
             {evaluated.map(({ event, notes }) => (

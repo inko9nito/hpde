@@ -918,7 +918,16 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const notes = [
     { eventId: jul.id, evaluation: card(65, 95, 60, 55, 60, 70, 75, 50, 65, 25), sessions: [] },
     { eventId: sep.id, evaluation: card(75, 95, 70, 65, 70, 70, 80, 65, 70, 15), sessions: [] },
-    { eventId: oct.id, evaluation: card(90, 100, 80, 70, 85, 75, 85, 80, 85, 10), sessions: [] },
+    { eventId: oct.id, evaluation: { ...card(90, 100, 80, 70, 85, 75, 85, 80, 85, 10), notes: 'Smoother on the brakes, and much better at picking up flags early.' }, sessions: [] },
+    // Not a TDE event: no report card, but its feedback is listed too.
+    {
+      eventId: alpha.id,
+      evaluation: { instructor: 'Sam Ortiz', notes: 'Good day. Carry more speed through the carousel.' },
+      sessions: [{
+        key: '2026-03-07 08:30 blue', date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+        evaluation: { feedback: 'Unwind the wheel sooner and use all of the exit curb.', instructor: 'Sam Ortiz' },
+      }],
+    },
   ]
   await page.route(/\/api\/notes(\?|$)/, route => {
     const id = new URL(route.request().url()).searchParams.get('event')
@@ -958,9 +967,15 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // The events, newest first; one opens on My notes, and Back comes back.
-  const events = page.getByRole('region', { name: 'Events' }).getByRole('link')
-  await expect(events).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
-  await events.first().click()
+  const feedback = page.getByRole('region', { name: 'Feedback by event' })
+  const events = feedback.getByRole('link')
+  await expect(events).toHaveText([/Alpha Track Day/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  const alphaCard = feedback.getByRole('article', { name: 'Alpha Track Day' })
+  await expect(alphaCard.getByRole('listitem')).toHaveText([
+    /Whole event.*Sam Ortiz.*Carry more speed/,
+    /Session 1 · 8:30 AM.*Sam Ortiz.*Unwind the wheel sooner/,
+  ])
+  await events.nth(1).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${oct.id}$`))
   await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
   await page.getByRole('button', { name: 'Back' }).last().click()

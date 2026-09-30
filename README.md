@@ -282,10 +282,12 @@ Private like your lap times: only you and admins see them.
   event chips to show or hide any card). Tap a skill's name for a list of
   its score at each event, newest first, with the change from the card
   before. *Car aids over activated* isn't on either (lower is better
-  there); it's on each event's card. Under those, every event you have an
-  evaluation at, newest first, with your instructor and what's there (the
-  report card or the event's evaluation, and how many sessions have one).
-  Tap one for its *My notes*; Back returns to the list.
+  there); it's on each event's card. Under those, **Feedback by event**:
+  every event you have an evaluation at, TDE or not, newest first, with
+  what the instructors said right on its card — about the whole event
+  (on a TDE event, the report card's notes, and how many skills it
+  scored) and each session, with who said it. Tap an event for its
+  *My notes*; Back returns to the list.
 - **Where they live:** `netlify/functions/notes.mts` (`/api/notes`; with
   no `?event=` it returns every event's, for Instructor evaluations) in
   Netlify Blobs (store `notes`), one record per driver per event, next to

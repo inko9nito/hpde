@@ -1313,8 +1313,10 @@ describe('Instructor evaluations across events (#345)', () => {
     moreEvents = [tdeSep, tdeOct]
     notesByEvent = {
       [tdeSep.id]: { evaluation: { instructor: 'John Harms', skills: { flags: 65, vision: 70 }, carAidsPct: 25 }, sessions: [] },
-      [tdeOct.id]: { evaluation: { instructor: 'Amy Lee', skills: { flags: 80, vision: 70, pace: 90 } }, sessions: [] },
+      [tdeOct.id]: { evaluation: { instructor: 'Amy Lee', skills: { flags: 80, vision: 70, pace: 90 }, notes: 'Smoother on the brakes.' }, sessions: [] },
+      // Not a TDE event: no report card, but its evaluations are listed all the same.
       [event.id]: {
+        evaluation: { instructor: 'Jo', notes: 'Brake later into turn 1.' },
         sessions: [{ key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, evaluation: { feedback: 'Eyes up.', instructor: 'Jo' } }],
       },
     }
@@ -1359,23 +1361,24 @@ describe('Instructor evaluations across events (#345)', () => {
     expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
   })
 
-  it('lists every event with an evaluation, newest first, and opens one on My notes; Back returns here', async () => {
+  it('lists every event with an evaluation, TDE or not, newest first, with what the instructors said; one opens on My notes and Back returns here', async () => {
     openAt('#/more')
     await userEvent.click(await screen.findByRole('link', { name: /Instructor evaluations/ }))
     expect(window.location.hash).toBe('#/evaluations')
     const el = await page()
-    const events = within(await within(el).findByRole('region', { name: 'Events' })).getAllByRole('link')
-    expect(events.map(a => a.textContent)).toEqual([
-      expect.stringContaining('Lap Day'),
-      expect.stringContaining('TDE at ECR'),
-      expect.stringContaining('TDE at MSRC'),
+    const section = await within(el).findByRole('region', { name: 'Feedback by event' })
+    const cards = within(section).getAllByRole('article')
+    expect(cards.map(c => c.getAttribute('aria-label'))).toEqual(['Lap Day', 'TDE at ECR', 'TDE at MSRC'])
+    const feedback = (card: HTMLElement) => within(within(card).getByRole('list', { name: 'Feedback' })).getAllByRole('listitem').map(li => li.textContent)
+    // The whole event's, then each session's, each with who said it.
+    expect(feedback(cards[0])).toEqual([
+      'Whole event· JoBrake later into turn 1.',
+      'Session 2 · 11:45 AM· JoEyes up.',
     ])
-    expect(events[0]).toHaveTextContent('1 session')
-    expect(events[0]).toHaveTextContent('Jo')
-    expect(events[1]).toHaveTextContent('Report card')
-    expect(events[1]).toHaveTextContent('Amy Lee')
+    expect(feedback(cards[1])).toEqual(['Report card3 skills scored· Amy LeeSmoother on the brakes.'])
+    expect(feedback(cards[2])).toEqual(['Report card2 skills scored· John Harms'])
 
-    await userEvent.click(events[1])
+    await userEvent.click(within(cards[1]).getByRole('link'))
     expect(window.location.hash).toBe(`#/event/${tdeOct.id}`)
     expect(await screen.findByRole('tab', { name: /My notes/, selected: true })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('Amy Lee')
