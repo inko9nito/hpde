@@ -298,9 +298,9 @@ Private like your notes: only you and admins see it.
   the photo or the details or remove the car — its **Consumables** as
   they are now, each with the date it went on, its **Change log**, and
   its **Events**, which open on their *My notes* over the car's page
-  (Back returns to it). **Add to events** there lists the events you're
-  going to or went to (your answers, #235) that it isn't at yet: pick
-  some or **Select all**. One with another car on it says so, and this
+  (Back returns to it). **Add to events** there lists the events it isn't
+  at yet, all but those you said you didn't go to or aren't going to
+  (#235): pick some or **Select all**. One with another car on it says so, and this
   car takes its place there (its tire pressures stay).
 - **The change log:** **Log a change** is one job: pick everything that
   was changed — tires, front or rear pads, front or rear rotors, brake

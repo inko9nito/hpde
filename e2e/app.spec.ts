@@ -721,8 +721,6 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
-  // Going to Alpha (#235), so the car's page offers it.
-  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [alpha.id]: { status: 'going' } } } }))
   type Car = { id: string; photo?: string; log?: object[] }
   const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
   let photo: { type: string; body: Buffer } | null = null
@@ -837,7 +835,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front pads · Hawk DTC-60Front rotorsat Speed Shop')
   await noSideScroll()
 
-  // Added to an event from its page: the events the driver's going to.
+  // Added to an event from its page: any the driver didn't say they're not going to.
   await page.getByRole('button', { name: 'Add to events' }).click()
   const pick = page.getByRole('dialog', { name: 'Add to events' })
   await pick.getByRole('checkbox', { name: new RegExp(`^${alpha.name}`) }).click()

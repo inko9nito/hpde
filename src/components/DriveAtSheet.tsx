@@ -2,25 +2,26 @@ import { useState } from 'react'
 import { Check, Lock } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { TrackIcon } from './TrackIcon'
+import { useEvents } from '../data/EventsContext'
 import { useRsvps } from '../data/RsvpsContext'
 import { carName, eventsToDriveAt } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
 import { formatDateRange } from '../utils/time'
-import type { EventConfig } from '../types'
 
 /**
- * Adds a car to events from its page (#344): the driver's events — ones
- * they're going to or went to — it isn't at yet, to pick one by one or all
- * at once. One with another car on it says so, and picking it puts this
+ * Adds a car to events from its page (#344): the events it isn't at yet —
+ * all but those the driver said they didn't go to, or aren't going to — to
+ * pick one by one or all at once. One with another car on it says so, and picking it puts this
  * car there instead (its tire pressures stay).
  */
-export function DriveAtSheet({ car, garage, events, onSave, onClose }: {
+export function DriveAtSheet({ car, garage, onSave, onClose }: {
   car: Car
   garage: Garage
-  events: EventConfig[]
   onSave: (eventIds: string[]) => Promise<void>
   onClose: () => void
 }) {
+  // The events the app lists — not the fixtures, reachable only by URL.
+  const { events } = useEvents()
   const { status, rsvps } = useRsvps()
   const choices = eventsToDriveAt(car.id, garage, events, rsvps)
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
@@ -67,11 +68,11 @@ export function DriveAtSheet({ car, garage, events, onSave, onClose }: {
         <p className="mt-4 text-sm text-gray-700">Couldn’t load your events. Check your connection and try again.</p>
       ) : choices.length === 0 ? (
         <p className="mt-4 text-sm text-gray-700">
-          No events to add it to. Events you’re going to, or went to, show here: say you’re going on an event’s page.
+          No events to add it to. It’s at every event you haven’t said you’re not going to.
         </p>
       ) : (<>
         <div className="mt-4 flex items-baseline justify-between">
-          <p className="text-xs font-medium text-gray-700">Events you’re going to or went to</p>
+          <p className="text-xs font-medium text-gray-700">Events</p>
           <button
             onClick={() => setPicked(allPicked ? new Set() : new Set(choices.map(c => c.event.id)))}
             disabled={busy}

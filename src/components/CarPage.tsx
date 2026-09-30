@@ -211,7 +211,6 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         <DriveAtSheet
           car={car}
           garage={garage}
-          events={events}
           onSave={async ids => {
             await garage.driveAt(car.id, ids)
             setAddingEvents(false)

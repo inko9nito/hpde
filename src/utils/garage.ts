@@ -289,13 +289,14 @@ export function carEvents(carId: string, garage: Garage, events: EventConfig[]):
 }
 
 /**
- * The events a car could be added to from its page: the driver's — ones
- * they're going to, or went to (#235) — it isn't already at, newest first,
- * each with the car that's there now, if another is.
+ * The events a car could be added to from its page: every one it isn't
+ * already at, but those the driver said they're not going to, or didn't go
+ * to (#235) — newest first, each with the car that's there now, if another
+ * is.
  */
 export function eventsToDriveAt(carId: string, garage: Garage, events: EventConfig[], rsvps: Rsvps): { event: EventConfig; now?: Car }[] {
   return events
-    .filter(e => rsvps[e.id]?.status === 'going' && garage.events[e.id]?.carId !== carId)
+    .filter(e => rsvps[e.id]?.status !== 'not-going' && garage.events[e.id]?.carId !== carId)
     .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
     .map(event => {
       const now = garage.cars.find(c => c.id === garage.events[event.id]?.carId)

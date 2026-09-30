@@ -1631,10 +1631,11 @@ describe('the garage (#344)', () => {
     expect(screen.getByRole('button', { name: 'Your car: Mazda Miata' })).toBeInTheDocument()
   })
 
-  it('adds a car to the events you’re going to or went to from its page, one or all, taking another car’s place', async () => {
+  it('adds a car to events from its page, one or all — all but ones you didn’t go to — taking another car’s place', async () => {
     const miata = { id: 'miata', make: 'Mazda', model: 'Miata', nickname: 'Zoom' }
     garageData = { cars: [cayman, miata], events: { [otherWay.id]: { carId: 'miata' } } }
-    rsvps = { [event.id]: { status: 'going' }, [otherWay.id]: { status: 'going' }, [sameLayout.id]: { status: 'not-going' } }
+    // No answer for one, maybe for another; not going to the third, which isn't listed.
+    rsvps = { [otherWay.id]: { status: 'maybe' }, [sameLayout.id]: { status: 'not-going' } }
     window.location.hash = '#/garage/cayman'
     render(<AuthProvider><EventsProvider><RsvpsProvider><GarageProvider><App /></GarageProvider></RsvpsProvider></EventsProvider></AuthProvider>)
     const page = await carPage('The Cayman')
