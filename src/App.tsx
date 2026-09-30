@@ -13,7 +13,7 @@ import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { SharePage, SHARE_HASH, isEventShareHash, eventShareUrl } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
 import { PushPage } from './components/PushPage'
-import { EventHeader, BackButton } from './components/EventHeader'
+import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
 import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
@@ -452,7 +452,7 @@ export default function App() {
       skipEnterAnimation={skipPushEnterAnimationRef.current}
     >
     <PullToRefresh disabled={!isOnEventRoute || !!shownOverlay} scrollContainerRef={pushScrollRef}>
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" style={routeMissing ? undefined : { minHeight: EVENT_PAGE_MIN_HEIGHT }}>
         {routeMissing ? (
           <MissingEvent loading={!eventsLoaded} onHome={goHome} />
         ) : (<>

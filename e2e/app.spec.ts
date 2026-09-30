@@ -959,3 +959,39 @@ test('a driver joins events from the list or the event’s header — going, may
   await expect(page.getByRole('dialog', { name: 'Did you drive this event?' }).getByRole('radio'))
     .toHaveText(['I drove', 'I didn’t drive'])
 })
+
+// A short tab could fold the title into the top bar but not scroll the
+// empty title block away, leaving a white gap over the tabs (#305). Every
+// event page has room to scroll it all the way: the tabs end up right
+// under the top bar.
+test('a short tab folds the event header all the way', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${alpha.id}`)
+  const heading = page.getByRole('heading', { level: 1, name: alpha.name })
+  await heading.waitFor()
+  await page.getByRole('tab', { name: 'Details' }).click()
+  const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await scroller.evaluate(el => el.scrollTo(0, el.scrollHeight))
+  // The top bar is 52px tall; the tabs stick right under it.
+  const tabs = page.getByRole('tablist', { name: 'Event section' })
+  await expect.poll(async () => Math.round((await tabs.boundingBox())!.y)).toBe(52)
+})
+
+// Left partway through the title block, the header snaps (#305): folded
+// the rest of the way once the title has faded (48px), open again before.
+test('a half-folded event header snaps shut or open', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${alpha.id}`)
+  const heading = page.getByRole('heading', { level: 1, name: alpha.name })
+  await heading.waitFor()
+  const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  const tabs = page.getByRole('tablist', { name: 'Event section' })
+
+  await scroller.evaluate(el => el.scrollTo(0, 60))
+  await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(96)
+  await expect.poll(async () => Math.round((await tabs.boundingBox())!.y)).toBe(52)
+
+  await scroller.evaluate(el => el.scrollTo(0, 30))
+  await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(0)
+  await expect(heading).toBeVisible()
+})
