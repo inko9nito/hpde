@@ -18,8 +18,9 @@ import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
 import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
 import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventPage'
-import { LapTimesSheet } from './components/LapTimesSheet'
-import type { SessionSlot } from './components/LapTimesSheet'
+import { LapTimesSheet, groupFor } from './components/LapTimesSheet'
+import type { SessionSlot, SessionView } from './components/LapTimesSheet'
+import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
@@ -28,6 +29,7 @@ import type { HomeTab } from './components/HomeTabs'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
+import { useNotesLog } from './data/notesLog'
 import { useDrivers, driverName } from './data/drivers'
 import type { Driver } from './data/drivers'
 import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
@@ -193,8 +195,11 @@ export default function App() {
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
   const trackScrollRef = useRef<HTMLDivElement>(null)
-  // The session whose lap times are open in the sheet (#210), if any.
-  const [lapSlot, setLapSlot] = useState<SessionSlot | null>(null)
+  // The session whose lap times are open in the sheet (#210), if any — and
+  // what of it: what it has, or its laps or evaluation (#340).
+  const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
+  // A TDE event's report card, open in its sheet (#340).
+  const [evaluationOpen, setEvaluationOpen] = useState(false)
   // An admin can log another driver's lap times (#288): whose the sheet,
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
@@ -304,6 +309,16 @@ export default function App() {
   // Fetched only while this event's page is open.
   const lapLog = useLapLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
   const savedLapKeys = new Set(lapLog.byKey.keys())
+  // …and their instructor's evaluations of it (#340).
+  const notesLog = useNotesLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
+  const evaluatedKeys = new Set(notesLog.byKey.keys())
+  // The group they drove in, for a TDE report card (#340): their answer to
+  // "Did you drive?" — or for another driver's, or with none, their laps'.
+  const rsvpGroup = driver ? null : myRunGroup(activeEvent, rsvps[activeEvent.id])
+  const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
+  const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
+  // Sessions with anything saved, and the report card: "My notes (3)".
+  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys]).size + (notesLog.evaluation ? 1 : 0)
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
@@ -340,6 +355,7 @@ export default function App() {
     setSelectedGroups(mine ? [mine] : [])
     setActiveTab('schedule')
     setLapSlot(null)
+    setEvaluationOpen(false)
     setLapDriver(null)
   }
 
@@ -461,7 +477,7 @@ export default function App() {
           status={eventStatus}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          notesCount={lapLog.sessions.length}
+          notesCount={notesCount}
           onRunGroup={id => setSelectedGroups([id])}
           onBack={trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent)) : backToTab}
           onDeleted={() => {
@@ -540,6 +556,7 @@ export default function App() {
                 lapTimes={authStatus === 'signed-in' ? {
                   date: activeDay.date,
                   saved: savedLapKeys,
+                  evaluated: evaluatedKeys,
                   onOpen: session => setLapSlot({
                     date: activeDay.date,
                     time: session.time,
@@ -561,17 +578,22 @@ export default function App() {
             <MyLapTimes
               event={activeEvent}
               log={lapLog}
+              notes={notesLog}
               layoutBest={layoutBest}
               allTimeBest={allTimeBest}
               track={trackLink}
               driver={driver}
               driverPicker={driverPicker}
-              onEdit={session => setLapSlot({
+              runGroup={evaluationGroup}
+              events={ALL_EVENTS}
+              onEdit={(session, view) => setLapSlot({
                 date: session.date,
                 time: session.time,
                 sessionNumber: session.sessionNumber,
                 groups: [session.group],
+                view,
               })}
+              onEditEvaluation={() => setEvaluationOpen(true)}
             />
           )}
 
@@ -650,9 +672,11 @@ export default function App() {
         // A fresh sheet for each session, so nothing typed carries over.
         key={`${activeEvent.id} ${lapSlot.date} ${lapSlot.time} ${lapSlot.groups.join(',')}`}
         slot={lapSlot}
+        view={lapSlot.view}
         runGroups={activeEvent.runGroups}
         showDate={multiDay}
         saved={key => lapLog.byKey.get(key)}
+        savedNotes={key => notesLog.byKey.get(key)}
         allTimeBest={allTimeBest}
         track={trackLink}
         onOpenTrack={() => {
@@ -661,7 +685,7 @@ export default function App() {
         }}
         driver={driver}
         driverPicker={driverPicker}
-        loading={lapLog.status === 'loading'}
+        loading={lapLog.status === 'loading' || notesLog.status === 'loading'}
         onSave={async session => {
           await lapLog.save(session)
           setLapSlot(null)
@@ -672,7 +696,38 @@ export default function App() {
           setLapSlot(null)
           showToast(driver ? `Lap times removed for ${driverName(driver)}` : 'Lap times removed')
         }}
+        onSaveEvaluation={async session => {
+          await notesLog.saveSession(session)
+          setLapSlot(null)
+          showToast(driver ? `Evaluation saved for ${driverName(driver)}` : 'Evaluation saved')
+        }}
+        onRemoveEvaluation={async key => {
+          await notesLog.removeSession(key)
+          setLapSlot(null)
+          showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
+        }}
         onClose={() => setLapSlot(null)}
+      />
+    )}
+    {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
+      <EventEvaluationSheet
+        key={`${activeEvent.id} ${driver?.id ?? ''}`}
+        event={activeEvent}
+        events={ALL_EVENTS}
+        existing={notesLog.evaluation}
+        runGroup={evaluationGroup}
+        driver={driver}
+        onSave={async evaluation => {
+          await notesLog.saveEvaluation(evaluation)
+          setEvaluationOpen(false)
+          showToast(driver ? `Evaluation saved for ${driverName(driver)}` : 'Evaluation saved')
+        }}
+        onRemove={async () => {
+          await notesLog.removeEvaluation()
+          setEvaluationOpen(false)
+          showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
+        }}
+        onClose={() => setEvaluationOpen(false)}
       />
     )}
     {/* Clear of the tab bar while a tab is showing. */}

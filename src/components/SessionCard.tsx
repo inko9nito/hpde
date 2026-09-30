@@ -1,4 +1,4 @@
-import { ChevronRight, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
 import type { SessionActivity, RunGroupConfig } from '../types'
@@ -14,6 +14,8 @@ interface Props {
   onOpenLaps?: () => void
   /** Laps are saved for this session: shows the timer. */
   hasLaps?: boolean
+  /** An instructor's evaluation is saved for it (#340): shows the clipboard. */
+  hasEvaluation?: boolean
 }
 
 function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig[] {
@@ -23,7 +25,7 @@ function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig
   })
 }
 
-export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps }: Props) {
+export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation }: Props) {
   const onTrack = resolveGroups(activity.onTrack, runGroups)
   const inClass = resolveGroups(activity.inClass ?? [], runGroups)
 
@@ -47,7 +49,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps }: 
           {onTrack.length > 0 && (onOpenLaps ? (
             <button
               onClick={onOpenLaps}
-              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}`}
+              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}${hasEvaluation ? ' (evaluated)' : ''}`}
               // The highlight reaches 6px past the row on every side, 10px
               // short of the card's edge. A divider or note below sits only
               // 12px away, not 16, so there the row keeps 4px more room. On its
@@ -56,6 +58,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps }: 
             >
               {onTrackRow}
               {hasLaps && <Timer size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-laps />}
+              {hasEvaluation && <ClipboardCheck size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-evaluation />}
               <ChevronRight size={16} className="shrink-0 text-gray-300" aria-hidden="true" />
             </button>
           ) : (

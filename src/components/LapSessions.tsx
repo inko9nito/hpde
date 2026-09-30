@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Lock } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
@@ -8,13 +8,17 @@ import { groupFor, shortDate } from './LapTimesSheet'
 import { formatTime, formatAmPm } from '../utils/time'
 import { formatLapTime } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
+import type { SessionNotes } from '../utils/evaluation'
 import type { RunGroupConfig } from '../types'
 
 // The pieces My notes (#210) lists saved laps with — the best-lap cards,
 // the Expand all / Private bar, a session's card and the loading skeleton
 // — some of which a track page (#274) shares.
 
-export function sessionTitle(s: SessionLaps): string {
+/** Which session: its day, start time and run group. */
+export type SessionHead = Pick<SessionLaps, 'key' | 'date' | 'time' | 'group' | 'sessionNumber'>
+
+export function sessionTitle(s: Pick<SessionLaps, 'sessionNumber'>): string {
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
 }
 
@@ -113,12 +117,16 @@ export function PrivateTag({ whose }: { whose: string | null }) {
 }
 
 /**
- * One session's laps (#210): its time and group, then its lap count and a
- * small table of its average and best lap and speeds (#324), which open
- * onto the lap table. `onEdit` adds an Edit button (My notes).
+ * One session's notes on My notes (#210): its time and group, then what's
+ * saved for it (#324) — its lap count and a small table of its average and
+ * best lap and speeds, which open onto the lap table; and its instructor's
+ * evaluation (#340), which opens in the session's sheet. `onEdit` adds an
+ * Edit button, for everything the session has.
  */
-export function SessionLapsCard({ session, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, tableId }: {
-  session: SessionLaps
+export function SessionLapsCard({ session, laps, notes, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, tableId }: {
+  session: SessionHead
+  laps?: SessionLaps
+  notes?: SessionNotes
   runGroups: RunGroupConfig[]
   /** Show the day too — the event runs more than one. */
   showDate: boolean
@@ -128,6 +136,7 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
   expanded: boolean
   onToggle: () => void
   onEdit?: () => void
+  onOpenEvaluation?: () => void
   /** Unique on the page. */
   tableId: string
 }) {
@@ -149,46 +158,78 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
             <button
               onClick={onEdit}
               className="ml-auto text-sm font-medium text-blue-600 hover:text-blue-700"
-              aria-label={`Edit lap times for ${title}`}
+              aria-label={`Edit ${title}`}
             >
               Edit
             </button>
           )}
         </div>
-        <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-          {/* The heading and figures open the table: the chevron's button stretches over them. */}
-          <div className="relative flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-3">
-              <LapsHeading laps={session.laps} />
-              <button
-                onClick={onToggle}
-                aria-expanded={expanded}
-                aria-controls={tableId}
-                aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
-                className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
-              >
-                <ChevronRight
-                  size={18}
-                  className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
+        {laps && (
+          <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
+            {/* The heading and figures open the table: the chevron's button stretches over them. */}
+            <div className="relative flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <LapsHeading laps={laps.laps} />
+                <button
+                  onClick={onToggle}
+                  aria-expanded={expanded}
+                  aria-controls={tableId}
+                  aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
+                  className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+                >
+                  <ChevronRight
+                    size={18}
+                    className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+              <div className={FIGURES_INDENT}>
+                <SessionFigures laps={laps.laps} allTimeBest={allTimeBest} />
+              </div>
             </div>
-            <div className={FIGURES_INDENT}>
-              <SessionFigures laps={session.laps} allTimeBest={allTimeBest} />
-            </div>
+            {laps.summary && (
+              <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{laps.summary}</p>
+            )}
+            {expanded && (
+              <div id={tableId}>
+                <LapTable laps={laps.laps} columns={columns} allTimeBest={allTimeBest} />
+              </div>
+            )}
           </div>
-          {session.summary && (
-            <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{session.summary}</p>
-          )}
-          {expanded && (
-            <div id={tableId}>
-              <LapTable laps={session.laps} columns={columns} allTimeBest={allTimeBest} />
-            </div>
-          )}
-        </div>
+        )}
+        {notes && <EvaluationRow notes={notes} title={title} onOpen={onOpenEvaluation} />}
       </div>
     </section>
+  )
+}
+
+/**
+ * A session's instructor evaluation on its card (#340): who gave it, and
+ * what they said. The chevron opens it in the session's sheet; its button
+ * stretches over the row.
+ */
+function EvaluationRow({ notes, title, onOpen }: { notes: SessionNotes; title: string; onOpen?: () => void }) {
+  const { feedback, instructor } = notes.evaluation
+  return (
+    <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-evaluation>
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+          <ClipboardCheck size={13} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">Instructor evaluation{instructor && ` · ${instructor}`}</span>
+        </p>
+        {onOpen && (
+          <button
+            onClick={onOpen}
+            aria-label={`Open the instructor evaluation for ${title}`}
+            className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      <p className={`${FIGURES_INDENT} whitespace-pre-line text-sm text-gray-900`}>{feedback}</p>
+    </div>
   )
 }
 

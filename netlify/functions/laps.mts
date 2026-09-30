@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto'
-import { getStore, getDeployStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
-import { isAdmin } from '../lib/newEvent.mjs'
-import { findDriver } from '../lib/drivers.mjs'
+import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
+import type { Store, StoreDeps } from '../lib/driverStore.mts'
 import { cleanSessionLaps, lapStats, sessionKey } from '../../src/utils/lapTimes.ts'
 import type { Lap, SessionLaps } from '../../src/utils/lapTimes.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
@@ -56,46 +55,10 @@ interface EventLaps {
   sessions: Record<string, SessionLaps>
 }
 
-type Deps = {
-  getStore?: typeof getStore
-  getDeployStore?: typeof getDeployStore
+type Deps = StoreDeps & {
   fetch?: typeof fetch
-  identity?: Parameters<typeof findDriver>[1]
   /** Stands in for SAMPLE_DRIVER_EMAIL_SHA256 in tests. */
   sampleDriverSha256?: string
-}
-
-type Store = ReturnType<typeof getStore>
-
-/**
- * Production reads and writes the live laps. Anything else (a deploy
- * preview, a branch deploy) gets stores of its own for that deploy;
- * `live` is only read from, to copy the driver's laps in (ensureCopied).
- */
-function openStores(context: unknown, deps: Deps): { laps: Store; meta: Store; live?: Store } {
-  const deployContext = (context as { deploy?: { context?: string } } | undefined)?.deploy?.context
-  const site = (name: string) => (deps.getStore ?? getStore)({ name, consistency: 'strong' })
-  const deploy = (name: string) => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
-  if (!deployContext || deployContext === 'production') return { laps: site(LAPS_STORE), meta: site(LAPS_META_STORE) }
-  return { laps: deploy(LAPS_STORE), meta: deploy(LAPS_META_STORE), live: site(LAPS_STORE) }
-}
-
-/**
- * On a preview, copies the driver's live laps (as they are at that moment)
- * into the deploy's own store the first time they're used there, and
- * records that it did, so laps removed on the preview don't come back.
- * Production has nothing to copy. Each copy only writes a record that
- * isn't there yet, so one saved on the preview meanwhile is kept.
- */
-async function ensureCopied({ laps, meta, live }: { laps: Store; meta: Store; live?: Store }, driverId: string) {
-  if (!live) return
-  if (await meta.get(driverId, { type: 'json' })) return
-  const { blobs } = await live.list({ prefix: `${driverId}/` })
-  for (const { key } of blobs) {
-    const record = await live.get(key, { type: 'json' })
-    if (record) await laps.setJSON(key, record, { onlyIfNew: true })
-  }
-  await meta.setJSON(driverId, { at: new Date().toISOString() })
 }
 
 /**
@@ -105,7 +68,7 @@ async function ensureCopied({ laps, meta, live }: { laps: Store; meta: Store; li
  * laps saved or removed there last only until then. A preview never copies
  * production's test account; it starts from the sample.
  */
-async function ensureSeeded({ laps, meta }: { laps: Store; meta: Store }) {
+async function ensureSeeded({ records: laps, meta }: { records: Store; meta: Store }) {
   const seeded = (await meta.get(TEST_SEED_KEY, { type: 'json' })) as { version?: number } | null
   if (seeded?.version === TEST_ACCOUNT_VERSION) return
   // Written over, never deleted first, so a request that comes in meanwhile
@@ -130,7 +93,7 @@ export function isSampleDriver(email: string | undefined | null, sha256 = SAMPLE
  * own). A session they already have is kept as it is; the record of the
  * fill lists those. Removed afterwards, laps stay removed.
  */
-async function ensureOwnLaps({ laps, meta }: { laps: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
+async function ensureOwnLaps({ records: laps, meta }: { records: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
   if (!isSampleDriver(email, sha256)) return
   const doneKey = `filled-own-laps:${driverId}`
   if (await meta.get(doneKey, { type: 'json' })) return
@@ -171,7 +134,7 @@ export const MOVED_SESSIONS = [
  * sample laps filled in at the new time on a preview (ensureOwnLaps) gives
  * way to the driver's own. The record of it lists the sessions moved.
  */
-async function ensureMovedSessions({ laps, meta }: { laps: Store; meta: Store }, driverId: string) {
+async function ensureMovedSessions({ records: laps, meta }: { records: Store; meta: Store }, driverId: string) {
   for (const { eventId, issue, moves } of MOVED_SESSIONS) {
     const doneKey = `moved-sessions:${eventId}:${issue}:${driverId}`
     if (await meta.get(doneKey, { type: 'json' })) continue
@@ -273,7 +236,7 @@ export function withSheetSpeeds(mine: Lap[], sheet: Lap[]): { laps: Lap[]; added
  * speeds; this one runs once more with laps in order, and puts right any
  * speeds that came from the sheet onto the wrong lap.
  */
-async function ensureOwnSpeeds({ laps, meta }: { laps: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
+async function ensureOwnSpeeds({ records: laps, meta }: { records: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
   if (!isSampleDriver(email, sha256)) return
   const doneKey = `sheet-speeds-2:${driverId}`
   if (await meta.get(doneKey, { type: 'json' })) return
@@ -310,27 +273,11 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const params = new URL(req.url).searchParams
 
   // Whose laps: the signed-in driver's, or for an admin, the driver asked for.
-  let driverId = user.id
-  let driverEmail: string | undefined = user.email
-  const asked = params.get('driver')
-  if (asked === TEST_DRIVER_ID) {
-    if (!isAdmin(user)) return json(403, { error: 'Only admins can use the test account.' })
-    driverId = TEST_DRIVER_ID
-  } else if (asked && asked !== user.id) {
-    if (!isAdmin(user)) return json(403, { error: 'Only admins can log lap times for other drivers.' })
-    let driver
-    try {
-      driver = await findDriver(asked, deps.identity)
-    } catch (err) {
-      console.error('laps: looking up the driver failed:', err)
-      return json(502, { error: 'Couldn’t check that driver. Try again in a moment.' })
-    }
-    if (!driver) return json(404, { error: 'There’s no driver with that id.' })
-    driverId = driver.id
-    driverEmail = driver.email
-  }
+  const whose = await whoseRecords(user, params.get('driver'), 'lap times', deps.identity)
+  if (whose instanceof Response) return whose
+  const { driverId, driverEmail } = whose
 
-  const stores = openStores(context, deps)
+  const stores = openStores(context, deps, LAPS_STORE, LAPS_META_STORE)
   if (driverId === TEST_DRIVER_ID) await ensureSeeded(stores)
   else {
     await ensureCopied(stores, driverId)
@@ -338,7 +285,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     await ensureMovedSessions(stores, driverId)
     await ensureOwnSpeeds(stores, driverId, driverEmail, deps.sampleDriverSha256)
   }
-  const store = stores.laps
+  const store = stores.records
 
   if (req.method === 'GET' && params.has('events')) {
     const eventIds = [...new Set((params.get('events') ?? '').split(',').filter(Boolean))]

@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
-import { Timer } from 'lucide-react'
+import { NotebookPen } from 'lucide-react'
 import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
+import type { SessionHead } from './LapSessions'
+import { AddEventEvaluation, EventEvaluationCard } from './EventEvaluationCard'
+import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
 import { groupFor, shortDate } from './LapTimesSheet'
@@ -9,14 +12,18 @@ import { eventBest, trackShortName } from '../utils/trackStats'
 import { formatAverage, lapSpeeds, lapStats } from '../utils/lapTimes'
 import { formatTime, formatAmPm } from '../utils/time'
 import type { LapLog } from '../data/lapLog'
+import type { NotesLog } from '../data/notesLog'
+import { isTdeEvent } from '../utils/evaluation'
+import { classifyEvent } from '../utils/eventClass'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
-import type { SessionLaps } from '../utils/lapTimes'
-import type { EventConfig } from '../types'
+import type { EventConfig, RunGroupConfig } from '../types'
 
 interface Props {
   event: EventConfig
   log: LapLog
+  /** Instructor evaluations: each session's, and a TDE event's report card (#340). */
+  notes: NotesLog
   /** The best on this track layout across every event, and how many events that is. */
   layoutBest: { best?: number; events: number }
   /** The same best, once every event's is known — marks the lap that set it. */
@@ -27,22 +34,33 @@ interface Props {
   driver?: Driver | null
   /** Admins only: the Driver picker, above the laps (#288). */
   driverPicker?: ReactNode
-  onEdit: (session: SessionLaps) => void
+  /** The group they drove in, and every event (to color groups), for the report card. */
+  runGroup?: RunGroupConfig | null
+  events: EventConfig[]
+  /** Opens a session's sheet: on what it has (`menu`), or on one thing. */
+  onEdit: (session: SessionHead, view: SessionView) => void
+  /** Opens the report card's form (#340). */
+  onEditEvaluation: () => void
 }
 
 /**
- * The My notes tab (#210): the driver's own lap times for this event,
- * session by session. Added from the Schedule tab; edited from here too.
- * An admin can pick another driver's instead (#288).
+ * The My notes tab (#210): the driver's own notes for this event, session
+ * by session — lap times, and what their instructor said (#340) — with a
+ * TDE event's report card for the whole event. Added from the Schedule
+ * tab; edited from here too. An admin can pick another driver's instead
+ * (#288).
  */
-export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, onEdit }: Props) {
+export function MyLapTimes({
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, runGroup, events, onEdit, onEditEvaluation,
+}: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
   const track = trackShortName(event)
   const name = driver ? driverName(driver) : null
   const whose = name ? `${name}’s` : 'your'
 
-  const loading = log.status === 'loading' || log.status === 'off'
+  const loading = log.status === 'loading' || log.status === 'off' || notes.status === 'loading'
+  const tde = isTdeEvent(event)
   const leaving = useSkeletonFade(loading)
 
   const header = (<>
@@ -59,15 +77,18 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
     return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label={`Loading ${whose} lap times`} /></>
   }
 
-  if (log.status === 'error') {
+  if (log.status === 'error' || notes.status === 'error') {
     return (
       <>
         {header}
         <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} lap times</p>
+          <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} notes</p>
           <p className="mt-1 text-xs text-gray-400">Check your connection and try again.</p>
           <button
-            onClick={log.reload}
+            onClick={() => {
+              if (log.status === 'error') log.reload()
+              if (notes.status === 'error') notes.reload()
+            }}
             className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
           >
             Try again
@@ -77,24 +98,38 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
     )
   }
 
-  if (log.sessions.length === 0) {
+  // The whole event's evaluation — on a TDE event, their report card — or
+  // once the event's begun, the way to add one.
+  const reportCard = notes.evaluation
+    ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
+    : classifyEvent(event) !== 'upcoming' ? <AddEventEvaluation tde={tde} onAdd={onEditEvaluation} /> : null
+
+  // Every session with something saved: laps, an evaluation or both.
+  const heads = new Map<string, SessionHead>()
+  for (const s of [...log.sessions, ...notes.sessions]) if (!heads.has(s.key)) heads.set(s.key, s)
+  const sessions = [...heads.values()].sort((a, b) => a.key.localeCompare(b.key))
+
+  if (sessions.length === 0) {
     return (
       <>
         {header}
-        <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <Timer size={20} className="mx-auto text-gray-400" aria-hidden="true" />
-          <p className="mt-2 text-sm font-medium text-gray-700">No lap times yet</p>
-          <p className="mt-1 text-xs text-gray-400">
-            {name
-              ? `On the Schedule tab, tap a session ${name} drove to add their laps.`
-              : 'On the Schedule tab, tap a session you drove to add your laps.'}
-          </p>
+        <div className="fade-in flex flex-col gap-5">
+          {reportCard}
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+            <NotebookPen size={20} className="mx-auto text-gray-400" aria-hidden="true" />
+            <p className="mt-2 text-sm font-medium text-gray-700">No session notes yet</p>
+            <p className="mt-1 text-xs text-gray-400">
+              {name
+                ? `On the Schedule tab, tap a session ${name} drove to add their laps or their instructor’s feedback.`
+                : 'On the Schedule tab, tap a session you drove to add your laps or your instructor’s feedback.'}
+            </p>
+          </div>
         </div>
       </>
     )
   }
 
-  const days = new Set(log.sessions.map(s => s.date))
+  const days = new Set(sessions.map(s => s.date))
   // One set of columns for every session's table, so they line up.
   const columns = lapColumns(log.sessions.flatMap(s => s.laps))
   // Each session's best and average, in schedule order, for the chart (#274).
@@ -117,7 +152,7 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
     <>
       {header}
       <div className="fade-in">
-        <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {log.sessions.length > 0 && <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <StatCard
             label="Best lap this event"
             ms={eventBest(log.sessions)}
@@ -134,7 +169,8 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
               }}
             />
           )}
-        </div>
+        </div>}
+        {reportCard && <div className="mb-5">{reportCard}</div>}
         {trend.length > 0 && (
           <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4">
             <p className="mb-3 text-[13px] font-semibold text-gray-500">Lap times by session</p>
@@ -142,17 +178,20 @@ export function MyLapTimes({ event, log, layoutBest, allTimeBest, track: trackPa
           </div>
         )}
         <div className="flex flex-col gap-5">
-          {log.sessions.map(session => (
+          {sessions.map(session => (
             <SessionLapsCard
               key={session.key}
               session={session}
+              laps={log.byKey.get(session.key)}
+              notes={notes.byKey.get(session.key)}
               runGroups={runGroups}
               showDate={days.size > 1}
               columns={columns}
               allTimeBest={allTimeBest}
               expanded={open.has(session.key)}
               onToggle={() => toggle(session.key)}
-              onEdit={() => onEdit(session)}
+              onEdit={() => onEdit(session, 'menu')}
+              onOpenEvaluation={() => onEdit(session, 'evaluation')}
               tableId={`laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`}
             />
           ))}
