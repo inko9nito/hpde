@@ -48,7 +48,7 @@ describe('NewEventPage', () => {
     fireEvent.change(start, { target: { value: '2026-11-06' } })
     expect(end.value).toBe('2026-11-08')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     expect(await posted()).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-08' })
   })
 
@@ -59,7 +59,7 @@ describe('NewEventPage', () => {
     fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2026-09-23' } })
 
     expect(screen.getByRole('alert')).toHaveTextContent('Ends before it starts')
-    await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }))
   })
 })

@@ -130,14 +130,18 @@ function eventIdFromHash(hash: string): string | null {
 }
 
 /** A page that slides up from the bottom over the landing or event page
- *  (#273, #278): New event, Share (the site, or one event) or the iOS
- *  widget setup. */
-type Overlay = { kind: 'new-event' } | { kind: 'widget' } | { kind: 'share'; eventId?: string }
+ *  (#273, #278): New event, Share (the site, or one event), the iOS
+ *  widget setup, or an event's Edit details or Edit schedule (#368). */
+type Overlay =
+  | { kind: 'new-event' }
+  | { kind: 'widget' }
+  | { kind: 'share'; eventId?: string }
+  | { kind: 'edit-event' | 'edit-schedule'; eventId: string }
 
 // What the page stack (#274) reads from a hash: the event it's a page of —
-// its own, a sub-page or an editor — and the track page it is.
+// its own, or a sub-page (Share, the editors) — and the track page it is.
 const PAGE_HASHES = {
-  event: (hash: string) => eventIdFromHash(hash) ?? eventIdFromEditScheduleHash(hash) ?? eventIdFromEditEventHash(hash),
+  event: eventIdFromHash,
   track: trackSlugFromHash,
   more: morePageFromHash,
 }
@@ -149,6 +153,10 @@ function overlayFromHash(hash: string): Overlay | null {
   if (hash === '#/widget-setup' || hash === '#/widget-script') return { kind: 'widget' }
   if (hash === SHARE_HASH) return { kind: 'share' }
   if (isEventShareHash(hash)) return { kind: 'share', eventId: eventIdFromHash(hash)! }
+  const editEventId = eventIdFromEditEventHash(hash)
+  if (editEventId !== null) return { kind: 'edit-event', eventId: editEventId }
+  const editScheduleId = eventIdFromEditScheduleHash(hash)
+  if (editScheduleId !== null) return { kind: 'edit-schedule', eventId: editScheduleId }
   return null
 }
 
@@ -409,7 +417,11 @@ export default function App() {
   // the page has slid in, not while it's still on its way — until a
   // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
-  useChromeColor(((eventPageOpen && pushEntered) || trackEntered || carEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
+  // Pages that slide up with a white toolbar across their top (#368) keep
+  // it white; Share and the iOS widget page are gray to the top.
+  const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'share' && shownOverlay.kind !== 'widget'
+  const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
+  useChromeColor(whiteTop ? HEADER_CHROME_COLOR : null)
   // The tabs slide a little way left under the first page pushed over them (#367).
   const underPages = useUnderPushedPages(swiped)
 
@@ -536,41 +548,13 @@ export default function App() {
     // direct link to one only resolves once the fetch lands.
   }, [hash, ALL_EVENTS])
 
-  // Back where an editor was opened from, without replaying the event
-  // page's slide-in.
+  // Back to the event a track page was opened from, without replaying the
+  // event page's slide-in.
   function backToEvent(eventId: string) {
     skipPushEnterAnimationRef.current = true
     setHash(eventHash(eventId))
   }
 
-  const editScheduleEventId = eventIdFromEditScheduleHash(hash)
-  if (editScheduleEventId !== null) {
-    return (
-      <ScheduleEditorPage
-        eventId={editScheduleEventId}
-        onClose={() => backToEvent(editScheduleEventId)}
-        onSaved={() => {
-          setActiveTab('schedule')
-          backToEvent(editScheduleEventId)
-          showToast('Schedule saved')
-        }}
-      />
-    )
-  }
-
-  const editEventId = eventIdFromEditEventHash(hash)
-  if (editEventId !== null) {
-    return (
-      <EditEventPage
-        eventId={editEventId}
-        onClose={() => backToEvent(editEventId)}
-        onSaved={() => {
-          backToEvent(editEventId)
-          showToast('Details saved')
-        }}
-      />
-    )
-  }
 
   return (
     <>
@@ -847,13 +831,13 @@ export default function App() {
     )}
     {shownOverlay && (
       <PushPage
-        key={shownOverlay.kind === 'share' ? `share ${shownOverlay.eventId ?? ''}` : shownOverlay.kind}
+        key={'eventId' in shownOverlay ? `${shownOverlay.kind} ${shownOverlay.eventId ?? ''}` : shownOverlay.kind}
         open={overlay !== null}
         onExited={() => setLastOverlay(null)}
         onEnteredChange={setOverlayEntered}
         skipEnterAnimation={bootHashRef.current !== null}
         instant={swiped}
-        whiteHeader={false}
+        whiteHeader={overlayWhiteTop}
         from="bottom"
       >
         {shownOverlay.kind === 'new-event' ? (
@@ -866,6 +850,25 @@ export default function App() {
               skipPushEnterAnimationRef.current = true
               // Reassurance that this is the new event, not an old one.
               showToast(`“${event.name}” created`)
+            }}
+          />
+        ) : shownOverlay.kind === 'edit-event' ? (
+          <EditEventPage
+            eventId={shownOverlay.eventId}
+            onClose={() => setHash(eventHash(shownOverlay.eventId))}
+            onSaved={() => {
+              setHash(eventHash(shownOverlay.eventId))
+              showToast('Details saved')
+            }}
+          />
+        ) : shownOverlay.kind === 'edit-schedule' ? (
+          <ScheduleEditorPage
+            eventId={shownOverlay.eventId}
+            onClose={() => setHash(eventHash(shownOverlay.eventId))}
+            onSaved={() => {
+              setActiveTab('schedule')
+              setHash(eventHash(shownOverlay.eventId))
+              showToast('Schedule saved')
             }}
           />
         ) : shownOverlay.kind === 'widget' ? (

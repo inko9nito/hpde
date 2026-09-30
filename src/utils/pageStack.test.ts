@@ -3,7 +3,7 @@ import { emptyPageStack, nextPageStack } from './pageStack'
 import type { PageStack } from './pageStack'
 
 const read = {
-  event: (h: string) => /^#\/(?:event|edit-schedule)\/([^/]+)/.exec(h)?.[1] ?? null,
+  event: (h: string) => /^#\/event\/([^/]+)/.exec(h)?.[1] ?? null,
   track: (h: string) => /^#\/track\/([^/]+)/.exec(h)?.[1] ?? null,
   more: (h: string) => (h === '#/evaluations' ? 'evaluations' : null),
 }
@@ -37,7 +37,7 @@ describe('page stack (#274)', () => {
   })
 
   it('keeps the stack through an event’s own sub-pages and editors', () => {
-    const stack = walk(['#/track/t', '#/event/b', '#/event/b/share', '#/edit-schedule/b', '#/event/b'])
+    const stack = walk(['#/track/t', '#/event/b', '#/event/b/share', '#/event/b/edit-schedule', '#/event/b'])
     expect(stack.trackUnderEvent).toBe('t')
   })
 

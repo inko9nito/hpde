@@ -78,7 +78,7 @@ describe('Edit details (#232)', () => {
     renderAt(`#/event/${stored.id}`)
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit details' }))
-    expect(window.location.hash).toBe(`#/edit-event/${stored.id}`)
+    expect(window.location.hash).toBe(`#/event/${stored.id}/edit`)
 
     const title = await screen.findByLabelText('Title') as HTMLInputElement
     expect(screen.getByRole('heading', { name: 'Edit details' })).toBeInTheDocument()
@@ -119,7 +119,7 @@ describe('Edit details (#232)', () => {
   })
 
   it('moves both days together, and warns before a day’s schedule is dropped', async () => {
-    renderAt(`#/edit-event/${stored.id}`)
+    renderAt(`#/event/${stored.id}/edit`)
     const start = await screen.findByLabelText('Start date')
     // A week later: same length, so the schedule moves along.
     fireEvent.change(start, { target: { value: '2099-10-17' } })
@@ -136,7 +136,7 @@ describe('Edit details (#232)', () => {
   })
 
   it('keeps the changes when the page reloads mid-edit (signing in again goes to Google and back)', async () => {
-    renderAt(`#/edit-event/${stored.id}`)
+    renderAt(`#/event/${stored.id}/edit`)
     const title = await screen.findByLabelText('Title')
     await userEvent.type(title, ' (rain date)')
     // The page going away with the tab, as a redirect does: no unmount.
@@ -145,12 +145,12 @@ describe('Edit details (#232)', () => {
     cleanup()
     sessionStorage.setItem(`hpde:detailsDraft:${stored.id}`, draft!)
 
-    renderAt(`#/edit-event/${stored.id}`)
+    renderAt(`#/event/${stored.id}/edit`)
     expect(((await screen.findByLabelText('Title')) as HTMLInputElement).value).toBe('Fall Track Day (rain date)')
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
 
     // Closing the page drops it.
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(window.location.hash).toBe(`#/event/${stored.id}`))
     expect(sessionStorage.getItem(`hpde:detailsDraft:${stored.id}`)).toBeNull()
   })
@@ -163,14 +163,14 @@ describe('Edit details (#232)', () => {
     expect(item).toHaveTextContent('Test events can’t be edited')
     cleanup()
 
-    renderAt(`#/edit-event/${FIXTURE_EVENTS[0].id}`)
+    renderAt(`#/event/${FIXTURE_EVENTS[0].id}/edit`)
     expect(await screen.findByText('Test events can’t be edited.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
   })
 
   it('is for admins only', async () => {
     roles = []
-    renderAt(`#/edit-event/${stored.id}`)
+    renderAt(`#/event/${stored.id}/edit`)
     expect(await screen.findByText('Only admins can edit events.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument()
   })

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Camera, Lock } from 'lucide-react'
 import { PushPage } from './PushPage'
+import { PageHeader } from './PageHeader'
 import { inputClass } from './SessionEvaluationForm'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { MAX_NAME, MAX_TORQUE, cleanCar, carName } from '../utils/garage'
@@ -209,21 +210,12 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
     <PushPage open={open} onExited={onClosed} raised from="bottom">
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
       <div role="dialog" aria-label={title} aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-screen bg-gray-50" data-car-form>
-        <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
-          <div className="mx-auto grid min-h-[52px] max-w-lg grid-cols-[1fr_auto_1fr] items-center gap-2 px-2">
-            <button onClick={close} disabled={!!busy} className="justify-self-start rounded-lg px-2 py-2 text-[15px] text-blue-600 hover:text-blue-700 disabled:text-gray-300">
-              Cancel
-            </button>
-            <h1 className="truncate text-[15px] font-semibold text-gray-900">{title}</h1>
-            <button
-              onClick={save}
-              disabled={!('value' in cleaned) || !!busy}
-              className="justify-self-end rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-300"
-            >
-              {busy === 'saving' ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          title={title}
+          onCancel={close}
+          cancelDisabled={!!busy}
+          save={{ label: busy === 'saving' ? 'Saving…' : 'Save', disabled: !('value' in cleaned) || !!busy, onClick: save }}
+        />
 
         <div className="mx-auto flex max-w-lg flex-col gap-5 px-3 pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-6">
           <section aria-label="Photo" className={card}>
