@@ -10,7 +10,7 @@ import type { Lap, SessionLaps } from '../../utils/lapTimes'
 // The laps function writes these into the test account the first time it's
 // used, and again whenever TEST_ACCOUNT_VERSION goes up — so bump it after
 // changing anything here.
-export const TEST_ACCOUNT_VERSION = 2
+export const TEST_ACCOUNT_VERSION = 3
 
 /**
  * The driver these laps are, by the SHA-256 of their sign-in email
@@ -182,7 +182,7 @@ const EVENTS: FixtureEvent[] = [
         ],
       },
       {
-        date: '2025-10-04', time: '12:25', group: 'blue', sessionNumber: 2,
+        date: '2025-10-04', time: '12:20', group: 'blue', sessionNumber: 2,
         laps: [
           { ms: 142286, topMph: 104.3, avgMph: 66.4 },
           { ms: 138223, topMph: 116.9, avgMph: 68.3 },
@@ -218,7 +218,7 @@ const EVENTS: FixtureEvent[] = [
         ],
       },
       {
-        date: '2025-10-05', time: '12:20', group: 'blue', sessionNumber: 1,
+        date: '2025-10-05', time: '12:20', group: 'blue', sessionNumber: 2,
         laps: [
           { ms: 152113, topMph: 102.1, avgMph: 62.1 },
           { ms: 153982, topMph: 89.2, avgMph: 61.2 },
@@ -231,7 +231,7 @@ const EVENTS: FixtureEvent[] = [
         ],
       },
       {
-        date: '2025-10-05', time: '14:55', group: 'blue', sessionNumber: 2,
+        date: '2025-10-05', time: '14:55', group: 'blue', sessionNumber: 3,
         laps: [
           { ms: 134450, topMph: 115.2, avgMph: 70.0 },
           { ms: 139720, topMph: 106.6, avgMph: 67.3 },
@@ -243,7 +243,7 @@ const EVENTS: FixtureEvent[] = [
         ],
       },
       {
-        date: '2025-10-05', time: '16:25', group: 'blue', sessionNumber: 3,
+        date: '2025-10-05', time: '16:30', group: 'blue', sessionNumber: 4,
         laps: [
           { ms: 134014, topMph: 116.4, avgMph: 70.3 },
           { ms: 136444, topMph: 116.0, avgMph: 69.1 },

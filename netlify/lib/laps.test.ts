@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
-import handler, { TEST_SEED_KEY, isSampleDriver, withSheetSpeeds } from '../functions/laps.mts'
+import handler, { MOVED_SESSIONS, TEST_SEED_KEY, isSampleDriver, withSheetSpeeds } from '../functions/laps.mts'
 import { fakeBlobs } from './fakeBlobs'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount'
 import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps'
@@ -452,6 +452,77 @@ describe('laps function (#210)', () => {
       expect(await summary('jason-token')).toEqual([])
       expect(store.size).toBe(0)
     })
+  })
+})
+
+describe('laps moved onto a schedule found later (#339)', () => {
+  const [{ eventId: OCT, moves }] = MOVED_SESSIONS
+  const logged = (date: string, time: string, sessionNumber: number, group = 'blue') =>
+    ({ key: `${date} ${time} ${group}`, date, time, group, sessionNumber, laps: [{ ms: 135_000 + sessionNumber }] })
+  // Blue's sessions as they were logged, at the times their laps started.
+  const before = [
+    logged('2025-10-04', '10:10', 1), logged('2025-10-04', '12:25', 2),
+    logged('2025-10-05', '12:20', 1), logged('2025-10-05', '14:55', 2), logged('2025-10-05', '16:25', 3),
+  ]
+  const record = (sessions: ReturnType<typeof logged>[]) => ({ eventId: OCT, sessions: Object.fromEntries(sessions.map(s => [s.key, s])) })
+  const got = async (token: string, context?: unknown) =>
+    (await (await call('GET', { token, query: `?event=${OCT}`, context })).json()).sessions
+      .map((s: { key: string; sessionNumber: number; laps: { ms: number }[] }) => `${s.key} #${s.sessionNumber} ${s.laps.map(l => l.ms)}`)
+  const after = [
+    ['2025-10-04 10:10 blue', 1, 1], ['2025-10-04 12:20 blue', 2, 2],
+    ['2025-10-05 12:20 blue', 2, 1], ['2025-10-05 14:55 blue', 3, 2], ['2025-10-05 16:30 blue', 4, 3],
+  ].map(([key, number, logged]) => `${key} #${number} ${135_000 + Number(logged)}`)
+
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
+
+  it('names sessions that moved', () => {
+    expect(moves.map(m => `${m.date} ${m.from}→${m.to}`)).toEqual([
+      '2025-10-04 12:25→12:20', '2025-10-05 12:20→12:20', '2025-10-05 14:55→14:55', '2025-10-05 16:25→16:30',
+    ])
+  })
+
+  it('moves a driver’s laps to their sessions’ times and numbers, laps and all, once', async () => {
+    store.set(`vera/${OCT}`, record(before))
+    expect(await got('vera-token')).toEqual(after)
+    expect(blobs.data('site:laps-meta').get(`moved-sessions:${OCT}:339:vera`)).toMatchObject({
+      moved: ['2025-10-04 12:25 blue', '2025-10-05 12:20 blue', '2025-10-05 14:55 blue', '2025-10-05 16:25 blue'],
+    })
+
+    // Once: logged at the old time again afterwards, they stay there.
+    store.set(`vera/${OCT}`, record([logged('2025-10-04', '12:25', 2)]))
+    expect(await got('vera-token')).toEqual(['2025-10-04 12:25 blue #2 135002'])
+  })
+
+  it('leaves other groups’ sessions, and drivers with no laps there, alone', async () => {
+    const red = logged('2025-10-04', '12:25', 2, 'red')
+    store.set(`vera/${OCT}`, record([red]))
+    expect(await got('vera-token')).toEqual([`${red.key} #2 135002`])
+    await got('jason-token')
+    expect(store.has(`${JASON}/${OCT}`)).toBe(false)
+  })
+
+  it('on a preview, moves the copy of the live laps, over the sample’s laps filled in at the new time', async () => {
+    sampleDriverSha256 = createHash('sha256').update('jason@example.com').digest('hex')
+    store.set(`${JASON}/${OCT}`, record(before))
+    blobs.data('site:laps-meta').set(`filled-own-laps:${JASON}`, { at: 'then', kept: [] })
+    const preview = { deploy: { context: 'deploy-preview' } }
+    // Theirs, moved, with the sample's other two sessions (14:30, 16:40)
+    // filled in: none of the sample's left beside theirs.
+    const sessions = await got('jason-token', preview)
+    expect(sessions).toEqual(expect.arrayContaining(after))
+    expect(sessions).toHaveLength(7)
+    // The live laps are untouched.
+    expect(store.get(`${JASON}/${OCT}`)).toEqual(record(before))
+  })
+
+  it('is for the drivers’ own laps: the test account’s sample has the new times', async () => {
+    const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === OCT)!
+    for (const m of moves) {
+      expect(Object.values(sample.sessions)).toContainEqual(expect.objectContaining({ date: m.date, time: m.to, group: m.group, sessionNumber: m.sessionNumber }))
+    }
   })
 })
 
