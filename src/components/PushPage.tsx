@@ -6,6 +6,27 @@ import type { RefObject } from 'react'
 const PUSH_DURATION_MS = 350
 const PUSH_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
+// Open pushed pages, so the document stays locked until the last one
+// closes (an event's page can be open over a track page).
+let openPages = 0
+
+/**
+ * While a pushed page is open, the page under it doesn't scroll (#321).
+ * The pushed page is its own scroller over the document; left scrollable,
+ * iOS hands a drag to the document behind it instead — reliably after a
+ * native picker (a date field) has been open — so the page in view stops
+ * scrolling while the hidden list underneath does.
+ */
+function useLockDocumentScroll(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return
+    if (openPages++ === 0) document.documentElement.classList.add('push-page-open')
+    return () => {
+      if (--openPages === 0) document.documentElement.classList.remove('push-page-open')
+    }
+  }, [locked])
+}
+
 interface Props {
   open: boolean
   onExited?: () => void
@@ -66,6 +87,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
     onEnteredChange?.(entered)
   }, [entered])
   const white = entered && whiteHeader
+  useLockDocumentScroll(open)
 
   useEffect(() => {
     if (isFirstRun.current) {
@@ -84,7 +106,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   return (
     <div
       ref={scrollRef}
-      className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto ${white ? 'bg-white' : 'bg-gray-50'}`}
+      className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         zIndex: raised ? 31 : undefined,
         // Once in place, white is what Safari 26 samples to tint the

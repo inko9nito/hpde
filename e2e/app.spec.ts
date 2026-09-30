@@ -327,6 +327,34 @@ test('an admin adds an event from beside the list/calendar toggle; the page slid
   await expect(add).toBeInViewport()
 })
 
+test('the page under a pushed page doesn’t scroll while it’s open (#321)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/')
+  const documentScrolls = () => page.evaluate(() =>
+    [document.documentElement, document.body].every(el => getComputedStyle(el).overflowY !== 'hidden'))
+  expect(await documentScrolls()).toBe(true)
+
+  // New event slides up; a drag on it is its own, never the list's behind it.
+  await page.getByRole('link', { name: 'Add event' }).click()
+  const heading = page.getByRole('heading', { level: 1, name: 'New event' })
+  await expect(heading).toBeInViewport()
+  expect(await documentScrolls()).toBe(false)
+  const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  expect(await scroller.evaluate(el => getComputedStyle(el).overscrollBehaviorY)).toBe('contain')
+  await page.getByRole('button', { name: 'Close' }).click()
+  await expect(heading).toHaveCount(0)
+  expect(await documentScrolls()).toBe(true)
+
+  // An event's page slides in from the side: the same, until it's closed.
+  await page.getByRole('button', { name: new RegExp(alpha.name) }).click()
+  await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
+  expect(await documentScrolls()).toBe(false)
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  await expect.poll(documentScrolls).toBe(true)
+})
+
 test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/')
