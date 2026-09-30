@@ -1,0 +1,50 @@
+import { describe, it, expect } from 'vitest'
+import { cardLooks, scoredCards, skillHistory, skillMoves } from './ReportCardSkills'
+import type { ReportCardPoint } from './ReportCardSkills'
+
+const card = (key: string, date: string, skills: Record<string, number>, carAidsPct?: number): ReportCardPoint =>
+  ({ key, date, title: key, evaluation: { skills, ...(carAidsPct !== undefined ? { carAidsPct } : {}) } })
+
+describe('report card skills (#345)', () => {
+  it('takes the cards with a core skill scored, oldest first, and the skills any of them scores, in the card’s order', () => {
+    const { cards, skills } = scoredCards([
+      card('oct', '2025-10-04', { pace: 90, flags: 80 }),
+      card('aids-only', '2025-08-01', {}, 20),
+      card('jul', '2025-07-19', { flags: 65 }),
+    ])
+    expect(cards.map(c => c.key)).toEqual(['jul', 'oct'])
+    expect(skills.map(s => s.id)).toEqual(['flags', 'pace'])
+  })
+
+  it('gives a skill’s score on each card that scored it, with the change from the one before', () => {
+    const cards = [card('a', '2025-07-19', { flags: 65 }), card('b', '2025-09-13', { pace: 70 }), card('c', '2025-10-04', { flags: 60, pace: 70 })]
+    expect(skillHistory('flags', cards)).toEqual([{ card: cards[0], score: 65 }, { card: cards[2], score: 60, change: -5 }])
+    expect(skillHistory('vision', cards)).toEqual([])
+  })
+
+  it('lists the most improved since the first card, and the lowest on the latest', () => {
+    const cards = [
+      card('jul', '2025-07-19', { flags: 65, passing: 95, vision: 55, references: 50, pace: 80 }),
+      card('oct', '2025-10-04', { flags: 90, passing: 100, vision: 70, references: 80, pace: 75, awareness: 70 }),
+    ]
+    const { improved, needsWork } = skillMoves(cards)
+    expect(improved.map(m => [m.skill.id, m.gain])).toEqual([['references', 30], ['flags', 25], ['vision', 15]])
+    // Lowest now; of the two at 70, the one that gained least (awareness, one card) first.
+    expect(needsWork.map(m => [m.skill.id, m.latest])).toEqual([['awareness', 70], ['vision', 70], ['pace', 75]])
+  })
+
+  it('has nothing improved with one card, or when nothing went up', () => {
+    expect(skillMoves([card('a', '2025-07-19', { flags: 65 })]).improved).toEqual([])
+    expect(skillMoves([card('a', '2025-07-19', { flags: 65 }), card('b', '2025-09-13', { flags: 60 })]).improved).toEqual([])
+  })
+
+  it('gives the four newest cards shown a marker each, and any older one a plain line behind them', () => {
+    const cards = ['a', 'b', 'c', 'd', 'e', 'f'].map((k, i) => card(k, `2025-0${i + 1}-01`, { flags: 60 }))
+    const all = cardLooks(cards, new Set(cards.map(c => c.key)))
+    expect(['f', 'e', 'd', 'c', 'b', 'a'].map(k => all.get(k)!.shape)).toEqual(['circle', 'square', 'triangle', 'diamond', null, null])
+    // Hide the newest two, and the older ones come forward.
+    const some = cardLooks(cards, new Set(['a', 'b', 'c', 'd']))
+    expect(['d', 'c', 'b', 'a'].map(k => some.get(k)!.shape)).toEqual(['circle', 'square', 'triangle', 'diamond'])
+    expect(some.has('f')).toBe(false)
+  })
+})

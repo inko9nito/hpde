@@ -102,6 +102,8 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const params = new URL(url, 'https://x').searchParams
     // Nobody else's notes are kept here.
     if (params.has('driver')) return json(init?.method ? { error: 'Not here.' } : { sessions: [] }, init?.method ? 500 : 200)
+    // Every event's, for the Instructor evaluations page (#345).
+    if (!params.has('event')) return json({ events: Object.entries(notesByEvent).map(([eventId, n]) => ({ eventId, ...n })) })
     const id = params.get('event')!
     const notes = notesByEvent[id] ?? { sessions: [] }
     const keep = (next: Notes) => { notesByEvent[id] = next }
@@ -1190,7 +1192,7 @@ describe('a track page: the events on one layout (#274)', () => {
   })
 })
 
-describe('the Events, Tracks and Garage tabs (#274)', () => {
+describe('the Events, Tracks and More tabs (#274, #345)', () => {
   const at = (date: string, laps: number[]): SessionLaps => ({
     key: `${date} 09:50 blue`, date, time: '09:50', group: 'blue', sessionNumber: 1, laps: laps.map(ms => ({ ms })),
   })
@@ -1269,18 +1271,176 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
     expect(lapCalls('GET')).toHaveLength(0)
   })
 
-  it('switches tabs from the tab bar; the Garage is coming soon', async () => {
+  it('switches tabs from the tab bar; More lists Instructor evaluations and the Garage, which is coming soon', async () => {
     openAt('#/')
     expect(await screen.findByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: 'Garage' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('link', { name: 'Garage' }))
+    await userEvent.click(screen.getByRole('link', { name: 'More' }))
+    expect(window.location.hash).toBe('#/more')
+    expect(screen.getByRole('heading', { level: 1, name: 'More' })).toBeInTheDocument()
+    const items = within(screen.getByRole('list', { name: 'More' })).getAllByRole('link')
+    expect(items.map(a => a.getAttribute('href'))).toEqual(['#/evaluations', '#/garage'])
+
+    await userEvent.click(items[1])
     expect(window.location.hash).toBe('#/garage')
-    expect(screen.getByRole('heading', { level: 1, name: 'Garage' })).toBeInTheDocument()
-    expect(screen.getByText('Coming soon')).toBeInTheDocument()
+    const garage = screen.getByRole('heading', { level: 1, name: 'Garage' }).closest<HTMLElement>('.fixed')!
+    expect(within(garage).getByText('Coming soon')).toBeInTheDocument()
+    // Still under More.
+    expect(screen.getByRole('link', { name: 'More' })).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(within(garage).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe('#/more')
 
     await userEvent.click(screen.getByRole('link', { name: 'Events' }))
     expect(window.location.hash).toBe('#/')
     expect(screen.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
+  })
+})
+
+describe('Instructor evaluations across events (#345)', () => {
+  // Two TDE events on the layout, and Lap Day, which isn't one.
+  const tdeSep: EventConfig = { ...sameLayout, id: '2025-09-13_tde', name: 'TDE at MSRC', organizer: 'The Drivers Edge', days: [{ ...event.days[0], date: '2025-09-13' }] }
+  const tdeOct: EventConfig = { ...sameLayout, id: '2025-10-04_tde', name: 'TDE at ECR', organizer: 'The Drivers Edge', days: [{ ...event.days[0], date: '2025-10-04' }] }
+  const openAt = (hash: string) => {
+    window.location.hash = hash
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+  }
+  const page = async () => (await screen.findByRole('heading', { level: 1, name: 'Instructor evaluations' })).closest<HTMLElement>('.fixed')!
+
+  beforeEach(() => {
+    moreEvents = [tdeSep, tdeOct]
+    notesByEvent = {
+      [tdeSep.id]: { evaluation: { instructor: 'John Harms', skills: { flags: 65, vision: 70 }, carAidsPct: 25 }, sessions: [] },
+      [tdeOct.id]: { evaluation: { instructor: 'Amy Lee', skills: { flags: 80, vision: 70, pace: 90 }, notes: 'Smoother on the brakes.' }, sessions: [] },
+      // Not a TDE event: no report card, but its evaluations are listed all the same.
+      [event.id]: {
+        evaluation: { instructor: 'Jo', notes: 'Brake later into turn 1.' },
+        sessions: [{ key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, evaluation: { feedback: 'Eyes up.', instructor: 'Jo' } }],
+      },
+    }
+    // Events they went to with nothing yet: one they said they drove, one they've laps at. Not one they didn't go to.
+    rsvps = { [sameLayout.id]: { status: 'going' }, [tdeSep.id]: { status: 'not-going' } }
+    summary = [{ eventId: otherWay.id, best: 90_000, sessions: 1 }]
+  })
+
+  it('sums the report cards up: most improved since the first, and what needs work on the latest', async () => {
+    openAt('#/evaluations')
+    const el = await page()
+    const overview = await within(el).findByRole('region', { name: 'Report card overview' })
+    expect(within(overview).getByText('2 events')).toBeInTheDocument()
+    const items = (name: string) => within(within(overview).getByRole('region', { name })).getAllByRole('listitem').map(li => li.textContent)
+    // Only what went up: vision stayed at 70, and pace is on one card.
+    expect(items('Most improved')).toEqual(['Flags+15'])
+    expect(items('Needs work')).toEqual(['Vision70%', 'Flags80%', 'Pace90%'])
+  })
+
+  it('draws each report card on the skills wheel, and lists a skill’s score at each event when it’s tapped', async () => {
+    openAt('#/evaluations')
+    const el = await page()
+    const wheel = await within(el).findByRole('region', { name: 'Skills wheel' })
+    // All, then the cards newest first, every one on at first; one can be hidden, not every one.
+    const chips = within(within(wheel).getByRole('group', { name: 'Report cards shown' })).getAllByRole('button')
+    expect(chips.map(c => [c.textContent, c.getAttribute('aria-pressed')])).toEqual([['All', 'true'], ['Oct 4', 'true'], ['Sep 13', 'true']])
+    const drawn = () => [...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))
+    // The newest drawn last, on top.
+    expect(drawn()).toEqual([tdeSep.id, tdeOct.id])
+    await userEvent.click(chips[2])
+    expect(drawn()).toEqual([tdeOct.id])
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(chips[1])
+    expect(chips[1]).toHaveAttribute('aria-pressed', 'true')
+    // All shows every card; again, just the newest.
+    await userEvent.click(chips[0])
+    expect(drawn()).toEqual([tdeSep.id, tdeOct.id])
+    await userEvent.click(chips[0])
+    expect(drawn()).toEqual([tdeOct.id])
+    await userEvent.click(chips[0])
+
+    // A spoke for each skill scored; not car aids.
+    expect(within(wheel).getAllByRole('button', { pressed: false }).map(b => b.getAttribute('aria-label')).filter(Boolean))
+      .toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
+    expect(within(wheel).getByText('Tap a skill for its score at each event.')).toBeInTheDocument()
+    await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
+    const list = within(wheel).getByRole('region', { name: 'Calls out all flags at each event' })
+    expect(within(list).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+      'Oct 4, 2025TDE at ECR+1580%',
+      'Sep 13, 2025TDE at MSRC65%',
+    ])
+    // Each on a 0–100% bar, the gain since the event before hatched on.
+    expect([...list.querySelectorAll('[data-bar]')].map(b => b.querySelector('[data-change]')?.getAttribute('data-change') ?? null)).toEqual(['gain', null])
+    // Tapped again, it goes.
+    await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
+    expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
+  })
+
+  it('lists every event with an evaluation, TDE or not, newest first, with what the instructors said; one opens on My notes and Back returns here', async () => {
+    openAt('#/more')
+    await userEvent.click(await screen.findByRole('link', { name: /Instructor evaluations/ }))
+    expect(window.location.hash).toBe('#/evaluations')
+    const el = await page()
+    const section = await within(el).findByRole('region', { name: 'Events' })
+    await waitFor(() => expect(within(section).getAllByRole('article')).toHaveLength(5))
+    const cards = within(section).getAllByRole('article')
+    // With the events they went to that have none yet, newest first.
+    expect(cards.map(c => c.getAttribute('aria-label'))).toEqual(['Lap Day', 'Earlier', 'CCW', 'TDE at ECR', 'TDE at MSRC'])
+    expect(within(cards[1]).getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
+    expect(within(cards[2]).getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
+    expect(within(cards[0]).queryByRole('button', { name: /^Add instructor evaluation/ })).not.toBeInTheDocument()
+    const feedback = (card: HTMLElement) => within(within(card).getByRole('list', { name: 'Feedback' })).getAllByRole('listitem').map(li => li.textContent)
+    // The whole event's (who the instructor was, and their notes), then each session's.
+    expect(feedback(cards[0])).toEqual([
+      'JoBrake later into turn 1.',
+      'Session 2 · 11:45 AM· JoEyes up.',
+    ])
+    expect(feedback(cards[3])).toEqual(['Amy LeeSmoother on the brakes.'])
+    // A report card with no notes says so.
+    expect(feedback(cards[4])).toEqual(['John HarmsNo notes.'])
+
+    await userEvent.click(within(cards[3]).getByRole('link'))
+    expect(window.location.hash).toBe(`#/event/${tdeOct.id}`)
+    expect(await screen.findByRole('tab', { name: /My notes/, selected: true })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('Amy Lee')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' }).at(-1)!)
+    expect(window.location.hash).toBe('#/evaluations')
+  })
+
+  it('adds an evaluation to an event they went to: its My notes, with the form open', async () => {
+    openAt('#/evaluations')
+    const el = await page()
+    const earlier = await within(el).findByRole('article', { name: 'Earlier' })
+    await userEvent.click(within(earlier).getByRole('button', { name: /^Add instructor evaluation/ }))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: /My notes/, selected: true })).toBeInTheDocument()
+    const form = await screen.findByRole('dialog', { name: 'Instructor evaluation' })
+    await userEvent.type(within(form).getByLabelText('Instructor', { exact: true }), 'Sam')
+    await userEvent.type(within(form).getByLabelText('Instructor notes'), 'Look further ahead.')
+    await userEvent.click(within(form).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(notesByEvent[sameLayout.id]?.evaluation).toMatchObject({ instructor: 'Sam', notes: 'Look further ahead.' }))
+
+    // Back on the page, it has feedback now.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' }).at(-1)!)
+    expect(window.location.hash).toBe('#/evaluations')
+    const card = await within(el).findByRole('article', { name: 'Earlier' })
+    await waitFor(() => expect(within(card).getByRole('list', { name: 'Feedback' })).toHaveTextContent('Look further ahead.'))
+  })
+
+  it('says how to add one when there are none, with no chart', async () => {
+    notesByEvent = {}
+    rsvps = {}
+    summary = []
+    openAt('#/evaluations')
+    const el = await page()
+    expect(await within(el).findByText('No instructor evaluations yet')).toBeInTheDocument()
+    expect(within(el).queryByRole('region', { name: 'Skills wheel' })).not.toBeInTheDocument()
+  })
+
+  it('asks anyone signed out to sign in, and fetches nothing', async () => {
+    signedIn = false
+    openAt('#/evaluations')
+    const el = await page()
+    expect(await within(el).findByText('Sign in to see your instructor evaluations')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('api/notes'))).toHaveLength(0)
   })
 })

@@ -128,6 +128,24 @@ describe('notes function (#340)', () => {
     expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}&session=nope` })).status).toBe(404)
   })
 
+  it('lists every event’s notes, with no event named (#345)', async () => {
+    expect(await notesOf('vera-token', '')).toEqual({ events: [] })
+    await call('PUT', { token: 'vera-token', body: { evaluation: reportCard } })
+    await call('PUT', { token: 'vera-token', body: { session: session2 } })
+    await call('PUT', { token: 'vera-token', query: '?event=2025-09-13_tde', body: { session: session1 } })
+    await call('PUT', { token: 'jason-token', query: '?event=2025-07-19_tde', body: { session: session1 } })
+    const { events } = await notesOf('vera-token', '')
+    expect(events.map((e: { eventId: string }) => e.eventId).sort()).toEqual(['2025-09-13_tde', EVENT])
+    const mine = events.find((e: { eventId: string }) => e.eventId === EVENT)
+    expect(mine.evaluation.skills).toEqual(reportCard.skills)
+    expect(mine.sessions.map((s: { key: string }) => s.key)).toEqual(['2026-09-12 10:25 pink'])
+    expect(events.find((e: { eventId: string }) => e.eventId === '2025-09-13_tde')).not.toHaveProperty('evaluation')
+    // An admin's list of a driver's, and only with their own sign-in otherwise.
+    expect((await notesOf('admin-token', `?driver=${JASON}`)).events.map((e: { eventId: string }) => e.eventId)).toEqual(['2025-07-19_tde'])
+    expect((await call('GET', { token: 'jason-token', query: '?driver=vera' })).status).toBe(403)
+    expect((await call('GET', { query: '' })).status).toBe(401)
+  })
+
   it('keeps each driver’s notes to themselves', async () => {
     await call('PUT', { token: 'vera-token', body: { session: session2 } })
     expect((await notesOf('jason-token')).sessions).toEqual([])

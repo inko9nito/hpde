@@ -139,3 +139,61 @@ export function useNotesLog(eventId: string | null, driverId: string | null = nu
 
   return { status, evaluation, sessions, byKey, saveSession, removeSession, saveEvaluation, removeEvaluation, reload }
 }
+
+/** One event's notes, as the list of every event's has them (#345). */
+export interface EventNotes {
+  eventId: string
+  evaluation?: EventEvaluation
+  sessions: SessionNotes[]
+}
+
+export interface AllNotes {
+  status: NotesStatus
+  events: EventNotes[]
+  reload(): void
+}
+
+/**
+ * Every event's notes (#345), for the Instructor evaluations page: the
+ * signed-in driver's own, or the test account's while an admin has
+ * switched to it (#309). Fetched while `active`.
+ */
+export function useAllNotes(active: boolean): AllNotes {
+  const { status: authStatus, authedFetch, testAccount } = useAuth()
+  const signedIn = authStatus === 'signed-in'
+  const on = signedIn && active
+  const [loaded, setLoaded] = useState<{ url: string; events: EventNotes[] } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const url = `${NOTES_URL}${testAccount ? `?driver=${encodeURIComponent(TEST_DRIVER_ID)}` : ''}`
+
+  useEffect(() => {
+    if (!signedIn) {
+      setLoaded(null)
+      return
+    }
+    if (!on) return
+    let cancelled = false
+    setFailed(false)
+    ;(async () => {
+      try {
+        const res = await authedFetch(url)
+        if (!res.ok) throw await errorFrom(res)
+        const body = await res.json()
+        if (!cancelled) setLoaded({ url, events: Array.isArray(body?.events) ? body.events : [] })
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [signedIn, on, url, authedFetch, attempt])
+
+  // Another account's notes never show here.
+  const current = loaded?.url === url
+  const events = useMemo(() => (signedIn && current ? loaded!.events : []), [signedIn, current, loaded])
+  const status: NotesStatus = !signedIn ? 'off' : current ? 'ready' : failed ? 'error' : 'loading'
+  const reload = useCallback(() => setAttempt(a => a + 1), [])
+  return { status, events, reload }
+}

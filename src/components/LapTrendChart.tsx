@@ -139,7 +139,7 @@ export function labelled(xs: number[], texts: string[]): number[] {
   return taken
 }
 
-function useWidth() {
+export function useWidth() {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   useLayoutEffect(() => {

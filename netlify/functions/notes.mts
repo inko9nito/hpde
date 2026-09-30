@@ -10,6 +10,9 @@ import { DATE, GROUP, TIME, sessionKey } from '../../src/utils/lapTimes.ts'
 // their own — or, for an admin, the driver named by `driver=<user id>`
 // (#288). For now the notes are their instructor's evaluations: each
 // session's feedback, and a TDE event's report card for the whole event.
+//   GET                               every event's notes: { events: [{ eventId,
+//                                     evaluation?, sessions }] } — for the
+//                                     Instructor evaluations page (#345)
 //   GET    ?event=                    the event's notes: { evaluation?, sessions }
 //   PUT    ?event=  {session}         saves one session's notes (replacing any)
 //   PUT    ?event=  {evaluation}      saves the event's report card (replacing any)
@@ -76,12 +79,24 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   if (whose instanceof Response) return whose
   const { driverId } = whose
 
+  const stores = openStores(context, deps, NOTES_STORE, NOTES_META_STORE)
+  const store = stores.records
+
+  if (req.method === 'GET' && !params.has('event')) {
+    await ensureCopied(stores, driverId)
+    const { blobs } = await store.list({ prefix: `${driverId}/` })
+    const records = await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' }) as Promise<EventNotes | null>))
+    const events = records.flatMap(record => {
+      if (!record) return []
+      return [{ eventId: record.eventId, ...(record.evaluation ? { evaluation: record.evaluation } : {}), sessions: inOrder(record) }]
+    })
+    return json(200, { events })
+  }
+
   const eventId = params.get('event') ?? ''
   if (!EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
 
-  const stores = openStores(context, deps, NOTES_STORE, NOTES_META_STORE)
   await ensureCopied(stores, driverId)
-  const store = stores.records
   const key = `${driverId}/${eventId}`
   const record = (await store.get(key, { type: 'json' })) as EventNotes | null
 

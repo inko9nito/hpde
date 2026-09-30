@@ -1,9 +1,10 @@
 // Which pages sit under which (#274). An event's page and a track page can
 // each be opened from the other — My notes' All time best card opens the
 // track page over the event; a track page's event cards open the event
-// over the track page — and Back returns to the one underneath. The hash
-// only names the page on top, so what's under it is worked out from the
-// way there, one hash change at a time.
+// over the track page — and Back returns to the one underneath. An event
+// opened from a More page (#345: Instructor evaluations) goes over that,
+// too. The hash only names the page on top, so what's under it is worked
+// out from the way there, one hash change at a time.
 
 export interface PageStack<Driver> {
   hash: string
@@ -13,6 +14,8 @@ export interface PageStack<Driver> {
   trackUnderEvent: string | null
   /** Whose laps the track page shows: another driver's, when opened from theirs on an event (#288). */
   trackDriver: Driver | null
+  /** The More page (its hash) under the event's page, the one it was opened from (#345) — under a track page opened from that event too. */
+  moreUnderEvent: string | null
 }
 
 export interface HashReader {
@@ -20,10 +23,12 @@ export interface HashReader {
   event(hash: string): string | null
   /** The track page a hash is. */
   track(hash: string): string | null
+  /** The More page a hash is (#345). */
+  more(hash: string): string | null
 }
 
 export function emptyPageStack<Driver>(hash: string): PageStack<Driver> {
-  return { hash, eventUnderTrack: null, trackUnderEvent: null, trackDriver: null }
+  return { hash, eventUnderTrack: null, trackUnderEvent: null, trackDriver: null, moreUnderEvent: null }
 }
 
 /** The stack once `hash` is on top. `driver` is the one picked on the event page, if any. */
@@ -41,22 +46,27 @@ export function nextPageStack<Driver>(
   if (slug !== null) {
     // Back from an event opened from this track page.
     if (prevEventId !== null && prev.trackUnderEvent === slug) {
-      return { hash, eventUnderTrack: null, trackUnderEvent: null, trackDriver: prev.trackDriver }
+      return { ...emptyPageStack(hash), trackDriver: prev.trackDriver }
     }
-    // Opened from an event's page: over it, showing the laps it showed.
-    if (prevEventId !== null) return { hash, eventUnderTrack: prevEventId, trackUnderEvent: null, trackDriver: driver }
+    // Opened from an event's page: over it, showing the laps it showed —
+    // and over whatever the event was over.
+    if (prevEventId !== null) {
+      return { hash, eventUnderTrack: prevEventId, trackUnderEvent: null, trackDriver: driver, moreUnderEvent: prev.moreUnderEvent }
+    }
     return emptyPageStack(hash)
   }
 
   if (eventId !== null) {
     // The same event, or one of its sub-pages: nothing moves.
     if (prevEventId === eventId) return { ...prev, hash }
-    // Back to the event the track page was opened from.
-    if (prevSlug !== null && prev.eventUnderTrack === eventId) return emptyPageStack(hash)
+    // Back to the event the track page was opened from, still over what it was over.
+    if (prevSlug !== null && prev.eventUnderTrack === eventId) return { ...emptyPageStack(hash), moreUnderEvent: prev.moreUnderEvent }
     // Opened from a track page: over it.
     if (prevSlug !== null) {
-      return { hash, eventUnderTrack: null, trackUnderEvent: prevSlug, trackDriver: prev.trackDriver }
+      return { ...emptyPageStack(hash), trackUnderEvent: prevSlug, trackDriver: prev.trackDriver }
     }
+    // Opened from a More page: over it.
+    if (read.more(prev.hash) !== null) return { ...emptyPageStack(hash), moreUnderEvent: prev.hash }
   }
   return emptyPageStack(hash)
 }

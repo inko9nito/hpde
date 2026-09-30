@@ -104,12 +104,15 @@ export function LapsToolbar({ keys, open, onOpen, whose }: {
   )
 }
 
-/** "Private", with who can see the laps on hover. `whose` names another driver, for an admin (#288). */
-export function PrivateTag({ whose }: { whose: string | null }) {
+/**
+ * "Private", with who can see the laps on hover. `whose` names another
+ * driver, for an admin (#288); `what` is what's private, if not lap times.
+ */
+export function PrivateTag({ whose, what = 'lap times' }: { whose: string | null; what?: string }) {
   return (
     <span
       className="flex shrink-0 items-center gap-1"
-      title={whose ? `Only ${whose} and admins can see these lap times` : 'Only you and admins can see your lap times'}
+      title={whose ? `Only ${whose} and admins can see these ${what}` : `Only you and admins can see your ${what}`}
     >
       <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
     </span>

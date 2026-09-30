@@ -846,7 +846,7 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(alphaTrack).toContainText('No events yet')
 })
 
-test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {
+test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (#274), the Garage from More (#345)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/')
   const bar = page.getByRole('navigation', { name: 'Sections' })
@@ -890,10 +890,132 @@ test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks
   await expect(page).toHaveURL(/#\/tracks$/)
   await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
 
-  await bar.getByRole('link', { name: 'Garage' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeVisible()
-  await expect(page.getByText('Coming soon')).toBeVisible()
+  await bar.getByRole('link', { name: 'More' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible()
+  const garage = await trackSlide(page, () => page.getByRole('link', { name: /^Garage/ }).click(), 'Garage')
+  expect(garage).toEqual({ fromBelow: false, fromSide: true })
+  await expect(page.locator('p', { hasText: 'Coming soon' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(bar.getByRole('link', { name: 'More' })).toHaveAttribute('aria-current', 'page')
+})
+
+test('Instructor evaluations, from More: the TDE report cards’ overview and skills wheel, and the events, which open on My notes (#345)', async ({ page }) => {
+  const tde = (id: string, name: string, date: string): EventConfig =>
+    ({ ...alpha, id: `${date}_${id}`, name, organizer: 'The Drivers Edge', days: [{ ...alpha.days[0], date }] })
+  const jul = tde('jul', 'TDE at MSRC', '2025-07-19')
+  const sep = tde('sep', 'TDE at MSRC 2.0', '2025-09-13')
+  const oct = tde('oct', 'TDE at Eagles Canyon Raceway', '2025-10-04')
+  await stubEvents(page, [...TEST_EVENTS, jul, sep, oct])
+  await signInAsAdmin(page)
+  const bravo = TEST_EVENTS.find(e => e.name === 'Bravo HPDE')!
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [bravo.id]: { status: 'going' } } } }))
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const card = (flags: number, passing: number, inputs: number, vision: number, consistency: number, carControl: number, pace: number, references: number, awareness: number, carAidsPct: number) =>
+    ({ instructor: 'John Harms', skills: { flags, passing, inputs, vision, consistency, carControl, pace, references, awareness }, carAidsPct })
+  const notes = [
+    { eventId: jul.id, evaluation: card(65, 95, 60, 55, 60, 70, 75, 50, 65, 25), sessions: [] },
+    { eventId: sep.id, evaluation: card(75, 95, 70, 65, 70, 70, 80, 65, 70, 15), sessions: [] },
+    { eventId: oct.id, evaluation: { ...card(90, 100, 80, 60, 85, 75, 85, 80, 85, 10), notes: 'Smoother on the brakes, and much better at picking up flags early.' }, sessions: [] },
+    // Not a TDE event: no report card, but its feedback is listed too.
+    {
+      eventId: alpha.id,
+      evaluation: { instructor: 'Sam Ortiz', notes: 'Good day. Carry more speed through the carousel.' },
+      sessions: [{
+        key: '2026-03-07 08:30 blue', date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+        evaluation: { feedback: 'Unwind the wheel sooner and use all of the exit curb.', instructor: 'Sam Ortiz' },
+      }],
+    },
+  ]
+  await page.route(/\/api\/notes(\?|$)/, route => {
+    const id = new URL(route.request().url()).searchParams.get('event')
+    if (!id) return route.fulfill({ json: { events: notes } })
+    const { evaluation, sessions } = notes.find(n => n.eventId === id) ?? { sessions: [] }
+    return route.fulfill({ json: { ...(evaluation ? { evaluation } : {}), sessions } })
+  })
+
+  await page.goto('/#/more')
+  const slide = await trackSlide(page, () => page.getByRole('link', { name: /^Instructor evaluations/ }).click(), 'Instructor evaluations')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  const overview = page.getByRole('region', { name: 'Report card overview' })
+  await expect(overview.getByRole('region', { name: 'Most improved' }).getByRole('listitem'))
+    .toHaveText([/References\s*\+30/, /Flags\s*\+25/, /Consistency\s*\+25/])
+  await expect(overview.getByRole('region', { name: 'Needs work' }).getByRole('listitem'))
+    .toHaveText([/Vision\s*60%/, /Car control\s*75%/, /Inputs\s*80%/])
+
+  const wheel = page.getByRole('region', { name: 'Skills wheel' })
+  // Every skill's name is on the card, clear of its edges and of the others.
+  const names = wheel.locator('[data-spoke]')
+  await expect(names).toHaveCount(9)
+  const frame = (await wheel.boundingBox())!
+  const boxes = await names.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON() as DOMRect))
+  for (const b of boxes) {
+    expect(b.left).toBeGreaterThanOrEqual(frame.x)
+    expect(b.right).toBeLessThanOrEqual(frame.x + frame.width)
+  }
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const [a, b] = [boxes[i], boxes[j]]
+    expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true)
+  }
+  // Every card is drawn, each with its own marker; a tap on a skill lists it at every event.
+  await expect(wheel.locator('[data-card]')).toHaveCount(3)
+  const chips = wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button')
+  await expect(wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button', { pressed: true })).toHaveText(['All', /Oct 4/, /Sep 13/, /Jul 19/])
+  // Picked, a chip is filled black, as a picked skill's name is.
+  await expect(chips.nth(1)).toHaveCSS('background-color', 'rgb(17, 24, 39)')
+  await chips.nth(1).click()
+  await expect(chips.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await chips.nth(1).click()
+  expect(await wheel.getByRole('group', { name: 'Report cards shown' }).locator('[data-shape]').evaluateAll(els => els.map(el => el.getAttribute('data-shape'))))
+    .toEqual(['circle', 'square', 'triangle'])
+  await wheel.getByRole('button', { name: 'Calls out all flags' }).click()
+  await expect(wheel.getByRole('region', { name: 'Calls out all flags at each event' }).getByRole('listitem'))
+    .toHaveText([/Oct 4, 2025.*\+15\s*90%/, /Sep 13, 2025.*\+10\s*75%/, /Jul 19, 2025.*65%/])
+  // Each on a bar, 0% to 100%: the gain since the event before hatched on, a drop hatched light.
+  await wheel.getByRole('button', { name: 'Looks ahead' }).click()
+  const vision = wheel.getByRole('region', { name: 'Looks ahead at each event' })
+  await expect(vision.getByRole('listitem')).toHaveText([/Oct 4, 2025.*−5\s*60%/, /Sep 13, 2025.*\+10\s*65%/, /Jul 19, 2025.*55%/])
+  const bars = await vision.locator('[data-bar]').evaluateAll(els => els.map(el => {
+    const track = el.getBoundingClientRect()
+    const [solid, change] = [...el.children].map(c => c.getBoundingClientRect())
+    const pct = (px: number) => Math.round((px / track.width) * 100)
+    return { solid: pct(solid.width), change: change ? [el.children[1].getAttribute('data-change'), pct(change.left - track.left), pct(change.width)] : null }
+  }))
+  expect(bars).toEqual([
+    { solid: 60, change: ['loss', 60, 5] },
+    { solid: 55, change: ['gain', 55, 10] },
+    { solid: 55, change: null },
+  ])
+  await expect(vision).toContainText('Up since the event before')
+  await expect(vision).toContainText('Down since the event before')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // The events, newest first; one opens on My notes, and Back comes back.
+  const feedback = page.getByRole('region', { name: 'Events' })
+  const events = feedback.getByRole('link')
+  // Bravo has no evaluation, but they drove it: it's there to add one to.
+  await expect(events).toHaveText([/Alpha Track Day/, /Bravo HPDE/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  await expect(feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ })).toBeVisible()
+  const alphaCard = feedback.getByRole('article', { name: 'Alpha Track Day' })
+  await expect(alphaCard.getByRole('listitem')).toHaveText([
+    /^Sam Ortiz\s*Good day\. Carry more speed/,
+    /Session 1 · 8:30 AM.*Sam Ortiz.*Unwind the wheel sooner/,
+  ])
+  await events.nth(2).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${oct.id}$`))
+  await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
+  await page.getByRole('button', { name: 'Back' }).last().click()
+  await expect(page).toHaveURL(/#\/evaluations$/)
+  await expect(wheel).toBeVisible()
+
+  // Adding one to Bravo opens its My notes with the form up.
+  await feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${bravo.id}$`))
+  await expect(page.getByRole('dialog', { name: 'Instructor evaluation' })).toBeVisible()
 })
 
 test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {
