@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
 import { RunGroupFilter } from './components/RunGroupFilter'
@@ -42,8 +43,10 @@ import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
-import { useRsvps } from './data/RsvpsContext'
-import { useGarage } from './data/GarageContext'
+import { RsvpsScope, useDriverRsvps, useRsvps } from './data/RsvpsContext'
+import type { RsvpsValue } from './data/RsvpsContext'
+import { GarageScope, useDriverGarage, useGarage } from './data/GarageContext'
+import type { GarageValue } from './data/GarageContext'
 import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
@@ -197,11 +200,21 @@ function isEmptyHash(hash: string): boolean {
   return hash === '' || hash === '#'
 }
 
+/**
+ * What an event's page, its sheets and the pages opened over it see (#362):
+ * the garage and answers of the driver an admin picked, or their own —
+ * the rest of the app (the Events list, the Garage) is always their own.
+ */
+function DriverScope({ garage, rsvps, children }: { garage: GarageValue; rsvps: RsvpsValue; children: ReactNode }) {
+  return <GarageScope value={garage}><RsvpsScope value={rsvps}>{children}</RsvpsScope></GarageScope>
+}
+
 export default function App() {
   const [hash, setHash] = useHashRoute()
   const { status: authStatus, user } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
-  const { rsvps } = useRsvps()
+  const ownRsvps = useRsvps()
+  const { rsvps } = ownRsvps
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
@@ -237,6 +250,8 @@ export default function App() {
   function showToast(text: string) {
     setToast({ id: Date.now(), text })
   }
+  // Says whose, for the driver an admin picked (#288, #362).
+  const forDriver = (text: string) => (driver ? `${text} for ${driverName(driver)}` : text)
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
   // empty-hash-redirects-to-today's-live-event effect below — should show
@@ -389,17 +404,23 @@ export default function App() {
   // …and their instructor's evaluations of it (#340).
   const notesLog = useNotesLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
   const evaluatedKeys = new Set(notesLog.byKey.keys())
+  // Whose answers to "Did you drive?" the event's page shows: the picked
+  // driver's (#362), or the admin's own.
+  const driverRsvps = useDriverRsvps(driver?.id ?? null)
+  const eventRsvps = driver ? driverRsvps : ownRsvps
   // The group they drove in, for a TDE report card (#340): their answer to
-  // "Did you drive?" — or for another driver's, or with none, their laps'.
-  const rsvpGroup = driver ? null : myRunGroup(activeEvent, rsvps[activeEvent.id])
+  // "Did you drive?" — or with none, their laps'.
+  const rsvpGroup = myRunGroup(activeEvent, eventRsvps.rsvps[activeEvent.id])
   const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
   const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
   // …and what they ran there (#344): the car, its consumables and each
-  // session's tire pressures — from their own garage, so not for another
-  // driver's notes.
-  const garage = useGarage()
-  const ownGarage = driver === null && garage.status !== 'off'
-  const eventSetup = ownGarage ? garage.events[activeEvent.id] : undefined
+  // session's tire pressures — from their garage: the picked driver's
+  // (#362), or the admin's own.
+  const ownGarage = useGarage()
+  const driverGarage = useDriverGarage(driver?.id ?? null)
+  const garage = driver ? driverGarage : ownGarage
+  const garageOn = garage.status !== 'off'
+  const eventSetup = garageOn ? garage.events[activeEvent.id] : undefined
   const eventCar = eventSetup?.carId ? garage.cars.find(c => c.id === eventSetup.carId) : undefined
   const pressuresByKey = new Map(Object.values(eventSetup?.sessions ?? {}).map(p => [p.key, p]))
   const pressureKeys = new Set(pressuresByKey.keys())
@@ -574,6 +595,7 @@ export default function App() {
         )}
       </PushPage>
     )}
+    <DriverScope garage={garage} rsvps={eventRsvps}>
     {pushMounted && (
     <PushPage
       // A fresh page when it goes over the track or a car's page, so it slides in.
@@ -720,7 +742,7 @@ export default function App() {
                 view,
               })}
               onEditEvaluation={() => setEvaluationOpen(true)}
-              garage={ownGarage ? {
+              garage={garageOn ? {
                 status: garage.status,
                 car: eventCar,
                 pressures: pressuresByKey,
@@ -738,7 +760,10 @@ export default function App() {
     </PullToRefresh>
     </PushPage>
     )}
+    </DriverScope>
     {shownCarId && (
+      // Opened from an event's page, the car is in that page's garage: the picked driver's (#362).
+      <DriverScope garage={eventUnderCar !== null ? garage : ownGarage} rsvps={eventUnderCar !== null ? eventRsvps : ownRsvps}>
       <PushPage
         key={`car ${shownCarId}`}
         raised={carRaised}
@@ -763,11 +788,14 @@ export default function App() {
             setUnderCar(null)
             setCarUnderEvent(shownCarId)
             switchEvent(event)
+            // Another driver's car's event is theirs too (#362).
+            if (eventUnderCar !== null) setLapDriver(driver)
             setActiveTab('notes')
           }}
           onToast={showToast}
         />
       </PushPage>
+      </DriverScope>
     )}
     {shownTrackSlug && (
       <PushPage
@@ -831,6 +859,7 @@ export default function App() {
         )}
       </PushPage>
     )}
+    <DriverScope garage={garage} rsvps={eventRsvps}>
     {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
       <LapTimesSheet
         // A fresh sheet for each session, so nothing typed carries over.
@@ -870,19 +899,19 @@ export default function App() {
           setLapSlot(null)
           showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
         }}
-        pressures={ownGarage ? {
+        pressures={garageOn ? {
           saved: key => pressuresByKey.get(key),
           onSave: async pressures => {
             await garage.saveSetup(activeEvent.id, withPressures(eventSetup, pressures.key, pressures))
             setLapSlot(null)
-            showToast('Tire pressures saved')
+            showToast(forDriver('Tire pressures saved'))
           },
           onRemove: async key => {
             const next = withPressures(eventSetup, key, null)
             if (Object.keys(next).length) await garage.saveSetup(activeEvent.id, next)
             else await garage.removeSetup(activeEvent.id)
             setLapSlot(null)
-            showToast('Tire pressures removed')
+            showToast(forDriver('Tire pressures removed'))
           },
         } : undefined}
         onClose={() => setLapSlot(null)}
@@ -897,16 +926,17 @@ export default function App() {
         onClose={() => setDriverSheetOpen(false)}
       />
     )}
-    {carSheetOpen && ownGarage && isOnEventRoute && !routeMissing && (
+    {carSheetOpen && garageOn && isOnEventRoute && !routeMissing && (
       <EventCarSheet
         key={activeEvent.id}
         event={activeEvent}
         garage={garage}
         car={eventCar}
+        driver={driver ? driverName(driver) : undefined}
         onPick={async carId => {
           await garage.saveSetup(activeEvent.id, { ...(eventSetup?.sessions ? { sessions: eventSetup.sessions } : {}), carId })
           setCarSheetOpen(false)
-          showToast('Car saved')
+          showToast(forDriver('Car saved'))
         }}
         onAddCar={() => {
           setCarSheetOpen(false)
@@ -925,7 +955,7 @@ export default function App() {
           if (sessions) await garage.saveSetup(activeEvent.id, { sessions })
           else await garage.removeSetup(activeEvent.id)
           setCarSheetOpen(false)
-          showToast('Car removed from event')
+          showToast(forDriver('Car removed from event'))
         }}
         onClose={() => setCarSheetOpen(false)}
       />
@@ -938,7 +968,7 @@ export default function App() {
           const { eventId } = addingCarFor
           const sessions = garage.events[eventId]?.sessions
           await garage.saveSetup(eventId, { ...(sessions ? { sessions } : {}), carId: car.id })
-          showToast('Car added')
+          showToast(forDriver('Car added'))
         }}
         onClosed={() => setAddingCarFor(null)}
       />
@@ -964,6 +994,7 @@ export default function App() {
         onClose={() => setEvaluationOpen(false)}
       />
     )}
+    </DriverScope>
     {/* Clear of the tab bar while a tab is showing. */}
     <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || morePageShowing !== null || carPageId !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>

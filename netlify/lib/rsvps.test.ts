@@ -5,10 +5,22 @@ import { fakeBlobs } from './fakeBlobs'
 const blobs = fakeBlobs()
 const store = blobs.data('site:rsvps')
 
+// Identity's user ids are UUIDs; an admin names a driver by theirs.
+const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
+
 // Stands in for Netlify Identity's /user endpoint: one token per user.
 const identityUsers: Record<string, unknown> = {
   'vera-token': { id: 'vera', email: 'vera@example.com' },
-  'jason-token': { id: 'jason', email: 'jason@example.com' },
+  'jason-token': { id: JASON, email: 'jason@example.com' },
+  'admin-token': { id: 'amy', email: 'amy@example.com', app_metadata: { roles: ['admin'] } },
+}
+
+const identity = {
+  getUser: async (id: string) => {
+    if (id === JASON) return { id: JASON, email: 'jason@example.com', name: 'Jason' }
+    throw Object.assign(new Error('User not found'), { status: 404 })
+  },
+  listUsers: async () => [],
 }
 const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
   expect(String(url)).toBe('https://site.example/.netlify/identity/user')
@@ -30,7 +42,7 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch } as never,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity } as never,
   )
 
 const rsvpsOf = async (token: string, context?: unknown) =>
@@ -38,6 +50,25 @@ const rsvpsOf = async (token: string, context?: unknown) =>
 
 describe('rsvps function (#235)', () => {
   beforeEach(() => blobs.clear())
+
+  it('keeps each driver’s answers to themselves; an admin can read and answer for one (#362)', async () => {
+    expect((await call('PUT', { token: 'vera-token', body: { status: 'going' } })).status).toBe(200)
+    expect(await rsvpsOf('jason-token')).toEqual({})
+    // Only an admin can name another driver, and only a real one.
+    expect((await call('GET', { token: 'jason-token', query: '?driver=vera' })).status).toBe(403)
+    expect((await call('PUT', { token: 'jason-token', query: `?event=${EVENT}&driver=vera`, body: { status: 'not-going' } })).status).toBe(403)
+    expect((await call('GET', { token: 'admin-token', query: '?driver=nobody' })).status).toBe(404)
+
+    const put = await call('PUT', { token: 'admin-token', query: `?event=${EVENT}&driver=${JASON}`, body: { status: 'going', runGroup: 'blue' } })
+    expect(put.status).toBe(200)
+    expect(Object.keys(await rsvpsOf('jason-token'))).toEqual([EVENT])
+    expect((await (await call('GET', { token: 'admin-token', query: `?driver=${JASON}` })).json()).rsvps[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
+    // Not the admin's own.
+    expect(await rsvpsOf('admin-token')).toEqual({})
+    expect((await call('DELETE', { token: 'admin-token', query: `?event=${EVENT}&driver=${JASON}` })).status).toBe(200)
+    expect(await rsvpsOf('jason-token')).toEqual({})
+    expect([...store.keys()]).toEqual(['vera'])
+  })
 
   it('needs a sign-in for everything', async () => {
     expect((await call('GET', { query: '' })).status).toBe(401)

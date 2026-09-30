@@ -225,7 +225,11 @@ Only they and admins can see them.
   account, so they see them when they sign in, and they count toward
   that driver's all-time best. While someone else is picked, the
   Schedule and My notes tabs show the picker at the top, so it's clear
-  whose laps are marked, and the menu item says whose are showing. Another event starts back on *Me*. Someone who has
+  whose laps are marked, and the menu item says whose are showing. The
+  event's page then shows that driver's answer to *Did you drive?* /
+  *Are you going?* and their car too, and changes them for them (#362);
+  `/api/rsvps` and `/api/garage` take `driver=<user id>` from admins, as
+  `/api/laps` does. Another event starts back on *Me*. Someone who has
   never signed in isn't on the list: they need to sign in once first.
   - `netlify/functions/drivers.mts` (`/api/drivers`, admins only) lists
     everyone from Netlify Identity's admin API (`@netlify/identity`);
@@ -353,8 +357,12 @@ Private like your notes: only you and admins see it.
   what you changed. The session's row shows a tire; on *My notes* they're
   a small table under the session's laps.
 - **Not yet (phase 2):** maintenance and modification logs,
-  service reminders, alignment and damper setups. An admin looking at
-  another driver's notes (#288) doesn't see or change their garage.
+  service reminders, alignment and damper setups.
+- **Another driver's (admins, #362):** switched to another driver on an
+  event's page, an admin sees and changes that driver's car there — the
+  car row, picking or adding one, its page, and each session's tire
+  pressures — from that driver's garage. The Garage under More is always
+  the admin's own.
 - **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
   Netlify Blobs (store `garage`), one record per driver
   (`<user id>/garage`): their cars, each with its change log, and each
