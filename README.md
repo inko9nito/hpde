@@ -10,7 +10,8 @@ runs.
 
 - **Three tabs** along the bottom (#274): **Events** (the list and
   calendar of events), **Tracks** (your lap times by track layout) and
-  **Garage** (coming soon)
+  **Garage** (your cars, their tires and brakes at each event, and each
+  session's tire pressures)
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -280,6 +281,37 @@ Private like your lap times: only you and admins see them.
   over, so notes saved there before a push are gone after it (`netlify/lib/driverStore.mts`,
   shared with `/api/laps`). Personal notes and videos (#205) can join
   them there.
+
+## Garage (signed in, #344)
+
+Private like your notes: only you and admins see it.
+
+- **Your cars:** the **Garage** tab lists them — year, make, model, a
+  nickname and the lug nut torque (ft·lb). **Add a car**, or **Edit** one
+  to change or remove it. Each car shows the consumables it ran last and
+  every event it went to, newest first; an event opens on its *My notes*.
+- **An event's car and consumables:** *My notes* has **Add your car** (any
+  event, before it too, to prep): pick the car — or add one there — and
+  its tires, front and rear pads, front and rear rotors and brake fluid.
+  They start as they were at the car's last event, since they carry over
+  until they're replaced; each field suggests what you've used before.
+  The card shows the lug nut torque too. Removing a car from the garage
+  leaves its events with what they ran.
+- **A session's tire pressures:** tap the session on the Schedule tab,
+  then **Tire pressures**: each corner before the session (cold, or as
+  you set them) and hot after it, in psi, laid out as the car sits, and
+  what you changed. The session's row shows a gauge; on *My notes* they're
+  a small table under the session's laps.
+- **Not yet (phase 2):** maintenance and modification logs, service
+  reminders, alignment and damper setups, photos. An admin looking at
+  another driver's notes (#288) doesn't see or change their garage.
+- **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
+  Netlify Blobs (store `garage`), one record per driver
+  (`<user id>/garage`): their cars and each event's setup. Kept like the
+  laps and notes (`netlify/lib/driverStore.mts`): a sign-in for
+  everything, `driver=` for admins only, and a deploy preview starts from
+  a copy of your real garage and never changes it. The checks the app and
+  the function share are in `src/utils/garage.ts`.
 
 ---
 

@@ -16,9 +16,10 @@ interface Props {
   /**
    * Signed in: sessions open their lap times (#210). `saved` holds the
    * session keys (see sessionKey) that have laps; `evaluated`, those with
-   * an instructor's evaluation (#340).
+   * an instructor's evaluation (#340); `pressures`, those with tire
+   * pressures (#344).
    */
-  lapTimes?: { date: string; saved: Set<string>; evaluated?: Set<string>; onOpen: (session: SessionActivity) => void }
+  lapTimes?: { date: string; saved: Set<string>; evaluated?: Set<string>; pressures?: Set<string>; onOpen: (session: SessionActivity) => void }
 }
 
 // Animates an item sliding away instead of vanishing instantly. Stays
@@ -150,6 +151,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
                 onOpenLaps={lapTimes && (() => lapTimes.onOpen(activity))}
                 hasLaps={lapTimes && activity.onTrack.some(g => lapTimes.saved.has(sessionKey(lapTimes.date, activity.time, g)))}
                 hasEvaluation={lapTimes && activity.onTrack.some(g => !!lapTimes.evaluated?.has(sessionKey(lapTimes.date, activity.time, g)))}
+                hasPressures={lapTimes && activity.onTrack.some(g => !!lapTimes.pressures?.has(sessionKey(lapTimes.date, activity.time, g)))}
               />
             )
             : <ActivityCard activity={activity} past={past} />

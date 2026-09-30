@@ -3,6 +3,8 @@ import { Check, ChevronDown } from 'lucide-react'
 import { filterOptions, findExact, findSimilar } from '../utils/fieldOptions'
 
 interface Props {
+  /** For a label to name it. */
+  id?: string
   value: string
   onChange: (value: string) => void
   // Values already used on past events.
@@ -22,7 +24,7 @@ interface Props {
  * dropdown — filtering only starts once you type, so an already-chosen
  * value doesn't hide the alternatives.
  */
-export function SuggestInput({ value, onChange, options, placeholder, className }: Props) {
+export function SuggestInput({ id, value, onChange, options, placeholder, className }: Props) {
   const listId = useId()
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
@@ -68,6 +70,7 @@ export function SuggestInput({ value, onChange, options, placeholder, className 
   return (
     <div className="relative">
       <input
+        id={id}
         role="combobox"
         aria-expanded={showList}
         aria-controls={listId}

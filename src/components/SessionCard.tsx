@@ -1,4 +1,4 @@
-import { ChevronRight, ClipboardCheck, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Gauge, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
 import type { SessionActivity, RunGroupConfig } from '../types'
@@ -16,6 +16,8 @@ interface Props {
   hasLaps?: boolean
   /** An instructor's evaluation is saved for it (#340): shows the clipboard. */
   hasEvaluation?: boolean
+  /** Tire pressures are saved for it (#344): shows the gauge. */
+  hasPressures?: boolean
 }
 
 function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig[] {
@@ -25,7 +27,7 @@ function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig
   })
 }
 
-export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation }: Props) {
+export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation, hasPressures }: Props) {
   const onTrack = resolveGroups(activity.onTrack, runGroups)
   const inClass = resolveGroups(activity.inClass ?? [], runGroups)
 
@@ -49,7 +51,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, ha
           {onTrack.length > 0 && (onOpenLaps ? (
             <button
               onClick={onOpenLaps}
-              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}${hasEvaluation ? ' (evaluated)' : ''}`}
+              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}${hasEvaluation ? ' (evaluated)' : ''}${hasPressures ? ' (tire pressures)' : ''}`}
               // The highlight reaches 6px past the row on every side, 10px
               // short of the card's edge. A divider or note below sits only
               // 12px away, not 16, so there the row keeps 4px more room. On its
@@ -59,6 +61,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, ha
               {onTrackRow}
               {hasLaps && <Timer size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-laps />}
               {hasEvaluation && <ClipboardCheck size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-evaluation />}
+              {hasPressures && <Gauge size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-pressures />}
               <ChevronRight size={16} className="shrink-0 text-gray-300" aria-hidden="true" />
             </button>
           ) : (

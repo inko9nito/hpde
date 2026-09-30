@@ -5,7 +5,7 @@ import { AppMenu } from './AppMenu'
 import { AccountButton } from './AccountButton'
 
 // The app's top-level sections (#274): Events (the list of events), Tracks
-// (lap times by track layout) and Garage (coming soon), picked from a tab
+// (lap times by track layout) and Garage (your cars, #344), picked from a tab
 // bar along the bottom, as in an iOS app. Pushed pages — an event, a
 // track — slide in over them.
 
@@ -72,24 +72,6 @@ export function HomeHeader({ title, children }: { title: string; children?: Reac
         </div>
       </div>
       {children}
-    </div>
-  )
-}
-
-/** The Garage tab: coming soon (#120). */
-export function GarageTab() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <HomeHeader title="Garage" />
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <Car size={22} className="mx-auto text-gray-400" aria-hidden="true" />
-          <p className="mt-2 text-sm font-medium text-gray-700">Coming soon</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Your car’s setup, parts and service history, event by event.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

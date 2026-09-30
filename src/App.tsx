@@ -24,7 +24,9 @@ import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
-import { GarageTab, HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
+import { HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
+import { GarageTab } from './components/GarageTab'
+import { EventSetupSheet } from './components/EventSetupSheet'
 import type { HomeTab } from './components/HomeTabs'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker } from './components/DriverPicker'
@@ -38,7 +40,10 @@ import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
 import { useRsvps } from './data/RsvpsContext'
+import { useGarage } from './data/GarageContext'
 import { myRunGroup } from './utils/rsvp'
+import { hasConsumables } from './utils/garage'
+import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
 import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
@@ -174,6 +179,17 @@ function MissingEvent({ loading, onHome }: { loading: boolean; onHome: () => voi
   )
 }
 
+/**
+ * An event's setup with one session's tire pressures put in (or, with
+ * null, taken out) — what's saved in its place.
+ */
+function withPressures(setup: EventSetup | undefined, key: string, pressures: SessionPressures | null): Omit<EventSetup, 'updatedAt'> {
+  const { updatedAt: _stamp, sessions = {}, ...rest } = setup ?? {}
+  const { [key]: _old, ...others } = sessions
+  const next = pressures ? { ...others, [key]: pressures } : others
+  return { ...rest, ...(Object.keys(next).length ? { sessions: next } : {}) }
+}
+
 function isEmptyHash(hash: string): boolean {
   return hash === '' || hash === '#'
 }
@@ -200,6 +216,8 @@ export default function App() {
   const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
   // A TDE event's report card, open in its sheet (#340).
   const [evaluationOpen, setEvaluationOpen] = useState(false)
+  // The event's car and consumables, open in their sheet (#344).
+  const [setupOpen, setSetupOpen] = useState(false)
   // An admin can log another driver's lap times (#288): whose the sheet,
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
@@ -317,8 +335,18 @@ export default function App() {
   const rsvpGroup = driver ? null : myRunGroup(activeEvent, rsvps[activeEvent.id])
   const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
   const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
-  // Sessions with anything saved, and the report card: "My notes (3)".
-  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys]).size + (notesLog.evaluation ? 1 : 0)
+  // …and what they ran there (#344): the car, its consumables and each
+  // session's tire pressures — from their own garage, so not for another
+  // driver's notes.
+  const garage = useGarage()
+  const ownGarage = driver === null && garage.status !== 'off'
+  const eventSetup = ownGarage ? garage.events[activeEvent.id] : undefined
+  const eventCar = eventSetup?.carId ? garage.cars.find(c => c.id === eventSetup.carId) : undefined
+  const pressuresByKey = new Map(Object.values(eventSetup?.sessions ?? {}).map(p => [p.key, p]))
+  const pressureKeys = new Set(pressuresByKey.keys())
+  const setupSaved = !!eventCar || hasConsumables(eventSetup)
+  // Sessions with anything saved, the report card and the car: "My notes (3)".
+  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys, ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (setupSaved ? 1 : 0)
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
@@ -356,6 +384,7 @@ export default function App() {
     setActiveTab('schedule')
     setLapSlot(null)
     setEvaluationOpen(false)
+    setSetupOpen(false)
     setLapDriver(null)
   }
 
@@ -452,7 +481,17 @@ export default function App() {
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))` }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
         {homeTab === 'tracks' && <TracksTab />}
-        {homeTab === 'garage' && <GarageTab />}
+        {homeTab === 'garage' && (
+          <GarageTab
+            events={ALL_EVENTS}
+            // An event a car went to opens on My notes, where its car is.
+            onOpenEvent={event => {
+              switchEvent(event)
+              setActiveTab('notes')
+            }}
+            onToast={showToast}
+          />
+        )}
       </div>
     </PullToRefresh>
     <TabBar active={homeTab} />
@@ -557,6 +596,7 @@ export default function App() {
                   date: activeDay.date,
                   saved: savedLapKeys,
                   evaluated: evaluatedKeys,
+                  pressures: pressureKeys,
                   onOpen: session => setLapSlot({
                     date: activeDay.date,
                     time: session.time,
@@ -594,6 +634,14 @@ export default function App() {
                 view,
               })}
               onEditEvaluation={() => setEvaluationOpen(true)}
+              garage={ownGarage ? {
+                status: garage.status,
+                setup: eventSetup,
+                car: eventCar,
+                pressures: pressuresByKey,
+                onEditSetup: () => setSetupOpen(true),
+                reload: garage.reload,
+              } : undefined}
             />
           )}
 
@@ -706,7 +754,45 @@ export default function App() {
           setLapSlot(null)
           showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
         }}
+        pressures={ownGarage ? {
+          saved: key => pressuresByKey.get(key),
+          onSave: async pressures => {
+            await garage.saveSetup(activeEvent.id, withPressures(eventSetup, pressures.key, pressures))
+            setLapSlot(null)
+            showToast('Tire pressures saved')
+          },
+          onRemove: async key => {
+            const next = withPressures(eventSetup, key, null)
+            if (Object.keys(next).length) await garage.saveSetup(activeEvent.id, next)
+            else await garage.removeSetup(activeEvent.id)
+            setLapSlot(null)
+            showToast('Tire pressures removed')
+          },
+        } : undefined}
         onClose={() => setLapSlot(null)}
+      />
+    )}
+    {setupOpen && ownGarage && isOnEventRoute && !routeMissing && (
+      <EventSetupSheet
+        key={activeEvent.id}
+        event={activeEvent}
+        events={ALL_EVENTS}
+        garage={garage}
+        onSaveCar={garage.saveCar}
+        onSave={async setup => {
+          await garage.saveSetup(activeEvent.id, setup)
+          setSetupOpen(false)
+          showToast('Car and consumables saved')
+        }}
+        onRemove={async () => {
+          // Each session's pressures stay.
+          const sessions = eventSetup?.sessions
+          if (sessions) await garage.saveSetup(activeEvent.id, { sessions })
+          else await garage.removeSetup(activeEvent.id)
+          setSetupOpen(false)
+          showToast('Car and consumables removed')
+        }}
+        onClose={() => setSetupOpen(false)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (

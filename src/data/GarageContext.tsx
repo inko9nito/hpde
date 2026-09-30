@@ -1,0 +1,163 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { useAuth } from '../auth/AuthContext'
+import type { Car, EventSetup, Garage } from '../utils/garage'
+import { TEST_DRIVER_ID } from './testAccount'
+
+// The signed-in driver's garage (#344), from the garage function: their
+// cars, and what each event ran on. Shared by the Garage tab and the event
+// page, so a car added in one is there in the other. While an admin has
+// the test account on (#309), it's the test account's. Nothing is fetched
+// for anyone who isn't signed in.
+export const GARAGE_URL = `${import.meta.env.BASE_URL}api/garage`
+
+export type GarageStatus = 'off' | 'loading' | 'ready' | 'error'
+
+export interface GarageValue extends Garage {
+  status: GarageStatus
+  /** Adds a car (no id) or changes one; resolves to it as saved. Throws with a message to show. */
+  saveCar(car: Omit<Car, 'id' | 'updatedAt'> & { id?: string }): Promise<Car>
+  removeCar(id: string): Promise<void>
+  /** Saves an event's setup, replacing any. */
+  saveSetup(eventId: string, setup: Omit<EventSetup, 'updatedAt'>): Promise<void>
+  removeSetup(eventId: string): Promise<void>
+  reload(): void
+}
+
+async function errorFrom(res: Response): Promise<Error> {
+  try {
+    const body = await res.json()
+    if (typeof body?.error === 'string') return new Error(body.error)
+  } catch {
+    // Not JSON: fall through to the generic message.
+  }
+  return new Error('Couldn’t reach the server. Check your connection and try again.')
+}
+
+const EMPTY: Garage = { cars: [], events: {} }
+
+const GarageContext = createContext<GarageValue | null>(null)
+
+export function GarageProvider({ children }: { children: ReactNode }) {
+  const { status: authStatus, user, authedFetch, testAccount } = useAuth()
+  const signedIn = authStatus === 'signed-in' && !!user
+  // Whose garage this is, so another sign-in on this device never sees it.
+  const who = signedIn ? (testAccount ? TEST_DRIVER_ID : user!.id) : null
+  const url = `${GARAGE_URL}${testAccount ? `?driver=${TEST_DRIVER_ID}` : ''}`
+  const [loaded, setLoaded] = useState<{ who: string; garage: Garage } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (!who) {
+      setLoaded(null)
+      return
+    }
+    let cancelled = false
+    setFailed(false)
+    ;(async () => {
+      try {
+        const res = await authedFetch(url)
+        if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw await errorFrom(res)
+        const body = await res.json()
+        if (!cancelled) {
+          setLoaded({
+            who,
+            garage: {
+              cars: Array.isArray(body?.cars) ? body.cars : [],
+              events: body?.events && typeof body.events === 'object' ? body.events : {},
+            },
+          })
+        }
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [who, url, authedFetch, attempt])
+
+  const current = who !== null && loaded?.who === who
+  const garage = current ? loaded!.garage : EMPTY
+  const status: GarageStatus = !who ? 'off' : current ? 'ready' : failed ? 'error' : 'loading'
+
+  const send = useCallback(async (query: string, init: RequestInit) => {
+    if (!who) throw new Error('Please sign in to continue.')
+    const sep = url.includes('?') ? '&' : '?'
+    const res = await authedFetch(query ? `${url}${sep}${query}` : url, init)
+    if (!res.ok && !(init.method === 'DELETE' && res.status === 404)) throw await errorFrom(res)
+    return res
+  }, [who, url, authedFetch])
+
+  // Changes what's loaded for this driver, once the function has saved it.
+  const change = useCallback((next: (g: Garage) => Garage) => {
+    if (!who) return
+    setLoaded(prev => ({ who, garage: next(prev?.who === who ? prev.garage : EMPTY) }))
+  }, [who])
+
+  const put = (body: unknown): RequestInit => ({
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const saveCar = useCallback(async (car: Omit<Car, 'id' | 'updatedAt'> & { id?: string }) => {
+    const saved = (await (await send('', put({ car }))).json()).car as Car
+    change(g => ({
+      ...g,
+      cars: g.cars.some(c => c.id === saved.id) ? g.cars.map(c => (c.id === saved.id ? saved : c)) : [...g.cars, saved],
+    }))
+    return saved
+  }, [send, change])
+
+  const removeCar = useCallback(async (id: string) => {
+    await send(`car=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    // As the function does: its events keep what they ran, without it.
+    change(g => ({
+      cars: g.cars.filter(c => c.id !== id),
+      events: Object.fromEntries(Object.entries(g.events).flatMap(([eventId, setup]): [string, EventSetup][] => {
+        if (setup.carId !== id) return [[eventId, setup]]
+        const { carId: _gone, ...rest } = setup
+        return Object.keys(rest).some(k => k !== 'updatedAt') ? [[eventId, rest]] : []
+      })),
+    }))
+  }, [send, change])
+
+  const saveSetup = useCallback(async (eventId: string, setup: Omit<EventSetup, 'updatedAt'>) => {
+    const saved = (await (await send(`event=${encodeURIComponent(eventId)}`, put({ setup }))).json()).setup as EventSetup
+    change(g => ({ ...g, events: { ...g.events, [eventId]: saved } }))
+  }, [send, change])
+
+  const removeSetup = useCallback(async (eventId: string) => {
+    await send(`event=${encodeURIComponent(eventId)}`, { method: 'DELETE' })
+    change(g => {
+      const { [eventId]: _gone, ...events } = g.events
+      return { ...g, events }
+    })
+  }, [send, change])
+
+  const reload = useCallback(() => setAttempt(a => a + 1), [])
+
+  const value = useMemo(
+    () => ({ status, ...garage, saveCar, removeCar, saveSetup, removeSetup, reload }),
+    [status, garage, saveCar, removeCar, saveSetup, removeSetup, reload],
+  )
+  return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
+}
+
+const signIn = () => Promise.reject(new Error('Please sign in to continue.'))
+const OFF: GarageValue = {
+  status: 'off',
+  ...EMPTY,
+  saveCar: signIn,
+  removeCar: signIn,
+  saveSetup: signIn,
+  removeSetup: signIn,
+  reload() {},
+}
+
+// Rendered without a provider (isolated tests) → as if signed out.
+export function useGarage(): GarageValue {
+  return useContext(GarageContext) ?? OFF
+}
