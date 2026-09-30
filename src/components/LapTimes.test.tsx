@@ -9,6 +9,7 @@ import { RsvpsProvider } from '../data/RsvpsContext'
 import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 import type { SessionLaps } from '../utils/lapTimes'
+import type { EventEvaluation, SessionNotes } from '../utils/evaluation'
 import { LapTimesSheet } from './LapTimesSheet'
 
 // Logging lap times against a session (#210), through the whole app: the
@@ -81,6 +82,9 @@ let elsewhere: Record<string, SessionLaps[]> = {}
 let failSaves = false
 // While set, reading the laps waits for it.
 let holdLaps: Promise<void> | null = null
+// The notes function (#340), in memory: the signed-in driver's evaluations, by event.
+type Notes = { evaluation?: EventEvaluation; sessions: SessionNotes[] }
+let notesByEvent: Record<string, Notes> = {}
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -92,6 +96,36 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   if (url.includes('api/drivers')) {
     expect(roles).toContain('admin')
     return json({ drivers: DRIVERS })
+  }
+  if (url.includes('api/notes')) {
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
+    const params = new URL(url, 'https://x').searchParams
+    // Nobody else's notes are kept here.
+    if (params.has('driver')) return json(init?.method ? { error: 'Not here.' } : { sessions: [] }, init?.method ? 500 : 200)
+    const id = params.get('event')!
+    const notes = notesByEvent[id] ?? { sessions: [] }
+    const keep = (next: Notes) => { notesByEvent[id] = next }
+    if (init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body))
+      if (body.evaluation) {
+        keep({ ...notes, evaluation: body.evaluation })
+        return json({ evaluation: body.evaluation })
+      }
+      const { session } = body
+      const stored = { ...session, key: `${session.date} ${session.time} ${session.group}`, updatedAt: 'now' }
+      keep({ ...notes, sessions: [...notes.sessions.filter(s => s.key !== stored.key), stored] })
+      return json({ session: stored })
+    }
+    if (init?.method === 'DELETE') {
+      if (params.get('evaluation')) {
+        const { evaluation: _gone, ...rest } = notes
+        keep(rest)
+        return json({ deleted: 'evaluation' })
+      }
+      keep({ ...notes, sessions: notes.sessions.filter(s => s.key !== params.get('session')) })
+      return json({ deleted: params.get('session') })
+    }
+    return json(notes)
   }
   if (url.includes('api/laps')) {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
@@ -137,10 +171,18 @@ function openEvent() {
   render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
 }
 
-// Once the driver's laps have loaded, the schedule is settled.
-async function tapSession(name: string) {
+// Once the driver's laps have loaded, the schedule is settled. The sheet
+// opens on what the session can have (#205); `open` picks one of them.
+async function tapSession(name: string, open: 'Lap times' | 'Instructor evaluation' | null = 'Lap times') {
   await waitFor(() => expect(lapCalls('GET').length).toBeGreaterThan(0))
   await userEvent.click(await screen.findByRole('button', { name }))
+  if (open) await openInSheet(open)
+}
+
+// In the session's sheet, opens one of the things it can have.
+async function openInSheet(what: 'Lap times' | 'Instructor evaluation') {
+  const nav = within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })
+  await userEvent.click(within(nav).getByRole('button', { name: new RegExp(`^${what}`) }))
 }
 
 // An event's figures on a track page, by label.
@@ -167,6 +209,8 @@ function rows(el: HTMLElement): string[][] {
     cell.children.length > 1 ? [...cell.children].map(line => line.textContent).join(' – ') : cell.textContent ?? ''))
 }
 
+const notesCalls = (method: string) =>
+  fetchMock.mock.calls.filter(([url, init]) => String(url).includes('api/notes') && (init?.method ?? 'GET') === method)
 const lapCalls = (method: string) =>
   fetchMock.mock.calls.filter(([url, init]) => String(url).includes('api/laps') && (init?.method ?? 'GET') === method)
 const driverCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('api/drivers'))
@@ -182,6 +226,7 @@ beforeEach(() => {
   rsvps = {}
   moreEvents = []
   holdLaps = null
+  notesByEvent = {}
   failSaves = false
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -318,6 +363,7 @@ describe('lap times (#210)', () => {
     // Editing brings them back as rows, speeds after the lap time.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' }))
+    await openInSheet('Lap times')
     const again = screen.getByRole('dialog')
     await userEvent.click(within(again).getByRole('button', { name: 'Edit' }))
     expect(within(again).getByLabelText('Lap times or timestamps')).toHaveValue(
@@ -327,13 +373,16 @@ describe('lap times (#210)', () => {
 
   it('asks which group when more than one is on track', async () => {
     openEvent()
-    await tapSession('Lap times: 9:50 AM, Blue, Red')
+    await tapSession('Lap times: 9:50 AM, Blue, Red', null)
     const sheet = screen.getByRole('dialog')
-    expect(within(sheet).queryByLabelText('Lap times or timestamps')).not.toBeInTheDocument()
-    expect(within(sheet).getByRole('button', { name: 'Save lap times' })).toBeDisabled()
+    // Nothing to add to till the group's picked.
+    const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
+    expect(within(nav).getByRole('button', { name: /^Lap times/ })).toBeDisabled()
+    expect(within(nav).getByRole('button', { name: /^Instructor evaluation/ })).toBeDisabled()
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Red' }))
     expect(sheet).toHaveAccessibleName('9:50 AM · Red')
+    await openInSheet('Lap times')
     fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '1:39.42, 1:38.91' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
     await waitFor(() => expect(lapCalls('PUT')).toHaveLength(1))
@@ -385,7 +434,8 @@ describe('lap times (#210)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit lap times for Session 2' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Session 2' }))
+    await openInSheet('Lap times')
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
     // Saved laps open read-only, with a way to edit them.
     expect(within(sheet).queryByLabelText('Lap times or timestamps')).not.toBeInTheDocument()
@@ -406,7 +456,7 @@ describe('lap times (#210)', () => {
     await userEvent.click(within(sheet).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(lapCalls('DELETE')[0][0]).toContain(`session=${encodeURIComponent('2026-03-07 11:45 blue')}`)
-    expect(screen.getByText('No lap times yet')).toBeInTheDocument()
+    expect(screen.getByText('No session notes yet')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'My notes' })).toBeInTheDocument()
   })
 
@@ -650,8 +700,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
-    expect(await screen.findByText('No lap times yet')).toBeInTheDocument()
-    expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps.')).toBeInTheDocument()
+    expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
+    expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps or their instructor’s feedback.')).toBeInTheDocument()
     expect(screen.getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
 
     // Picked again, they're fetched afresh.
@@ -670,15 +720,169 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   })
 })
 
+describe('instructor evaluation (#340)', () => {
+  // A TDE event: the report card is theirs alone.
+  const tde: EventConfig = {
+    ...event,
+    id: '2026-03-21_tde-day',
+    name: 'TDE Day',
+    organizer: 'The Drivers Edge',
+    runGroups: [
+      { id: 'instructors', label: 'Instructors', bgClass: 'bg-zinc-900', textClass: 'text-white' },
+      { id: 'pink', label: 'Pink', bgClass: 'bg-runpink-500', textClass: 'text-white' },
+    ],
+    days: [{ id: 'saturday', label: 'Saturday', date: '2026-03-21', activities: [
+      { time: '10:25', type: 'session', sessionNumber: 2, onTrack: ['pink'] },
+    ] }],
+  }
+  function openTde() {
+    moreEvents = [tde]
+    window.location.hash = `#/event/${tde.id}`
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+  }
+
+  it('adds a session’s evaluation from the schedule, and shows it on My notes, laps or not', async () => {
+    openEvent()
+    await tapSession('Lap times: 11:45 AM, Blue', null)
+    const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
+    // The sheet lists what the session can have (#205).
+    const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
+    expect(within(nav).getByRole('button', { name: /^Lap times/ })).toHaveTextContent('Paste times or timestamps')
+    await openInSheet('Instructor evaluation')
+    // Nothing to save till there's feedback.
+    expect(within(sheet).getByRole('button', { name: 'Save evaluation' })).toBeDisabled()
+    fireEvent.change(within(sheet).getByLabelText('Instructor feedback'), { target: { value: 'Unwind the wheel sooner.' } })
+    fireEvent.change(within(sheet).getByRole('textbox', { name: /^Instructor\s?Optional$/ }), { target: { value: 'John Harms' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('Evaluation saved')
+    expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).session).toEqual({
+      date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2,
+      evaluation: { feedback: 'Unwind the wheel sooner.', instructor: 'John Harms' },
+    })
+    expect(lapCalls('PUT')).toHaveLength(0)
+
+    // The schedule marks it; My notes counts it and lists it, with no laps.
+    expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (evaluated)' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
+    const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    expect(card).toHaveTextContent('Instructor evaluation · John HarmsUnwind the wheel sooner.')
+    expect(within(card).queryByRole('table', { name: 'Session figures' })).not.toBeInTheDocument()
+    // Not a TDE event: no report card.
+    expect(screen.queryByRole('button', { name: 'Add evaluation' })).not.toBeInTheDocument()
+
+    // Its chevron opens it in the sheet, where it's removed.
+    await userEvent.click(within(card).getByRole('button', { name: 'Open the instructor evaluation for Session 2' }))
+    const again = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
+    expect(within(again).getByLabelText('Instructor feedback')).toHaveValue('Unwind the wheel sooner.')
+    await userEvent.click(within(again).getByRole('button', { name: 'Remove from session' }))
+    await userEvent.click(within(again).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(notesCalls('DELETE')[0][0]).toContain(`session=${encodeURIComponent('2026-03-07 11:45 blue')}`)
+    expect(screen.getByText('No session notes yet')).toBeInTheDocument()
+  })
+
+  it('shows a session’s evaluation under its laps, and the menu says what each has', async () => {
+    saved = [{ key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 99_420 }, { ms: 98_910 }] }]
+    notesByEvent = { [event.id]: { sessions: [{
+      key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2,
+      evaluation: { feedback: 'Eyes up through Big Bend.' },
+    }] } }
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    expect(card).toHaveTextContent('Lap times · 2 laps')
+    expect(card.querySelector('[data-session-evaluation]')).toHaveTextContent('Instructor evaluationEyes up through Big Bend.')
+
+    // Edit opens the sheet on everything the session has.
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit Session 2' }))
+    const nav = within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })
+    expect(within(nav).getByRole('button', { name: /^Lap times/ })).toHaveTextContent('2 laps · best 1:38.91')
+    expect(within(nav).getByRole('button', { name: /^Instructor evaluation/ })).toHaveTextContent('Eyes up through Big Bend.')
+    // And back from one of them.
+    await openInSheet('Lap times')
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'All session info' }))
+    expect(within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })).toBeInTheDocument()
+  })
+
+  it('on a TDE event, adds the report card: skills, recommended groups and notes, with the group from “Did you drive?”', async () => {
+    rsvps = { [tde.id]: { status: 'going', runGroup: 'pink' } }
+    openTde()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add evaluation' }))
+    const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })
+    // Their group is the event's, shown, not picked.
+    expect(sheet).toHaveTextContent('You drove inPink')
+    expect(within(sheet).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Save evaluation' })).toBeDisabled()
+
+    fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
+    fireEvent.change(within(sheet).getByLabelText('Car'), { target: { value: 'Porsche Panamera' } })
+    // Recommendations are the app's run group pills; never Instructors.
+    const same = within(sheet).getByRole('radiogroup', { name: 'Same track & direction' })
+    expect(within(same).getAllByRole('radio').map(r => r.textContent)).toEqual(['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Pink', 'Purple'])
+    await userEvent.click(within(same).getByRole('radio', { name: 'Blue' }))
+    expect(within(same).getByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true')
+    await userEvent.click(within(within(sheet).getByRole('radiogroup', { name: 'New track' })).getByRole('radio', { name: 'Green' }))
+    // Scores: digits only, at most 100.
+    fireEvent.change(within(sheet).getByLabelText('Calls out all flags'), { target: { value: '65' } })
+    fireEvent.change(within(sheet).getByLabelText('Looks ahead'), { target: { value: '8o0' } })
+    expect(within(sheet).getByLabelText('Looks ahead')).toHaveValue('80')
+    fireEvent.change(within(sheet).getByLabelText('Consistency'), { target: { value: '150' } })
+    expect(within(sheet).getByLabelText('Consistency')).toHaveValue('100')
+    await userEvent.click(within(within(sheet).getByRole('group', { name: 'Aggressiveness = skill' })).getByRole('button', { name: 'Yes' }))
+    fireEvent.change(within(sheet).getByLabelText('Car aids over activated'), { target: { value: '25' } })
+    fireEvent.change(within(sheet).getByLabelText('Instructor notes'), { target: { value: 'Very smooth.' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({
+      instructor: 'John Harms',
+      car: 'Porsche Panamera',
+      next: { sameTrack: 'Blue', newTrack: 'Green' },
+      skills: { flags: 65, vision: 80, consistency: 100 },
+      aggressivenessIsSkill: true,
+      carAidsPct: 25,
+      notes: 'Very smooth.',
+    })
+    const card = screen.getByRole('region', { name: 'Instructor evaluation' })
+    expect(card).toHaveTextContent('InstructorJohn Harms')
+    expect(card).toHaveTextContent('CarPorsche Panamera')
+    expect(card).toHaveTextContent('Run groupPink')
+    expect(card).toHaveTextContent('Same track & directionBlue')
+    expect(card).not.toHaveTextContent('New direction')
+    expect(within(card).getByRole('list', { name: 'Core skills' })).toHaveTextContent('Calls out all flags65%Looks ahead80%Consistency100%')
+    expect(card).toHaveTextContent('Aggressiveness = skill: Yes')
+    expect(card).toHaveTextContent('Car aids over activated: 25%')
+    expect(card).toHaveTextContent('Instructor notesVery smooth.')
+    // It counts on the tab.
+    expect(screen.getByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
+
+    // Edited, and removed.
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit evaluation' }))
+    const again = screen.getByRole('dialog', { name: 'Instructor evaluation' })
+    expect(within(again).getByLabelText('Calls out all flags')).toHaveValue('65')
+    await userEvent.click(within(again).getByRole('button', { name: 'Remove evaluation' }))
+    await userEvent.click(within(again).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(notesCalls('DELETE')[0][0]).toContain('evaluation=1')
+    expect(screen.getByRole('button', { name: 'Add evaluation' })).toBeInTheDocument()
+  })
+})
+
 describe('LapTimesSheet', () => {
   it('keeps focus in the text box when the page behind re-renders', async () => {
     const props = {
       slot: { date: '2026-03-07', time: '11:45', sessionNumber: 2, groups: ['blue'] },
+      view: 'laps' as const,
       runGroups: event.runGroups,
       showDate: false,
       saved: () => undefined,
+      savedNotes: () => undefined,
       onSave: async () => {},
       onRemove: async () => {},
+      onSaveEvaluation: async () => {},
+      onRemoveEvaluation: async () => {},
     }
     // Every render of the event page hands the sheet a new onClose.
     const { rerender } = render(<LapTimesSheet {...props} onClose={() => {}} />)

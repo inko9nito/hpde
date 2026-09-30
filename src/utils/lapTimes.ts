@@ -557,9 +557,11 @@ export function lapsToText(laps: Lap[]): string {
 
 // --- Checking what's sent to be saved ----------------------------------------
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
-const GROUP = /^[a-z0-9][a-z0-9-]{0,39}$/
+// A session's day, start time and run group id, as sessionKey takes them —
+// its notes (#340) are checked the same way.
+export const DATE = /^\d{4}-\d{2}-\d{2}$/
+export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+export const GROUP = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 function cleanLap(value: unknown): Lap | null {
   const lap = value as Lap

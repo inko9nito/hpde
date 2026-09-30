@@ -269,6 +269,8 @@ async function signInAsAdmin(page: Page) {
   await page.route('**/.netlify/identity/settings', route => route.fulfill({ json: {} }))
   // No answers yet (#235); a test about them routes its own.
   await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: {} } }))
+  // No notes either (#340); a test about them routes its own.
+  await page.route(/\/api\/notes(\?|$)/, route => route.fulfill({ json: { sessions: [] } }))
   await page.addInitScript(() => {
     const user = { id: 'a', email: 'admin@example.com', app_metadata: { roles: ['admin'] }, jwt: async () => 'token' }
     ;(window as unknown as { netlifyIdentity: unknown }).netlifyIdentity = {
@@ -497,6 +499,8 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await expect(sheet).toBeVisible()
+  // It opens on what the session can have (#205).
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   // A sheet along the bottom of the screen, as wide as the phone at most.
   const viewport = page.viewportSize()!
   await expect.poll(async () => {
@@ -614,6 +618,7 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   const picker = sheet.getByLabel('Driver')
   await expect(picker.getByRole('option')).toHaveText(['Me', email])
   await picker.selectOption({ label: email })
@@ -642,7 +647,70 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
 
   // Back to the admin's own: none yet.
   await page.getByLabel('Driver').selectOption({ label: 'Me' })
-  await expect(page.getByText('No lap times yet')).toBeVisible()
+  await expect(page.getByText('No session notes yet')).toBeVisible()
+})
+
+test('a driver adds their instructor’s evaluation of a session, and a TDE event’s report card (#340)', async ({ page }) => {
+  const tde: EventConfig = { ...alpha, id: '2026-03-07_tde', name: 'TDE Day', organizer: 'The Drivers Edge' }
+  await stubEvents(page, [tde])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [tde.id]: { status: 'going', runGroup: 'blue' } } } }))
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  let notes: { evaluation?: object; sessions: object[] } = { sessions: [] }
+  await page.route(/\/api\/notes(\?|$)/, async route => {
+    const req = route.request()
+    expect(req.headers().authorization).toBe('Bearer token')
+    if (req.method() === 'PUT') {
+      const body = req.postDataJSON()
+      if (body.evaluation) {
+        notes = { ...notes, evaluation: body.evaluation }
+        return route.fulfill({ json: { evaluation: body.evaluation } })
+      }
+      const saved = { ...body.session, key: `${body.session.date} ${body.session.time} ${body.session.group}` }
+      notes = { ...notes, sessions: [saved] }
+      return route.fulfill({ json: { session: saved } })
+    }
+    return route.fulfill({ json: notes })
+  })
+
+  await page.goto(`/#/event/${tde.id}`)
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor evaluation/ }).click()
+  await sheet.getByLabel('Instructor feedback').fill('Unwind the wheel sooner and use all of the exit curb.')
+  await sheet.getByRole('button', { name: 'Save evaluation' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Evaluation saved')
+  await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (evaluated)' })).toBeVisible()
+
+  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' })).toContainText('Unwind the wheel sooner')
+  await page.getByRole('button', { name: 'Add evaluation' }).click()
+  const card = page.getByRole('dialog', { name: 'Instructor evaluation' })
+  await expect(card).toContainText('You drove inBlue')
+  await card.getByLabel('Instructor', { exact: true }).fill('John Harms')
+  // The pills wrap inside the sheet, on the narrowest phone too.
+  const same = card.getByRole('radiogroup', { name: 'Same track & direction' })
+  await same.getByRole('radio', { name: 'Green' }).click()
+  const sheetBox = (await card.boundingBox())!
+  for (const pill of await same.getByRole('radio').all()) {
+    const box = (await pill.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(sheetBox.x + sheetBox.width)
+  }
+  await card.getByLabel('Calls out all flags').fill('65')
+  await card.getByLabel('Instructor notes').fill('Very smooth; got faster as the day went on.')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await card.getByRole('button', { name: 'Save evaluation' }).click()
+  await expect(card).toBeHidden()
+
+  const report = page.getByRole('region', { name: 'Instructor evaluation' })
+  await expect(report).toContainText('John Harms')
+  await expect(report).toContainText('Same track & directionGreen')
+  await expect(report.getByRole('listitem', { name: 'Calls out all flags: 65%' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My notes (2)' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {

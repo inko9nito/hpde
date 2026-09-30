@@ -1,12 +1,15 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronRight, Lock, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Lock, Timer } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
+import { Sheet } from './Sheet'
+import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
+import type { SessionNotes } from '../utils/evaluation'
 import { gapToBest } from '../utils/trackStats'
 import { opensElsewhere } from '../utils/links'
 import { driverName } from '../data/drivers'
@@ -22,12 +25,19 @@ export interface SessionSlot {
   groups: string[]
 }
 
+/** What the sheet shows: what can be added to the session (#205), its laps, or its instructor evaluation (#340). */
+export type SessionView = 'menu' | 'laps' | 'evaluation'
+
 interface Props {
   slot: SessionSlot
+  /** Where it opens. The menu, unless it's opened for one of them. */
+  view?: SessionView
   runGroups: RunGroupConfig[]
   /** Show the day too — for an event that runs more than one. */
   showDate: boolean
   saved: (key: string) => SessionLaps | undefined
+  /** The session's instructor evaluation, if one's saved (#340). */
+  savedNotes: (key: string) => SessionNotes | undefined
   /** The best on this track layout across every event, to mark a lap that set it. */
   allTimeBest?: number
   /** The layout's track page (#274), linked under saved laps. */
@@ -38,10 +48,12 @@ interface Props {
   driver?: Driver | null
   /** Admins only: the Driver picker, under the heading (#288). */
   driverPicker?: ReactNode
-  /** The driver's saved laps are still on their way. */
+  /** The driver's saved laps (or notes) are still on their way. */
   loading?: boolean
   onSave: (session: Omit<SessionLaps, 'key' | 'updatedAt'>) => Promise<void>
   onRemove: (key: string) => Promise<void>
+  onSaveEvaluation: (session: Omit<SessionNotes, 'key' | 'updatedAt'>) => Promise<void>
+  onRemoveEvaluation: (key: string) => Promise<void>
   onClose: () => void
 }
 
@@ -55,20 +67,27 @@ export function shortDate(iso: string): string {
 }
 
 /**
- * The sheet a session's lap times are added and edited in (#210): tap a
- * session you drove, paste your times, check what was read, save. Opens
- * from the bottom like an iOS sheet.
+ * The sheet a session you drove opens in (#210): what you can add to it
+ * (#205) — its lap times and your instructor's evaluation (#340) — each
+ * opening in the sheet, with the way back to the list. Lap times: paste
+ * your times, check what was read, save. Opens from the bottom like an iOS
+ * sheet.
  */
 export function LapTimesSheet({
-  slot, runGroups, showDate, saved, allTimeBest, track, onOpenTrack, driver = null, driverPicker, loading = false, onSave, onRemove, onClose,
+  slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null, driverPicker,
+  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, onClose,
 }: Props) {
+  const [view, setView] = useState<SessionView>(startView)
   // With more than one group on track, start from the one that already has
-  // laps; failing that, ask — laps saved under the wrong group would be lost.
+  // laps or notes; failing that, ask — saved under the wrong group, they'd
+  // be lost.
   const savedGroup = () =>
     slot.groups.length === 1 ? slot.groups[0]
-      : slot.groups.find(g => saved(sessionKey(slot.date, slot.time, g))) ?? null
+      : slot.groups.find(g => saved(sessionKey(slot.date, slot.time, g)) ?? savedNotes(sessionKey(slot.date, slot.time, g))) ?? null
   const [group, setGroup] = useState<string | null>(savedGroup)
   const existing = group ? saved(sessionKey(slot.date, slot.time, group)) : undefined
+  const notes = group ? savedNotes(sessionKey(slot.date, slot.time, group)) : undefined
+  const [evaluationBusy, setEvaluationBusy] = useState(false)
   const [text, setText] = useState(() => (existing ? lapsToText(existing.laps) : ''))
   const [textTouched, setTextTouched] = useState(false)
   const [readAs, setReadAs] = useState<ReadAs | undefined>(undefined)
@@ -83,7 +102,6 @@ export function LapTimesSheet({
   // Saved laps open read-only; Edit brings up the text box.
   const [editing, setEditing] = useState(() => !existing)
   const textareaId = useId()
-  const closeRef = useRef<HTMLButtonElement>(null)
 
   const parsed = useMemo(() => parseLapTimes(text, readAs), [text, readAs])
   const canSave = group !== null && parsed.laps.length > 0 && parsed.errors.length === 0 && !busy && !loading
@@ -117,21 +135,6 @@ export function LapTimesSheet({
   // Until their laps are in, there's nothing to show but that.
   const waiting = loading && !typed
   const whose = driver ? `${driverName(driver)}’s` : 'your'
-
-  // Once, when the sheet opens — not on every render, which would pull
-  // focus out of the text box mid-typing (and close the iPhone keyboard).
-  const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
-  useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null
-    closeRef.current?.focus()
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      previousFocus?.focus?.()
-    }
-  }, [])
 
   async function save() {
     if (!canSave || group === null) return
@@ -177,65 +180,85 @@ export function LapTimesSheet({
     setEditing(false)
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center" data-lap-sheet>
-      <div className="absolute inset-0 bg-black/40" onClick={busy ? undefined : onClose} aria-hidden="true" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="sheet-up relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-t-2xl bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
-      >
-        <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-gray-300" aria-hidden="true" />
-        <div className="flex items-start justify-between gap-3 pt-3">
-          {/* Like the session's card on the schedule: its time and group. */}
-          <div className="min-w-0">
-            {overline && <p className="text-xs text-gray-500">{overline}</p>}
-            <h2 className="mt-0.5 flex items-center gap-3">
-              <span className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
-                {formatTime(slot.time)}
-                <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(slot.time)}</span>
-              </span>
-              {group !== null && <GroupBadge group={groupFor(group, runGroups)} size="sm" />}
-            </h2>
+  const key = group ? sessionKey(slot.date, slot.time, group) : null
+
+  return (
+    <Sheet
+      label={title}
+      busy={!!busy || evaluationBusy}
+      onClose={onClose}
+      data-lap-sheet
+      heading={<>
+        {/* Like the session's card on the schedule: its time and group. */}
+        {overline && <p className="text-xs text-gray-500">{overline}</p>}
+        <h2 className="mt-0.5 flex items-center gap-3">
+          <span className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
+            {formatTime(slot.time)}
+            <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(slot.time)}</span>
+          </span>
+          {group !== null && <GroupBadge group={groupFor(group, runGroups)} size="sm" />}
+        </h2>
+      </>}
+    >
+      {driverPicker && <div className="mt-4">{driverPicker}</div>}
+
+      {waiting && (
+        <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading {whose} notes…</p>
+      )}
+
+      {slot.groups.length > 1 && !waiting && (
+        <fieldset className="mt-4">
+          <legend className="text-xs font-medium text-gray-700">
+            {driver ? `Which group was ${driverName(driver)} driving in?` : 'Which group were you driving in?'}
+          </legend>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {slot.groups.map(id => (
+              <button
+                key={id}
+                onClick={() => startFrom(id)}
+                aria-pressed={group === id}
+                className={`rounded-full ring-offset-2 transition-shadow ${group === id ? 'ring-2 ring-gray-900' : 'opacity-60 hover:opacity-100'}`}
+              >
+                <GroupBadge group={groupFor(id, runGroups)} size="sm" />
+              </button>
+            ))}
           </div>
-          <button
-            ref={closeRef}
-            onClick={onClose}
-            disabled={!!busy}
-            aria-label="Close"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-600 transition-colors hover:bg-gray-200"
-          >
-            <X size={16} strokeWidth={2.5} />
-          </button>
-        </div>
+        </fieldset>
+      )}
 
-        {driverPicker && <div className="mt-4">{driverPicker}</div>}
+      {view !== 'menu' && !waiting && (
+        <button
+          onClick={() => setView('menu')}
+          disabled={!!busy || evaluationBusy}
+          className="-ml-1 mt-4 flex items-center self-start text-sm font-medium text-blue-600 hover:text-blue-700"
+        >
+          <ChevronLeft size={18} aria-hidden="true" />
+          All session info
+        </button>
+      )}
 
-        {waiting && (
-          <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading {whose} lap times…</p>
-        )}
+      {view === 'menu' && !waiting && (
+        <nav aria-label="Session info" className="mt-4 flex flex-col gap-2">
+          <MenuRow
+            icon={Timer}
+            title="Lap times"
+            detail={existing ? lapsDetail(existing) : 'Paste times or timestamps from your timing sheet'}
+            saved={!!existing}
+            disabled={group === null}
+            onClick={() => setView('laps')}
+          />
+          <MenuRow
+            icon={ClipboardCheck}
+            title="Instructor evaluation"
+            detail={notes ? notes.evaluation.feedback : 'Add what your instructor told you after this session'}
+            saved={!!notes}
+            disabled={group === null}
+            onClick={() => setView('evaluation')}
+          />
+        </nav>
+      )}
 
-        {slot.groups.length > 1 && !waiting && (
-          <fieldset className="mt-4">
-            <legend className="text-xs font-medium text-gray-700">
-              {driver ? `Which group was ${driverName(driver)} driving in?` : 'Which group were you driving in?'}
-            </legend>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {slot.groups.map(id => (
-                <button
-                  key={id}
-                  onClick={() => startFrom(id)}
-                  aria-pressed={group === id}
-                  className={`rounded-full ring-offset-2 transition-shadow ${group === id ? 'ring-2 ring-gray-900' : 'opacity-60 hover:opacity-100'}`}
-                >
-                  <GroupBadge group={groupFor(id, runGroups)} size="sm" />
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        )}
-
+      {view === 'laps' && (<>
         {group !== null && existing && !editing && !waiting && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
             {/* Like the session's card on My notes (#324). */}
@@ -386,14 +409,63 @@ export function LapTimesSheet({
               </button>
             </div>
           )}
-          <p className="flex items-center gap-1 text-[11px] text-gray-400">
-            <Lock size={11} aria-hidden="true" />
-            {driver ? `Only ${driverName(driver)} and admins can see these lap times.` : 'Only you and admins can see your lap times.'}
-          </p>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </>)}
+
+      {view === 'evaluation' && group !== null && key !== null && !waiting && (
+        <SessionEvaluationForm
+          // Fresh for each group and driver, from what they have saved.
+          key={`${key} ${driver?.id ?? ''}`}
+          existing={notes?.evaluation}
+          onBusyChange={setEvaluationBusy}
+          onSave={evaluation => onSaveEvaluation({
+            date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, evaluation,
+          })}
+          onRemove={() => onRemoveEvaluation(key)}
+        />
+      )}
+
+      <p className={`${view === 'laps' ? 'mt-3' : 'mt-5'} flex items-center justify-center gap-1 text-[11px] text-gray-400`}>
+        <Lock size={11} aria-hidden="true" />
+        {view === 'laps'
+          ? (driver ? `Only ${driverName(driver)} and admins can see these lap times.` : 'Only you and admins can see your lap times.')
+          : (driver ? `Only ${driverName(driver)} and admins can see these notes.` : 'Only you and admins can see your notes.')}
+      </p>
+    </Sheet>
+  )
+}
+
+/** "3 laps · best 1:39.12": what a session's saved laps come to, in the menu. */
+function lapsDetail(laps: SessionLaps): string {
+  const { count, best } = lapStats(laps.laps)
+  return `${count} ${count === 1 ? 'lap' : 'laps'}${best !== undefined ? ` · best ${formatLapTime(best)}` : ''}`
+}
+
+/** One thing a session can have (#205): what it is, what's saved, and the way in. */
+function MenuRow({ icon: Icon, title, detail, saved, disabled, onClick }: {
+  icon: LucideIcon
+  title: string
+  detail: string
+  saved: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition-colors hover:bg-gray-50 disabled:opacity-50"
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-gray-900">{title}</span>
+        <span className={`mt-0.5 block truncate text-xs ${saved ? 'text-gray-700' : 'text-gray-500'}`}>{detail}</span>
+      </span>
+      {saved && <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden="true" />}
+      <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+    </button>
   )
 }
 

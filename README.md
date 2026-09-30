@@ -144,7 +144,9 @@ Signed-in drivers can log their lap times for each session they drove.
 Only they and admins can see them.
 
 - **Add:** on an event's Schedule tab, tap a session's *On track* row.
-  If more than one group is on track, pick yours. Then paste your times
+  If more than one group is on track, pick yours. The sheet lists what
+  the session can have (#205): **Lap times** and **Instructor
+  evaluation** (below). Tap *Lap times*, paste your times
   and tap **Save lap times**. The sheet shows what it read (laps, best,
   average) before you save.
 - **What you can paste:**
@@ -177,8 +179,9 @@ Only they and admins can see them.
   configuration and direction), then each session's figures and lap time summary;
   tap the figures to open its lap table, or use *Expand all*. The tables'
   columns line up from session to session. While the laps load, a
-  skeleton of the cards fades in and out. The tab shows how many
-  sessions have laps, e.g. *My notes (2)*. Under the two best-lap cards,
+  skeleton of the cards fades in and out. The tab counts the
+  sessions with laps or an evaluation, and a report card (#340), e.g.
+  *My notes (2)*. Under the two best-lap cards,
   *Lap times by session* charts each session's best and average, in
   schedule order (#274).
 - **Tracks tab and track pages (#274):** the Tracks tab (`#/tracks`)
@@ -242,6 +245,32 @@ Only they and admins can see them.
     nothing else changes. The driver is matched by a SHA-256 of their
     sign-in email (`SAMPLE_DRIVER_EMAIL_SHA256`), so the address isn't in
     the repo.
+
+## Instructor evaluations (signed in, #340)
+
+Private like your lap times: only you and admins see them.
+
+- **A session's:** tap the session on the Schedule tab, then
+  **Instructor evaluation**: what your instructor said, and optionally
+  who they were. Any event. The session's row shows a clipboard once it
+  has one; on *My notes* it's under the session's laps (a session with
+  only an evaluation gets a card too), and its chevron opens it again.
+- **A TDE event's report card:** on events run by The Drivers Edge
+  (organizer *The Drivers Edge*, or a name starting *TDE*), *My notes*
+  has a whole-event **Instructor evaluation**, filled in from TDE's paper
+  card: the instructor and your car, the run group they recommend for
+  the same track and direction, a new direction and a new track (the
+  app's run group pills), a score for each core skill, *Aggressiveness =
+  skill*, *Car aids over activated* and their notes. It's in black, not
+  TDE's red. The group you drove in isn't picked here: it's your answer
+  to *Did you drive?* (or your laps' group), shown to confirm.
+- **Where they live:** `netlify/functions/notes.mts` (`/api/notes`) in
+  Netlify Blobs (store `notes`), one record per driver per event, next to
+  the laps and kept the same way: a sign-in for everything, `driver=` for
+  admins only (#288), and a deploy preview starts from a copy of your
+  real notes and never changes them (`netlify/lib/driverStore.mts`,
+  shared with `/api/laps`). Personal notes and videos (#205) can join
+  them there.
 
 ---
 

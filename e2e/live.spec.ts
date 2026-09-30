@@ -61,6 +61,15 @@ test('/api/laps keeps lap times to signed-in drivers (#210)', async ({ request }
   expect(res.status()).toBe(401)
 })
 
+test('/api/notes keeps instructor evaluations to signed-in drivers (#340)', async ({ request }) => {
+  // Refused at the sign-in check, so this reads and changes nothing — but
+  // answers with the function's own JSON, so it loaded.
+  const get = await request.get('/api/notes?event=test-live')
+  expect(get.status()).toBe(401)
+  expect(await get.json()).toEqual({ error: 'Please sign in to continue.' })
+  expect((await request.put('/api/notes?event=test-live', { data: { evaluation: {} } })).status()).toBe(401)
+})
+
 test('/api/me says who is signed in, and no one is', async ({ request }) => {
   expect((await request.get('/api/me')).status()).toBe(401)
 })
