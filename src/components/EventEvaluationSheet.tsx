@@ -175,14 +175,17 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         </div>
 
         <h3 className={sectionHead}>Core skills</h3>
-        {/* Each bar hugs its own skill, with room before the next. */}
-        <ul className="mt-3 flex flex-col gap-5">
+        {/* Each skill over its bar, the score beside the bar it goes with. */}
+        <ul className="mt-3 flex flex-col gap-4">
           {TDE_SKILLS.map(s => {
             const value = draft.skills[s.id]
             return (
               <li key={s.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <label htmlFor={`${id}-skill-${s.id}`} className="text-sm text-gray-900">{s.label}</label>
+                <label htmlFor={`${id}-skill-${s.id}`} className="text-sm text-gray-900">{s.label}</label>
+                <div className="mt-1 flex items-center gap-3">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                    <div className="h-full rounded-full bg-gray-900 transition-[width]" style={{ width: `${value === '' ? 0 : Number(value)}%` }} />
+                  </div>
                   <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
                     <input
                       id={`${id}-skill-${s.id}`}
@@ -194,9 +197,6 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
                     />
                     %
                   </span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
-                  <div className="h-full rounded-full bg-gray-900 transition-[width]" style={{ width: `${value === '' ? 0 : Number(value)}%` }} />
                 </div>
               </li>
             )

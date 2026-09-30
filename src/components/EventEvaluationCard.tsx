@@ -100,18 +100,18 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
       {scored.length > 0 && (
         <div className="mt-4">
           <h4 className="text-sm font-semibold text-gray-900">Core skills</h4>
-          {/* Each bar hugs its own skill, with room before the next. */}
-          <ul className="mt-3 flex flex-col gap-5" aria-label="Core skills">
+          {/* Each skill over its bar, the score beside the bar it goes with. */}
+          <ul className="mt-3 flex flex-col gap-4" aria-label="Core skills">
             {scored.map(({ id, label }) => {
               const pct = skills![id]!
               return (
                 <li key={id} aria-label={`${label}: ${pct}%`}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm text-gray-900">
-                    <span>{label}</span>
-                    <span className="font-semibold tabular-nums">{pct}%</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
-                    <div className="h-full rounded-full bg-gray-900" style={{ width: `${pct}%` }} />
+                  <p className="text-sm text-gray-900">{label}</p>
+                  <div className="mt-1 flex items-center gap-3">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                      <div className="h-full rounded-full bg-gray-900" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900">{pct}%</span>
                   </div>
                 </li>
               )
