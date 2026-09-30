@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapFigures, LapTable, SpeedFigures } from './LapList'
+import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { formatTime, formatAmPm } from '../utils/time'
@@ -113,8 +113,9 @@ export function PrivateTag({ whose }: { whose: string | null }) {
 }
 
 /**
- * One session's laps (#210): its time and group, then Laps · Average · Best,
- * which open onto the lap table. `onEdit` adds an Edit button (My notes).
+ * One session's laps (#210): its time and group, then its lap count and a
+ * small table of its average and best lap and speeds (#324), which open
+ * onto the lap table. `onEdit` adds an Edit button (My notes).
  */
 export function SessionLapsCard({ session, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, tableId }: {
   session: SessionLaps
@@ -138,48 +139,47 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
         {showDate && <span className="ml-2 font-medium normal-case tracking-normal">{shortDate(session.date)}</span>}
       </h3>
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex min-h-7 items-center gap-3">
           <div className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
             {formatTime(session.time)}
             <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(session.time)}</span>
           </div>
           <GroupBadge group={groupFor(session.group, runGroups)} size="sm" />
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="ml-auto text-sm font-medium text-blue-600 hover:text-blue-700"
+              aria-label={`Edit lap times for ${title}`}
+            >
+              Edit
+            </button>
+          )}
         </div>
         <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-          <div className="flex min-h-5 items-center justify-between gap-3">
-            <p className="flex items-center gap-1.5 text-xs text-gray-500">
-              <Timer size={13} aria-hidden="true" /> Lap times
-            </p>
-            {onEdit && (
+          {/* The heading and figures open the table: the chevron's button stretches over them. */}
+          <div className="relative flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <LapsHeading laps={session.laps} />
               <button
-                onClick={onEdit}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
-                aria-label={`Edit lap times for ${title}`}
+                onClick={onToggle}
+                aria-expanded={expanded}
+                aria-controls={tableId}
+                aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
+                className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
               >
-                Edit
+                <ChevronRight
+                  size={18}
+                  className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                  aria-hidden="true"
+                />
               </button>
-            )}
+            </div>
+            <div className={FIGURES_INDENT}>
+              <SessionFigures laps={session.laps} allTimeBest={allTimeBest} />
+            </div>
           </div>
-          {/* The whole row opens the table: the chevron's button stretches over it. */}
-          <div className="relative flex items-center gap-2">
-            <LapFigures laps={session.laps} allTimeBest={allTimeBest} />
-            <button
-              onClick={onToggle}
-              aria-expanded={expanded}
-              aria-controls={tableId}
-              aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
-              className="shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
-            >
-              <ChevronRight
-                size={18}
-                className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-          <SpeedFigures laps={session.laps} />
           {session.summary && (
-            <p className="text-sm text-gray-700" data-lap-summary>{session.summary}</p>
+            <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{session.summary}</p>
           )}
           {expanded && (
             <div id={tableId}>
@@ -235,14 +235,14 @@ export function LapsSkeleton({ cards, leaving, label }: {
       </div>
       <div className={`mb-2 ml-1 h-2.5 w-20 ${bar}`} />
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex min-h-7 items-center gap-3">
           <div className={`h-5 w-16 ${bar}`} />
           <div className="h-5 w-12 animate-pulse rounded-full bg-gray-100" />
         </div>
-        <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-          <div className={`h-3 w-20 ${bar}`} />
-          <div className="grid grid-cols-3 gap-2">
-            {[0, 1, 2].map(i => <div key={i} className="h-[52px] animate-pulse rounded-lg bg-gray-50" />)}
+        <div className="flex flex-col gap-2.5 border-t border-gray-100 pt-3">
+          <div className={`h-3 w-28 ${bar}`} />
+          <div className={`flex flex-col gap-2 ${FIGURES_INDENT}`}>
+            {[0, 1].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
           </div>
         </div>
       </div>
