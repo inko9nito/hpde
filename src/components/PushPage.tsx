@@ -1,24 +1,84 @@
-import { useEffect, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { CSSProperties, RefObject } from 'react'
+import { IOS_SPRING_EASING, IOS_SPRING_MS } from '../utils/iosSpring'
 
-// iOS UINavigationController's default push transition. Same curve and
-// duration the event-details drawer uses so both pushes feel of a piece.
-const PUSH_DURATION_MS = 350
-const PUSH_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
+// What's under a page pushed from the right slides a little way left, and
+// darkens, as the page covers it — iOS's parallax (#367), measured off the
+// same recordings as the spring: 30% as far as the page travels, and 10%
+// darker once covered.
+const COVERED_SHIFT = 'translateX(-30%)'
+const COVERED_DIM = 0.1
 
-// Open pushed pages, so the document stays locked until the last one
-// closes (an event's page can be open over a track page).
+// Pages pushed from the right that are in place, in the order they got
+// there: each covers the one before it, and the first covers the tabs.
+// Pages that slide up (Share, New event) cover nothing, as on iOS.
+const covering: object[] = []
+const coveringListeners = new Set<() => void>()
+
+function onCoveringChange(listener: () => void) {
+  coveringListeners.add(listener)
+  return () => { coveringListeners.delete(listener) }
+}
+
+function useCovering(page: object, on: boolean) {
+  useLayoutEffect(() => {
+    if (!on) return
+    covering.push(page)
+    coveringListeners.forEach(listener => listener())
+    return () => {
+      covering.splice(covering.indexOf(page), 1)
+      coveringListeners.forEach(listener => listener())
+    }
+  }, [on])
+}
+
+/** Whether a page is pushed over `page` — or, without one, over the tabs. */
+function useCovered(page?: object): boolean {
+  return useSyncExternalStore(onCoveringChange, () => {
+    if (!page) return covering.length > 0
+    const i = covering.indexOf(page)
+    return i >= 0 && i < covering.length - 1
+  })
+}
+
+function slide(property: string, instant: boolean) {
+  return instant ? 'none' : `${property} ${IOS_SPRING_MS}ms ${IOS_SPRING_EASING}`
+}
+
+/**
+ * Style for the tabs and their tab bar, under every pushed page: they
+ * slide a little way left as the first page is pushed over them, and back
+ * as it goes (#367). `instant` as for PushPage.
+ */
+export function useUnderPushedPages(instant: boolean): CSSProperties {
+  return {
+    transform: useCovered() ? COVERED_SHIFT : undefined,
+    transition: slide('transform', instant),
+    // Painted as a layer of their own ahead of time, as a pushed page is:
+    // made one only as a push starts, Safari paints them in that push's
+    // first frame, and the push jumps.
+    willChange: 'transform',
+  }
+}
+
+// Pushed pages on screen, so the document stays locked until the last one
+// has gone (an event's page can be open over a track page).
 let openPages = 0
 
 /**
- * While a pushed page is open, the page under it doesn't scroll (#321).
+ * While a pushed page is on screen, the page under it doesn't scroll (#321).
  * The pushed page is its own scroller over the document; left scrollable,
  * iOS hands a drag to the document behind it instead — reliably after a
  * native picker (a date field) has been open — so the page in view stops
  * scrolling while the hidden list underneath does.
+ *
+ * Unlocked once the page has slid all the way out, not as it starts to
+ * (#367): that relays out the whole page underneath, and Safari jumps a
+ * slide ahead by however long its first frame takes. Lifted in the same
+ * commit that takes the page away, so it never outlasts the page.
  */
 function useLockDocumentScroll(locked: boolean) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!locked) return
     if (openPages++ === 0) document.documentElement.classList.add('push-page-open')
     return () => {
@@ -105,7 +165,21 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
     onEnteredChange?.(entered)
   }, [entered])
   const white = entered && whiteHeader
-  useLockDocumentScroll(open)
+  // Open, or still on its way out.
+  const [onScreen, setOnScreen] = useState(open)
+  if (open && !onScreen) setOnScreen(true)
+  useLockDocumentScroll(onScreen)
+  function exited() {
+    setOnScreen(false)
+    onExited?.()
+  }
+  // Pushed from the right, it covers the page before it while in place —
+  // from the frame it starts sliding in to the frame it starts sliding out
+  // — and is itself covered by the next (#367).
+  const self = useRef({}).current
+  const pushed = from === 'right'
+  useCovering(self, pushed && inPosition)
+  const covered = useCovered(self) && pushed
 
   useEffect(() => {
     if (isFirstRun.current) {
@@ -115,18 +189,39 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       if (skipEnterAnimation || instant) return
     }
     if (instant) {
-      // Already out of sight, with no slide to wait for.
-      if (!open) onExited?.()
+      // Already out of sight, with no slide to wait for — as is a page
+      // swiped away while it was still sliding out, since `transition:
+      // none` cuts that slide short.
+      if (!open && onScreen) exited()
       return
     }
     if (open) {
       const id = requestAnimationFrame(() => setInPosition(true))
       return () => cancelAnimationFrame(id)
     }
-    setInPosition(false)
-  }, [open])
+    // Closed before it ever slid in: nothing to slide out. Nor closed
+    // under the page over it, going too: that one slides away to show
+    // what's under both, as iOS pops more than one page at once.
+    if (!inPosition || covered) {
+      if (onScreen) exited()
+    } else setInPosition(false)
+  }, [open, instant])
 
   return (
+    <>
+    {pushed && (
+      // Darkens whatever it's pushed over, as it covers it (#367).
+      <div
+        aria-hidden="true"
+        data-covering-dim
+        className="pointer-events-none fixed inset-0 z-30 bg-black"
+        style={{
+          zIndex: raised ? 31 : undefined,
+          opacity: inPosition ? COVERED_DIM : 0,
+          transition: slide('opacity', instant),
+        }}
+      />
+    )}
     <div
       ref={scrollRef}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
@@ -142,8 +237,9 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         backgroundImage: white ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)' : undefined,
         transform: from === 'bottom'
           ? `translateY(${inPosition ? '0' : '100%'})`
-          : `translateX(${inPosition ? '0' : '100%'})`,
-        transition: instant ? 'none' : `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
+          : !inPosition ? 'translateX(100%)' : covered ? COVERED_SHIFT : 'translateX(0)',
+        // iOS's own push, pop and sheet spring (#367).
+        transition: slide('transform', instant),
         willChange: 'transform',
         // Cast onto the page it's covering: left of a push, above a modal.
         boxShadow: from === 'bottom'
@@ -153,10 +249,11 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       onTransitionEnd={e => {
         if (e.target !== e.currentTarget || e.propertyName !== 'transform') return
         if (inPosition && open) setEntered(true)
-        else if (!inPosition && !open) onExited?.()
+        else if (!inPosition && !open) exited()
       }}
     >
       {children}
     </div>
+    </>
   )
 }

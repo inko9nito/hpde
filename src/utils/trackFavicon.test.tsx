@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useTrackFavicon, useDocumentTitle } from './trackFavicon'
+import { useTrackFavicon, useDocumentTitle, TRACK_FAVICON_DELAY_MS } from './trackFavicon'
 import { trackIconSrc } from '../components/TrackIcon'
+
+// Drawn once the page has slid in (#367).
+const afterSlide = { timeout: TRACK_FAVICON_DELAY_MS + 1000 }
 
 function iconHref(rel = 'icon', sizes = '64x64') {
   return document.head.querySelector(`link[rel~="${rel}"][sizes="${sizes}"]`)?.getAttribute('href') ?? null
@@ -18,21 +21,29 @@ describe('useTrackFavicon (#233)', () => {
 
   it('uses the track icon and removes it again when the page goes away', async () => {
     const { unmount } = renderHook(() => useTrackFavicon('msrc-1-7'))
-    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')))
+    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')), afterSlide)
     unmount()
     expect(iconHref()).toBeNull()
   })
 
+  it('waits for the page to slide in before drawing it (#367)', async () => {
+    const { unmount } = renderHook(() => useTrackFavicon('msrc-1-7'))
+    await new Promise(r => setTimeout(r, 100))
+    expect(iconHref()).toBeNull()
+    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')), afterSlide)
+    unmount()
+  })
+
   it('also sets the iOS touch icon (Favorites / Home Screen)', async () => {
     const { unmount } = renderHook(() => useTrackFavicon('msrc-3-1'))
-    await waitFor(() => expect(iconHref('apple-touch-icon', '180x180')).toBe(trackIconSrc('msrc-3-1')))
+    await waitFor(() => expect(iconHref('apple-touch-icon', '180x180')).toBe(trackIconSrc('msrc-3-1')), afterSlide)
     unmount()
     expect(iconHref('apple-touch-icon', '180x180')).toBeNull()
   })
 
   it('also sets a 192px icon for Android home-screen shortcuts', async () => {
     const { unmount } = renderHook(() => useTrackFavicon('msrc-3-1'))
-    await waitFor(() => expect(iconHref('icon', '192x192')).toBe(trackIconSrc('msrc-3-1')))
+    await waitFor(() => expect(iconHref('icon', '192x192')).toBe(trackIconSrc('msrc-3-1')), afterSlide)
     expect(iconHref('icon', '64x64')).toBe(trackIconSrc('msrc-3-1'))
     unmount()
     expect(iconHref('icon', '192x192')).toBeNull()
@@ -43,9 +54,9 @@ describe('useTrackFavicon (#233)', () => {
     const { rerender } = renderHook(({ id }) => useTrackFavicon(id), {
       initialProps: { id: 'msrc-1-7' as string | undefined },
     })
-    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')))
+    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('msrc-1-7')), afterSlide)
     rerender({ id: 'ecr-2-7' })
-    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('ecr-2-7')))
+    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('ecr-2-7')), afterSlide)
     rerender({ id: undefined })
     expect(iconHref()).toBeNull()
   })
@@ -63,7 +74,7 @@ describe('useTrackFavicon (#233)', () => {
     document.head.appendChild(link)
 
     const { unmount } = renderHook(() => useTrackFavicon('ecr-2-7'))
-    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('ecr-2-7')))
+    await waitFor(() => expect(iconHref()).toBe(trackIconSrc('ecr-2-7')), afterSlide)
     unmount()
     expect(iconHref()).toBe('/favicon.png')
     link.remove()

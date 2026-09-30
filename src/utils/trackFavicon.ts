@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { trackIconSrc } from '../components/TrackIcon'
+import { IOS_SPRING_MS } from './iosSpring'
 
 // Page icons for an event page (#233): the event's track shape, drawn to a
 // canvas and handed over as PNGs. PNG because Safari ignores SVG favicons,
@@ -132,6 +133,28 @@ function swapLink(rel: string, sizes: string, href: string): () => void {
   }
 }
 
+// Each track's icons, drawn once: a canvas and a scan of its pixels each.
+const drawn = new Map<string, Promise<string>>()
+
+function drawOnce(src: string, style: IconStyle): Promise<string> {
+  const key = `${src} ${style.size}`
+  let icon = drawn.get(key)
+  if (!icon) {
+    icon = renderTrackIcon(src, style)
+    // Tried again next time, if it failed.
+    icon.catch(() => drawn.delete(key))
+    drawn.set(key, icon)
+  }
+  return icon
+}
+
+/**
+ * Drawn once the page it's for has slid in (#367). Drawing all three
+ * holds up a phone for about a tenth of a second, and landing in the
+ * slide's first frames, it made the slide jump.
+ */
+export const TRACK_FAVICON_DELAY_MS = IOS_SPRING_MS + 100
+
 /**
  * While `trackId` has a real icon, use it as the page's favicon and its
  * iOS / Android home-screen icons; put back whatever was there before (or nothing) when it
@@ -149,16 +172,19 @@ export function useTrackFavicon(trackId: string | undefined) {
       ['apple-touch-icon', TOUCH_ICON],
       ['icon', ANDROID_ICON],
     ]
-    for (const [rel, style] of icons) {
-      const sizes = `${style.size}x${style.size}`
-      const apply = (href: string) => {
-        if (!cancelled) restores.push(swapLink(rel, sizes, href))
+    const timer = setTimeout(() => {
+      for (const [rel, style] of icons) {
+        const sizes = `${style.size}x${style.size}`
+        const apply = (href: string) => {
+          if (!cancelled) restores.push(swapLink(rel, sizes, href))
+        }
+        drawOnce(src, style).then(apply, () => apply(src))
       }
-      renderTrackIcon(src, style).then(apply, () => apply(src))
-    }
+    }, TRACK_FAVICON_DELAY_MS)
 
     return () => {
       cancelled = true
+      clearTimeout(timer)
       restores.forEach(restore => restore())
     }
   }, [trackId])

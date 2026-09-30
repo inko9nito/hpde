@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { CalendarDays, Car, ChevronRight, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AppMenu } from './AppMenu'
@@ -48,11 +48,12 @@ const TABS: readonly { id: HomeTab; label: string; Icon: LucideIcon }[] = [
   { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 
-export function TabBar({ active }: { active: HomeTab }) {
+export function TabBar({ active, style }: { active: HomeTab; style?: CSSProperties }) {
   return (
     <nav
       aria-label="Sections"
       className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+      style={style}
     >
       <div className="mx-auto flex max-w-lg" style={{ height: TAB_BAR_PX }}>
         {TABS.map(({ id, label, Icon }) => {

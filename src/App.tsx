@@ -13,7 +13,7 @@ import { Legend } from './components/Legend'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { SharePage, SHARE_HASH, isEventShareHash, eventShareUrl } from './components/SharePage'
 import { LandingPage } from './components/LandingPage'
-import { PushPage } from './components/PushPage'
+import { PushPage, useUnderPushedPages } from './components/PushPage'
 import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
@@ -410,6 +410,8 @@ export default function App() {
   // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
   useChromeColor(((eventPageOpen && pushEntered) || trackEntered || carEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
+  // The tabs slide a little way left under the first page pushed over them (#367).
+  const underPages = useUnderPushedPages(swiped)
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -574,13 +576,13 @@ export default function App() {
     <>
     <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownMorePage || !!shownOverlay || !!shownCarId}>
       {/* Room at the bottom for the tab bar. */}
-      <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))` }}>
+      <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
         {homeTab === 'tracks' && <TracksTab />}
         {homeTab === 'more' && <MoreTab />}
       </div>
     </PullToRefresh>
-    <TabBar active={homeTab} />
+    <TabBar active={homeTab} style={underPages} />
     {/* Before the event's page, which goes over it when opened from it. */}
     {shownMorePage && (
       <PushPage
