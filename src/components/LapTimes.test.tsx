@@ -1388,13 +1388,14 @@ describe('Instructor evaluations across events (#345)', () => {
     expect(within(cards[2]).getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
     expect(within(cards[0]).queryByRole('button', { name: /^Add instructor evaluation/ })).not.toBeInTheDocument()
     const feedback = (card: HTMLElement) => within(within(card).getByRole('list', { name: 'Feedback' })).getAllByRole('listitem').map(li => li.textContent)
-    // The whole event's, then each session's, each with who said it.
+    // The whole event's (who the instructor was, and their notes), then each session's.
     expect(feedback(cards[0])).toEqual([
-      'Whole event· JoBrake later into turn 1.',
+      'JoBrake later into turn 1.',
       'Session 2 · 11:45 AM· JoEyes up.',
     ])
-    expect(feedback(cards[3])).toEqual(['Report card3 skills scored· Amy LeeSmoother on the brakes.'])
-    expect(feedback(cards[4])).toEqual(['Report card2 skills scored· John Harms'])
+    expect(feedback(cards[3])).toEqual(['Amy LeeSmoother on the brakes.'])
+    // A report card with no notes says so.
+    expect(feedback(cards[4])).toEqual(['John HarmsNo notes.'])
 
     await userEvent.click(within(cards[3]).getByRole('link'))
     expect(window.location.hash).toBe(`#/event/${tdeOct.id}`)

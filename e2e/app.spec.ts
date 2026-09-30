@@ -963,7 +963,13 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   }
   // Every card is drawn, each with its own marker; a tap on a skill lists it at every event.
   await expect(wheel.locator('[data-card]')).toHaveCount(3)
+  const chips = wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button')
   await expect(wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button', { pressed: true })).toHaveText(['All', /Oct 4/, /Sep 13/, /Jul 19/])
+  // Picked, a chip is filled black, as a picked skill's name is.
+  await expect(chips.nth(1)).toHaveCSS('background-color', 'rgb(17, 24, 39)')
+  await chips.nth(1).click()
+  await expect(chips.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await chips.nth(1).click()
   expect(await wheel.getByRole('group', { name: 'Report cards shown' }).locator('[data-shape]').evaluateAll(els => els.map(el => el.getAttribute('data-shape'))))
     .toEqual(['circle', 'square', 'triangle'])
   await wheel.getByRole('button', { name: 'Calls out all flags' }).click()
@@ -996,7 +1002,7 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ })).toBeVisible()
   const alphaCard = feedback.getByRole('article', { name: 'Alpha Track Day' })
   await expect(alphaCard.getByRole('listitem')).toHaveText([
-    /Whole event.*Sam Ortiz.*Carry more speed/,
+    /^Sam Ortiz\s*Good day\. Carry more speed/,
     /Session 1 · 8:30 AM.*Sam Ortiz.*Unwind the wheel sooner/,
   ])
   await events.nth(2).click()

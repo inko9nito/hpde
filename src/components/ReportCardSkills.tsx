@@ -163,28 +163,29 @@ export function SkillOverview({ points }: { points: ReportCardPoint[] }) {
 
 // Which report card is which, on the wheel, its chips and a skill's list:
 // the four newest of the cards shown each get a marker at their points
-// (●, ■, ▲, ◆) and a line — the newest solid black and shaded, the others
-// grayer and broken. More than four such can't be told apart, however
-// they're drawn (a driver may have 20 cards), so any older card shown is a
-// thin light line behind them: the history, not one to pick out. Hide
-// newer ones to bring an older one forward. Not by hue: every hue is a run
-// group's somewhere in the app, and the one color here (green and rose)
-// means up or down.
+// (●, ■, ▲, ◆) and a solid line, by one rule the page says — newer is
+// darker: the newest black and shaded, the others lighter grays. (Broken
+// lines, which an older card had at first, read as meaning something of
+// their own.) More than four can't be told apart, however they're drawn
+// (a driver may have 20 cards), so any older card shown is a thin light
+// line behind them: the history, not one to pick out. Hide newer ones to
+// bring an older one forward. Not by hue: every hue is a run group's
+// somewhere in the app, and the one color here (green and rose) means up
+// or down.
 const INK = '#111827'
-const RING = '#e5e7eb'
+const RING = '#eceef1'
 type Shape = 'circle' | 'square' | 'triangle' | 'diamond'
 const SHAPES: Shape[] = ['circle', 'square', 'triangle', 'diamond']
 const LINES = [
-  { stroke: INK, dash: undefined, width: 2, fill: 'rgba(17, 24, 39, 0.07)' },
-  { stroke: '#4b5563', dash: undefined, width: 1.75, fill: 'none' },
-  { stroke: '#6b7280', dash: '5 3', width: 1.75, fill: 'none' },
-  { stroke: '#9ca3af', dash: '1.5 3', width: 1.75, fill: 'none' },
+  { stroke: INK, width: 2, fill: 'rgba(17, 24, 39, 0.07)' },
+  { stroke: '#4b5563', width: 1.75, fill: 'none' },
+  { stroke: '#8b93a1', width: 1.75, fill: 'none' },
+  { stroke: '#b5bbc5', width: 1.75, fill: 'none' },
 ]
-const BACKGROUND = { stroke: '#d1d5db', dash: undefined, width: 1, fill: 'none' }
+const BACKGROUND = { stroke: '#d9dce1', width: 1, fill: 'none' }
 
 export interface CardLook {
   stroke: string
-  dash?: string
   width: number
   fill: string
   /** None for an older card, drawn behind the four newest. */
@@ -203,8 +204,8 @@ export function cardLooks(cards: ReportCardPoint[], shown: ReadonlySet<string>):
 }
 
 /** A card's marker at (x, y), `r` from its middle to its edge. */
-function Marker({ shape, x, y, r, color }: { shape: Shape; x: number; y: number; r: number; color: string }) {
-  const paint = { fill: color, stroke: '#ffffff', strokeWidth: 1.25 }
+function Marker({ shape, x, y, r, color, outline = '#ffffff' }: { shape: Shape; x: number; y: number; r: number; color: string; outline?: string }) {
+  const paint = { fill: color, stroke: outline, strokeWidth: 1.25 }
   if (shape === 'circle') return <circle cx={x} cy={y} r={r} {...paint} />
   if (shape === 'square') return <rect x={x - r * 0.85} y={y - r * 0.85} width={r * 1.7} height={r * 1.7} {...paint} />
   if (shape === 'triangle') {
@@ -214,13 +215,18 @@ function Marker({ shape, x, y, r, color }: { shape: Shape; x: number; y: number;
   return <polygon points={`${x},${y - r * 1.2} ${x + r * 1.2},${y} ${x},${y + r * 1.2} ${x - r * 1.2},${y}`} {...paint} />
 }
 
-/** A card's line with its marker on it, for its chip and a skill's list; room for one, for a card not shown. */
-function CardKey({ look }: { look?: CardLook }) {
+/**
+ * A card's line with its marker on it, for a skill's list — or, `onDark`,
+ * in white, for its chip when it's picked; room for one, for a card not
+ * shown.
+ */
+function CardKey({ look, onDark = false }: { look?: CardLook; onDark?: boolean }) {
   if (!look) return <span aria-hidden="true" className="inline-block w-5 shrink-0" />
+  const color = onDark ? (look.shape ? '#ffffff' : 'rgba(255, 255, 255, 0.5)') : look.stroke
   return (
     <svg aria-hidden="true" width={20} height={10} className="shrink-0 overflow-visible" data-shape={look.shape ?? 'line'}>
-      <line x1={0} x2={20} y1={5} y2={5} stroke={look.stroke} strokeWidth={look.shape ? 2 : 1.5} strokeDasharray={look.dash} />
-      {look.shape && <Marker shape={look.shape} x={10} y={5} r={3.5} color={look.stroke} />}
+      <line x1={0} x2={20} y1={5} y2={5} stroke={color} strokeWidth={look.shape ? 2 : 1.5} />
+      {look.shape && <Marker shape={look.shape} x={10} y={5} r={3.5} color={color} outline={onDark ? INK : '#ffffff'} />}
     </svg>
   )
 }
@@ -310,8 +316,9 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
   const looks = cardLooks(cards, shown)
   // Drawn oldest first, so the newest is on top.
   const drawn = [...cards].filter(c => shown.has(c.key)).sort((a, b) => looks.get(b.key)!.rank - looks.get(a.key)!.rank)
+  // Picked, filled black, as a picked skill's name is.
   const chip = (on: boolean) => `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-    on ? 'border-gray-900 font-semibold text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'
+    on ? 'border-gray-900 bg-gray-900 font-semibold text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
   }`
   const pickedSkill = skills.find(s => s.id === picked)
   const pickedIndex = skills.findIndex(s => s.id === picked)
@@ -335,15 +342,20 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
               const on = shown.has(c.key)
               return (
                 <button key={c.key} type="button" aria-pressed={on} title={c.title} onClick={() => toggle(c.key)} className={chip(on)}>
-                  {on && <CardKey look={looks.get(c.key)} />}
+                  {on && <CardKey look={looks.get(c.key)} onDark />}
                   {day(c.date)}
                   {/* The year, where it isn't the newest card's. */}
-                  {c.date.slice(0, 4) !== cards[n - 1].date.slice(0, 4) && <span className="font-normal text-gray-400">’{c.date.slice(2, 4)}</span>}
+                  {c.date.slice(0, 4) !== cards[n - 1].date.slice(0, 4) && <span className="font-normal opacity-60">’{c.date.slice(2, 4)}</span>}
                 </button>
               )
             })}
           </div>
         </div>
+      )}
+      {shown.size > 1 && (
+        <p className="text-[11px] text-gray-400">
+          Newer events are darker{shown.size > SHAPES.length ? `; the ${SHAPES.length} newest shown have a marker each` : ''}.
+        </p>
       )}
       <div ref={ref} className="relative" style={{ height }}>
         <svg width={width} height={height} className="block" aria-hidden="true">
@@ -362,7 +374,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
             })
             return (
               <g key={c.key} data-card={c.key}>
-                <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} strokeLinejoin="round" />
+                <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeLinejoin="round" />
                 {style.shape && skills.map((s, i) => {
                   const v = scoreOf(c, s.id)
                   if (v === undefined) return null

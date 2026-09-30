@@ -281,9 +281,10 @@ Private like your lap times: only you and admins see them.
   rim (rings every 20%), and every card as
   a shape on it. The cards' chips scroll sideways, newest first, after
   **All** (every card; tapped again, just the newest); tap one to hide or
-  show it. The four newest cards shown each have a marker at their points
-  (●, ■, ▲, ◆) and a line (the newest solid black, the others grayer and
-  broken), in their chips and the list too; any older ones shown are thin
+  show it; a picked chip is filled black, as a picked skill's name is. The
+  four newest cards shown each have a marker at their points (●, ■, ▲, ◆)
+  and a solid line, newer darker (the page says so), in their chips and
+  the list too; any older ones shown are thin
   light lines behind them, since more than four can't be told apart
   (hide newer ones to bring an older one forward). Not a color: every hue
   is a run group's somewhere. Tap a skill's name for a list of
@@ -294,8 +295,9 @@ Private like your lap times: only you and admins see them.
   there); it's on each event's card. Under those, **Events**: every event
   you have an evaluation at, TDE or not, newest first, with what the
   instructors said right on its card — about the whole event (on a TDE
-  event, the report card's notes, and how many skills it scored) and each
-  session, with who said it. Events you went to (you said you drove, or
+  event, the report card's notes) and each
+  session, with who said it: the whole event's is the instructor's name
+  over their notes (or *No notes*). Events you went to (you said you drove, or
   have laps there) with none yet are in the list too, with **Add
   instructor evaluation**, which opens the event's *My notes* with the
   form up. Tap an event for its *My notes*; Back returns to the list.

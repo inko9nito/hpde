@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from 'react'
-import type { ReactNode } from 'react'
 import { ChevronRight, ClipboardCheck, Plus } from 'lucide-react'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
@@ -7,7 +6,7 @@ import { GroupBadge } from './GroupBadge'
 import { groupFor } from './LapTimesSheet'
 import { CARD_FRAME, CARD_SHELL } from './LandingPage'
 import { DateBlock } from './DateBlock'
-import { PrivateTag, plural, sessionTitle, useSkeletonFade } from './LapSessions'
+import { PrivateTag, sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 import { useAuth } from '../auth/AuthContext'
@@ -75,20 +74,21 @@ export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
 }
 
 /** One piece of an instructor's feedback: what it's of, who said it, and what they said. */
-function Feedback({ label, instructor, text, children }: {
+function Feedback({ label, instructor, text }: {
   label: string
   instructor?: string
+  /** What they said; none, and it says so. */
   text?: string
-  children?: ReactNode
 }) {
   return (
     <li className="min-w-0" data-feedback>
       <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs">
         <span className="font-semibold text-gray-900">{label}</span>
-        {children}
         {instructor && <span className="text-gray-500">· {instructor}</span>}
       </p>
-      {text && <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-gray-900">{text}</p>}
+      {text
+        ? <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-gray-900">{text}</p>
+        : <p className="mt-1 text-sm text-gray-400">No notes.</p>}
     </li>
   )
 }
@@ -112,7 +112,6 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
   const groups = notes?.sessions.length ? [...new Set(notes.sessions.map(s => s.group))] : runGroup ? [runGroup] : []
   const tde = isTdeEvent(event)
   const evaluation = notes?.evaluation
-  const scored = evaluation?.skills ? Object.keys(evaluation.skills).length : 0
   const multiDay = event.days.length > 1
   return (
     <article aria-label={event.name} className={`${CARD_FRAME} overflow-hidden`}>
@@ -137,16 +136,8 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
       </a>
       {notes ? (
       <ul className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3" aria-label="Feedback">
-        {evaluation && (
-          <Feedback label={tde ? 'Report card' : 'Whole event'} instructor={evaluation.instructor} text={evaluation.notes}>
-            {tde && scored > 0 && (
-              <span className="inline-flex items-center gap-1 text-gray-500">
-                <ClipboardCheck size={12} aria-hidden="true" />
-                {plural(scored, 'skill', 'skills')} scored
-              </span>
-            )}
-          </Feedback>
-        )}
+        {/* The whole event's: who the instructor was, and their notes (on a TDE event, the report card's). */}
+        {evaluation && <Feedback label={evaluation.instructor ?? 'Instructor'} text={evaluation.notes} />}
         {notes.sessions.map(s => (
           <Feedback
             key={s.key}
