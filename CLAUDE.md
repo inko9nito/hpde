@@ -10,6 +10,12 @@ progresses, rename it back to the issue's durable topic via
 `set_session_title`. The branch name is fixed for the life of the
 PR; the session title isn't, so keep it accurate.
 
+## Pages with Cancel slide up (#356)
+
+A page closed with Cancel (or ✕) is a modal: it slides up from the bottom
+and back down when dismissed, as on iOS — `PushPage` with `from="bottom"`.
+Only pages closed with Back slide in from the right.
+
 ## Keeping GitHub issues up to date
 
 Chat is ephemeral; the issue is the durable record. Whenever

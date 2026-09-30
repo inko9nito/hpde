@@ -51,8 +51,9 @@ interface Props {
   whiteHeader?: boolean
   /**
    * Which edge it slides in from, and back out to. 'right' is a push
-   * (the event page); 'bottom' is a modal page closed with ✕ — New
-   * event, Share, iOS widget (#278).
+   * (the event page), closed with Back; 'bottom' is a modal page closed
+   * with ✕ or Cancel — New event, Share, iOS widget (#278), Add a car
+   * (#356). A page with a Cancel always slides up, as on iOS.
    */
   from?: 'right' | 'bottom'
   /**

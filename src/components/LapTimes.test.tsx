@@ -1401,6 +1401,8 @@ describe('the garage (#344)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add a car' }))
     const form = screen.getByRole('dialog', { name: 'Add a car' })
     expect(form.closest('[data-car-form]')).toBe(form)
+    // It has a Cancel, so it slides up from the bottom, as on iOS (#356).
+    expect((form.parentElement as HTMLElement).style.transform).toMatch(/^translateY\(/)
     // Nothing to save till it has a make and model.
     expect(within(form).getByRole('button', { name: 'Save' })).toBeDisabled()
     await userEvent.type(within(form).getByLabelText('Year'), '2019')
