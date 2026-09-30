@@ -1,24 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { IOS_SPRING_EASING, IOS_SPRING_MS } from '../utils/iosSpring'
 
-// iOS UINavigationController's default push transition. Same curve and
-// duration the event-details drawer uses so both pushes feel of a piece.
-const PUSH_DURATION_MS = 350
-const PUSH_EASING = 'cubic-bezier(0.32, 0.72, 0, 1)'
-
-// Open pushed pages, so the document stays locked until the last one
-// closes (an event's page can be open over a track page).
+// Pushed pages on screen, so the document stays locked until the last one
+// has gone (an event's page can be open over a track page).
 let openPages = 0
 
 /**
- * While a pushed page is open, the page under it doesn't scroll (#321).
+ * While a pushed page is on screen, the page under it doesn't scroll (#321).
  * The pushed page is its own scroller over the document; left scrollable,
  * iOS hands a drag to the document behind it instead — reliably after a
  * native picker (a date field) has been open — so the page in view stops
  * scrolling while the hidden list underneath does.
+ *
+ * Unlocked once the page has slid all the way out, not as it starts to
+ * (#367): that relays out the whole page underneath, and Safari jumps a
+ * slide ahead by however long its first frame takes. Lifted in the same
+ * commit that takes the page away, so it never outlasts the page.
  */
 function useLockDocumentScroll(locked: boolean) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!locked) return
     if (openPages++ === 0) document.documentElement.classList.add('push-page-open')
     return () => {
@@ -105,7 +106,14 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
     onEnteredChange?.(entered)
   }, [entered])
   const white = entered && whiteHeader
-  useLockDocumentScroll(open)
+  // Open, or still on its way out.
+  const [onScreen, setOnScreen] = useState(open)
+  if (open && !onScreen) setOnScreen(true)
+  useLockDocumentScroll(onScreen)
+  function exited() {
+    setOnScreen(false)
+    onExited?.()
+  }
 
   useEffect(() => {
     if (isFirstRun.current) {
@@ -115,16 +123,21 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       if (skipEnterAnimation || instant) return
     }
     if (instant) {
-      // Already out of sight, with no slide to wait for.
-      if (!open) onExited?.()
+      // Already out of sight, with no slide to wait for — as is a page
+      // swiped away while it was still sliding out, since `transition:
+      // none` cuts that slide short.
+      if (!open && onScreen) exited()
       return
     }
     if (open) {
       const id = requestAnimationFrame(() => setInPosition(true))
       return () => cancelAnimationFrame(id)
     }
-    setInPosition(false)
-  }, [open])
+    // Closed before it ever slid in: nothing to slide out.
+    if (!inPosition) {
+      if (onScreen) exited()
+    } else setInPosition(false)
+  }, [open, instant])
 
   return (
     <div
@@ -143,7 +156,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         transform: from === 'bottom'
           ? `translateY(${inPosition ? '0' : '100%'})`
           : `translateX(${inPosition ? '0' : '100%'})`,
-        transition: instant ? 'none' : `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
+        // iOS's own push, pop and sheet spring (#367).
+        transition: instant ? 'none' : `transform ${IOS_SPRING_MS}ms ${IOS_SPRING_EASING}`,
         willChange: 'transform',
         // Cast onto the page it's covering: left of a push, above a modal.
         boxShadow: from === 'bottom'
@@ -153,7 +167,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       onTransitionEnd={e => {
         if (e.target !== e.currentTarget || e.propertyName !== 'transform') return
         if (inPosition && open) setEntered(true)
-        else if (!inPosition && !open) onExited?.()
+        else if (!inPosition && !open) exited()
       }}
     >
       {children}

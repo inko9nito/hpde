@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent, act } from '@testing-library/react'
 import { PushPage } from './PushPage'
+import { IOS_SPRING_MS } from '../utils/iosSpring'
 
 function slideEnd(el: HTMLElement) {
   // jsdom's TransitionEvent lacks propertyName, so build it by hand.
@@ -89,6 +90,52 @@ describe('PushPage after a swipe the browser animated (#355)', () => {
     expect(onExited).not.toHaveBeenCalled()
     slideEnd(page)
     expect(onExited).toHaveBeenCalled()
+  })
+})
+
+describe('PushPage timing (#367)', () => {
+  it('slides with iOS’s spring', () => {
+    const { container } = render(<PushPage open><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    expect(page.style.transition).toContain(`transform ${IOS_SPRING_MS}ms`)
+  })
+
+  it('keeps the page under it still until it has slid all the way out', async () => {
+    const lock = () => document.documentElement.classList.contains('push-page-open')
+    const { container, rerender, unmount } = render(<PushPage open><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    expect(lock()).toBe(true)
+    await act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+    slideEnd(page)
+
+    rerender(<PushPage open={false}><div /></PushPage>)
+    expect(lock()).toBe(true)
+    slideEnd(page)
+    expect(lock()).toBe(false)
+    unmount()
+  })
+
+  it('is done at once when closed before it ever slid in', () => {
+    const onExited = vi.fn()
+    const lock = () => document.documentElement.classList.contains('push-page-open')
+    const { rerender, unmount } = render(<PushPage open onExited={onExited}><div /></PushPage>)
+    rerender(<PushPage open={false} onExited={onExited}><div /></PushPage>)
+    expect(onExited).toHaveBeenCalledTimes(1)
+    expect(lock()).toBe(false)
+    unmount()
+  })
+
+  it('is done at once when swiped away while sliding out (#355)', async () => {
+    const onExited = vi.fn()
+    const { container, rerender, unmount } = render(<PushPage open onExited={onExited}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    await act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+    slideEnd(page)
+    rerender(<PushPage open={false} onExited={onExited}><div /></PushPage>)
+    expect(onExited).not.toHaveBeenCalled()
+    rerender(<PushPage open={false} instant onExited={onExited}><div /></PushPage>)
+    expect(onExited).toHaveBeenCalledTimes(1)
+    unmount()
   })
 })
 
