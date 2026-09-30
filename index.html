@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover (#318): without it iOS reports every
+         env(safe-area-inset-*) as 0, so the tab bar, sheets and page
+         bottoms that pad by it sat under the home indicator in the
+         Home Screen app. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>HPDE Events</title>
     <!-- Browser chrome tint: gray-50, the page background. Event pages
          switch it to their white header (src/utils/chromeColor.ts). -->
