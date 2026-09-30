@@ -151,6 +151,13 @@ function figures(el: HTMLElement, label = 'Session figures'): Record<string, str
   return out
 }
 
+// A session card's figures table (#324), as text, row by row: the column
+// headings, then each row's label and figures.
+function sessionFigures(card: HTMLElement): string[][] {
+  return within(within(card).getByRole('table', { name: 'Session figures' })).getAllByRole('row')
+    .map(row => [...row.children].map(cell => cell.textContent ?? ''))
+}
+
 // A table of laps, as text, header first. Lines stacked in one cell (start
 // over finish) are joined with a dash.
 function rows(el: HTMLElement): string[][] {
@@ -239,13 +246,18 @@ describe('lap times (#210)', () => {
     expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    expect(figures(card)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
+    // Its laps that count, then a compact table of its figures (#324).
+    expect(card).toHaveTextContent('Lap times · 2 laps')
+    expect(sessionFigures(card)).toEqual([
+      ['', 'Average', 'Best'],
+      ['Lap time', '1:50.0', '1:44'],
+    ])
     // The laps are folded away until asked for.
-    expect(within(card).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     await userEvent.click(within(card).getByRole('button', { name: 'Show laps for Session 2' }))
-    expect(rows(card)[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
+    expect(rows(within(card).getByRole('table', { name: 'Laps' }))[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
     await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
-    expect(within(card).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
     // Only admins pick a driver (#288).
@@ -473,9 +485,22 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
-    // Under the session's figures; nothing for a session without speeds.
-    expect(figures(screen.getByRole('region', { name: 'Session 1, 9:50 AM' }), 'Session speeds')).toEqual({ Top: '104.5', Avg: '69.5' })
-    expect(screen.getByRole('region', { name: 'Session 2, 11:45 AM' }).querySelector('[data-speed-figures]')).toBeNull()
+    // A row under the lap times (#324), the top speed in a chip like the best
+    // lap's; nothing for a session without speeds.
+    const withSpeeds = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    expect(withSpeeds).toHaveTextContent('Laps & speeds · 2 laps')
+    expect(sessionFigures(withSpeeds)).toEqual([
+      ['', 'Average', 'Best / top'],
+      ['Lap time', '1:40.210', '1:39.42'],
+      ['Speed', '69.5 mph', '104.5 mph'],
+    ])
+    expect(withSpeeds.querySelector('[data-top-speed]')).toHaveTextContent('104.5')
+    const without = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    expect(without).toHaveTextContent('Lap times · 2 laps')
+    expect(sessionFigures(without)).toEqual([
+      ['', 'Average', 'Best'],
+      ['Lap time', '1:39.105', '1:38.91'],
+    ])
 
     const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order, with top speed in mph on the right: 2 sessions\./ })
     const legend = chart.parentElement!
@@ -499,7 +524,7 @@ describe('lap times (#210)', () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
-    const headers = screen.getAllByRole('table').map(t => rows(t)[0])
+    const headers = screen.getAllByRole('table', { name: 'Laps' }).map(t => rows(t)[0])
     expect(headers).toEqual([['Lap', 'From / To', 'Lap time'], ['Lap', 'From / To', 'Lap time']])
   })
 
@@ -526,11 +551,11 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
-    expect(screen.queryAllByRole('table')).toHaveLength(0)
+    expect(screen.queryAllByRole('table', { name: 'Laps' })).toHaveLength(0)
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
-    expect(screen.getAllByRole('table')).toHaveLength(2)
+    expect(screen.getAllByRole('table', { name: 'Laps' })).toHaveLength(2)
     await userEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
-    expect(screen.queryAllByRole('table')).toHaveLength(0)
+    expect(screen.queryAllByRole('table', { name: 'Laps' })).toHaveLength(0)
   })
 
   it('closes on Escape without saving', async () => {

@@ -3,6 +3,8 @@ import { Timer } from 'lucide-react'
 import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
 
+const chip = 'inline-flex items-center gap-1 rounded-md bg-gray-900 px-1.5 py-0.5 font-mono font-bold tabular-nums text-white'
+
 /**
  * The best lap's time in a dark chip, so it stands out from the rest (#210).
  * In a table it's pulled left by its own padding (`aligned`), so its digits
@@ -12,7 +14,7 @@ import type { Lap } from '../utils/lapTimes'
 export function BestChip({ ms, allTime, aligned }: { ms: number; allTime?: boolean; aligned?: boolean }) {
   return (
     <span
-      className={`${aligned ? '-ml-1.5 ' : ''}inline-flex items-center gap-1 rounded-md bg-gray-900 px-1.5 py-0.5 font-mono font-bold tabular-nums text-white`}
+      className={`${aligned ? '-ml-1.5 ' : ''}${chip}`}
       data-best-lap
       {...(allTime ? { 'data-all-time-best': true, title: 'All time best' } : {})}
     >
@@ -53,6 +55,63 @@ export function SpeedFigures({ laps }: { laps: Lap[] }) {
       {top !== undefined && <Speedline label="Top" mph={top} />}
       {average !== undefined && <Speedline label="Avg" mph={average} />}
     </dl>
+  )
+}
+
+/**
+ * A session card's figures (#324), in a small table: the average and best
+ * lap, and under them the average and top speed when they're logged
+ * (#298). The best lap and the top speed are in chips, pulled left so
+ * their digits line up with the column's heading. Out and in laps don't
+ * count; `allTimeBest` marks the best lap when it's the best on this layout
+ * too. The columns are the same widths on every card, so they line up down
+ * the page.
+ */
+export function SessionFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: number }) {
+  const stats = lapStats(laps)
+  const speeds = lapSpeeds(laps)
+  const hasSpeeds = speeds.top !== undefined || speeds.average !== undefined
+  const figure = 'py-0.5 font-mono font-semibold tabular-nums text-gray-900'
+  return (
+    <table className="w-full table-fixed text-left text-xs" aria-label="Session figures">
+      <colgroup>
+        <col className="w-[4.5rem]" />
+        <col />
+        <col />
+      </colgroup>
+      <thead className="text-[11px] text-gray-500">
+        <tr>
+          <td />
+          <th scope="col" className="pb-1 font-medium">Average</th>
+          <th scope="col" className="pb-1 font-medium">{hasSpeeds ? 'Best / top' : 'Best'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row" className="py-0.5 font-normal text-gray-500">Lap time</th>
+          <td className={figure}>{stats.average !== undefined ? formatAverage(laps, stats.average) : '—'}</td>
+          <td className={figure}>
+            {stats.best !== undefined ? <BestChip ms={stats.best} allTime={stats.best === allTimeBest} aligned /> : '—'}
+          </td>
+        </tr>
+        {hasSpeeds && (
+          <tr data-speed-figures>
+            <th scope="row" className="py-0.5 font-normal text-gray-500">Speed</th>
+            <td className={figure}>{speeds.average !== undefined ? <Mph mph={speeds.average} /> : '—'}</td>
+            <td className={figure}>{speeds.top !== undefined ? <Mph mph={speeds.top} top /> : '—'}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  )
+}
+
+function Mph({ mph, top }: { mph: number; top?: boolean }) {
+  return (
+    <>
+      {top ? <span className={`-ml-1.5 ${chip}`} data-top-speed>{formatSpeed(mph)}</span> : formatSpeed(mph)}
+      {' '}<span className="font-sans font-normal text-gray-400">mph</span>
+    </>
   )
 }
 

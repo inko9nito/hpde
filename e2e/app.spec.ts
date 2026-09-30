@@ -526,12 +526,14 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
-  await expect(card.getByLabel('Session figures').getByRole('definition')).toHaveText(['2', '1:49.0', '1:46'])
-  await expect(card.getByLabel('Session speeds').getByRole('definition')).toHaveText(['103.9', '69.5'])
+  // A compact table (#324): average and best lap, then average and top speed.
+  await expect(card).toContainText('Laps & speeds · 2 laps')
+  await expect(card.getByLabel('Session figures').locator('tbody').getByRole('cell')).toHaveText(['1:49.0', '1:46', '69.5 mph', '103.9 mph'])
   // Tapping anywhere on the figures opens the laps (the toggle covers them).
   // Below the chart on a phone, so scrolled to first, as a thumb would.
-  await card.getByRole('definition').first().scrollIntoViewIfNeeded()
-  const figure = (await card.getByRole('definition').first().boundingBox())!
+  const firstFigure = card.getByLabel('Session figures').locator('tbody').getByRole('cell').first()
+  await firstFigure.scrollIntoViewIfNeeded()
+  const figure = (await firstFigure.boundingBox())!
   await page.mouse.click(figure.x + 4, figure.y + 4)
   await expect(card.getByRole('button', { name: 'Hide laps for Session 1' })).toHaveAttribute('aria-expanded', 'true')
   await expect(card.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
