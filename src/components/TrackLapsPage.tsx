@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { Timer } from 'lucide-react'
+import { Check, Timer } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { TrackIcon } from './TrackIcon'
 import { SignInPrompt } from './SignInPrompt'
@@ -13,14 +13,18 @@ import { LapTrendChart, dayLabel, fullDate, withTopSpeed } from './LapTrendChart
 import type { TrendPoint } from './LapTrendChart'
 import { useAuth } from '../auth/AuthContext'
 import { useTrackLaps } from '../data/lapLog'
+import { useRsvps } from '../data/RsvpsContext'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import { eventBest, eventsOnLayout, layoutName, layoutSlug, startDate } from '../utils/trackStats'
 import { formatAverage, formatSpeed, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import { classifyEvent } from '../utils/eventClass'
+import { goingIds, myRunGroup } from '../utils/rsvp'
+import type { Rsvp } from '../utils/rsvp'
 import { opensElsewhere } from '../utils/links'
 import type { EventConfig } from '../types'
+import type { EventTabId } from './EventTabs'
 
 export const TRACK_HASH_PREFIX = '#/track/'
 
@@ -46,27 +50,33 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
  * the date; the name over the driver's run group and the organizer; and
  * their best lap there (the black chip, as everywhere) over their average,
  * across every session, and the fastest they went there (#298). Opens the
- * event, on My notes, for its sessions.
+ * event, on My notes, for its sessions — or, with none logged yet (#320),
+ * on its Schedule, where they're added: Going there instead of the figures
+ * when it's still to come.
  */
-function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
+function EventLapsCard({ event, sessions, rsvp, allTimeBest, onOpen }: {
   event: EventConfig
   sessions: SessionLaps[]
+  /** Their answer, for the run group they said, before they've laps. */
+  rsvp?: Rsvp
   allTimeBest?: number
-  onOpen: () => void
+  onOpen: (tab: EventTabId) => void
 }) {
   const status = classifyEvent(event)
   const laps = sessions.flatMap(s => s.laps)
   const { average, best } = lapStats(laps)
   const peak = lapSpeeds(laps).top
-  // The group(s) they drove in, as the schedule lists them.
-  const groups = [...new Set(sessions.map(s => s.group))]
+  // The group(s) they drove in, as the schedule lists them; before any
+  // laps, the one they said they're in.
+  const said = myRunGroup(event, rsvp)
+  const groups = sessions.length ? [...new Set(sessions.map(s => s.group))] : said ? [said] : []
   return (
     <a
       href={`#/event/${encodeURIComponent(event.id)}`}
       onClick={e => {
         if (opensElsewhere(e)) return
         e.preventDefault()
-        onOpen()
+        onOpen(sessions.length ? 'notes' : 'schedule')
       }}
       className={`${CARD_SHELL} transition-colors hover:border-gray-400`}
     >
@@ -81,6 +91,16 @@ function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
           {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
         </div>
       </div>
+      {sessions.length === 0 ? (
+        status === 'past' ? (
+          <span className="shrink-0 text-xs text-gray-400">No laps</span>
+        ) : (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 font-rubik text-[11px] font-medium leading-none text-emerald-700">
+            <Check size={11} strokeWidth={3} aria-hidden="true" />
+            Going
+          </span>
+        )
+      ) : (
       <dl className="flex shrink-0 flex-col items-end gap-1" aria-label="Event figures">
         <div className="flex">
           <dt className="sr-only">Best</dt>
@@ -100,6 +120,7 @@ function EventLapsCard({ event, sessions, allTimeBest, onOpen }: {
           </div>
         )}
       </dl>
+      )}
     </a>
   )
 }
@@ -142,18 +163,19 @@ interface Props {
   /** On top, not under an event opened from it: back on top, its laps are fetched again. */
   active: boolean
   onBack: () => void
-  /** Opens one of the events, on its My notes tab. */
-  onOpenEvent: (event: EventConfig) => void
+  /** Opens one of the events: on My notes for its laps, or its Schedule to add them. */
+  onOpenEvent: (event: EventConfig, tab: EventTabId) => void
   /** To the Tracks tab. */
   onAllTracks: () => void
 }
 
 /**
- * A track page (#274): the events on one layout — the same track,
+ * A track page (#274): the driver's events on one layout — the same track,
  * configuration and direction, as the All time best card counts them —
- * that the driver has laps at, newest first, under their all-time best
- * there. Each event opens its own page for its sessions. Private: it needs
- * a sign-in.
+ * newest first, under their all-time best there: the ones they have laps
+ * at, and the ones they said they're going to or went to, laps or not
+ * (#320). Each event opens its own page for its sessions. Private: it
+ * needs a sign-in.
  */
 export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBack, onOpenEvent, onAllTracks }: Props) {
   const { status: authStatus } = useAuth()
@@ -161,6 +183,10 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
   const title = trackPageTitle(slug, events)
   const eventIds = useMemo(() => (onLayout.length ? onLayout.map(e => e.id).sort() : null), [onLayout])
   const laps = useTrackLaps(eventIds, driver?.id ?? null)
+  // Your own answers; an admin looking at another driver's laps has only theirs.
+  const { status: rsvpsStatus, rsvps } = useRsvps()
+  const answers = useMemo(() => (driver ? {} : rsvps), [driver, rsvps])
+  const going = useMemo(() => goingIds(onLayout, answers), [onLayout, answers])
   const name = driver ? driverName(driver) : null
   const whose = name ? `${name}’s` : 'your'
 
@@ -172,17 +198,17 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     wasActive.current = active
   }, [active, reload])
 
-  const loading = authStatus === 'signed-in' && (laps.status === 'loading' || (laps.status === 'off' && !eventsLoaded))
+  const loading = authStatus === 'signed-in'
+    && (laps.status === 'loading' || (laps.status === 'off' && !eventsLoaded) || (!driver && rsvpsStatus === 'loading'))
   const leaving = useSkeletonFade(loading)
 
-  // The newest event first.
-  const byId = new Map(onLayout.map(e => [e.id, e]))
-  const withLaps = laps.events
-    .flatMap(({ eventId, sessions }) => {
-      const event = byId.get(eventId)
-      return event && sessions.length ? [{ event, sessions }] : []
-    })
+  // Theirs, the newest first: laps at it, or a yes to it (#320).
+  const sessionsOf = new Map(laps.events.filter(e => e.sessions.length).map(e => [e.eventId, e.sessions]))
+  const mine = onLayout
+    .filter(e => sessionsOf.has(e.id) || going.has(e.id))
+    .map(event => ({ event, sessions: sessionsOf.get(event.id) ?? [] }))
     .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
+  const withLaps = mine.filter(g => g.sessions.length)
   const allSessions = withLaps.flatMap(g => g.sessions)
   const best = eventBest(allSessions)
   // Each event's best and average, oldest first, for the chart.
@@ -256,9 +282,9 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
         </button>
       </div>
     )
-  } else if (withLaps.length === 0) {
-    body = (
-      <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
+  } else {
+    const noLaps = (
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
         <Timer size={20} className="mx-auto text-gray-400" aria-hidden="true" />
         <p className="mt-2 text-sm font-medium text-gray-700">No lap times on {title?.name ?? 'this track'} yet</p>
         <p className="mt-1 text-xs text-gray-400">
@@ -268,10 +294,10 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
         </p>
       </div>
     )
-  } else {
     body = (
       <div className="fade-in">
         <div className="mb-8">
+          {withLaps.length === 0 ? noLaps : (
           <StatCard
             label="All time best"
             ms={best}
@@ -284,20 +310,30 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
               </div>
             )}
           </StatCard>
+          )}
         </div>
+        {/* Theirs whether or not they've laps there (#320). */}
+        {mine.length > 0 && (
         <section aria-labelledby="track-events-heading">
           {/* Headed like the Events list's Past. */}
           <h2 id="track-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
             Events
           </h2>
           <ul className="space-y-3">
-            {withLaps.map(({ event, sessions }) => (
+            {mine.map(({ event, sessions }) => (
               <li key={event.id}>
-                <EventLapsCard event={event} sessions={sessions} allTimeBest={best} onOpen={() => onOpenEvent(event)} />
+                <EventLapsCard
+                  event={event}
+                  sessions={sessions}
+                  rsvp={answers[event.id]}
+                  allTimeBest={best}
+                  onOpen={tab => onOpenEvent(event, tab)}
+                />
               </li>
             ))}
           </ul>
         </section>
+        )}
       </div>
     )
   }

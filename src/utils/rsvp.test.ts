@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { answerFor, cleanRsvp, myEvents, myRunGroup, needsAnswer } from './rsvp'
+import { answerFor, cleanRsvp, goingIds, myEvents, myRunGroup, needsAnswer } from './rsvp'
 import type { EventConfig } from '../types'
 
 const event = (id: string, date: string): EventConfig => ({
@@ -52,6 +52,12 @@ describe('My events (#235)', () => {
     expect(answerFor(past, { past: { status: 'maybe' } }, TODAY)).toBeNull()
     expect(answerFor(soon, { soon: { status: 'maybe' } }, TODAY)).toBe('maybe')
     expect(myEvents([past], { past: { status: 'maybe' } }, TODAY)).toEqual([])
+  })
+
+  it('knows the events they said yes to — not a maybe, nor a no (#320)', () => {
+    const rsvps = { past: { status: 'going' as const }, soon: { status: 'maybe' as const }, later: { status: 'not-going' as const }, live: { status: 'going' as const } }
+    expect([...goingIds(events, rsvps, TODAY)].sort()).toEqual(['live', 'past'])
+    expect(goingIds(events, {}, TODAY).size).toBe(0)
   })
 
   it('knows their run group, if it’s still one of the event’s', () => {

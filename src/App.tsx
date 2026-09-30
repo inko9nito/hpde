@@ -357,15 +357,16 @@ export default function App() {
     setHash(HOME_TAB_HASH[homeTab])
   }
 
-  // From a track page, one of its events, for its sessions: My notes, with
-  // whoever's laps the track page showed. It slides in over the track page
+  // From a track page, one of its events, for its sessions: My notes (or,
+  // with no laps there yet, the Schedule to add them), with whoever's laps
+  // the track page showed. It slides in over the track page
   // — except the event the track page was opened from, already in place
   // under it, which the track page slides away to reveal.
-  function openEventNotes(event: EventConfig) {
+  function openEventNotes(event: EventConfig, tab: EventTabId = 'notes') {
     // The event it was opened from keeps its day and filters.
     if (event.id !== activeEvent.id) selectEvent(event)
     setLapDriver(stack.trackDriver)
-    setActiveTab('notes')
+    setActiveTab(tab)
     skipPushEnterAnimationRef.current = event.id === trackOverEventId
     setHash(eventHash(event.id))
   }

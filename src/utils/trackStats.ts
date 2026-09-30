@@ -148,15 +148,24 @@ export function trackGroups(layouts: Layout[]): TrackGroup[] {
   return [...groups.values()].map(g => ({ ...g, layouts: g.layouts.sort(byName) }))
 }
 
-/** The driver's laps on a layout, from the laps function's summary: best lap, sessions, and events with laps. */
-export function layoutLaps(layout: Layout, summary: EventBest[]): { best?: number; sessions: number; events: number } {
+/**
+ * The driver's laps on a layout, from the laps function's summary: best
+ * lap and sessions, and their events there (#320) — the ones they have
+ * sessions at, and the ones in `going`, that they said they're going to.
+ */
+export function layoutLaps(
+  layout: Layout,
+  summary: EventBest[],
+  going: ReadonlySet<string> = new Set(),
+): { best?: number; sessions: number; events: number } {
   const ids = new Set(layout.events.map(e => e.id))
   const mine = summary.filter(s => ids.has(s.eventId) && s.sessions > 0)
   const bests = mine.map(s => s.best).filter((ms): ms is number => ms !== undefined)
+  const events = new Set([...mine.map(s => s.eventId), ...[...going].filter(id => ids.has(id))])
   return {
     ...(bests.length ? { best: Math.min(...bests) } : {}),
     sessions: mine.reduce((n, s) => n + s.sessions, 0),
-    events: mine.length,
+    events: events.size,
   }
 }
 

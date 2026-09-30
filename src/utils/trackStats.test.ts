@@ -153,5 +153,8 @@ describe('the Tracks tab (#274)', () => {
     ]
     expect(layoutLaps(layout, summary)).toEqual({ best: 98_540, sessions: 3, events: 2 })
     expect(layoutLaps(layout, [])).toEqual({ sessions: 0, events: 0 })
+    // Events they said they're going to count too, each once, and only on this layout (#320).
+    expect(layoutLaps(layout, summary, new Set([scca.id, ccw.id]))).toEqual({ best: 98_540, sessions: 3, events: 2 })
+    expect(layoutLaps(layout, [], new Set([tde.id, ccw.id]))).toEqual({ sessions: 0, events: 1 })
   })
 })

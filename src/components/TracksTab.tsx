@@ -8,6 +8,8 @@ import { plural } from './LapSessions'
 import { useEvents } from '../data/EventsContext'
 import { useAuth } from '../auth/AuthContext'
 import { useLapSummary } from '../data/lapLog'
+import { useRsvps } from '../data/RsvpsContext'
+import { goingIds } from '../utils/rsvp'
 import { layoutLaps, layoutsOf, trackGroups } from '../utils/trackStats'
 import type { EventBest, Layout, TrackGroup } from '../utils/trackStats'
 
@@ -22,11 +24,12 @@ const ICON = 84
 
 /**
  * One layout: its shape on a wide dark panel along the card's left edge,
- * its name, and how many events you have sessions at there. Opens its
- * track page, with your laps.
+ * its name, and how many of your events are on it: ones you're going to
+ * or went to, or have sessions at (#320). Opens its track page, with those
+ * events and your laps.
  */
-function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | null }) {
-  const laps = summary ? layoutLaps(layout, summary) : null
+function TrackRow({ layout, summary, going }: { layout: Layout; summary: EventBest[] | null; going: ReadonlySet<string> | null }) {
+  const laps = summary && going ? layoutLaps(layout, summary, going) : null
   const DirectionIcon = layout.direction === 'ccw' ? RotateCcw : RotateCw
   return (
     <a
@@ -54,12 +57,12 @@ function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | 
       <div className="flex min-w-0 flex-1 items-center gap-4 py-4 pl-4 pr-3">
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{layout.name}</div>
-          {/* The events you have sessions at, not the sessions (#314); nothing until your laps are in. */}
+          {/* Your events, not the sessions (#314, #320); nothing until your laps and answers are in. */}
           {laps && (laps.events ? (
             <div className="mt-0.5 truncate text-sm text-gray-500">{plural(laps.events, 'event', 'events')}</div>
           ) : (
             // Faded: a note, not a count to read.
-            <div className="mt-0.5 truncate text-xs text-gray-400">No sessions yet</div>
+            <div className="mt-0.5 truncate text-xs text-gray-400">No events yet</div>
           ))}
         </div>
         <ChevronRight size={18} className="-ml-2 shrink-0 text-gray-300" aria-hidden="true" />
@@ -69,7 +72,7 @@ function TrackRow({ layout, summary }: { layout: Layout; summary: EventBest[] | 
 }
 
 /** A track's layouts under its name and where it is (#314). */
-function TrackSection({ group, summary }: { group: TrackGroup; summary: EventBest[] | null }) {
+function TrackSection({ group, summary, going }: { group: TrackGroup; summary: EventBest[] | null; going: ReadonlySet<string> | null }) {
   return (
     <section aria-label={group.name}>
       <div className="mb-2">
@@ -79,7 +82,7 @@ function TrackSection({ group, summary }: { group: TrackGroup; summary: EventBes
       <ul className="space-y-4">
         {group.layouts.map(layout => (
           <li key={layout.slug}>
-            <TrackRow layout={layout} summary={summary} />
+            <TrackRow layout={layout} summary={summary} going={going} />
           </li>
         ))}
       </ul>
@@ -101,14 +104,20 @@ function TrackRowSkeleton() {
 
 /**
  * The Tracks tab (#274): every track layout the events are on, grouped by
- * track (#314), with the driver's best lap on each once they're signed in.
- * Each opens its track page, with every session they've logged there.
+ * track (#314), with how many of the driver's events are on each once
+ * they're signed in. Each opens its track page, with those events.
  */
 export function TracksTab() {
   const { events, loaded } = useEvents()
   const { status } = useAuth()
   const groups = useMemo(() => trackGroups(layoutsOf(events)), [events])
   const summary = useLapSummary(status === 'signed-in')
+  const { status: rsvpsStatus, rsvps } = useRsvps()
+  // The events they said yes to; none if their answers couldn't load.
+  const going = useMemo(
+    () => (rsvpsStatus === 'loading' ? null : goingIds(events, rsvps)),
+    [rsvpsStatus, events, rsvps],
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -120,7 +129,7 @@ export function TracksTab() {
           <ul className="space-y-6" aria-label="Tracks">
             {groups.map(group => (
               <li key={group.name}>
-                <TrackSection group={group} summary={summary} />
+                <TrackSection group={group} summary={summary} going={going} />
               </li>
             ))}
           </ul>
