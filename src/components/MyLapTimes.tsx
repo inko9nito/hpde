@@ -82,23 +82,28 @@ export function MyLapTimes({
 
   // The car they drove, first of all: one line, which opens its details.
   const carRow = garage?.status === 'ready' && (
-    <div className="mb-3">
+    <div className="mb-5">
       {garage.car
         ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
         : <CarRow compact title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
     </div>
   )
 
-  const header = (<>
-    {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
-    {carRow}
+  // Expand all and Private: at the top until there are sessions to list,
+  // then just over them, by the cards it opens (#361).
+  const toolbar = (
     <LapsToolbar
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
       onOpen={setOpen}
       whose={name}
     />
+  )
+  const top = (<>
+    {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
+    {carRow}
   </>)
+  const header = <>{top}{toolbar}</>
 
   if (loading || leaving) {
     return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label={`Loading ${whose} lap times`} /></>
@@ -178,7 +183,7 @@ export function MyLapTimes({
 
   return (
     <>
-      {header}
+      {top}
       <div className="fade-in">
         {log.sessions.length > 0 && <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <StatCard
@@ -205,6 +210,7 @@ export function MyLapTimes({
             <LapTrendChart points={trend} label="Best and average lap in each session, in schedule order" noun={['session', 'sessions']} />
           </div>
         )}
+        {toolbar}
         <div className="flex flex-col gap-5">
           {sessions.map(session => (
             <SessionLapsCard
