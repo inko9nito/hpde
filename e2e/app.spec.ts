@@ -687,7 +687,7 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' })).toContainText('Unwind the wheel sooner')
-  await page.getByRole('button', { name: 'Add evaluation' }).click()
+  await page.getByRole('button', { name: /^Add instructor evaluation/ }).click()
   const card = page.getByRole('dialog', { name: 'Instructor evaluation' })
   await expect(card).toContainText('You drove inBlue')
   await card.getByLabel('Instructor', { exact: true }).fill('John Harms')

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CarFront, ClipboardCheck, Flag, UserRound } from 'lucide-react'
+import { CarFront, ChevronRight, ClipboardCheck, Flag, UserRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { NEXT_GROUPS, TDE_GROUP_NAMES, TDE_SKILLS } from '../utils/evaluation'
@@ -150,25 +150,26 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
   )
 }
 
-/** An event with no evaluation yet (#340): what it's for, and the way to add it. */
+/**
+ * An event with no evaluation yet (#340): one row, like the session sheet's
+ * (#205), saying what it's for — kept short so the laps below stay in view.
+ */
 export function AddEventEvaluation({ tde, onAdd }: { tde: boolean; onAdd: () => void }) {
   return (
-    <section aria-label="Instructor evaluation" className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-bold text-gray-900">Instructor evaluation</h3>
-        <ClipboardCheck size={18} className="mt-1 shrink-0 text-gray-400" aria-hidden="true" />
-      </div>
-      <p className="mt-1 text-sm text-gray-500">
-        {tde
-          ? 'Add your TDE report card: the run group your instructor recommends, your core skill scores and their notes.'
-          : 'Add what your instructor said about the whole event.'}
-      </p>
-      <button
-        onClick={onAdd}
-        className="mt-4 w-full rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-700"
-      >
-        Add evaluation
-      </button>
-    </section>
+    <button
+      onClick={onAdd}
+      className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
+        <ClipboardCheck size={18} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-gray-900">Add instructor evaluation</span>
+        <span className="mt-0.5 block text-xs text-gray-500">
+          {tde ? 'Your TDE report card: run groups, skills and notes' : 'What your instructor said about the whole event'}
+        </span>
+      </span>
+      <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+    </button>
   )
 }

@@ -806,8 +806,9 @@ describe('instructor evaluation (#340)', () => {
   it('adds the whole event’s evaluation on any event: on others, just the instructor and their notes', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    expect(screen.getByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('Add what your instructor said about the whole event.')
-    await userEvent.click(screen.getByRole('button', { name: 'Add evaluation' }))
+    const add = screen.getByRole('button', { name: /^Add instructor evaluation/ })
+    expect(add).toHaveTextContent('What your instructor said about the whole event')
+    await userEvent.click(add)
     const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })
     // None of TDE's report card.
     expect(within(sheet).queryByLabelText('Car')).not.toBeInTheDocument()
@@ -834,13 +835,13 @@ describe('instructor evaluation (#340)', () => {
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
     expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add evaluation' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Add instructor evaluation/ })).not.toBeInTheDocument()
   })
 
   it('keeps the whole event’s evaluation after leaving the event and coming back', async () => {
     openTde()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Add evaluation' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Add instructor evaluation/ }))
     fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save evaluation' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -856,7 +857,7 @@ describe('instructor evaluation (#340)', () => {
     rsvps = { [tde.id]: { status: 'going', runGroup: 'pink' } }
     openTde()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Add evaluation' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Add instructor evaluation/ }))
     const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })
     // Their group is the event's, shown, not picked.
     expect(sheet).toHaveTextContent('You drove inPink')
@@ -922,7 +923,7 @@ describe('instructor evaluation (#340)', () => {
     await userEvent.click(within(again).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(notesCalls('DELETE')[0][0]).toContain('evaluation=1')
-    expect(screen.getByRole('button', { name: 'Add evaluation' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
   })
 })
 
