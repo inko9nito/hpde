@@ -18,6 +18,12 @@ const TOP_BAR_PX = 52
 /** Height of the title block under it — fixed (the name truncates) so
  *  the header knows exactly how far to scroll before it sticks. */
 const TITLE_BLOCK_PX = 96
+
+/** How much taller than the screen an event page is, at least: room to
+ *  scroll the whole title block away. A shorter page (a Details tab, a
+ *  day with no schedule) could fold the title into the top bar but not
+ *  slide the empty block out from under it (#305). */
+export const EVENT_PAGE_MIN_HEIGHT = `calc(100vh + ${TITLE_BLOCK_PX}px)`
 /** Scroll distance over which the title block fades out as it rises
  *  toward the top bar — fully gone before it reaches the chevron row
  *  (Figma 2043:6837). The compact title takes over from here. */

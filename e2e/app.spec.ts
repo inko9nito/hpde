@@ -959,3 +959,20 @@ test('a driver joins events from the list or the event’s header — going, may
   await expect(page.getByRole('dialog', { name: 'Did you drive this event?' }).getByRole('radio'))
     .toHaveText(['I drove', 'I didn’t drive'])
 })
+
+// A short tab could fold the title into the top bar but not scroll the
+// empty title block away, leaving a white gap over the tabs (#305). Every
+// event page has room to scroll it all the way: the tabs end up right
+// under the top bar.
+test('a short tab folds the event header all the way', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${alpha.id}`)
+  const heading = page.getByRole('heading', { level: 1, name: alpha.name })
+  await heading.waitFor()
+  await page.getByRole('tab', { name: 'Details' }).click()
+  const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await scroller.evaluate(el => el.scrollTo(0, el.scrollHeight))
+  // The top bar is 52px tall; the tabs stick right under it.
+  const tabs = page.getByRole('tablist', { name: 'Event section' })
+  await expect.poll(async () => Math.round((await tabs.boundingBox())!.y)).toBe(52)
+})
