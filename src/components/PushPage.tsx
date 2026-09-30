@@ -44,6 +44,12 @@ interface Props {
    */
   skipEnterAnimation?: boolean
   /**
+   * The browser has already slid this page in or out itself — an iOS
+   * swipe back or forward (#355) — so it opens or closes in place, rather
+   * than sliding across a second time.
+   */
+  instant?: boolean
+  /**
    * The page's top edge is a white header (the event page), so once in
    * place its backdrop turns white to match. False for pages that are
    * gray-50 all the way up — Share, iOS widget (#273).
@@ -70,17 +76,28 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, whiteHeader = true, from = 'right', raised = false }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, instant = false, whiteHeader = true, from = 'right', raised = false }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
-  // frame never paints and the transition doesn't fire. The one
-  // exception is skipEnterAnimation, which renders already in position.
-  const [inPosition, setInPosition] = useState(() => open && !!skipEnterAnimation)
+  // frame never paints and the transition doesn't fire. The exceptions
+  // are skipEnterAnimation and instant, which render already in position.
+  const [inPosition, setInPosition] = useState(() => open && (!!skipEnterAnimation || instant))
   const isFirstRun = useRef(true)
   // Fully in place, as opposed to on its way in or out. The status bar
   // tint (#245) follows this rather than `open`, so it doesn't turn white
   // before the page has slid in, and turns back as soon as it leaves.
-  const [entered, setEntered] = useState(() => open && !!skipEnterAnimation)
+  const [entered, setEntered] = useState(() => open && (!!skipEnterAnimation || instant))
+  // Opened or closed by a swipe the browser has already animated (#355):
+  // in place (or off-screen) in the same render, so the page it swiped
+  // away never shows again.
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (instant) {
+      setInPosition(open)
+      setEntered(open)
+    }
+  }
   useEffect(() => {
     if (!open) setEntered(false)
   }, [open])
@@ -95,7 +112,12 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       isFirstRun.current = false
       // inPosition already matches `open` from the state initializer
       // above — nothing to animate for this first run.
-      if (skipEnterAnimation) return
+      if (skipEnterAnimation || instant) return
+    }
+    if (instant) {
+      // Already out of sight, with no slide to wait for.
+      if (!open) onExited?.()
+      return
     }
     if (open) {
       const id = requestAnimationFrame(() => setInPosition(true))
@@ -121,7 +143,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         transform: from === 'bottom'
           ? `translateY(${inPosition ? '0' : '100%'})`
           : `translateX(${inPosition ? '0' : '100%'})`,
-        transition: `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
+        transition: instant ? 'none' : `transform ${PUSH_DURATION_MS}ms ${PUSH_EASING}`,
         willChange: 'transform',
         // Cast onto the page it's covering: left of a push, above a modal.
         boxShadow: from === 'bottom'

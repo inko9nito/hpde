@@ -373,6 +373,77 @@ test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }
   }
 })
 
+// Safari's word for a history move it has slid across the screen itself:
+// an iOS swipe back or forward. `swipe()` makes the next move say so.
+async function stubSwipes(page: Page) {
+  await page.addInitScript(() => {
+    let swiping = false
+    Object.defineProperty(PopStateEvent.prototype, 'hasUAVisualTransition', { configurable: true, get: () => swiping })
+    Object.assign(window, {
+      swipe(direction: 'back' | 'forward') {
+        swiping = true
+        addEventListener('hashchange', () => { swiping = false }, { once: true })
+        history[direction]()
+      },
+    })
+  })
+}
+
+function swipe(page: Page, direction: 'back' | 'forward') {
+  return page.evaluate(direction => (window as unknown as { swipe(d: string): void }).swipe(direction), direction)
+}
+
+// Follows the page with this heading, frame by frame, through the history
+// move `move()` makes, until it's settled: whether it was ever seen partway
+// across the screen — sliding.
+async function seenSliding(page: Page, move: () => Promise<unknown>, heading: string) {
+  const track = page.evaluate(heading => new Promise<boolean>(resolve => {
+    const from = location.hash
+    let sliding = false
+    let still = 0
+    let last: number | undefined
+    const step = () => {
+      const h = [...document.querySelectorAll('h1')].find(el => el.textContent === heading)
+      const left = h?.closest<HTMLElement>('.fixed')?.getBoundingClientRect().left
+      if (left !== undefined && left > 1 && left < innerWidth - 1) sliding = true
+      still = left === last ? still + 1 : 0
+      last = left
+      if (location.hash !== from && still > 10) return resolve(sliding)
+      requestAnimationFrame(step)
+    }
+    step()
+  }), heading)
+  await move()
+  return track
+}
+
+test('a page iOS has swiped away, or back, doesn’t slide across again after it (#355)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await stubSwipes(page)
+  for (const [start, opener, heading] of [
+    ['/#/more', page.getByRole('link', { name: /^Instructor evaluations/ }), 'Instructor evaluations'],
+    ['/#/', page.getByRole('button', { name: new RegExp(alpha.name) }), alpha.name],
+  ] as const) {
+    await page.goto(start)
+    const slide = await trackSlide(page, () => opener.click(), heading)
+    expect(slide).toEqual({ fromBelow: false, fromSide: true })
+
+    // Swiped back: gone, not slid out over the page under it.
+    expect(await seenSliding(page, () => swipe(page, 'back'), heading)).toBe(false)
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toHaveCount(0)
+    await expect(opener).toBeInViewport()
+
+    // Swiped forward: in place, not slid in again.
+    expect(await seenSliding(page, () => swipe(page, 'forward'), heading)).toBe(false)
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeInViewport()
+
+    // Back any other way — the browser's button — still slides it out.
+    expect(await seenSliding(page, () => page.evaluate(() => history.back()), heading)).toBe(true)
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toHaveCount(0)
+  }
+})
+
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
