@@ -81,9 +81,23 @@ describe('event page header (#216)', () => {
     gotoEvent(EVENTS[0].id)
     renderApp()
     const heading = screen.getByRole('heading', { level: 1, name: EVENTS[0].name })
-    const titleBlock = heading.parentElement!
-    expect(titleBlock).toHaveTextContent(/Past$/)
+    // On the date line, under the name — the track follows on its own line (#305).
+    expect(heading.nextElementSibling).toHaveTextContent(/Past$/)
     expect(screen.queryByText('This event has passed.')).not.toBeInTheDocument()
+  })
+
+  it('leads with the big date, and the track second (#305)', () => {
+    gotoEvent(EVENTS[0].id)
+    renderApp()
+    const heading = screen.getByRole('heading', { level: 1, name: EVENTS[0].name })
+    const titleRow = heading.parentElement!.parentElement!
+    const [y, m, d] = EVENTS[0].days[0].date.split('-').map(Number)
+    const month = new Date(2000, m - 1, 1).toLocaleDateString('en-US', { month: 'short' })
+    // Month over day (and the year, once it isn't this year), ahead of the
+    // name; the track's layout after the date line.
+    expect(titleRow).toHaveTextContent(new RegExp(`^${month}${d}(${y})?${EVENTS[0].name}`))
+    expect(titleRow).toHaveTextContent(/MSRC 2\.0 CW$/)
+    expect(titleRow.querySelector('[data-track-icon]')).not.toBeNull()
   })
 
   it('shows a LIVE badge on the date line of a live event', () => {

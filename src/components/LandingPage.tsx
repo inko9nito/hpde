@@ -6,8 +6,8 @@ import { answerFor, myEvents, needsAnswer } from '../utils/rsvp'
 import { RsvpPicker } from './RsvpPicker'
 import { useAuth } from '../auth/AuthContext'
 import { ADMIN_ROLE } from './NewEventPage'
-import { firstDate, partitionEvents } from '../utils/eventClass'
-import { todayLocalISO } from '../utils/time'
+import { partitionEvents } from '../utils/eventClass'
+import { DateBlock } from './DateBlock'
 import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { FadedTrack, TrackIcon } from './TrackIcon'
@@ -51,32 +51,6 @@ const CARD_BOX = `${CARD_FRAME} ${CARD_PADDING}`
 // empty state — shares this shell (p-4 + 48px tile + border = 82px),
 // so swapping between them never shifts the page.
 export const CARD_SHELL = `flex items-center gap-4 ${CARD_BOX}`
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** Month + day-of-month tile on the left of a card. A multi-day event
- *  shows only its first day (#243). The year goes under the day, only
- *  when it isn't this year (#266). `dark` is for the featured card's
- *  near-black background (#276). */
-export function DateBlock({ event, muted, dark = false }: { event: EventConfig; muted: boolean; dark?: boolean }) {
-  if (event.days.length === 0) return <div className="w-10 shrink-0" />
-  const [y, m, d] = firstDate(event).split('-').map(Number)
-  const thisYear = Number(todayLocalISO().slice(0, 4))
-  const monthColor = muted ? 'text-gray-500' : dark ? 'text-red-400' : 'text-red-600'
-  return (
-    <div className="flex w-10 shrink-0 flex-col items-center font-rubik leading-none">
-      <span className={`text-[11px] font-medium uppercase tracking-wider ${monthColor}`}>
-        {MONTHS[m - 1]}
-      </span>
-      <span className={`mt-1 text-2xl font-bold ${dark ? 'text-white' : 'text-gray-900'}`}>{d}</span>
-      {y !== thisYear && (
-        <span className={`mt-0.5 text-[11px] font-normal tracking-wider ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
-          {y}
-        </span>
-      )}
-    </div>
-  )
-}
 
 /** Event name (with a LIVE pill when it's on today) over its organizer. */
 export function EventTitle({ event, live }: { event: EventConfig; live: boolean }) {
