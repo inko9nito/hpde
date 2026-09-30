@@ -122,6 +122,10 @@ their own events. No extra Netlify setup is needed for Blobs.
   (`netlify/lib/pastEvents.mjs`). With no organizer's schedule, each
   lists only one run group's sessions, at the times its laps started.
   After that they're ordinary events: edit or delete them in the app.
+  Oct 4–5 has the organizer's schedule now (#339): a store that already
+  had the event gets it once, unless it's been edited in the app, and
+  laps logged at a session's start time rather than the schedule's move
+  onto that session (`MOVED_SESSIONS` in `netlify/functions/laps.mts`).
 
 **Make yourself an admin (one time)**
 1. Sign in on the Netlify site once with Google, so your user exists.
