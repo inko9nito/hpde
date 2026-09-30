@@ -42,11 +42,26 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
+// dist/hpde-widget.js and dist/hpde-widget-loader.js: the Scriptable widget
+// and its loader, served from the site so the loader works whether or not the
+// repo is public (#351).
+const WIDGET_FILES = ['hpde-widget.js', 'hpde-widget-loader.js']
+function widgetScriptsPlugin(): Plugin {
+  return {
+    name: 'hpde-widget-scripts',
+    apply: 'build',
+    writeBundle(options) {
+      const outDir = options.dir ?? 'dist'
+      for (const f of WIDGET_FILES) fs.copyFileSync(path.join('scripts', f), path.join(outDir, f))
+    },
+  }
+}
+
 export default defineConfig({
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime()),
   },
-  plugins: [react(), eventsJsonPlugin(), versionJsonPlugin()],
+  plugins: [react(), eventsJsonPlugin(), versionJsonPlugin(), widgetScriptsPlugin()],
   test: {
     environment: 'jsdom',
     globals: true,

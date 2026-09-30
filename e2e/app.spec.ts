@@ -222,7 +222,7 @@ test('widget setup page offers the loader script', async ({ page }) => {
   await page.goto('/#/widget-setup')
   await expect(page.getByRole('heading', { level: 1, name: 'iOS widget' })).toBeVisible()
   await page.getByRole('button', { name: 'View script' }).click()
-  await expect(page.getByText(/raw\.githubusercontent\.com\/inko9nito\/hpde\/main\/scripts\/hpde-widget\.js/)).toBeVisible()
+  await expect(page.getByText(/myhpde\.netlify\.app\/hpde-widget\.js/)).toBeVisible()
 })
 
 test('share page shares the live address with a QR code', async ({ page }) => {
