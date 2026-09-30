@@ -4,7 +4,7 @@ import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { isAdmin } from '../lib/newEvent.mjs'
 import { findDriver } from '../lib/drivers.mjs'
 import { cleanSessionLaps, lapStats } from '../../src/utils/lapTimes.ts'
-import type { SessionLaps } from '../../src/utils/lapTimes.ts'
+import type { Lap, SessionLaps } from '../../src/utils/lapTimes.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
 import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
 
@@ -16,7 +16,8 @@ import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } f
 // against Identity, and a session saved that way records who saved it.
 // An admin can also name the test account (`driver=test-account`, #309),
 // which starts out full of sample laps (see ensureSeeded). The driver those
-// laps belong to gets them in their own account too (see ensureOwnLaps).
+// laps belong to gets them in their own account too (see ensureOwnLaps),
+// and the sheet's speeds on the laps they'd already logged (ensureOwnSpeeds).
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
@@ -142,6 +143,81 @@ async function ensureOwnLaps({ laps, meta }: { laps: Store; meta: Store }, drive
   await meta.setJSON(doneKey, { at: new Date().toISOString(), kept })
 }
 
+// How far apart a lap the driver logged and a lap in the sheet can be and
+// still be the same lap: typed by hand, a time may be rounded or cut short.
+export const SAME_LAP_MS = 1000
+
+const hasSpeed = (lap: Lap) => lap.topMph !== undefined || lap.avgMph !== undefined
+
+/**
+ * A session's laps with the sheet's speeds (#322) on each lap that has none,
+ * taken from the sheet's lap in the same session that's the same lap: the
+ * one at the same place when both list the same laps (each within
+ * SAME_LAP_MS), otherwise the closest in time within SAME_LAP_MS, each sheet
+ * lap used once. Nothing else about a lap changes; a lap with no match, or
+ * that has a speed already, is left as it is.
+ */
+export function withSheetSpeeds(mine: Lap[], sheet: Lap[]): { laps: Lap[]; added: number } {
+  const close = (a: Lap, b: Lap) => Math.abs(a.ms - b.ms) <= SAME_LAP_MS
+  const from = new Map<number, Lap>()
+  if (mine.length === sheet.length && mine.every((lap, i) => close(lap, sheet[i]))) {
+    mine.forEach((_, i) => from.set(i, sheet[i]))
+  } else {
+    const pairs = mine.flatMap((lap, i) => sheet.flatMap((s, j) => (close(lap, s) ? [{ i, j, off: Math.abs(lap.ms - s.ms) }] : [])))
+    pairs.sort((a, b) => a.off - b.off || Math.abs(a.i - a.j) - Math.abs(b.i - b.j))
+    const used = new Set<number>()
+    for (const { i, j } of pairs) {
+      if (from.has(i) || used.has(j)) continue
+      from.set(i, sheet[j])
+      used.add(j)
+    }
+  }
+  let added = 0
+  const laps = mine.map((lap, i) => {
+    const match = from.get(i)
+    if (hasSpeed(lap) || !match || !hasSpeed(match)) return lap
+    added++
+    return {
+      ...lap,
+      ...(match.topMph !== undefined ? { topMph: match.topMph } : {}),
+      ...(match.avgMph !== undefined ? { avgMph: match.avgMph } : {}),
+    }
+  })
+  return { laps, added }
+}
+
+/**
+ * The sessions the sample's driver already had when their laps were filled
+ * in (#310) were kept as they were: lap times, but no speeds, since they
+ * were logged before speeds were (#322). Once, after that fill, each of
+ * their sessions the sheet has gets the sheet's speeds on its laps (see
+ * withSheetSpeeds) — only the speeds; their times, notes and in/out laps
+ * stay theirs. The record of it says how many laps got speeds, per session.
+ */
+async function ensureOwnSpeeds({ laps, meta }: { laps: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
+  if (!isSampleDriver(email, sha256)) return
+  const doneKey = `sheet-speeds:${driverId}`
+  if (await meta.get(doneKey, { type: 'json' })) return
+  const sessions: { session: string; added: number; of: number }[] = []
+  for (const record of TEST_ACCOUNT_LAPS) {
+    const key = `${driverId}/${record.eventId}`
+    const existing = (await laps.get(key, { type: 'json' })) as EventLaps | null
+    if (!existing) continue
+    let changed = false
+    for (const [k, sheet] of Object.entries(record.sessions)) {
+      const mine = existing.sessions[k]
+      if (!mine || mine.laps.every(hasSpeed)) continue
+      const { laps: withSpeeds, added } = withSheetSpeeds(mine.laps, sheet.laps)
+      sessions.push({ session: `${record.eventId} ${k}`, added, of: mine.laps.length })
+      if (!added) continue
+      existing.sessions[k] = { ...mine, laps: withSpeeds }
+      changed = true
+    }
+    if (changed) await laps.setJSON(key, existing)
+  }
+  await meta.setJSON(doneKey, { at: new Date().toISOString(), sessions })
+}
+
 function inOrder(record: EventLaps | null): SessionLaps[] {
   return Object.values(record?.sessions ?? {}).sort((a, b) => a.key.localeCompare(b.key))
 }
@@ -180,6 +256,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   else {
     await ensureCopied(stores, driverId)
     await ensureOwnLaps(stores, driverId, driverEmail, deps.sampleDriverSha256)
+    await ensureOwnSpeeds(stores, driverId, driverEmail, deps.sampleDriverSha256)
   }
   const store = stores.laps
 
