@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Gauge, Lock } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Lock } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
@@ -251,7 +251,7 @@ function PressuresRow({ pressures, title, onOpen }: { pressures: SessionPressure
     <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-pressures>
       <div className="flex items-center justify-between gap-3">
         <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
-          <Gauge size={13} className="shrink-0" aria-hidden="true" />
+          <Disc3 size={13} className="shrink-0" aria-hidden="true" />
           <span className="truncate">Tire pressures · psi</span>
         </p>
         {onOpen && (

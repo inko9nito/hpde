@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Gauge, Lock, Timer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Lock, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
@@ -275,7 +275,7 @@ export function LapTimesSheet({
           />
           {pressures && (
             <MenuRow
-              icon={Gauge}
+              icon={Disc3}
               title="Tire pressures"
               detail={tires ? pressuresText(tires) : 'Each corner, before the session and hot after it'}
               saved={!!tires}

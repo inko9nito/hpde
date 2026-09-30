@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, Plus } from 'lucide-react'
+import { Camera, ChevronRight, Plus } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { CarTile, ConsumablesList, DetailRow } from './CarRow'
 import { CarSheet } from './CarSheet'
 import { ChangeSheet } from './ChangeSheet'
 import { TrackIcon } from './TrackIcon'
-import { useGarage } from '../data/GarageContext'
+import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { carEvents, carName, carTitle, consumableLabel, formatDay, logNewestFirst } from '../utils/garage'
-import type { ConsumableChange } from '../utils/garage'
+import type { Car, LogEntry } from '../utils/garage'
+import { shrinkPhoto } from '../utils/photo'
 import { formatDateRange } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -35,6 +36,85 @@ function Card({ title, children, action }: { title: string; children: ReactNode;
   )
 }
 
+/**
+ * The car's photo, over its details: picked from the phone's library or
+ * taken there and then, shrunk before it's sent. Change or remove it.
+ */
+function CarPhoto({ car, onToast }: { car: Car; onToast: (text: string) => void }) {
+  const garage = useGarage()
+  const src = useCarPhoto(car)
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  async function run(kind: 'saving' | 'removing', action: () => Promise<void>, done: string) {
+    setBusy(kind)
+    setFailure(null)
+    try {
+      await action()
+      onToast(done)
+    } catch (err) {
+      setFailure((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const pick = (
+    <input
+      ref={input}
+      type="file"
+      accept="image/*"
+      className="sr-only"
+      aria-label={car.photo ? 'Change photo' : 'Add a photo'}
+      tabIndex={-1}
+      onChange={e => {
+        const file = e.target.files?.[0]
+        e.target.value = ''
+        if (file) run('saving', async () => garage.savePhoto(car.id, await shrinkPhoto(file)), car.photo ? 'Photo changed' : 'Photo added')
+      }}
+    />
+  )
+  return (
+    <div className="mb-3">
+      {pick}
+      {car.photo ? (
+        <div className="relative overflow-hidden rounded-xl bg-gray-100">
+          {src
+            ? <img src={src} alt={carName(car)} className="aspect-[16/10] w-full object-cover" data-car-photo />
+            : <div className="aspect-[16/10] w-full animate-pulse" aria-busy="true" />}
+          <div className="absolute bottom-2 right-2 flex gap-2">
+            <button
+              onClick={() => input.current?.click()}
+              disabled={!!busy}
+              className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-sm backdrop-blur hover:bg-white"
+            >
+              {busy === 'saving' ? 'Uploading…' : 'Change photo'}
+            </button>
+            <button
+              onClick={() => run('removing', () => garage.removePhoto(car.id), 'Photo removed')}
+              disabled={!!busy}
+              className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm backdrop-blur hover:bg-white"
+            >
+              {busy === 'removing' ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => input.current?.click()}
+          disabled={!!busy}
+          className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+        >
+          <Camera size={22} className="text-gray-400" aria-hidden="true" />
+          {busy === 'saving' ? 'Uploading…' : 'Add a photo'}
+        </button>
+      )}
+      {failure && <p role="alert" className="mt-2 text-xs text-red-700">{failure}</p>}
+    </div>
+  )
+}
+
 const footButton = 'mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50'
 
 /**
@@ -54,7 +134,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const car = garage.cars.find(c => c.id === carId)
   const [editing, setEditing] = useState(false)
   // The log entry open in its sheet: one to change, or a new one.
-  const [entry, setEntry] = useState<ConsumableChange | 'new' | null>(null)
+  const [entry, setEntry] = useState<LogEntry | 'new' | null>(null)
 
   const header = (
     <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
@@ -62,7 +142,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         <BackButton onClick={onBack} />
         {car && (
           <div className="flex min-w-0 items-center gap-3">
-            <CarTile size={44} />
+            <CarTile car={car} size={44} />
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="truncate font-rubik text-lg font-bold leading-tight text-gray-900">{carName(car)}</h1>
               <p className="truncate text-[13px] leading-tight text-gray-500">{car.nickname ? carTitle(car) : 'Garage'}</p>
@@ -102,6 +182,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           title="Details"
           action={<button onClick={() => setEditing(true)} className={footButton}>Edit details</button>}
         >
+          <div className="mt-2"><CarPhoto car={car} onToast={onToast} /></div>
           <dl>
             {car.year !== undefined && <DetailRow label="Year">{car.year}</DetailRow>}
             <DetailRow label="Make">{car.make}</DetailRow>
@@ -120,21 +201,25 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
 
         <Card title="Change log">
           {log.length === 0 ? (
-            <p className="mt-1 text-xs text-gray-500">Each time tires, pads, rotors, brake fluid or oil are changed, log it here with the date.</p>
+            <p className="mt-1 text-xs text-gray-500">Nothing logged yet.</p>
           ) : (
             <ul className="mt-1" aria-label="Change log">
-              {log.map(c => (
-                <li key={c.id} className="border-b border-gray-100 last:border-b-0">
+              {log.map(e => (
+                <li key={e.id} className="border-b border-gray-100 last:border-b-0">
                   <button
-                    onClick={() => setEntry(c)}
+                    onClick={() => setEntry(e)}
                     className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-gray-50"
                   >
-                    <span className="w-[5.5rem] shrink-0 pt-px text-xs tabular-nums text-gray-500">{formatDay(c.date)}</span>
+                    <span className="w-[5.5rem] shrink-0 pt-px text-xs tabular-nums text-gray-500">{formatDay(e.date)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-gray-900">{consumableLabel(c.part)}</span>
-                      {c.what && <span className="block text-sm text-gray-700">{c.what}</span>}
-                      {c.shop && <span className="block text-xs text-gray-500">at {c.shop}</span>}
-                      {c.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{c.note}</span>}
+                      {e.parts.map(p => (
+                        <span key={p.part} className="block text-sm">
+                          <span className="font-semibold text-gray-900">{consumableLabel(p.part)}</span>
+                          {p.what && <span className="text-gray-700"> · {p.what}</span>}
+                        </span>
+                      ))}
+                      {e.shop && <span className="mt-0.5 block text-xs text-gray-500">at {e.shop}</span>}
+                      {e.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
                     </span>
                     <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
                   </button>
@@ -192,16 +277,16 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           key={entry === 'new' ? 'new' : entry.id}
           car={car}
           garage={garage}
-          change={entry === 'new' ? undefined : entry}
+          entry={entry === 'new' ? undefined : entry}
           onSave={async next => {
-            await garage.saveChange(car.id, next)
+            await garage.saveEntry(car.id, next)
             setEntry(null)
-            onToast(entry === 'new' ? 'Change logged' : 'Change saved')
+            onToast(entry === 'new' ? 'Logged' : 'Entry saved')
           }}
           onRemove={entry === 'new' ? undefined : async () => {
-            await garage.removeChange(car.id, entry.id)
+            await garage.removeEntry(car.id, entry.id)
             setEntry(null)
-            onToast('Change removed')
+            onToast('Entry removed')
           }}
           onClose={() => setEntry(null)}
         />

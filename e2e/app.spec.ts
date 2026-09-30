@@ -715,18 +715,27 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('a driver adds their car in the Garage, logs a consumable change, drives it at an event and logs tire pressures (#344)', async ({ page }) => {
+test('a driver adds their car and its photo in the Garage, logs a brake job, drives it at an event and logs tire pressures (#344)', async ({ page }) => {
   await stubEvents(page, [alpha])
   await signInAsAdmin(page)
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
-  type Car = { id: string; log?: object[] }
+  type Car = { id: string; photo?: string; log?: object[] }
   const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
+  let photo: { type: string; body: Buffer } | null = null
   await page.route(/\/api\/garage(\?|$)/, async route => {
     const req = route.request()
     expect(req.headers().authorization).toBe('Bearer token')
     const params = new URL(req.url()).searchParams
+    if (params.get('photo')) {
+      if (req.method() === 'PUT') {
+        photo = { type: req.headers()['content-type'], body: req.postDataBuffer()! }
+        garage.cars[0].photo = 'p1'
+        return route.fulfill({ json: { car: garage.cars[0] } })
+      }
+      return route.fulfill({ contentType: photo!.type, body: photo!.body })
+    }
     if (req.method() === 'PUT') {
       const body = req.postDataJSON()
       if (params.get('event')) {
@@ -734,9 +743,9 @@ test('a driver adds their car in the Garage, logs a consumable change, drives it
         return route.fulfill({ json: { setup: body.setup } })
       }
       if (params.get('car')) {
-        const change = { id: 'ch1', ...body.change }
-        garage.cars[0].log = [change]
-        return route.fulfill({ json: { change } })
+        const entry = { id: 'e1', ...body.entry }
+        garage.cars[0].log = [entry]
+        return route.fulfill({ json: { entry } })
       }
       const car = { id: 'car1', ...body.car }
       garage.cars = [car]
@@ -766,17 +775,37 @@ test('a driver adds their car in the Garage, logs a consumable change, drives it
   await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
   await expect(page.getByRole('region', { name: 'Details' })).toContainText('Lug nut torque118 ft·lb')
 
-  // New pads, dated.
+  // A photo: a camera-sized one, shrunk before it's sent.
+  const big = await page.evaluate(async () => {
+    const c = document.createElement('canvas')
+    c.width = 4000
+    c.height = 3000
+    c.getContext('2d')!.fillRect(0, 0, 4000, 3000)
+    return Array.from(new Uint8Array(await (await new Promise<Blob>(r => c.toBlob(b => r(b!), 'image/png'))).arrayBuffer()))
+  })
+  await page.getByLabel('Add a photo').setInputFiles({ name: 'cayman.png', mimeType: 'image/png', buffer: Buffer.from(big) })
+  await expect(page.getByRole('img', { name: 'The Cayman' })).toBeVisible()
+  expect(photo!.type).toBe('image/jpeg')
+  const size = await page.getByRole('img', { name: 'The Cayman' }).evaluate(img => [(img as HTMLImageElement).naturalWidth, (img as HTMLImageElement).naturalHeight])
+  expect(size).toEqual([1280, 960])
+
+  // A brake job: pads and rotors on one day at one shop.
   await page.getByRole('button', { name: 'Log a change' }).click()
   const change = page.getByRole('dialog', { name: 'Log a change' })
   await change.getByRole('button', { name: 'Front pads' }).click()
+  await change.getByRole('button', { name: 'Front rotors' }).click()
+  await change.getByLabel('Front pads', { exact: true }).and(page.getByRole('combobox')).fill('Hawk DTC-60')
   await change.getByLabel('Date').fill('2026-03-01')
-  await change.getByLabel(/^What went on/).fill('Hawk DTC-60')
+  await change.getByLabel(/^Shop/).fill('Speed Shop')
+  // The date sits inside the sheet, like the boxes around it (iOS ran it wider).
+  const date = (await change.getByLabel('Date').boundingBox())!
+  const shop = (await change.getByLabel(/^Shop/).boundingBox())!
+  expect(Math.round(date.x + date.width)).toBe(Math.round(shop.x + shop.width))
   await noSideScroll()
-  await change.getByRole('button', { name: 'Log front pads change' }).click()
+  await change.getByRole('button', { name: 'Log 2 changes' }).click()
   await expect(change).toBeHidden()
   await expect(page.getByRole('region', { name: 'Consumables' })).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
-  await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front padsHawk DTC-60')
+  await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front pads · Hawk DTC-60Front rotorsat Speed Shop')
   await noSideScroll()
 
   // At an event: the car's at the very top of My notes.
@@ -791,8 +820,13 @@ test('a driver adds their car in the Garage, logs a consumable change, drives it
   const details = page.getByRole('dialog', { name: 'The Cayman' })
   await expect(details).toContainText('Lug nut torque118 ft·lb')
   await expect(details.getByLabel('Consumables')).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
-  await details.getByRole('button', { name: 'Close' }).click()
-  await expect(details).toBeHidden()
+  // Its page, over the event; Back returns to the event.
+  await details.getByRole('button', { name: 'Car details' }).click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Back' }).last().click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
+  await expect(carRow).toBeInViewport()
 
   // A session's pressures, each corner, from the schedule.
   await page.getByRole('tab', { name: 'Schedule' }).click()

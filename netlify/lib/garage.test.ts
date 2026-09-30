@@ -51,7 +51,7 @@ const pressures = {
   cold: { fl: 30, fr: 30, rl: 28.5, rr: 28.5 }, hot: { fl: 36, fr: 36.5 }, note: 'Bled the fronts to 36.',
 }
 const setup = { carId: 'car1', sessions: { x: pressures } }
-const padsChange = { date: '2026-09-01', part: 'frontPads', what: 'Hawk DTC-60', shop: 'Speed Shop', note: 'At 12,400 miles.' }
+const brakeJob = { date: '2026-09-01', parts: [{ part: 'frontPads', what: 'Hawk DTC-60' }, { part: 'frontRotors' }], shop: 'Speed Shop', note: 'At 12,400 miles.' }
 
 const garageOf = async (token: string, query?: string) => (await (await call('GET', { token, query })).json())
 const addCar = async (token = 'vera-token', car: unknown = cayman) => (await (await call('PUT', { token, body: { car } })).json()).car
@@ -99,35 +99,79 @@ describe('garage function (#344)', () => {
     expect(events[EVENT].sessions).toEqual({ '2026-09-12 10:25 pink': { key: '2026-09-12 10:25 pink', ...pressures } })
   })
 
-  it('logs a car’s consumable changes, changes an entry and removes one', async () => {
+  it('logs jobs on a car — several consumables at once — changes an entry and removes one', async () => {
     await addCar()
-    const res = await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: padsChange } })
+    const res = await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: brakeJob } })
     expect(res.status).toBe(200)
-    expect((await res.json()).change).toEqual({ id: 'car2', ...padsChange })
-    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { date: '2026-09-01', part: 'brakeFluid' } } })
-    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { id: 'car2', ...padsChange, what: 'Hawk DTC-70' } } })
+    expect((await res.json()).entry).toEqual({ id: 'car2', ...brakeJob })
+    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: { date: '2026-09-01', parts: [{ part: 'brakeFluid' }] } } })
+    const edited = { id: 'car2', ...brakeJob, parts: [{ part: 'frontPads', what: 'Hawk DTC-70' }] }
+    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: edited } })
     let [car] = (await garageOf('vera-token')).cars
-    expect(car.log).toEqual([{ id: 'car2', ...padsChange, what: 'Hawk DTC-70' }, { id: 'car3', date: '2026-09-01', part: 'brakeFluid' }])
+    expect(car.log).toEqual([edited, { id: 'car3', date: '2026-09-01', parts: [{ part: 'brakeFluid' }] }])
 
     // Changing the car's details keeps its log.
     await call('PUT', { token: 'vera-token', body: { car: { id: 'car1', ...cayman, lugNutTorque: 96 } } })
     ;[car] = (await garageOf('vera-token')).cars
     expect(car.log).toHaveLength(2)
 
-    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&change=car2' })).status).toBe(200)
+    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&entry=car2' })).status).toBe(200)
     ;[car] = (await garageOf('vera-token')).cars
     expect(car.log.map((c: { id: string }) => c.id)).toEqual(['car3'])
-    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&change=car2' })).status).toBe(404)
-    expect((await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { id: 'nope', ...padsChange } } })).status).toBe(404)
-    expect((await call('PUT', { token: 'vera-token', query: '?car=nope', body: { change: padsChange } })).status).toBe(404)
+    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&entry=car2' })).status).toBe(404)
+    expect((await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: { id: 'nope', ...brakeJob } } })).status).toBe(404)
+    expect((await call('PUT', { token: 'vera-token', query: '?car=nope', body: { entry: brakeJob } })).status).toBe(404)
   })
 
-  it('removes an event’s setup', async () => {
+  it('keeps a car’s photo: set, read back, kept through edits, removed with the car', async () => {
     await addCar()
-    await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup } })
-    expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}` })).status).toBe(200)
-    expect((await garageOf('vera-token')).events).toEqual({})
-    expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}` })).status).toBe(404)
+    const photo = (query = '?car=car1&photo=1', init: RequestInit = {}) => handler(
+      new Request(`https://site.example/api/garage${query}`, { ...init, headers: { Authorization: 'Bearer vera-token', ...init.headers as object } }),
+      {},
+      { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, newId: () => 'abcd' } as never,
+    )
+    expect((await photo()).status).toBe(404)
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3])
+    const put = await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: bytes })
+    expect(put.status).toBe(200)
+    const { car } = await put.json()
+    expect(car.photo).toBeTruthy()
+    const got = await photo()
+    expect(got.headers.get('content-type')).toBe('image/jpeg')
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(bytes)
+    // Not a photo: refused.
+    expect((await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: 'hi' })).status).toBe(400)
+    expect((await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(3_000_001) })).status).toBe(400)
+    // Changing the car's details keeps it.
+    await call('PUT', { token: 'vera-token', body: { car: { id: 'car1', ...cayman } } })
+    expect((await garageOf('vera-token')).cars[0].photo).toBe(car.photo)
+    // Someone else can't reach it.
+    expect((await photo('?car=car1&photo=1', { headers: { Authorization: 'Bearer jason-token' } })).status).toBe(404)
+
+    expect((await photo('?car=car1&photo=1', { method: 'DELETE' })).status).toBe(200)
+    expect((await garageOf('vera-token')).cars[0]).not.toHaveProperty('photo')
+    expect(blobs.data('site:garage-photos').size).toBe(0)
+    await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: bytes })
+    await call('DELETE', { token: 'vera-token', query: '?car=car1' })
+    expect(blobs.data('site:garage-photos').size).toBe(0)
+  })
+
+  it('on a deploy preview, shows the live photo until it’s changed there, never changing the live one', async () => {
+    await addCar()
+    const bytes = new Uint8Array([1, 2, 3])
+    const photo = (method: string, context: unknown, body?: Uint8Array) => handler(
+      new Request('https://site.example/api/garage?car=car1&photo=1', {
+        method, headers: { Authorization: 'Bearer vera-token', 'Content-Type': 'image/png' }, ...(body ? { body } : {}),
+      }),
+      context,
+      { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity } as never,
+    )
+    await photo('PUT', {}, bytes)
+    const preview = { deploy: { context: 'deploy-preview' } }
+    expect(new Uint8Array(await (await photo('GET', preview)).arrayBuffer())).toEqual(bytes)
+    await photo('DELETE', preview)
+    expect(blobs.data('site:garage-photos').size).toBe(1)
+    expect((await photo('GET', {})).status).toBe(200)
   })
 
   it('removes a car and its log; its events keep their pressures, and the record goes with the last of it', async () => {
@@ -160,9 +204,10 @@ describe('garage function (#344)', () => {
     expect(await bad({ setup: { sessions: { x: { ...pressures, time: '10:25 AM' } } } }, q)).toBe(400)
     expect(await bad({ setup: { sessions: { x: { date: '2026-09-12', time: '10:25', group: 'pink' } } } }, q)).toBe(400)
     expect(await bad({ setup }, '?event=../../x')).toBe(400)
-    expect(await bad({ change: { part: 'tires' } }, '?car=car1')).toBe(400)
-    expect(await bad({ change: { date: '2026-09-01', part: 'wipers' } }, '?car=car1')).toBe(400)
-    expect(await bad({ change: { ...padsChange, note: 'x'.repeat(501) } }, '?car=car1')).toBe(400)
+    expect(await bad({ entry: { parts: [{ part: 'tires' }] } }, '?car=car1')).toBe(400)
+    expect(await bad({ entry: { date: '2026-09-01', parts: [] } }, '?car=car1')).toBe(400)
+    expect(await bad({ entry: { date: '2026-09-01', parts: [{ part: 'wipers' }] } }, '?car=car1')).toBe(400)
+    expect(await bad({ entry: { ...brakeJob, note: 'x'.repeat(501) } }, '?car=car1')).toBe(400)
     expect(await bad('not json')).toBe(400)
     expect(Object.keys((await garageOf('vera-token')).events)).toEqual([])
     expect((await garageOf('vera-token')).cars[0]).not.toHaveProperty('log')

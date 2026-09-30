@@ -56,9 +56,6 @@ export function GarageTab({ events, onToast }: {
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
             <CarIcon size={22} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
-            <p className="mt-1 text-xs text-gray-400">
-              Add your car and its lug nut torque, then log each change to its tires, brakes and fluids.
-            </p>
             <button
               onClick={() => setAdding(true)}
               className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
@@ -74,7 +71,7 @@ export function GarageTab({ events, onToast }: {
             <ul className="flex flex-col gap-3" aria-label="Cars">
               {garage.cars.map(car => (
                 <li key={car.id}>
-                  <CarRow title={carName(car)} subtitle={lastSeen(car, garage, events)} href={carHash(car.id)} />
+                  <CarRow car={car} title={carName(car)} subtitle={lastSeen(car, garage, events)} href={carHash(car.id)} />
                 </li>
               ))}
             </ul>

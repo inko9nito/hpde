@@ -11,7 +11,7 @@ import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventEvaluation, SessionNotes } from '../utils/evaluation'
-import { cleanCar, cleanChange, cleanSetup } from '../utils/garage'
+import { cleanCar, cleanEntry, cleanSetup } from '../utils/garage'
 import type { Garage } from '../utils/garage'
 import { LapTimesSheet } from './LapTimesSheet'
 
@@ -91,7 +91,7 @@ let notesByEvent: Record<string, Notes> = {}
 // The garage function (#344), in memory: the signed-in driver's cars and setups.
 let garageData: Garage = { cars: [], events: {} }
 let carCount = 0
-let changeCount = 0
+let entryCount = 0
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -139,17 +139,26 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const params = new URL(url, 'https://x').searchParams
     const eventId = params.get('event')
     const carId = params.get('car')
+    const withCar = (next: (c: Garage['cars'][number]) => Garage['cars'][number]) => {
+      garageData = { ...garageData, cars: garageData.cars.map(c => (c.id === carId ? next(c) : c)) }
+      return garageData.cars.find(c => c.id === carId)!
+    }
+    if (carId && params.get('photo')) {
+      if (init?.method === 'PUT') {
+        expect(init.body).toBeInstanceOf(Blob)
+        return json({ car: withCar(c => ({ ...c, photo: 'p1' })) })
+      }
+      if (init?.method === 'DELETE') return json({ car: withCar(({ photo: _gone, ...c }) => c) })
+      return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg' } })
+    }
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body))
       if (carId) {
-        const cleaned = cleanChange(body.change)
+        const cleaned = cleanEntry(body.entry)
         if ('error' in cleaned) return json(cleaned, 400)
-        const change = { id: body.change.id ?? `change${++changeCount}`, ...cleaned.value }
-        garageData = {
-          ...garageData,
-          cars: garageData.cars.map(c => (c.id === carId ? { ...c, log: [...(c.log ?? []).filter(e => e.id !== change.id), change] } : c)),
-        }
-        return json({ change })
+        const entry = { id: body.entry.id ?? `entry${++entryCount}`, ...cleaned.value }
+        withCar(c => ({ ...c, log: [...(c.log ?? []).filter(e => e.id !== entry.id), entry] }))
+        return json({ entry })
       }
       if (eventId) {
         const setup = cleanSetup(body.setup, garageData.cars.map(c => c.id))
@@ -165,10 +174,10 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       return json({ car })
     }
     if (init?.method === 'DELETE') {
-      const changeId = params.get('change')
-      if (carId && changeId) {
-        garageData = { ...garageData, cars: garageData.cars.map(c => (c.id === carId ? { ...c, log: (c.log ?? []).filter(e => e.id !== changeId) } : c)) }
-        return json({ deleted: changeId })
+      const entryId = params.get('entry')
+      if (carId && entryId) {
+        withCar(c => ({ ...c, log: (c.log ?? []).filter(e => e.id !== entryId) }))
+        return json({ deleted: entryId })
       }
       if (carId) {
         garageData = {
@@ -287,7 +296,7 @@ beforeEach(() => {
   notesByEvent = {}
   garageData = { cars: [], events: {} }
   carCount = 0
-  changeCount = 0
+  entryCount = 0
   failSaves = false
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -1349,9 +1358,8 @@ describe('the garage (#344)', () => {
   const cayman = {
     id: 'cayman', year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman', lugNutTorque: 118,
     log: [
-      { id: 'l1', date: '2026-02-20', part: 'tires' as const, what: 'Hoosier R7' },
-      { id: 'l2', date: '2026-02-20', part: 'frontPads' as const, what: 'Hawk DTC-60' },
-      { id: 'l3', date: '2026-04-15', part: 'tires' as const, what: 'Yokohama A052' },
+      { id: 'l1', date: '2026-02-20', shop: 'Speed Shop', parts: [{ part: 'tires' as const, what: 'Hoosier R7' }, { part: 'frontPads' as const, what: 'Hawk DTC-60' }] },
+      { id: 'l3', date: '2026-04-15', parts: [{ part: 'tires' as const, what: 'Yokohama A052' }] },
     ],
   }
   const openWithGarage = (hash: string) => {
@@ -1398,43 +1406,74 @@ describe('the garage (#344)', () => {
     expect(within(cars).getByRole('link')).toHaveTextContent('The CaymanLast at Lap Day · Mar 7, 2026')
   })
 
-  it('a car’s page has its details, what’s on it and its change log; a change is logged, edited and removed', async () => {
+  it('a car’s page has its details, what’s on it and its change log; a job is logged, edited and removed', async () => {
     garageData = { cars: [cayman], events: {} }
     openWithGarage('#/garage/cayman')
     const page = await carPage('The Cayman')
     expect(within(page).getByRole('region', { name: 'Details' })).toHaveTextContent('Year2019MakePorscheModel718 Cayman GTSNicknameThe CaymanLug nut torque118 ft·lb')
     const on = within(page).getByRole('region', { name: 'Consumables' })
     expect(on).toHaveTextContent('TiresYokohama A052since Apr 15, 2026Front padsHawk DTC-60since Feb 20, 2026')
-    const log = within(page).getByRole('list', { name: 'Change log' })
-    expect(within(log).getAllByRole('button').map(b => b.textContent)).toEqual([
-      'Apr 15, 2026TiresYokohama A052', 'Feb 20, 2026Front padsHawk DTC-60', 'Feb 20, 2026TiresHoosier R7',
+    const log = () => within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')
+    expect(log().map(b => b.textContent)).toEqual([
+      'Apr 15, 2026Tires · Yokohama A052', 'Feb 20, 2026Tires · Hoosier R7Front pads · Hawk DTC-60at Speed Shop',
     ])
 
-    // A brake fluid flush, dated.
+    // A brake job: several consumables on one day at one shop, each asking what went on.
     await userEvent.click(within(on).getByRole('button', { name: 'Log a change' }))
     const sheet = screen.getByRole('dialog', { name: 'Log a change' })
+    expect(within(sheet).queryByLabelText('Brake fluid')).not.toBeInTheDocument()
     await userEvent.click(within(sheet).getByRole('button', { name: 'Brake fluid' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Rear pads' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Coolant' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Coolant' }))
+    // One box for each picked, in the order they're listed.
+    const whats = within(within(sheet).getByRole('group', { name: /^What went on/ })).getAllByRole('combobox')
+    expect(whats.map(w => w.id.split('-').at(-1))).toEqual(['rearPads', 'brakeFluid'])
+    fireEvent.change(within(sheet).getByLabelText('Rear pads'), { target: { value: 'Hawk DTC-30' } })
+    fireEvent.change(within(sheet).getByLabelText('Brake fluid'), { target: { value: 'Motul RBF 660' } })
     fireEvent.change(within(sheet).getByLabelText('Date'), { target: { value: '2026-05-01' } })
-    fireEvent.change(within(sheet).getByLabelText(/^What went on/), { target: { value: 'Motul RBF 660' } })
     fireEvent.change(within(sheet).getByLabelText(/^Shop/), { target: { value: 'Speed Shop' } })
     fireEvent.change(within(sheet).getByRole('textbox', { name: /^Note/ }), { target: { value: 'Full flush.' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Log brake fluid change' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Log 2 changes' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Change logged')
+    expect(screen.getByRole('status')).toHaveTextContent('Logged')
     expect(garageCalls('PUT')[0][0]).toContain('car=cayman')
-    expect(body(garageCalls('PUT')[0]).change).toEqual({ date: '2026-05-01', part: 'brakeFluid', what: 'Motul RBF 660', shop: 'Speed Shop', note: 'Full flush.' })
-    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('Brake fluidMotul RBF 660since May 1, 2026')
-    expect(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[0]).toHaveTextContent('May 1, 2026Brake fluidMotul RBF 660at Speed ShopFull flush.')
+    expect(body(garageCalls('PUT')[0]).entry).toEqual({
+      date: '2026-05-01', shop: 'Speed Shop', note: 'Full flush.',
+      parts: [{ part: 'rearPads', what: 'Hawk DTC-30' }, { part: 'brakeFluid', what: 'Motul RBF 660' }],
+    })
+    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('Rear padsHawk DTC-30since May 1, 2026')
+    expect(log()[0]).toHaveTextContent('May 1, 2026Rear pads · Hawk DTC-30Brake fluid · Motul RBF 660at Speed ShopFull flush.')
 
     // An entry opens to change it, or take it out.
-    await userEvent.click(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[1])
-    const edit = screen.getByRole('dialog', { name: 'Edit change' })
+    await userEvent.click(log()[1])
+    const edit = screen.getByRole('dialog', { name: 'Edit entry' })
     expect(within(edit).getByRole('button', { name: 'Tires' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(edit).getByLabelText('Tires')).toHaveValue('Yokohama A052')
     await userEvent.click(within(edit).getByRole('button', { name: 'Remove from log' }))
     await userEvent.click(within(edit).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&change=l3')
+    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&entry=l3')
     expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('TiresHoosier R7since Feb 20, 2026')
+  })
+
+  it('adds a photo of the car, shrunk on the phone, and shows it', async () => {
+    const createObjectURL = vi.fn(() => 'blob:car-photo')
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL }))
+    garageData = { cars: [cayman], events: {} }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    const file = new File(['png'], 'cayman.png', { type: 'image/png' })
+    await userEvent.upload(within(page).getByLabelText('Add a photo'), file)
+    await waitFor(() => expect(within(page).getByRole('img', { name: 'The Cayman' })).toHaveAttribute('src', 'blob:car-photo'))
+    expect(screen.getByRole('status')).toHaveTextContent('Photo added')
+    const [url] = garageCalls('PUT')[0]
+    expect(url).toContain('car=cayman&photo=1')
+    // Fetched with the sign-in, once, however many places show it.
+    expect(fetchMock.mock.calls.filter(([u, i]) => String(u).includes('photo=1&v=p1') && !i?.method)).toHaveLength(1)
+
+    await userEvent.click(within(page).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(within(page).getByRole('button', { name: 'Add a photo' })).toBeInTheDocument())
   })
 
   it('edits a car’s details from its page, and removes it', async () => {
@@ -1479,7 +1518,7 @@ describe('the garage (#344)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInTheDocument()
   })
 
-  it('puts the car at the very top of My notes; it opens to what was on it at the event', async () => {
+  it('puts the car at the very top of My notes; it opens to what was on it at the event, and to its page', async () => {
     garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
     openWithGarage(`#/event/${event.id}`)
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
@@ -1492,6 +1531,15 @@ describe('the garage (#344)', () => {
     expect(sheet).toHaveTextContent('Lug nut torque118 ft·lb')
     // The event was Mar 7: the tires changed in April aren't on yet.
     expect(within(sheet).getByLabelText('Consumables')).toHaveTextContent('TiresHoosier R7since Feb 20, 2026Front padsHawk DTC-60since Feb 20, 2026')
+
+    // Its page, over the event; Back returns to the event.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Car details' }))
+    expect(window.location.hash).toBe('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    expect(within(page).getByRole('region', { name: 'Details' })).toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe(`#/event/${event.id}`)
+    expect(screen.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('picks the event’s car on My notes', async () => {

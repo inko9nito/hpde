@@ -1,8 +1,9 @@
 // A driver's garage (#344): their cars, and what each event ran on.
 //
 // A car has its own facts that don't change event to event, like its lug
-// nut torque, and a log of its consumables: each time tires, pads, rotors,
-// brake fluid or oil were changed, the day it was done and what went on.
+// nut torque and a photo, and a log of its consumables: each time some
+// were changed — tires, pads, rotors, fluids — the day it was done, where,
+// and what went on.
 // What was on the car at an event is whatever the log last says before it.
 // An event keeps which car it was and each session's tire pressures.
 //
@@ -20,6 +21,9 @@ export const CONSUMABLES = [
   { id: 'rearRotors', label: 'Rear rotors', placeholder: 'OEM' },
   { id: 'brakeFluid', label: 'Brake fluid', placeholder: 'Motul RBF 660' },
   { id: 'engineOil', label: 'Engine oil', placeholder: 'Motul 300V 5W-40' },
+  { id: 'transmissionFluid', label: 'Transmission fluid', placeholder: 'Motul Gear 300 75W-90' },
+  { id: 'diffFluid', label: 'Diff fluid', placeholder: 'Red Line 75W-90' },
+  { id: 'coolant', label: 'Coolant', placeholder: 'OEM, 50/50' },
 ] as const
 
 export type ConsumableId = typeof CONSUMABLES[number]['id']
@@ -28,19 +32,30 @@ export function consumableLabel(id: ConsumableId): string {
   return CONSUMABLES.find(c => c.id === id)!.label
 }
 
-/** One entry in a car's log: on this day, this consumable was changed — to what, if said. */
-export interface ConsumableChange {
+/** One consumable changed: which, and what went on ("Hawk DTC-60"), if said. */
+export interface PartChange {
+  part: ConsumableId
+  what?: string
+}
+
+/**
+ * One entry in a car's log: on this day, at this shop, these consumables
+ * were changed — one job, however many parts.
+ */
+export interface LogEntry {
   id: string
   /** "YYYY-MM-DD". */
   date: string
-  part: ConsumableId
-  /** What went on: "Hawk DTC-60". */
-  what?: string
+  /** In the order the forms list them. */
+  parts: PartChange[]
   /** Where it was done: "Mike's Motorsports". */
   shop?: string
   /** Anything else: the mileage, why. */
   note?: string
 }
+
+/** A consumable as it stands: what went on, and when and where. */
+export type PartOn = PartChange & Pick<LogEntry, 'date' | 'shop'>
 
 export interface Car {
   id: string
@@ -51,8 +66,10 @@ export interface Car {
   nickname?: string
   /** The wheels' lug nut torque, in ft·lb. */
   lugNutTorque?: number
+  /** Set once it has a photo: which one, so a new one isn't the old one cached. */
+  photo?: string
   /** Its consumables' changes, in the order they were logged. */
-  log?: ConsumableChange[]
+  log?: LogEntry[]
   updatedAt?: string
 }
 
@@ -101,6 +118,9 @@ export const MAX_CARS = 20
 export const MAX_EVENTS = 1000
 export const MAX_SESSIONS = 100
 export const MAX_LOG = 500
+/** A car photo as uploaded, already shrunk on the phone: at most this many bytes. */
+export const MAX_PHOTO_BYTES = 3_000_000
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 export const MAX_NAME = 60
 export const MAX_PART = 80
 export const MAX_NOTE = 500
@@ -124,8 +144,8 @@ function number(v: unknown, min: number, max: number, what: string, places = 0):
   return { value: Math.round(v * scale) / scale }
 }
 
-/** A car as sent: make and model required; year, nickname and lug nut torque optional. Its log is kept apart. */
-export function cleanCar(raw: unknown, thisYear = new Date().getFullYear()): Cleaned<Omit<Car, 'id' | 'log' | 'updatedAt'>> {
+/** A car as sent: make and model required; year, nickname and lug nut torque optional. Its photo and log are kept apart. */
+export function cleanCar(raw: unknown, thisYear = new Date().getFullYear()): Cleaned<Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'>> {
   const r = (raw ?? {}) as Record<string, unknown>
   const make = text(r.make, MAX_NAME, 'The make')
   if ('error' in make) return make
@@ -149,13 +169,23 @@ export function cleanCar(raw: unknown, thisYear = new Date().getFullYear()): Cle
   }
 }
 
-/** A log entry as sent: the day and the consumable required; what went on, the shop and a note optional. */
-export function cleanChange(raw: unknown): Cleaned<Omit<ConsumableChange, 'id'>> {
+/**
+ * A log entry as sent: the day and at least one consumable required, each
+ * once; what went on for each, the shop and a note optional.
+ */
+export function cleanEntry(raw: unknown): Cleaned<Omit<LogEntry, 'id'>> {
   const r = (raw ?? {}) as Record<string, unknown>
   if (typeof r.date !== 'string' || !DATE.test(r.date) || Number.isNaN(Date.parse(r.date))) return { error: 'Add the day it was done.' }
-  if (!CONSUMABLES.some(c => c.id === r.part)) return { error: 'Pick what was changed.' }
-  const what = text(r.what, MAX_PART, 'What went on')
-  if ('error' in what) return what
+  if (!Array.isArray(r.parts) || r.parts.length === 0) return { error: 'Pick what was changed.' }
+  const byPart = new Map<ConsumableId, PartChange>()
+  for (const p of r.parts as Record<string, unknown>[]) {
+    const id = p?.part as ConsumableId
+    if (!CONSUMABLES.some(c => c.id === id)) return { error: 'Pick what was changed.' }
+    if (byPart.has(id)) return { error: `${consumableLabel(id)} is in there twice.` }
+    const what = text(p.what, MAX_PART, `What went on for ${consumableLabel(id).toLowerCase()}`)
+    if ('error' in what) return what
+    byPart.set(id, { part: id, ...(what.value ? { what: what.value } : {}) })
+  }
   const shop = text(r.shop, MAX_NAME, 'The shop')
   if ('error' in shop) return shop
   const note = text(r.note, MAX_NOTE, 'The note')
@@ -163,8 +193,7 @@ export function cleanChange(raw: unknown): Cleaned<Omit<ConsumableChange, 'id'>>
   return {
     value: {
       date: r.date,
-      part: r.part as ConsumableId,
-      ...(what.value ? { what: what.value } : {}),
+      parts: CONSUMABLES.flatMap(c => (byPart.has(c.id) ? [byPart.get(c.id)!] : [])),
       ...(shop.value ? { shop: shop.value } : {}),
       ...(note.value ? { note: note.value } : {}),
     },
@@ -257,7 +286,7 @@ export function carEvents(carId: string, garage: Garage, events: EventConfig[]):
 }
 
 /** The car's log, newest first; entries on the same day, the last logged first. */
-export function logNewestFirst(car: Car): ConsumableChange[] {
+export function logNewestFirst(car: Car): LogEntry[] {
   return (car.log ?? []).map((c, i) => ({ c, i }))
     .sort((a, b) => b.c.date.localeCompare(a.c.date) || b.i - a.i)
     .map(({ c }) => c)
@@ -268,11 +297,13 @@ export function logNewestFirst(car: Car): ConsumableChange[] {
  * when given (an event's first day): what it ran there. In the order the
  * forms list them; one that's never been logged isn't there.
  */
-export function consumablesOn(car: Car, day?: string): ConsumableChange[] {
-  const latest = new Map<ConsumableId, ConsumableChange>()
-  for (const c of logNewestFirst(car)) {
-    if (day && c.date > day) continue
-    if (!latest.has(c.part)) latest.set(c.part, c)
+export function consumablesOn(car: Car, day?: string): PartOn[] {
+  const latest = new Map<ConsumableId, PartOn>()
+  for (const e of logNewestFirst(car)) {
+    if (day && e.date > day) continue
+    for (const p of e.parts) {
+      if (!latest.has(p.part)) latest.set(p.part, { ...p, date: e.date, ...(e.shop ? { shop: e.shop } : {}) })
+    }
   }
   return CONSUMABLES.flatMap(p => (latest.has(p.id) ? [latest.get(p.id)!] : []))
 }
@@ -281,7 +312,9 @@ export function consumablesOn(car: Car, day?: string): ConsumableChange[] {
 export function partOptions(part: ConsumableId, garage: Garage): string[] {
   const counts = new Map<string, number>()
   for (const car of garage.cars) {
-    for (const c of car.log ?? []) if (c.part === part && c.what) counts.set(c.what, (counts.get(c.what) ?? 0) + 1)
+    for (const e of car.log ?? []) {
+      for (const p of e.parts) if (p.part === part && p.what) counts.set(p.what, (counts.get(p.what) ?? 0) + 1)
+    }
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
 }
@@ -290,7 +323,7 @@ export function partOptions(part: ConsumableId, garage: Garage): string[] {
 export function shopOptions(garage: Garage): string[] {
   const counts = new Map<string, number>()
   for (const car of garage.cars) {
-    for (const c of car.log ?? []) if (c.shop) counts.set(c.shop, (counts.get(c.shop) ?? 0) + 1)
+    for (const e of car.log ?? []) if (e.shop) counts.set(e.shop, (counts.get(e.shop) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
 }

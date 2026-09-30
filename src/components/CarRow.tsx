@@ -2,16 +2,21 @@ import type { ReactNode } from 'react'
 import { CarFront, ChevronRight } from 'lucide-react'
 import { consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
+import { useCarPhoto } from '../data/GarageContext'
 
 // The pieces a car is shown with (#344): its tile, the one-line row that
 // opens it — in the Garage and at the top of an event's My notes — and
 // its details' rows.
 
-/** Where the car's photo goes: for now, a car on gray. */
-export function CarTile({ size = 48 }: { size?: number }) {
+/** The car's photo, square — or with none (yet), a car on gray. */
+export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car; size?: number; rounded?: string }) {
+  const src = useCarPhoto(car)
+  if (src) {
+    return <img src={src} alt="" className={`shrink-0 object-cover ${rounded}`} style={{ width: size, height: size }} data-car-photo />
+  }
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-xl bg-gray-100 text-gray-500"
+      className={`grid shrink-0 place-items-center bg-gray-100 text-gray-500 ${rounded}`}
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
@@ -26,7 +31,9 @@ export function CarTile({ size = 48 }: { size?: number }) {
  * `compact`: one slim line — a small car, the name and the line beside it —
  * for My notes, where it's seldom changed and shouldn't take the room.
  */
-export function CarRow({ title, subtitle, href, onClick, label, dashed = false, compact = false }: {
+export function CarRow({ car, title, subtitle, href, onClick, label, dashed = false, compact = false }: {
+  /** Its photo shows, if it has one. */
+  car?: Car
   title: string
   subtitle?: string
   href?: string
@@ -47,7 +54,9 @@ export function CarRow({ title, subtitle, href, onClick, label, dashed = false, 
         }`}
         data-car-row
       >
-        <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />
+        {car?.photo
+          ? <CarTile car={car} size={24} rounded="rounded-md" />
+          : <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />}
         <span className="min-w-0 flex-1 truncate">
           <span className="font-semibold text-gray-900">{title}</span>
           {subtitle && <span className="text-gray-500"> · {subtitle}</span>}
@@ -60,7 +69,7 @@ export function CarRow({ title, subtitle, href, onClick, label, dashed = false, 
     dashed ? 'border-dashed border-gray-300' : 'border-gray-200 shadow-sm'
   }`
   const body = (<>
-    <CarTile />
+    <CarTile car={car} />
     <span className="min-w-0 flex-1">
       <span className="block truncate text-base font-semibold text-gray-900">{title}</span>
       {subtitle && <span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span>}

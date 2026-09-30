@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  carEvents, carName, carTitle, cleanCar, cleanChange, cleanPressures, cleanSetup, consumablesOn, cornersText, formatDay, logNewestFirst, partOptions,
+  carEvents, carName, carTitle, cleanCar, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, formatDay, logNewestFirst, partOptions, shopOptions,
 } from './garage'
 import type { Car, Garage } from './garage'
 import type { EventConfig } from '../types'
@@ -13,14 +13,13 @@ const events = [at('march', '2026-03-07'), at('may', '2026-05-02'), at('sept', '
 const cayman: Car = {
   id: 'c', make: 'Porsche', model: 'Cayman',
   log: [
-    { id: '1', date: '2026-02-20', part: 'tires', what: 'Hoosier R7' },
-    { id: '2', date: '2026-02-20', part: 'frontPads', what: 'Hawk DTC-60' },
-    { id: '3', date: '2026-04-15', part: 'tires', what: 'Yokohama A052' },
-    { id: '4', date: '2026-04-15', part: 'brakeFluid', note: 'Flushed.' },
+    { id: '1', date: '2026-02-20', shop: 'Speed Shop', parts: [{ part: 'tires', what: 'Hoosier R7' }, { part: 'frontPads', what: 'Hawk DTC-60' }] },
+    { id: '3', date: '2026-04-15', parts: [{ part: 'tires', what: 'Yokohama A052' }] },
+    { id: '4', date: '2026-04-15', parts: [{ part: 'brakeFluid' }], note: 'Flushed.' },
   ],
 }
 const garage: Garage = {
-  cars: [cayman, { id: 'm', year: 1999, make: 'Mazda', model: 'Miata', nickname: 'Zoom', log: [{ id: '5', date: '2026-01-01', part: 'tires', what: 'Hoosier R7' }] }],
+  cars: [cayman, { id: 'm', year: 1999, make: 'Mazda', model: 'Miata', nickname: 'Zoom', log: [{ id: '5', date: '2026-01-01', shop: 'Speed Shop', parts: [{ part: 'tires', what: 'Hoosier R7' }] }] }],
   events: { sept: { carId: 'c' }, march: { carId: 'c' }, may: { carId: 'c' }, other: { carId: 'm' } },
 }
 
@@ -36,12 +35,14 @@ describe('garage (#344)', () => {
   })
 
   it('lists the log newest first', () => {
-    expect(logNewestFirst(cayman).map(c => c.id)).toEqual(['4', '3', '2', '1'])
+    expect(logNewestFirst(cayman).map(c => c.id)).toEqual(['4', '3', '1'])
   })
 
   it('works out what was on the car from its log: now, or at an event', () => {
-    expect(consumablesOn(cayman).map(c => [c.part, c.what ?? c.note])).toEqual([
-      ['tires', 'Yokohama A052'], ['frontPads', 'Hawk DTC-60'], ['brakeFluid', 'Flushed.'],
+    expect(consumablesOn(cayman)).toEqual([
+      { part: 'tires', what: 'Yokohama A052', date: '2026-04-15' },
+      { part: 'frontPads', what: 'Hawk DTC-60', date: '2026-02-20', shop: 'Speed Shop' },
+      { part: 'brakeFluid', date: '2026-04-15' },
     ])
     expect(consumablesOn(cayman, '2026-03-07').map(c => [c.part, c.what])).toEqual([['tires', 'Hoosier R7'], ['frontPads', 'Hawk DTC-60']])
     expect(consumablesOn(cayman, '2026-01-01')).toEqual([])
@@ -49,6 +50,7 @@ describe('garage (#344)', () => {
 
   it('suggests what a consumable’s been, most used first', () => {
     expect(partOptions('tires', garage)).toEqual(['Hoosier R7', 'Yokohama A052'])
+    expect(shopOptions(garage)).toEqual(['Speed Shop'])
   })
 
   it('reads a car: make and model needed, numbers checked', () => {
@@ -59,14 +61,19 @@ describe('garage (#344)', () => {
     expect(cleanCar({ make: 'Porsche', model: 'Cayman', year: 2031 }, 2026)).toHaveProperty('error')
   })
 
-  it('reads a log entry: a day and a consumable needed', () => {
-    expect(cleanChange({ date: '2026-04-15', part: 'brakeFluid', what: ' Motul RBF 660 ', shop: 'Speed Shop', note: '' })).toEqual({
-      value: { date: '2026-04-15', part: 'brakeFluid', what: 'Motul RBF 660', shop: 'Speed Shop' },
+  it('reads a log entry: a day and at least one consumable, each once, in the forms’ order', () => {
+    expect(cleanEntry({
+      date: '2026-04-15', shop: 'Speed Shop', note: '',
+      parts: [{ part: 'coolant', what: '' }, { part: 'brakeFluid', what: ' Motul RBF 660 ' }],
+    })).toEqual({
+      value: { date: '2026-04-15', shop: 'Speed Shop', parts: [{ part: 'brakeFluid', what: 'Motul RBF 660' }, { part: 'coolant' }] },
     })
-    expect(cleanChange({ date: '2026-04-15', part: 'brakeFluid', shop: 'x'.repeat(61) })).toHaveProperty('error')
-    expect(cleanChange({ date: '2026-04-15', part: 'wipers' })).toHaveProperty('error')
-    expect(cleanChange({ date: '4/15/2026', part: 'tires' })).toHaveProperty('error')
-    expect(cleanChange({ date: '2026-02-31x', part: 'tires' })).toHaveProperty('error')
+    const entry = (e: object) => cleanEntry({ date: '2026-04-15', parts: [{ part: 'tires' }], ...e })
+    expect(entry({ shop: 'x'.repeat(61) })).toHaveProperty('error')
+    expect(entry({ parts: [] })).toHaveProperty('error')
+    expect(entry({ parts: [{ part: 'wipers' }] })).toHaveProperty('error')
+    expect(entry({ parts: [{ part: 'tires' }, { part: 'tires' }] })).toHaveProperty('error')
+    expect(entry({ date: '4/15/2026' })).toHaveProperty('error')
   })
 
   it('reads a session’s pressures to a tenth of a psi, and wants at least one', () => {

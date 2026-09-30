@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import type { Car, ConsumableChange, EventSetup, Garage } from '../utils/garage'
+import type { Car, EventSetup, Garage, LogEntry } from '../utils/garage'
 import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's garage (#344), from the garage function: their
@@ -16,11 +16,16 @@ export type GarageStatus = 'off' | 'loading' | 'ready' | 'error'
 export interface GarageValue extends Garage {
   status: GarageStatus
   /** Adds a car (no id) or changes one; resolves to it as saved. Throws with a message to show. */
-  saveCar(car: Omit<Car, 'id' | 'log' | 'updatedAt'> & { id?: string }): Promise<Car>
+  saveCar(car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'> & { id?: string }): Promise<Car>
   removeCar(id: string): Promise<void>
-  /** Logs a consumable's change on a car (no id), or changes an entry. */
-  saveChange(carId: string, change: Omit<ConsumableChange, 'id'> & { id?: string }): Promise<void>
-  removeChange(carId: string, changeId: string): Promise<void>
+  /** Sets a car's photo: the image, already shrunk (shrinkPhoto). */
+  savePhoto(carId: string, photo: Blob): Promise<void>
+  removePhoto(carId: string): Promise<void>
+  /** Where a car's photo is, for useCarPhoto; none without one. */
+  photoUrl(car: Car): string | null
+  /** Logs a job on a car (no id), or changes an entry. */
+  saveEntry(carId: string, entry: Omit<LogEntry, 'id'> & { id?: string }): Promise<void>
+  removeEntry(carId: string, entryId: string): Promise<void>
   /** Saves an event's setup, replacing any. */
   saveSetup(eventId: string, setup: Omit<EventSetup, 'updatedAt'>): Promise<void>
   removeSetup(eventId: string): Promise<void>
@@ -105,7 +110,7 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     body: JSON.stringify(body),
   })
 
-  const saveCar = useCallback(async (car: Omit<Car, 'id' | 'log' | 'updatedAt'> & { id?: string }) => {
+  const saveCar = useCallback(async (car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'> & { id?: string }) => {
     const saved = (await (await send('', put({ car }))).json()).car as Car
     change(g => ({
       ...g,
@@ -127,8 +132,8 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     }))
   }, [send, change])
 
-  const saveChange = useCallback(async (carId: string, entry: Omit<ConsumableChange, 'id'> & { id?: string }) => {
-    const saved = (await (await send(`car=${encodeURIComponent(carId)}`, put({ change: entry }))).json()).change as ConsumableChange
+  const saveEntry = useCallback(async (carId: string, entry: Omit<LogEntry, 'id'> & { id?: string }) => {
+    const saved = (await (await send(`car=${encodeURIComponent(carId)}`, put({ entry }))).json()).entry as LogEntry
     change(g => ({
       ...g,
       cars: g.cars.map(c => {
@@ -139,10 +144,34 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     }))
   }, [send, change])
 
-  const removeChange = useCallback(async (carId: string, changeId: string) => {
-    await send(`car=${encodeURIComponent(carId)}&change=${encodeURIComponent(changeId)}`, { method: 'DELETE' })
-    change(g => ({ ...g, cars: g.cars.map(c => (c.id === carId ? { ...c, log: (c.log ?? []).filter(e => e.id !== changeId) } : c)) }))
+  const removeEntry = useCallback(async (carId: string, entryId: string) => {
+    await send(`car=${encodeURIComponent(carId)}&entry=${encodeURIComponent(entryId)}`, { method: 'DELETE' })
+    change(g => ({ ...g, cars: g.cars.map(c => (c.id === carId ? { ...c, log: (c.log ?? []).filter(e => e.id !== entryId) } : c)) }))
   }, [send, change])
+
+  const replaceCar = useCallback((saved: Car) => {
+    change(g => ({ ...g, cars: g.cars.map(c => (c.id === saved.id ? saved : c)) }))
+  }, [change])
+
+  const savePhoto = useCallback(async (carId: string, photo: Blob) => {
+    const res = await send(`car=${encodeURIComponent(carId)}&photo=1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': photo.type || 'image/jpeg' },
+      body: photo,
+    })
+    replaceCar((await res.json()).car as Car)
+  }, [send, replaceCar])
+
+  const removePhoto = useCallback(async (carId: string) => {
+    const res = await send(`car=${encodeURIComponent(carId)}&photo=1`, { method: 'DELETE' })
+    replaceCar((await res.json()).car as Car)
+  }, [send, replaceCar])
+
+  const photoUrl = useCallback((car: Car) => {
+    if (!car.photo) return null
+    const sep = url.includes('?') ? '&' : '?'
+    return `${url}${sep}car=${encodeURIComponent(car.id)}&photo=1&v=${encodeURIComponent(car.photo)}`
+  }, [url])
 
   const saveSetup = useCallback(async (eventId: string, setup: Omit<EventSetup, 'updatedAt'>) => {
     const saved = (await (await send(`event=${encodeURIComponent(eventId)}`, put({ setup }))).json()).setup as EventSetup
@@ -160,8 +189,8 @@ export function GarageProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
   const value = useMemo(
-    () => ({ status, ...garage, saveCar, removeCar, saveChange, removeChange, saveSetup, removeSetup, reload }),
-    [status, garage, saveCar, removeCar, saveChange, removeChange, saveSetup, removeSetup, reload],
+    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, reload }),
+    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, reload],
   )
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
@@ -172,8 +201,11 @@ const OFF: GarageValue = {
   ...EMPTY,
   saveCar: signIn,
   removeCar: signIn,
-  saveChange: signIn,
-  removeChange: signIn,
+  savePhoto: signIn,
+  removePhoto: signIn,
+  photoUrl: () => null,
+  saveEntry: signIn,
+  removeEntry: signIn,
   saveSetup: signIn,
   removeSetup: signIn,
   reload() {},
@@ -182,4 +214,42 @@ const OFF: GarageValue = {
 // Rendered without a provider (isolated tests) → as if signed out.
 export function useGarage(): GarageValue {
   return useContext(GarageContext) ?? OFF
+}
+
+// Photos already fetched, by URL (which names the photo): each is fetched
+// once, however many places show it.
+const photoCache = new Map<string, Promise<string | null>>()
+
+/**
+ * A car's photo, ready for an <img> — fetched with the driver's sign-in,
+ * since the photos are private — or null: none, or not in yet.
+ */
+export function useCarPhoto(car: Car | undefined): string | null {
+  const { photoUrl } = useGarage()
+  const { authedFetch } = useAuth()
+  const url = car ? photoUrl(car) : null
+  const [shown, setShown] = useState<{ url: string; src: string } | null>(null)
+  useEffect(() => {
+    if (!url) return
+    let cancelled = false
+    if (!photoCache.has(url)) {
+      photoCache.set(url, (async () => {
+        try {
+          const res = await authedFetch(url)
+          if (!res.ok) throw new Error('No photo')
+          return URL.createObjectURL(await res.blob())
+        } catch {
+          photoCache.delete(url)
+          return null
+        }
+      })())
+    }
+    photoCache.get(url)!.then(src => {
+      if (!cancelled && src) setShown({ url, src })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [url, authedFetch])
+  return url && shown?.url === url ? shown.src : null
 }

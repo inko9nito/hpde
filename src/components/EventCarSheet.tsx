@@ -9,17 +9,19 @@ import type { EventConfig } from '../types'
 
 /**
  * The car an event was driven in (#344), from the top of its My notes:
- * its details — the lug nut torque, and what was on it at this event, from
- * its change log — or, with none picked yet (or Change car), the garage's
- * cars to pick from, and the way to add one.
+ * its lug nut torque and what was on it at this event, from its change
+ * log, and the way to its page — or, with none picked yet (or Change car),
+ * the garage's cars to pick from, and the way to add one.
  */
-export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, onClose }: {
+export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, onOpenCar, onClose }: {
   event: EventConfig
   garage: Garage
   /** The event's car, if one's picked. */
   car?: Car
   onPick: (carId: string) => Promise<void>
-  onAddCar: (car: Omit<Car, 'id' | 'log' | 'updatedAt'>) => Promise<Car>
+  onAddCar: (car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'>) => Promise<Car>
+  /** Opens the car's page, over the event. */
+  onOpenCar: () => void
   /** Takes the car off the event. */
   onRemove: () => Promise<void>
   onClose: () => void
@@ -61,7 +63,6 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
         </dl>
         <h3 className="mt-4 text-sm font-semibold text-gray-900">At this event</h3>
         <ConsumablesList car={car} day={eventStart(event)} />
-        <p className="mt-2 text-xs text-gray-400">Log a change to tires, brakes or fluids on the car’s page in the Garage.</p>
       </>)}
 
       {picking && (
@@ -127,12 +128,20 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
 
       <div className="mt-5 flex flex-col items-center gap-3">
         {!picking && (
-          <button
-            onClick={() => setPicking(true)}
-            className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
-          >
-            Change car
-          </button>
+          <div className="grid w-full grid-cols-2 gap-2">
+            <button
+              onClick={onOpenCar}
+              className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-700"
+            >
+              Car details
+            </button>
+            <button
+              onClick={() => setPicking(true)}
+              className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
+            >
+              Change car
+            </button>
+          </div>
         )}
         {picking && car && (
           <button onClick={() => setPicking(false)} disabled={!!busy} className="text-sm text-gray-600 hover:text-gray-800">Cancel</button>

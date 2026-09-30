@@ -1,4 +1,4 @@
-import { ChevronRight, ClipboardCheck, Gauge, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
 import type { SessionActivity, RunGroupConfig } from '../types'
@@ -16,7 +16,7 @@ interface Props {
   hasLaps?: boolean
   /** An instructor's evaluation is saved for it (#340): shows the clipboard. */
   hasEvaluation?: boolean
-  /** Tire pressures are saved for it (#344): shows the gauge. */
+  /** Tire pressures are saved for it (#344): shows a tire. */
   hasPressures?: boolean
 }
 
@@ -61,7 +61,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, ha
               {onTrackRow}
               {hasLaps && <Timer size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-laps />}
               {hasEvaluation && <ClipboardCheck size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-evaluation />}
-              {hasPressures && <Gauge size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-pressures />}
+              {hasPressures && <Disc3 size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-pressures />}
               <ChevronRight size={16} className="shrink-0 text-gray-300" aria-hidden="true" />
             </button>
           ) : (

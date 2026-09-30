@@ -248,23 +248,42 @@ export default function App() {
   if (stack.hash !== hash) setStack(nextPageStack(stack, hash, driver, PAGE_HASHES))
   const trackOverEventId = trackSlug !== null ? stack.eventUnderTrack : null
   const trackUnderEvent = isOnEventRoute ? stack.trackUnderEvent : null
-  // The event whose page is showing: the route's, or the one under the track page.
-  const pageEventId = routeEventId ?? trackOverEventId
+  // A car's page (#344) and an event's page, each opened from the other —
+  // the car's events, the car at the top of My notes — go over it, and
+  // Back returns to the one underneath, until somewhere else is opened.
+  const carRouteId = carIdFromHash(hash)
+  const [carUnderEvent, setCarUnderEvent] = useState<string | null>(null)
+  if (carUnderEvent !== null && !isOnEventRoute && carRouteId !== carUnderEvent) setCarUnderEvent(null)
+  // The event a car's page was opened over, until the car's page closes:
+  // `arrived` once it's open, so leaving it (Back to the event, or
+  // anywhere) ends it.
+  const [underCar, setUnderCar] = useState<{ eventId: string; carId: string; arrived: boolean } | null>(null)
+  if (underCar !== null) {
+    const onCar = carRouteId === underCar.carId
+    if (onCar && !underCar.arrived) setUnderCar({ ...underCar, arrived: true })
+    else if (!onCar && (underCar.arrived || routeEventId !== underCar.eventId)) setUnderCar(null)
+  }
+  const eventUnderCar = underCar?.eventId ?? null
+  // The event whose page is showing: the route's, or the one under the track or car page.
+  const pageEventId = routeEventId ?? trackOverEventId ?? (carRouteId !== null ? eventUnderCar : null)
   const eventPageOpen = pageEventId !== null
   // The track page showing: the route's, or the one under the event's page.
   const trackPageSlug = trackSlug ?? trackUnderEvent
-  // An event's page opened from a track page goes over it — kept through
-  // its slide-out.
-  const [eventOverTrack, setEventOverTrack] = useState(trackUnderEvent !== null)
-  if (isOnEventRoute && eventOverTrack !== (trackUnderEvent !== null)) setEventOverTrack(trackUnderEvent !== null)
+  // An event's page opened from a track or car page goes over it — kept
+  // through its slide-out.
+  const [eventRaised, setEventRaised] = useState(trackUnderEvent !== null)
+  if (isOnEventRoute && eventRaised !== (trackUnderEvent !== null || carUnderEvent !== null)) {
+    setEventRaised(trackUnderEvent !== null || carUnderEvent !== null)
+  }
+  // …and a car's page opened from an event's, over it.
+  const [carRaised, setCarRaised] = useState(false)
+  if (carRouteId !== null && carRaised !== (eventUnderCar !== null)) setCarRaised(eventUnderCar !== null)
   // The tab under everything (#274): Events, Tracks or Garage. A track page
-  // of its own (not over an event) is the Tracks tab's. Pages pushed over a
-  // tab leave it as it was, and go back to it.
-  // A car's page (#344) is the Garage's.
-  const carRouteId = carIdFromHash(hash)
+  // of its own (not over an event) is the Tracks tab's, and a car's page the
+  // Garage's. Pages pushed over a tab leave it as it was, and go back to it.
   const hashTab = homeTabFromHash(hash)
     ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
-    ?? (carRouteId !== null ? 'garage' : null)
+    ?? (carRouteId !== null && eventUnderCar === null ? 'garage' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // A link to an event we don't have (yet): an app-created one before the
@@ -278,12 +297,8 @@ export default function App() {
     if (eventPageOpen) setPushMounted(true)
   }, [eventPageOpen])
 
-  // An event opened from a car's page goes over it, and Back returns to it:
-  // the car whose page is under the event's, until somewhere else is opened.
-  const [carUnderEvent, setCarUnderEvent] = useState<string | null>(null)
-  if (carUnderEvent !== null && !isOnEventRoute && carRouteId !== carUnderEvent) setCarUnderEvent(null)
+  // The car page showing: the route's, or the one under the event's page.
   const carPageId = carRouteId ?? (isOnEventRoute ? carUnderEvent : null)
-  const eventRaised = eventOverTrack || (isOnEventRoute && carUnderEvent !== null)
   // It stays mounted through its slide-out.
   const [lastCarId, setLastCarId] = useState(carPageId)
   useEffect(() => {
@@ -666,6 +681,7 @@ export default function App() {
     {shownCarId && (
       <PushPage
         key={`car ${shownCarId}`}
+        raised={carRaised}
         open={carPageId !== null}
         onExited={() => setLastCarId(null)}
         onEnteredChange={setCarEntered}
@@ -674,9 +690,16 @@ export default function App() {
         <CarPage
           carId={shownCarId}
           events={ALL_EVENTS}
-          onBack={backToTab}
-          // One of its events opens over it, on My notes, where its car is.
+          onBack={eventUnderCar !== null ? () => setHash(eventHash(eventUnderCar)) : backToTab}
+          // One of its events opens over it, on My notes, where its car is —
+          // or, the one it was opened from, back to it.
           onOpenEvent={event => {
+            if (event.id === eventUnderCar) {
+              setActiveTab('notes')
+              setHash(eventHash(event.id))
+              return
+            }
+            setUnderCar(null)
             setCarUnderEvent(shownCarId)
             switchEvent(event)
             setActiveTab('notes')
@@ -816,6 +839,13 @@ export default function App() {
           showToast('Car saved')
         }}
         onAddCar={garage.saveCar}
+        // Its page, over the event — or, the one the event was opened from, back to it.
+        onOpenCar={() => {
+          if (!eventCar) return
+          setCarSheetOpen(false)
+          if (carUnderEvent !== eventCar.id) setUnderCar({ eventId: activeEvent.id, carId: eventCar.id, arrived: false })
+          setHash(carHash(eventCar.id))
+        }}
         onRemove={async () => {
           // Each session's pressures stay.
           const sessions = eventSetup?.sessions

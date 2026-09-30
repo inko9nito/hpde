@@ -3,37 +3,52 @@ import { Lock } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { SuggestInput } from './SuggestInput'
 import { inputClass } from './SessionEvaluationForm'
-import { CONSUMABLES, MAX_NAME, MAX_NOTE, MAX_PART, carName, cleanChange, consumableLabel, partOptions, shopOptions } from '../utils/garage'
-import type { Car, ConsumableChange, ConsumableId, Garage } from '../utils/garage'
+import { CONSUMABLES, MAX_NAME, MAX_NOTE, MAX_PART, carName, cleanEntry, partOptions, shopOptions } from '../utils/garage'
+import type { Car, ConsumableId, Garage, LogEntry } from '../utils/garage'
 import { todayLocalISO } from '../utils/time'
 
 const label = 'text-xs font-medium text-gray-700'
+// iOS centers a date input's value and lets it run wider than the field;
+// left-aligned, one line tall, it sits like the text boxes around it
+// (as on New event's dates).
+const dateClass = `${inputClass} block h-10 min-w-0 appearance-none bg-white py-[7px] leading-6 [&::-webkit-date-and-time-value]:min-h-6 [&::-webkit-date-and-time-value]:text-left`
 
 /**
- * Logs a consumable's change on a car (#344), or changes or removes an
- * entry: what was changed — picked from the consumables, two by two — the
- * day it was done, what went on, the shop that did it and a note.
+ * Logs a job on a car (#344), or changes or removes an entry: what was
+ * changed — any of the consumables, picked two by two, each then asking
+ * what went on — the day it was done, the shop and a note.
  */
-export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: {
+export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   car: Car
   /** Every car's log, for suggestions. */
   garage: Garage
   /** The entry to change; none to log a new one. */
-  change?: ConsumableChange
-  onSave: (change: Omit<ConsumableChange, 'id'> & { id?: string }) => Promise<void>
+  entry?: LogEntry
+  onSave: (entry: Omit<LogEntry, 'id'> & { id?: string }) => Promise<void>
   onRemove?: () => Promise<void>
   onClose: () => void
 }) {
-  const [part, setPart] = useState<ConsumableId | null>(change?.part ?? null)
-  const [date, setDate] = useState(change?.date ?? todayLocalISO())
-  const [what, setWhat] = useState(change?.what ?? '')
-  const [shop, setShop] = useState(change?.shop ?? '')
-  const [note, setNote] = useState(change?.note ?? '')
+  // What went on for each consumable picked; one not picked isn't in it.
+  const [parts, setParts] = useState<Partial<Record<ConsumableId, string>>>(
+    () => Object.fromEntries((entry?.parts ?? []).map(p => [p.part, p.what ?? ''])),
+  )
+  const [date, setDate] = useState(entry?.date ?? todayLocalISO())
+  const [shop, setShop] = useState(entry?.shop ?? '')
+  const [note, setNote] = useState(entry?.note ?? '')
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const id = useId()
-  const cleaned = cleanChange({ date, part, what, shop, note })
+  const picked = CONSUMABLES.filter(c => parts[c.id] !== undefined)
+  const cleaned = cleanEntry({ date, shop, note, parts: picked.map(c => ({ part: c.id, what: parts[c.id] })) })
+
+  function toggle(part: ConsumableId) {
+    setParts(prev => {
+      if (prev[part] === undefined) return { ...prev, [part]: '' }
+      const { [part]: _gone, ...rest } = prev
+      return rest
+    })
+  }
 
   async function run(kind: 'saving' | 'removing', action: () => Promise<void>) {
     setBusy(kind)
@@ -46,7 +61,7 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
     }
   }
 
-  const title = change ? 'Edit change' : 'Log a change'
+  const title = entry ? 'Edit entry' : 'Log a change'
   return (
     <Sheet
       label={title}
@@ -59,15 +74,18 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
       </>}
     >
       <fieldset className="mt-4">
-        <legend className={label}>What was changed</legend>
+        <legend className={`flex w-full items-baseline justify-between ${label}`}>
+          What was changed
+          <span className="font-normal text-gray-400">Pick all that apply</span>
+        </legend>
         <div className="mt-1.5 grid grid-cols-2 gap-2">
           {CONSUMABLES.map(c => (
             <button
               key={c.id}
-              onClick={() => setPart(c.id)}
-              aria-pressed={part === c.id}
+              onClick={() => toggle(c.id)}
+              aria-pressed={parts[c.id] !== undefined}
               className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                part === c.id ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-800 hover:bg-gray-50'
+                parts[c.id] !== undefined ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-800 hover:bg-gray-50'
               }`}
             >
               {c.label}
@@ -76,6 +94,29 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
         </div>
       </fieldset>
 
+      {/* What went on, for each one picked. */}
+      {picked.length > 0 && (
+        <fieldset className="mt-4">
+          <legend className={`flex w-full items-baseline justify-between ${label}`}>
+            What went on
+            <span className="font-normal text-gray-400">Optional</span>
+          </legend>
+          {picked.map(c => (
+            <div key={c.id} className="mt-2 flex flex-col first-of-type:mt-1.5">
+              <label htmlFor={`${id}-${c.id}`} className="text-xs text-gray-500">{c.label}</label>
+              <SuggestInput
+                id={`${id}-${c.id}`}
+                value={parts[c.id] ?? ''}
+                onChange={v => setParts(prev => ({ ...prev, [c.id]: v.slice(0, MAX_PART) }))}
+                options={partOptions(c.id, garage)}
+                placeholder={c.placeholder}
+                className={inputClass}
+              />
+            </div>
+          ))}
+        </fieldset>
+      )}
+
       <label htmlFor={`${id}-date`} className={`mt-4 ${label}`}>Date</label>
       <input
         id={`${id}-date`}
@@ -83,20 +124,7 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
         value={date}
         onChange={e => setDate(e.target.value)}
         max={todayLocalISO()}
-        className={`${inputClass} min-h-10 bg-white`}
-      />
-
-      <label htmlFor={`${id}-what`} className={`mt-4 flex items-baseline justify-between ${label}`}>
-        What went on
-        <span className="font-normal text-gray-400">Optional</span>
-      </label>
-      <SuggestInput
-        id={`${id}-what`}
-        value={what}
-        onChange={v => setWhat(v.slice(0, MAX_PART))}
-        options={part ? partOptions(part, garage) : []}
-        placeholder={part ? CONSUMABLES.find(c => c.id === part)!.placeholder : 'Brand and model'}
-        className={inputClass}
+        className={dateClass}
       />
 
       <label htmlFor={`${id}-shop`} className={`mt-4 flex items-baseline justify-between ${label}`}>
@@ -130,20 +158,20 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
 
       <div className="mt-5 flex flex-col items-center gap-3">
         <button
-          onClick={() => 'value' in cleaned && run('saving', () => onSave({ ...(change ? { id: change.id } : {}), ...cleaned.value }))}
+          onClick={() => 'value' in cleaned && run('saving', () => onSave({ ...(entry ? { id: entry.id } : {}), ...cleaned.value }))}
           disabled={!('value' in cleaned) || !!busy}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
         >
-          {busy === 'saving' ? 'Saving…' : change ? 'Save change' : part ? `Log ${consumableLabel(part).toLowerCase()} change` : 'Log change'}
+          {busy === 'saving' ? 'Saving…' : entry ? 'Save entry' : picked.length > 1 ? `Log ${picked.length} changes` : 'Log change'}
         </button>
-        {change && onRemove && !confirmingRemove && (
+        {entry && onRemove && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
             Remove from log
           </button>
         )}
-        {change && onRemove && confirmingRemove && (
+        {entry && onRemove && confirmingRemove && (
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-gray-700">Remove this change?</span>
+            <span className="text-gray-700">Remove this entry?</span>
             <button onClick={() => run('removing', onRemove)} disabled={!!busy} className="font-semibold text-red-600 hover:text-red-700">
               {busy === 'removing' ? 'Removing…' : 'Remove'}
             </button>
