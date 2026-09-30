@@ -14,7 +14,6 @@ import type { SessionNotes } from '../utils/evaluation'
 import type { SessionPressures } from '../utils/garage'
 import { gapToBest } from '../utils/trackStats'
 import { opensElsewhere } from '../utils/links'
-import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import type { RunGroupConfig } from '../types'
 
@@ -152,7 +151,6 @@ export function LapTimesSheet({
   }
   // Until their laps are in, there's nothing to show but that.
   const waiting = loading && !typed
-  const whose = driver ? `${driverName(driver)}’s` : 'your'
 
   async function save() {
     if (!canSave || group === null) return
@@ -221,13 +219,13 @@ export function LapTimesSheet({
       {driverPicker && <div className="mt-4">{driverPicker}</div>}
 
       {waiting && (
-        <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading {whose} notes…</p>
+        <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>
       )}
 
       {slot.groups.length > 1 && !waiting && (
         <fieldset className="mt-4">
           <legend className="text-xs font-medium text-gray-700">
-            {driver ? `Which group was ${driverName(driver)} driving in?` : 'Which group were you driving in?'}
+            Which group were you driving in?
           </legend>
           <div className="mt-2 flex flex-wrap gap-2">
             {slot.groups.map(id => (
@@ -306,7 +304,7 @@ export function LapTimesSheet({
             </div>
             {existing.summary && <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{existing.summary}</p>}
             <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
-            {track && <TrackLink track={track} laps={existing} allTimeBest={allTimeBest} driver={driver} onOpen={onOpenTrack} />}
+            {track && <TrackLink track={track} laps={existing} allTimeBest={allTimeBest} onOpen={onOpenTrack} />}
           </section>
         )}
 
@@ -467,9 +465,9 @@ export function LapTimesSheet({
       <p className={`${view === 'laps' ? 'mt-3' : 'mt-5'} flex items-center justify-center gap-1 text-[11px] text-gray-400`}>
         <Lock size={11} aria-hidden="true" />
         {view === 'laps'
-          ? (driver ? `Only ${driverName(driver)} and admins can see these lap times.` : 'Only you and admins can see your lap times.')
+          ? 'Only you and admins can see your lap times.'
           : view === 'pressures' ? 'Only you and admins can see your garage.'
-          : (driver ? `Only ${driverName(driver)} and admins can see these notes.` : 'Only you and admins can see your notes.')}
+          : 'Only you and admins can see your notes.'}
       </p>
     </Sheet>
   )
@@ -513,11 +511,10 @@ function MenuRow({ icon: Icon, title, detail, saved, disabled, onClick }: {
  * Under a session's saved laps (#274): how they compare with the all-time
  * best on the layout, and the way to every session on it — the track page.
  */
-function TrackLink({ track, laps, allTimeBest, driver, onOpen }: {
+function TrackLink({ track, laps, allTimeBest, onOpen }: {
   track: { name: string; href: string }
   laps: SessionLaps
   allTimeBest?: number
-  driver: Driver | null
   onOpen?: () => void
 }) {
   const { best } = lapStats(laps.laps)
@@ -542,7 +539,7 @@ function TrackLink({ track, laps, allTimeBest, driver, onOpen }: {
         }}
         className="flex items-center gap-0.5 text-sm font-medium text-blue-600 hover:text-blue-700"
       >
-        See all {driver ? `${driverName(driver)}’s` : 'my'} {track.name} laps
+        See all my {track.name} laps
         <ChevronRight size={16} aria-hidden="true" />
       </a>
     </div>

@@ -624,15 +624,16 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   const picker = sheet.getByLabel('Driver')
   await expect(picker.getByRole('option')).toHaveText(['Me', email])
   await picker.selectOption({ label: email })
-  await expect(sheet).toContainText(`Only ${email} and admins can see these lap times.`)
+  // Worded as he'd see it (#364): only the picker says it's his.
+  await expect(sheet).toContainText('Only you and admins can see your lap times.')
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
 
   await expect(sheet).toBeHidden()
   const toast = page.getByRole('status')
-  await expect(toast).toHaveText(`Lap times saved for ${email}`)
-  // It wraps rather than running off the screen.
+  await expect(toast).toHaveText('Lap times saved')
+  // It stays on the screen.
   const pill = (await toast.locator('> div').boundingBox())!
   expect(pill.x).toBeGreaterThanOrEqual(0)
   expect(pill.x + pill.width).toBeLessThanOrEqual(page.viewportSize()!.width)

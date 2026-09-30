@@ -19,8 +19,6 @@ import { classifyEvent } from '../utils/eventClass'
 import { carName, carTitle } from '../utils/garage'
 import type { Car, SessionPressures } from '../utils/garage'
 import type { GarageStatus } from '../data/GarageContext'
-import { driverName } from '../data/drivers'
-import type { Driver } from '../data/drivers'
 import type { EventConfig, RunGroupConfig } from '../types'
 
 interface Props {
@@ -34,8 +32,6 @@ interface Props {
   allTimeBest?: number
   /** The layout's track page (#274), which the All time best card opens. */
   track?: { name: string; href: string }
-  /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
-  driver?: Driver | null
   /** Admins only, on another driver's notes: the Driver picker, above them, to say whose and switch back (#288, #362). */
   driverPicker?: ReactNode
   /** The group they drove in, and every event (to color groups), for the report card. */
@@ -68,13 +64,11 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
   const track = trackShortName(event)
-  const name = driver ? driverName(driver) : null
-  const whose = name ? `${name}’s` : 'your'
 
   const loading = log.status === 'loading' || log.status === 'off' || notes.status === 'loading' || garage?.status === 'loading'
   const tde = isTdeEvent(event)
@@ -96,7 +90,6 @@ export function MyLapTimes({
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
       onOpen={setOpen}
-      whose={name}
     />
   )
   const top = (<>
@@ -106,7 +99,7 @@ export function MyLapTimes({
   const header = <>{top}{toolbar}</>
 
   if (loading || leaving) {
-    return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label={`Loading ${whose} lap times`} /></>
+    return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label="Loading your lap times" /></>
   }
 
   if (log.status === 'error' || notes.status === 'error' || garage?.status === 'error') {
@@ -114,7 +107,7 @@ export function MyLapTimes({
       <>
         {header}
         <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} notes</p>
+          <p className="text-sm font-medium text-gray-700">Couldn’t load your notes</p>
           <p className="mt-1 text-xs text-gray-400">Check your connection and try again.</p>
           <button
             onClick={() => {
@@ -152,9 +145,7 @@ export function MyLapTimes({
             <NotebookPen size={20} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No session notes yet</p>
             <p className="mt-1 text-xs text-gray-400">
-              {name
-                ? `On the Schedule tab, tap a session ${name} drove to add their laps or their instructor’s feedback.`
-                : 'On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.'}
+              On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.
             </p>
           </div>
         </div>
@@ -198,7 +189,7 @@ export function MyLapTimes({
               caption={`Across ${plural(layoutBest.events, 'event', 'events')} at this track config`}
               link={trackPage && {
                 href: trackPage.href,
-                label: `See all ${name ? `${name}’s` : 'my'} ${trackPage.name} laps`,
+                label: `See all my ${trackPage.name} laps`,
               }}
             />
           )}

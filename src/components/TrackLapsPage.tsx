@@ -189,7 +189,6 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
   const answers = useMemo(() => (driver ? {} : rsvps), [driver, rsvps])
   const going = useMemo(() => goingIds(onLayout, answers), [onLayout, answers])
   const name = driver ? driverName(driver) : null
-  const whose = name ? `${name}’s` : 'your'
 
   // Back from an event opened from here, where its laps may have changed.
   const wasActive = useRef(active)
@@ -269,11 +268,11 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
   } else if (authStatus !== 'signed-in') {
     body = <SignInPrompt reason="see your lap times on this track" />
   } else if (loading || leaving) {
-    body = <TrackSkeleton leaving={leaving} label={`Loading ${whose} lap times`} />
+    body = <TrackSkeleton leaving={leaving} label="Loading your lap times" />
   } else if (laps.status === 'error') {
     body = (
       <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-        <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} lap times</p>
+        <p className="text-sm font-medium text-gray-700">Couldn’t load your lap times</p>
         <p className="mt-1 text-xs text-gray-400">Check your connection and try again.</p>
         <button
           onClick={laps.reload}
@@ -289,9 +288,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
         <Timer size={20} className="mx-auto text-gray-400" aria-hidden="true" />
         <p className="mt-2 text-sm font-medium text-gray-700">No lap times on {title?.name ?? 'this track'} yet</p>
         <p className="mt-1 text-xs text-gray-400">
-          {name
-            ? `On an event’s Schedule tab, tap a session ${name} drove to add their laps.`
-            : 'On an event’s Schedule tab, tap a session you drove to add your laps.'}
+          On an event’s Schedule tab, tap a session you drove to add your laps.
         </p>
       </div>
     )
@@ -345,7 +342,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {title && authStatus === 'signed-in' && (
           <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
-            <PrivateTag whose={name} />
+            <PrivateTag />
           </div>
         )}
         {body}

@@ -750,12 +750,13 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
 
     await userEvent.selectOptions(picker, 'Jason')
-    expect(sheet).toHaveTextContent('Only Jason and admins can see these lap times.')
+    // Worded as he'd see it (#364): only the picker says it's his.
+    expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
     const box = await within(sheet).findByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Lap times saved for Jason')
+    expect(screen.getByRole('status')).toHaveTextContent('Lap times saved')
 
     const [url] = lapCalls('PUT')[0]
     expect(String(url)).toContain(`driver=${JASON}`)
@@ -811,8 +812,9 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     expect(screen.getByRole('menuitem', { name: /^Switch driver/ })).toHaveTextContent('Showing Jason')
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
-    expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps or their instructor’s feedback.')).toBeInTheDocument()
-    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+    // Otherwise worded as he'd see it (#364).
+    expect(screen.getByText('On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.')).toBeInTheDocument()
+    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     // Picked again, they're fetched afresh.
     jasonSaved = [blue2(84_000)]
@@ -1284,7 +1286,7 @@ describe('a track page: the events on one layout (#274)', () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     await switchDriver('Jason')
-    await userEvent.click(await screen.findByRole('link', { name: 'See all Jason’s MSRC 1.7 CW laps' }))
+    await userEvent.click(await screen.findByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
 
     const page = await trackPage()
     expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
@@ -1294,7 +1296,7 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:24.42')
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
-    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     await userEvent.click(await card('Lap Day'))
     expect(screen.getByLabelText('Driver')).toHaveValue(JASON)

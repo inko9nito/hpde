@@ -727,7 +727,6 @@ export default function App() {
               layoutBest={layoutBest}
               allTimeBest={allTimeBest}
               track={trackLink}
-              driver={driver}
               // Picked from the "…" menu (#362); here only while it's someone else's, to say whose and switch back.
               driverPicker={driver ? driverPicker : undefined}
               runGroup={evaluationGroup}
@@ -880,22 +879,22 @@ export default function App() {
         onSave={async session => {
           await lapLog.save(session)
           setLapSlot(null)
-          showToast(driver ? `Lap times saved for ${driverName(driver)}` : 'Lap times saved')
+          showToast('Lap times saved')
         }}
         onRemove={async key => {
           await lapLog.remove(key)
           setLapSlot(null)
-          showToast(driver ? `Lap times removed for ${driverName(driver)}` : 'Lap times removed')
+          showToast('Lap times removed')
         }}
         onSaveEvaluation={async session => {
           await notesLog.saveSession(session)
           setLapSlot(null)
-          showToast(driver ? `Evaluation saved for ${driverName(driver)}` : 'Evaluation saved')
+          showToast('Evaluation saved')
         }}
         onRemoveEvaluation={async key => {
           await notesLog.removeSession(key)
           setLapSlot(null)
-          showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
+          showToast('Evaluation removed')
         }}
         pressures={garageOn ? {
           saved: key => pressuresByKey.get(key),
@@ -977,16 +976,15 @@ export default function App() {
         events={ALL_EVENTS}
         existing={notesLog.evaluation}
         runGroup={evaluationGroup}
-        driver={driver}
         onSave={async evaluation => {
           await notesLog.saveEvaluation(evaluation)
           setEvaluationOpen(false)
-          showToast(driver ? `Evaluation saved for ${driverName(driver)}` : 'Evaluation saved')
+          showToast('Evaluation saved')
         }}
         onRemove={async () => {
           await notesLog.removeEvaluation()
           setEvaluationOpen(false)
-          showToast(driver ? `Evaluation removed for ${driverName(driver)}` : 'Evaluation removed')
+          showToast('Evaluation removed')
         }}
         onClose={() => setEvaluationOpen(false)}
       />

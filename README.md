@@ -225,7 +225,10 @@ Only they and admins can see them.
   account, so they see them when they sign in, and they count toward
   that driver's all-time best. While someone else is picked, the
   Schedule and My notes tabs show the picker at the top, so it's clear
-  whose laps are marked, and the menu item says whose are showing. The
+  whose laps are marked, and the menu item says whose are showing.
+  Everything else reads just as that driver would see it — "your laps",
+  "Lap times saved" — so those are the only signs (#364); a track page
+  opened from their laps says "· <name>'s laps" under its title. The
   event's page then shows that driver's answer to *Did you drive?* /
   *Are you going?* and their car too, and changes them for them (#362);
   `/api/rsvps` and `/api/garage` take `driver=<user id>` from admins, as

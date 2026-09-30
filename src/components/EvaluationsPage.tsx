@@ -275,7 +275,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
     body = (
       <div className="fade-in">
         <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
-          <PrivateTag whose={null} what="evaluations" />
+          <PrivateTag what="evaluations" />
         </div>
         {scored > 0 && (
           <div className="mb-8 flex flex-col gap-4">
