@@ -267,7 +267,6 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
               >
                 <Camera size={22} className="text-gray-400" aria-hidden="true" />
                 {busy === 'photo' ? 'Getting it ready…' : 'Add a photo'}
-                <span className="text-xs font-normal text-gray-400">Any size: it’s made smaller to upload</span>
               </button>
             )}
           </section>

@@ -112,9 +112,9 @@ export function SubPageHeader({ title, onBack }: { title: string; onBack: () => 
   )
 }
 
-const MORE_ITEMS: readonly { page: MorePage; label: string; detail: string; Icon: LucideIcon }[] = [
-  { page: 'evaluations', label: 'Instructor evaluations', detail: 'Every event’s, and how your report cards have come along', Icon: ClipboardCheck },
-  { page: 'garage', label: 'Garage', detail: 'Your cars, what they run on and their tire pressures', Icon: Car },
+const MORE_ITEMS: readonly { page: MorePage; label: string; Icon: LucideIcon }[] = [
+  { page: 'evaluations', label: 'Instructor evaluations', Icon: ClipboardCheck },
+  { page: 'garage', label: 'Garage', Icon: Car },
 ]
 
 /** The More tab (#345): a list of the rest of the app, each opening its page over it. */
@@ -124,7 +124,7 @@ export function MoreTab() {
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="More" />
         <ul className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="More">
-          {MORE_ITEMS.map(({ page, label, detail, Icon }) => (
+          {MORE_ITEMS.map(({ page, label, Icon }) => (
             <li key={page}>
               <a
                 href={MORE_PAGE_HASH[page]}
@@ -133,10 +133,7 @@ export function MoreTab() {
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-900 text-white">
                   <Icon size={18} aria-hidden="true" />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-medium text-gray-900">{label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-gray-500">{detail}</span>
-                </span>
+                <span className="min-w-0 flex-1 text-[15px] font-medium text-gray-900">{label}</span>
                 <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
               </a>
             </li>
