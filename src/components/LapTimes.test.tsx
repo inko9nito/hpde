@@ -768,8 +768,6 @@ describe('instructor evaluation (#340)', () => {
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
     expect(card).toHaveTextContent('Instructor evaluation · John HarmsUnwind the wheel sooner.')
     expect(within(card).queryByRole('table', { name: 'Session figures' })).not.toBeInTheDocument()
-    // Not a TDE event: no report card.
-    expect(screen.queryByRole('button', { name: 'Add evaluation' })).not.toBeInTheDocument()
 
     // Its chevron opens it in the sheet, where it's removed.
     await userEvent.click(within(card).getByRole('button', { name: 'Open the instructor evaluation for Session 2' }))
@@ -803,6 +801,40 @@ describe('instructor evaluation (#340)', () => {
     await openInSheet('Lap times')
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'All session info' }))
     expect(within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })).toBeInTheDocument()
+  })
+
+  it('adds the whole event’s evaluation on any event: on others, just the instructor and their notes', async () => {
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    expect(screen.getByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('Add what your instructor said about the whole event.')
+    await userEvent.click(screen.getByRole('button', { name: 'Add evaluation' }))
+    const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })
+    // None of TDE's report card.
+    expect(within(sheet).queryByLabelText('Car')).not.toBeInTheDocument()
+    expect(within(sheet).queryByText('Recommended run group')).not.toBeInTheDocument()
+    expect(within(sheet).queryByText('Core skills')).not.toBeInTheDocument()
+    expect(within(sheet).queryByText('You drove in')).not.toBeInTheDocument()
+    fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'Pat Lee' } })
+    fireEvent.change(within(sheet).getByLabelText('Instructor notes'), { target: { value: 'Smooth hands; look further ahead.' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({ instructor: 'Pat Lee', notes: 'Smooth hands; look further ahead.' })
+    const card = screen.getByRole('region', { name: 'Instructor evaluation' })
+    expect(card).toHaveTextContent('Instructor evaluationInstructorPat LeeInstructor notesSmooth hands; look further ahead.Edit evaluation')
+    expect(screen.getByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
+  })
+
+  it('offers no evaluation of an event that hasn’t begun', async () => {
+    const coming: EventConfig = {
+      ...event, id: '2099-05-02_coming', name: 'Coming Up',
+      days: [{ ...event.days[0], date: '2099-05-02' }],
+    }
+    moreEvents = [coming]
+    window.location.hash = `#/event/${coming.id}`
+    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add evaluation' })).not.toBeInTheDocument()
   })
 
   it('on a TDE event, adds the report card: skills, recommended groups and notes, with the group from “Did you drive?”', async () => {

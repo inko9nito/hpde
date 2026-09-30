@@ -14,6 +14,7 @@ import { formatTime, formatAmPm } from '../utils/time'
 import type { LapLog } from '../data/lapLog'
 import type { NotesLog } from '../data/notesLog'
 import { isTdeEvent } from '../utils/evaluation'
+import { classifyEvent } from '../utils/eventClass'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -97,10 +98,11 @@ export function MyLapTimes({
     )
   }
 
-  // The report card, or on a TDE event without one, the way to add it.
+  // The whole event's evaluation — on a TDE event, their report card — or
+  // once the event's begun, the way to add one.
   const reportCard = notes.evaluation
-    ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={runGroup} events={events} onEdit={onEditEvaluation} />
-    : tde ? <AddEventEvaluation onAdd={onEditEvaluation} /> : null
+    ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
+    : classifyEvent(event) !== 'upcoming' ? <AddEventEvaluation tde={tde} onAdd={onEditEvaluation} /> : null
 
   // Every session with something saved: laps, an evaluation or both.
   const heads = new Map<string, SessionHead>()

@@ -259,16 +259,19 @@ Private like your lap times: only you and admins see them.
   who they were. Any event. The session's row shows a clipboard once it
   has one; on *My notes* it's under the session's laps (a session with
   only an evaluation gets a card too), and its chevron opens it again.
-- **A TDE event's report card:** on events run by The Drivers Edge
-  (organizer *The Drivers Edge*, or a name starting *TDE*), *My notes*
-  has a whole-event **Instructor evaluation**, filled in from TDE's paper
-  card: the instructor and your car, the run group they recommend for
-  the same track and direction, a new direction and a new track (each
-  picked from a menu of run group badges, like the Schedule tab's
-  filter), a score for each core skill, *Aggressiveness = skill*, *Car
-  aids over activated* and their notes. It's in black, not
-  TDE's red. The group you drove in isn't picked here: it's your answer
-  to *Did you drive?* (or your laps' group), shown to confirm.
+- **The whole event's:** *My notes* has an **Instructor evaluation**
+  card, under the best-lap cards, once the event has begun: who your
+  instructor was and their notes on the whole event.
+  - **On TDE events** (organizer *The Drivers Edge*, or a name starting
+    *TDE*) it's their report card, filled in from the paper one: also
+    your car, the run group they recommend for the same track and
+    direction, a new direction and a new track (each picked from a menu
+    of run group badges, like the Schedule tab's filter), a score for
+    each core skill, *Aggressiveness = skill* and *Car aids over
+    activated*. It's in black, not TDE's red. The group you drove in
+    isn't picked here: it's your answer to *Did you drive?* (or your
+    laps' group), shown to confirm.
+  - Attaching a photo or PDF of a paper card is #343.
 - **Where they live:** `netlify/functions/notes.mts` (`/api/notes`) in
   Netlify Blobs (store `notes`), one record per driver per event, next to
   the laps and kept the same way: a sign-in for everything, `driver=` for

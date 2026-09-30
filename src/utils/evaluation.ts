@@ -1,10 +1,10 @@
 // An instructor's evaluation of a driver (#340), kept with the driver's own
-// notes for an event. Two kinds:
-//   - a session's feedback, at any event: what the instructor said after
-//     that session, and who they were;
-//   - The Drivers Edge's report card, for the whole event (TDE events only):
-//     the run group they recommend next, a score for each core skill, and
-//     their notes.
+// notes for an event. Two kinds, at any event:
+//   - a session's feedback: what the instructor said after that session,
+//     and who they were;
+//   - the whole event's: who they were and their notes — on a TDE event,
+//     The Drivers Edge's report card, which adds the run group they
+//     recommend next and a score for each core skill.
 // What's read and checked here is shared by the app (the forms) and the
 // notes function (which checks what it's sent before saving).
 import type { EventConfig } from '../types'
@@ -54,9 +54,11 @@ export const NEXT_GROUPS = [
 export type NextGroupId = typeof NEXT_GROUPS[number]['id']
 
 /**
- * The Drivers Edge's report card for the whole event. Every field is
- * optional: fill in what the card has. The run group they drove in isn't
- * here: it's the event's (their answer to "Did you drive?", or their laps').
+ * The instructor's evaluation of the whole event: who they were and their
+ * notes — and on a TDE event, the rest of The Drivers Edge's report card.
+ * Every field is optional: fill in what the card has. The run group they
+ * drove in isn't here: it's the event's (their answer to "Did you drive?",
+ * or their laps').
  */
 export interface EventEvaluation {
   instructor?: string

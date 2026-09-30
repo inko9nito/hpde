@@ -6,7 +6,7 @@ import { GroupBadge } from './GroupBadge'
 import { RunGroupSelect } from './RunGroupSelect'
 import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
-import { MAX_NAME, MAX_NOTES, NEXT_GROUPS, TDE_SKILLS, cleanEventEvaluation } from '../utils/evaluation'
+import { MAX_NAME, MAX_NOTES, NEXT_GROUPS, TDE_SKILLS, cleanEventEvaluation, isTdeEvent } from '../utils/evaluation'
 import type { EventEvaluation, NextGroupId, TdeSkillId } from '../utils/evaluation'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
@@ -72,12 +72,14 @@ function Row({ label: text, id, htmlFor, children }: { label: string; id?: strin
 }
 
 /**
- * The Drivers Edge's report card, filled in from the paper one (#340): who
- * the instructor was, the run group they recommend next, a score for each
- * core skill and their notes. Everything's optional; save what the card has.
- * The group they drove in is the event's, shown to confirm, not picked here.
+ * The instructor's evaluation of the whole event (#340): who they were and
+ * their notes. On a TDE event, it's filled in from their paper report card,
+ * which also has the car, the run group they recommend next and a score for
+ * each core skill. Everything's optional; save what the card has. The group
+ * they drove in is the event's, shown to confirm, not picked here.
  */
 export function EventEvaluationSheet({ event, events, existing, runGroup, driver = null, onSave, onRemove, onClose }: {
+  /** A TDE event (isTdeEvent) gets the report card's fields. */
   event: EventConfig
   /** Every event, to color the groups as the app does. */
   events: EventConfig[]
@@ -97,6 +99,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
   const id = useId()
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }))
 
+  const tde = isTdeEvent(event)
   const groups = recommendableGroups(event, events)
   const cleaned = cleanEventEvaluation(toEvaluation(draft))
 
@@ -132,102 +135,106 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         placeholder="Their name"
         className={inputClass}
       />
-      <label htmlFor={`${id}-car`} className={`mt-4 ${label}`}>Car</label>
-      <input
-        id={`${id}-car`}
-        value={draft.car}
-        onChange={e => set({ car: e.target.value })}
-        maxLength={MAX_NAME}
-        autoComplete="off"
-        placeholder="Make and model"
-        className={inputClass}
-      />
 
-      <div className="mt-3">
-        <Row label={driver ? `${driverName(driver)} drove in` : 'You drove in'}>
-          {runGroup
-            ? <GroupBadge group={runGroup} size="sm" />
-            : <span className="text-right text-xs text-gray-500">Answer “Did you drive?” at the top</span>}
-        </Row>
-      </div>
+      {/* The rest of TDE's paper report card. */}
+      {tde && (<>
+        <label htmlFor={`${id}-car`} className={`mt-4 ${label}`}>Car</label>
+        <input
+          id={`${id}-car`}
+          value={draft.car}
+          onChange={e => set({ car: e.target.value })}
+          maxLength={MAX_NAME}
+          autoComplete="off"
+          placeholder="Make and model"
+          className={inputClass}
+        />
 
-      <h3 className={sectionHead}>Recommended run group</h3>
-      <div className="mt-1">
-        {NEXT_GROUPS.map(g => {
-          const picked = groups.find(group => group.label.toLowerCase() === draft.next[g.id].toLowerCase())
-          return (
-            <Row key={g.id} label={g.label}>
-              <RunGroupSelect
-                groups={groups}
-                value={picked?.id ?? null}
-                onChange={groupId => set({ next: { ...draft.next, [g.id]: groups.find(group => group.id === groupId)?.label ?? '' } })}
-                label={g.label}
+        <div className="mt-3">
+          <Row label={driver ? `${driverName(driver)} drove in` : 'You drove in'}>
+            {runGroup
+              ? <GroupBadge group={runGroup} size="sm" />
+              : <span className="text-right text-xs text-gray-500">Answer “Did you drive?” at the top</span>}
+          </Row>
+        </div>
+
+        <h3 className={sectionHead}>Recommended run group</h3>
+        <div className="mt-1">
+          {NEXT_GROUPS.map(g => {
+            const picked = groups.find(group => group.label.toLowerCase() === draft.next[g.id].toLowerCase())
+            return (
+              <Row key={g.id} label={g.label}>
+                <RunGroupSelect
+                  groups={groups}
+                  value={picked?.id ?? null}
+                  onChange={groupId => set({ next: { ...draft.next, [g.id]: groups.find(group => group.id === groupId)?.label ?? '' } })}
+                  label={g.label}
+                />
+              </Row>
+            )
+          })}
+        </div>
+
+        <h3 className={sectionHead}>Core skills</h3>
+        <ul className="mt-2 flex flex-col gap-3">
+          {TDE_SKILLS.map(s => {
+            const value = draft.skills[s.id]
+            return (
+              <li key={s.id}>
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor={`${id}-skill-${s.id}`} className="text-sm text-gray-900">{s.label}</label>
+                  <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
+                    <input
+                      id={`${id}-skill-${s.id}`}
+                      value={value}
+                      onChange={e => set({ skills: { ...draft.skills, [s.id]: pctInput(e.target.value) } })}
+                      inputMode="numeric"
+                      placeholder="—"
+                      className={pctClass}
+                    />
+                    %
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                  <div className="h-full rounded-full bg-gray-900 transition-[width]" style={{ width: `${value === '' ? 0 : Number(value)}%` }} />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+
+        <div className="mt-3">
+          <Row label="Aggressiveness = skill" id={`${id}-aggr`}>
+            <div className="flex shrink-0 rounded-lg bg-gray-100 p-0.5" role="group" aria-labelledby={`${id}-aggr`}>
+              {([true, false] as const).map(v => (
+                <button
+                  key={String(v)}
+                  // Tapped again, it's unanswered: not every card says.
+                  onClick={() => set({ aggressivenessIsSkill: draft.aggressivenessIsSkill === v ? null : v })}
+                  aria-pressed={draft.aggressivenessIsSkill === v}
+                  className={`rounded-md px-3.5 py-1 text-sm font-medium ${draft.aggressivenessIsSkill === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+                >
+                  {v ? 'Yes' : 'No'}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row label="Car aids over activated" htmlFor={`${id}-aids`}>
+            <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
+              <input
+                id={`${id}-aids`}
+                value={draft.carAidsPct}
+                onChange={e => set({ carAidsPct: pctInput(e.target.value) })}
+                inputMode="numeric"
+                placeholder="—"
+                className={pctClass}
               />
-            </Row>
-          )
-        })}
-      </div>
+              %
+            </span>
+          </Row>
+        </div>
+      </>)}
 
-      <h3 className={sectionHead}>Core skills</h3>
-      <ul className="mt-2 flex flex-col gap-3">
-        {TDE_SKILLS.map(s => {
-          const value = draft.skills[s.id]
-          return (
-            <li key={s.id}>
-              <div className="flex items-center justify-between gap-3">
-                <label htmlFor={`${id}-skill-${s.id}`} className="text-sm text-gray-900">{s.label}</label>
-                <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
-                  <input
-                    id={`${id}-skill-${s.id}`}
-                    value={value}
-                    onChange={e => set({ skills: { ...draft.skills, [s.id]: pctInput(e.target.value) } })}
-                    inputMode="numeric"
-                    placeholder="—"
-                    className={pctClass}
-                  />
-                  %
-                </span>
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
-                <div className="h-full rounded-full bg-gray-900 transition-[width]" style={{ width: `${value === '' ? 0 : Number(value)}%` }} />
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      <div className="mt-3">
-        <Row label="Aggressiveness = skill" id={`${id}-aggr`}>
-          <div className="flex shrink-0 rounded-lg bg-gray-100 p-0.5" role="group" aria-labelledby={`${id}-aggr`}>
-            {([true, false] as const).map(v => (
-              <button
-                key={String(v)}
-                // Tapped again, it's unanswered: not every card says.
-                onClick={() => set({ aggressivenessIsSkill: draft.aggressivenessIsSkill === v ? null : v })}
-                aria-pressed={draft.aggressivenessIsSkill === v}
-                className={`rounded-md px-3.5 py-1 text-sm font-medium ${draft.aggressivenessIsSkill === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-              >
-                {v ? 'Yes' : 'No'}
-              </button>
-            ))}
-          </div>
-        </Row>
-        <Row label="Car aids over activated" htmlFor={`${id}-aids`}>
-          <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
-            <input
-              id={`${id}-aids`}
-              value={draft.carAidsPct}
-              onChange={e => set({ carAidsPct: pctInput(e.target.value) })}
-              inputMode="numeric"
-              placeholder="—"
-              className={pctClass}
-            />
-            %
-          </span>
-        </Row>
-      </div>
-
-      <label htmlFor={`${id}-notes`} className={`mt-6 ${label}`}>Instructor notes</label>
+      <label htmlFor={`${id}-notes`} className={`${tde ? 'mt-6' : 'mt-4'} ${label}`}>Instructor notes</label>
       <textarea
         id={`${id}-notes`}
         value={draft.notes}

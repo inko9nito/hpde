@@ -51,10 +51,12 @@ function Row({ icon: Icon, label, children }: { icon?: LucideIcon; label: string
 }
 
 /**
- * The Drivers Edge's report card for the whole event (#340), on My notes:
- * who the instructor was, the run group they drove in and the ones the
- * instructor recommends next, a score for each core skill and their notes
- * — in black, not TDE's red, which reads as bad marks.
+ * The instructor's evaluation of the whole event (#340), on My notes: who
+ * they were and their notes. On a TDE event it's The Drivers Edge's report
+ * card, which also has the car, the run group they drove in and the ones
+ * the instructor recommends next, and a score for each core skill — in
+ * black, not TDE's red, which reads as bad marks. Only what's filled in
+ * shows.
  */
 export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
   evaluation: EventEvaluation
@@ -147,8 +149,8 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
   )
 }
 
-/** A TDE event with no report card yet (#340): what it's for, and the way to add it. */
-export function AddEventEvaluation({ onAdd }: { onAdd: () => void }) {
+/** An event with no evaluation yet (#340): what it's for, and the way to add it. */
+export function AddEventEvaluation({ tde, onAdd }: { tde: boolean; onAdd: () => void }) {
   return (
     <section aria-label="Instructor evaluation" className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
       <div className="flex items-start justify-between gap-3">
@@ -156,7 +158,9 @@ export function AddEventEvaluation({ onAdd }: { onAdd: () => void }) {
         <ClipboardCheck size={18} className="mt-1 shrink-0 text-gray-400" aria-hidden="true" />
       </div>
       <p className="mt-1 text-sm text-gray-500">
-        Add your TDE report card: the run group your instructor recommends, your core skill scores and their notes.
+        {tde
+          ? 'Add your TDE report card: the run group your instructor recommends, your core skill scores and their notes.'
+          : 'Add what your instructor said about the whole event.'}
       </p>
       <button
         onClick={onAdd}
