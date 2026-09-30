@@ -92,15 +92,23 @@ export function HomeHeader({ title, children }: { title: string; children?: Reac
   )
 }
 
-/** A page pushed over a tab: Back, and its title, in a white bar that stays at the top. */
+/**
+ * A page pushed over a tab (#345): Back at the top, as on an event's page,
+ * in a bar that stays there; and under it the page's title, as big and
+ * where a tab's is (Tracks), so it reads as a page of its own.
+ */
 export function SubPageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
-    <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
-      <div className="mx-auto flex min-h-[52px] max-w-lg items-center gap-2 px-4">
-        <BackButton onClick={onBack} />
-        <h1 className="min-w-0 truncate font-rubik text-lg font-bold leading-tight text-gray-900">{title}</h1>
+    <>
+      <div className="sticky top-0 z-20 bg-gray-50/95 backdrop-blur">
+        <div className="mx-auto flex h-[52px] max-w-lg items-center px-4">
+          <BackButton onClick={onBack} />
+        </div>
       </div>
-    </div>
+      <div className="mx-auto max-w-lg px-3 sm:px-4">
+        <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">{title}</h1>
+      </div>
+    </>
   )
 }
 

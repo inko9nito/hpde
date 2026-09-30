@@ -279,7 +279,6 @@ export default function App() {
     if (morePageShowing) setLastMorePage(morePageShowing)
   }, [morePageShowing])
   const shownMorePage = morePageShowing ?? lastMorePage
-  const [moreEntered, setMoreEntered] = useState(false)
 
   // Same for New event / Share / iOS widget: the last one opened stays
   // mounted through its slide-out.
@@ -318,7 +317,7 @@ export default function App() {
   // the page has slid in, not while it's still on its way — until a
   // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
-  useChromeColor(((eventPageOpen && pushEntered) || trackEntered || moreEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
+  useChromeColor(((eventPageOpen && pushEntered) || trackEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -479,9 +478,10 @@ export default function App() {
         key={shownMorePage}
         open={morePageShowing !== null}
         onExited={() => setLastMorePage(null)}
-        onEnteredChange={setMoreEntered}
         scrollRef={moreScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
+        // Gray to the top, as a tab is (#345).
+        whiteHeader={false}
       >
         {shownMorePage === 'evaluations' ? (
           <PullToRefresh disabled={morePage === null || !!shownOverlay} scrollContainerRef={moreScrollRef}>
