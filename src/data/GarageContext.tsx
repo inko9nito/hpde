@@ -8,7 +8,9 @@ import { TEST_DRIVER_ID } from './testAccount'
 // cars, and what each event ran on. Shared by the Garage tab and the event
 // page, so a car added in one is there in the other. While an admin has
 // the test account on (#309), it's the test account's. Nothing is fetched
-// for anyone who isn't signed in.
+// for anyone who isn't signed in. An admin who has switched to another
+// driver on an event's page (#362) sees that driver's garage there
+// instead: useDriverGarage, handed to what's on it with GarageScope.
 export const GARAGE_URL = `${import.meta.env.BASE_URL}api/garage`
 
 export type GarageStatus = 'off' | 'loading' | 'ready' | 'error'
@@ -48,12 +50,18 @@ const EMPTY: Garage = { cars: [], events: {} }
 
 const GarageContext = createContext<GarageValue | null>(null)
 
-export function GarageProvider({ children }: { children: ReactNode }) {
+/**
+ * The garage of the signed-in driver (`driverId` undefined) — or the test
+ * account's, while it's on — of another driver an admin picked (their user
+ * id, #362), or of nobody (null: off).
+ */
+function useGarageStore(driverId: string | null | undefined): GarageValue {
   const { status: authStatus, user, authedFetch, testAccount } = useAuth()
-  const signedIn = authStatus === 'signed-in' && !!user
+  const signedIn = authStatus === 'signed-in' && !!user && driverId !== null
+  const whose = driverId ?? (testAccount ? TEST_DRIVER_ID : null)
   // Whose garage this is, so another sign-in on this device never sees it.
-  const who = signedIn ? (testAccount ? TEST_DRIVER_ID : user!.id) : null
-  const url = `${GARAGE_URL}${testAccount ? `?driver=${TEST_DRIVER_ID}` : ''}`
+  const who = signedIn ? (whose ? `${user!.id} as ${whose}` : user!.id) : null
+  const url = `${GARAGE_URL}${whose ? `?driver=${encodeURIComponent(whose)}` : ''}`
   const [loaded, setLoaded] = useState<{ who: string; garage: Garage } | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -195,10 +203,24 @@ export function GarageProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
-  const value = useMemo(
+  return useMemo(
     () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload }),
     [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload],
   )
+}
+
+export function GarageProvider({ children }: { children: ReactNode }) {
+  const value = useGarageStore(undefined)
+  return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
+}
+
+/** Another driver's garage, for an admin who switched to them (#362); off for null. */
+export function useDriverGarage(driverId: string | null): GarageValue {
+  return useGarageStore(driverId)
+}
+
+/** Whose garage what's inside sees: `value`, from useGarage or useDriverGarage. */
+export function GarageScope({ value, children }: { value: GarageValue; children: ReactNode }) {
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
 

@@ -8,8 +8,6 @@ import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
 import { MAX_NAME, MAX_NOTES, NEXT_GROUPS, TDE_SKILLS, cleanEventEvaluation, isTdeEvent } from '../utils/evaluation'
 import type { EventEvaluation, NextGroupId, TdeSkillId } from '../utils/evaluation'
-import { driverName } from '../data/drivers'
-import type { Driver } from '../data/drivers'
 import type { EventConfig, RunGroupConfig } from '../types'
 
 /** What the form holds: every field as typed, numbers too. */
@@ -78,7 +76,7 @@ function Row({ label: text, id, htmlFor, children }: { label: string; id?: strin
  * each core skill. Everything's optional; save what the card has. The group
  * they drove in is the event's, shown to confirm, not picked here.
  */
-export function EventEvaluationSheet({ event, events, existing, runGroup, driver = null, onSave, onRemove, onClose }: {
+export function EventEvaluationSheet({ event, events, existing, runGroup, onSave, onRemove, onClose }: {
   /** A TDE event (isTdeEvent) gets the report card's fields. */
   event: EventConfig
   /** Every event, to color the groups as the app does. */
@@ -86,8 +84,6 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
   existing?: EventEvaluation
   /** The group they drove in at this event, if the app knows it. */
   runGroup?: RunGroupConfig | null
-  /** Whose: another driver's, for an admin (#288); null for your own. */
-  driver?: Driver | null
   onSave: (evaluation: EventEvaluation) => Promise<void>
   onRemove: () => Promise<void>
   onClose: () => void
@@ -150,7 +146,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         />
 
         <div className="mt-3">
-          <Row label={driver ? `${driverName(driver)} drove in` : 'You drove in'}>
+          <Row label="You drove in">
             {runGroup
               ? <GroupBadge group={runGroup} size="sm" />
               : <span className="text-right text-xs text-gray-500">Answer “Did you drive?” at the top</span>}
@@ -274,7 +270,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         )}
         <p className="flex items-center gap-1 text-[11px] text-gray-400">
           <Lock size={11} aria-hidden="true" />
-          {driver ? `Only ${driverName(driver)} and admins can see these notes.` : 'Only you and admins can see your notes.'}
+          Only you and admins can see your notes.
         </p>
       </div>
     </Sheet>

@@ -124,7 +124,7 @@ const outlineButton = 'rounded-xl border border-gray-300 px-4 py-2.5 text-sm fon
 
 /**
  * Adds a car to the garage, or changes or removes one (#344): a page that
- * slides in over the one it's opened from, Cancel and Save across its
+ * slides up over the one it's opened from (#356), Cancel and Save across its
  * top — its photo, what it is and its lug nut torque. Nothing's saved
  * until Save; a photo picked is made small enough to upload first.
  * Removing a car takes its change log with it; the events it went to keep
@@ -206,7 +206,7 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   const title = car ? 'Edit car' : 'Add a car'
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
-    <PushPage open={open} onExited={onClosed} raised>
+    <PushPage open={open} onExited={onClosed} raised from="bottom">
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
       <div role="dialog" aria-label={title} aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-screen bg-gray-50" data-car-form>
         <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
@@ -267,7 +267,6 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
               >
                 <Camera size={22} className="text-gray-400" aria-hidden="true" />
                 {busy === 'photo' ? 'Getting it ready…' : 'Add a photo'}
-                <span className="text-xs font-normal text-gray-400">Any size: it’s made smaller to upload</span>
               </button>
             )}
           </section>

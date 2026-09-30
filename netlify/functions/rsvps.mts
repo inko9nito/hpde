@@ -1,11 +1,16 @@
 import { getStore, getDeployStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
+import { whoseRecords } from '../lib/driverStore.mts'
+import type { StoreDeps } from '../lib/driverStore.mts'
 import { cleanRsvp } from '../../src/utils/rsvp.ts'
 import type { Rsvp, Rsvps } from '../../src/utils/rsvp.ts'
 
 // A signed-in driver's answers to "are you going?" (#235), private to them:
 // every request needs their sign-in, and only ever reaches their own — the
-// key is who the token says they are, never anything sent.
+// key is who the token says they are, never anything sent. The one
+// exception is an admin, who can add `driver=<user id>` to any of these to
+// read and answer for that driver instead (#362), as with their laps
+// (#288) — the id is checked against Identity.
 //   GET                         every answer they've given, by event id
 //   PUT    ?event=  {status, runGroup?}  answers for one event (replacing
 //                                any): going, maybe or not-going
@@ -33,6 +38,7 @@ type Deps = {
   getStore?: typeof getStore
   getDeployStore?: typeof getDeployStore
   fetch?: typeof fetch
+  identity?: StoreDeps['identity']
 }
 
 type Store = ReturnType<typeof getStore>
@@ -68,22 +74,27 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const user = await userFromRequest(req, deps.fetch)
   if (!user) return json(401, { error: 'Please sign in to continue.' })
 
+  const params = new URL(req.url).searchParams
+  const whose = await whoseRecords(user, params.get('driver'), 'answers', deps.identity)
+  if (whose instanceof Response) return whose
+  const { driverId } = whose
+
   const stores = openStores(context, deps)
-  await ensureCopied(stores, user.id)
+  await ensureCopied(stores, driverId)
   const store = stores.rsvps
-  const record = (await store.get(user.id, { type: 'json' })) as DriverRsvps | null
+  const record = (await store.get(driverId, { type: 'json' })) as DriverRsvps | null
   const events: Rsvps = record?.events ?? {}
 
   if (req.method === 'GET') return json(200, { rsvps: events })
 
-  const eventId = new URL(req.url).searchParams.get('event') ?? ''
+  const eventId = params.get('event') ?? ''
   if (!EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
 
   if (req.method === 'DELETE') {
     if (!events[eventId]) return json(200, { deleted: eventId })
     const { [eventId]: _removed, ...rest } = events
-    if (Object.keys(rest).length === 0) await store.delete(user.id)
-    else await store.setJSON(user.id, { events: rest })
+    if (Object.keys(rest).length === 0) await store.delete(driverId)
+    else await store.setJSON(driverId, { events: rest })
     return json(200, { deleted: eventId })
   }
 
@@ -100,6 +111,6 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   }
 
   const rsvp: Rsvp = { ...cleaned.rsvp, updatedAt: new Date().toISOString() }
-  await store.setJSON(user.id, { events: { ...events, [eventId]: rsvp } })
+  await store.setJSON(driverId, { events: { ...events, [eventId]: rsvp } })
   return json(200, { rsvp })
 }

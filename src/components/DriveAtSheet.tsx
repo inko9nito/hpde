@@ -68,7 +68,7 @@ export function DriveAtSheet({ car, garage, onSave, onClose }: {
         <p className="mt-4 text-sm text-gray-700">Couldn’t load your events. Check your connection and try again.</p>
       ) : choices.length === 0 ? (
         <p className="mt-4 text-sm text-gray-700">
-          No events to add it to. It’s at every event you haven’t said you’re not going to.
+          This car’s already added to all your events.
         </p>
       ) : (<>
         <div className="mt-4 flex items-baseline justify-between">

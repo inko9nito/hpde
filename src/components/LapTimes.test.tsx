@@ -56,6 +56,8 @@ const otherWay: EventConfig = { ...sameLayout, id: '2026-01-10_ccw', name: 'CCW'
 let summary: { eventId: string; best?: number; sessions: number }[] = []
 // The driver's answers to "are you going?" (#235), and events beyond the three above.
 let rsvps: Rsvps = {}
+// Jason's, for an admin who switched to him (#362).
+let jasonRsvps: Rsvps = {}
 let moreEvents: EventConfig[] = []
 
 // identity.ts caches the first widget it loads, so every test shares one
@@ -90,6 +92,8 @@ type Notes = { evaluation?: EventEvaluation; sessions: SessionNotes[] }
 let notesByEvent: Record<string, Notes> = {}
 // The garage function (#344), in memory: the signed-in driver's cars and setups.
 let garageData: Garage = { cars: [], events: {} }
+// Jason's, as an admin who switched to him reads it (#362).
+let jasonGarage: Garage | null = null
 let carCount = 0
 let entryCount = 0
 const json = (body: unknown, status = 200) =>
@@ -99,7 +103,11 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   const url = String(input)
   if (url.includes('/.netlify/identity/settings')) return json({})
   if (url.includes('api/events')) return json({ events: [event, sameLayout, otherWay, ...moreEvents] })
-  if (url.includes('api/rsvps')) return json({ rsvps })
+  if (url.includes('api/rsvps')) {
+    const driver = new URL(url, 'https://x').searchParams.get('driver')
+    if (driver) expect([roles, driver]).toEqual([expect.arrayContaining(['admin']), JASON])
+    return json({ rsvps: driver ? jasonRsvps : rsvps })
+  }
   if (url.includes('api/drivers')) {
     expect(roles).toContain('admin')
     return json({ drivers: DRIVERS })
@@ -139,6 +147,7 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
   if (url.includes('api/garage')) {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
     const params = new URL(url, 'https://x').searchParams
+    if (jasonGarage && params.get('driver') === JASON && !init?.method && !params.has('car')) return json(jasonGarage)
     const eventId = params.get('event')
     const carId = params.get('car')
     const withCar = (next: (c: Garage['cars'][number]) => Garage['cars'][number]) => {
@@ -166,6 +175,12 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
         const entry = { id: body.entry.id ?? `entry${++entryCount}`, ...cleaned.value }
         withCar(c => ({ ...c, log: [...(c.log ?? []).filter(e => e.id !== entry.id), entry] }))
         return json({ entry })
+      }
+      if (eventId && jasonGarage && params.get('driver') === JASON) {
+        const setup = cleanSetup(body.setup, jasonGarage.cars.map(c => c.id))
+        if ('error' in setup) return json(setup, 400)
+        jasonGarage = { ...jasonGarage, events: { ...jasonGarage.events, [eventId]: setup.value } }
+        return json({ setup: setup.value })
       }
       if (eventId) {
         const setup = cleanSetup(body.setup, garageData.cars.map(c => c.id))
@@ -298,10 +313,12 @@ beforeEach(() => {
   elsewhere = {}
   summary = []
   rsvps = {}
+  jasonRsvps = {}
   moreEvents = []
   holdLaps = null
   notesByEvent = {}
   garageData = { cars: [], events: {} }
+  jasonGarage = null
   carCount = 0
   entryCount = 0
   failSaves = false
@@ -707,6 +724,15 @@ describe('lap times (#210)', () => {
 })
 
 
+// Switch driver, in the event's "…" menu (#362): whose notes are showing.
+async function switchDriver(name: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  await userEvent.click(screen.getByRole('menuitem', { name: /^Switch driver/ }))
+  const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
+  await userEvent.click(await within(sheet).findByRole('radio', { name }))
+  expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+}
+
 describe('an admin logging another driver’s lap times (#288)', () => {
   const blue2 = (ms: number): SessionLaps => ({
     key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms }],
@@ -724,12 +750,13 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
 
     await userEvent.selectOptions(picker, 'Jason')
-    expect(sheet).toHaveTextContent('Only Jason and admins can see these lap times.')
+    // Worded as he'd see it (#364): only the picker says it's his.
+    expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
     const box = await within(sheet).findByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Lap times saved for Jason')
+    expect(screen.getByRole('status')).toHaveTextContent('Lap times saved')
 
     const [url] = lapCalls('PUT')[0]
     expect(String(url)).toContain(`driver=${JASON}`)
@@ -776,15 +803,24 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     saved = [blue2(99_000)]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
+    // Their own notes: no picker over them; it's in the "…" menu (#362).
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Jason')
     expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
-    expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps or their instructor’s feedback.')).toBeInTheDocument()
-    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+    // Someone else's: it says whose, and switches back.
+    expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menuitem', { name: /^Switch driver/ })).toHaveTextContent('Showing Jason')
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    // Otherwise worded as he'd see it (#364).
+    expect(screen.getByText('On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.')).toBeInTheDocument()
+    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     // Picked again, they're fetched afresh.
     jasonSaved = [blue2(84_000)]
     await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Me')
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Jason')
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Jason')
     expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
     expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:24')
 
@@ -1249,8 +1285,8 @@ describe('a track page: the events on one layout (#274)', () => {
     jasonSaved = [at('2026-03-07', '11:45', 2, [84_420])]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
-    await userEvent.click(await screen.findByRole('link', { name: 'See all Jason’s MSRC 1.7 CW laps' }))
+    await switchDriver('Jason')
+    await userEvent.click(await screen.findByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
 
     const page = await trackPage()
     expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
@@ -1260,7 +1296,7 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:24.42')
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
-    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
+    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     await userEvent.click(await card('Lap Day'))
     expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
@@ -1391,7 +1427,9 @@ describe('the garage (#344)', () => {
   it('asks anyone signed out to sign in, and fetches nothing', async () => {
     signedIn = false
     openWithGarage('#/garage')
-    expect(await screen.findByText('Sign in to keep your cars and what they run on')).toBeInTheDocument()
+    expect(await screen.findByText('Sign in to manage your cars')).toBeInTheDocument()
+    // Just that: no line under it.
+    expect(screen.queryByText('Only you and admins can see what you save.')).not.toBeInTheDocument()
     expect(garageCalls('GET')).toHaveLength(0)
   })
 
@@ -1401,6 +1439,8 @@ describe('the garage (#344)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add a car' }))
     const form = screen.getByRole('dialog', { name: 'Add a car' })
     expect(form.closest('[data-car-form]')).toBe(form)
+    // It has a Cancel, so it slides up from the bottom, as on iOS (#356).
+    expect((form.parentElement as HTMLElement).style.transform).toMatch(/^translateY\(/)
     // Nothing to save till it has a make and model.
     expect(within(form).getByRole('button', { name: 'Save' })).toBeDisabled()
     await userEvent.type(within(form).getByLabelText('Year'), '2019')
@@ -1712,7 +1752,7 @@ describe('the garage (#344)', () => {
     expect(screen.getByText('No session notes yet')).toBeInTheDocument()
   })
 
-  it('offers no tire pressures for another driver’s session (#288)', async () => {
+  it('offers another driver’s tire pressures, from their garage (#362)', async () => {
     roles = ['admin']
     openWithGarage(`#/event/${event.id}`)
     await tapSession('Lap times: 11:45 AM, Blue', null)
@@ -1720,8 +1760,42 @@ describe('the garage (#344)', () => {
     const nav0 = within(sheet).getByRole('navigation', { name: 'Session info' })
     expect(within(nav0).getByRole('button', { name: /^Tire pressures/ })).toBeInTheDocument()
     await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
+    await waitFor(() => expect(garageCalls('GET').some(([url]) => String(url).includes(`driver=${JASON}`))).toBe(true))
     const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
-    await waitFor(() => expect(within(nav).queryByRole('button', { name: /^Tire pressures/ })).not.toBeInTheDocument())
+    expect(within(nav).getByRole('button', { name: /^Tire pressures/ })).toBeInTheDocument()
+  })
+
+  it('shows the switched-to driver’s car and answer on the event, as they’d see them, and picks a car from their garage (#364)', async () => {
+    roles = ['admin']
+    const miata = { id: 'miata', make: 'Mazda', model: 'Miata' }
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
+    jasonGarage = { cars: [miata], events: {} }
+    jasonRsvps = { [event.id]: { status: 'going', runGroup: 'blue', updatedAt: 'now' } }
+    window.location.hash = `#/event/${event.id}`
+    render(<AuthProvider><EventsProvider><RsvpsProvider><GarageProvider><App /></GarageProvider></RsvpsProvider></EventsProvider></AuthProvider>)
+    await userEvent.click(await screen.findByRole('tab', { name: /^My notes/ }))
+    expect(await screen.findByRole('button', { name: 'Your car: The Cayman' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Did you drive\?/ })).toBeInTheDocument()
+
+    await switchDriver('Jason')
+    // His answer, and no car yet: from his garage, not the admin's.
+    expect(await screen.findByRole('button', { name: /^Drove/ })).toBeInTheDocument()
+    // Just as he'd see it: only the Driver banner says it's his.
+    await userEvent.click(await screen.findByRole('button', { name: /^Add your car/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Pick your car' })
+    expect(within(sheet).queryByText('The Cayman')).not.toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: /Mazda Miata/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('Car saved')
+    const [url] = garageCalls('PUT').at(-1)!
+    expect(String(url)).toContain(`driver=${JASON}`)
+    expect(String(url)).toContain(`event=${encodeURIComponent(event.id)}`)
+    expect(await screen.findByRole('button', { name: 'Your car: Mazda Miata' })).toBeInTheDocument()
+
+    // Back to the admin's own.
+    await switchDriver('Me')
+    expect(await screen.findByRole('button', { name: 'Your car: The Cayman' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Did you drive\?/ })).toBeInTheDocument()
   })
 })
 
@@ -1853,13 +1927,14 @@ describe('Instructor evaluations across events (#345)', () => {
     await waitFor(() => expect(within(card).getByRole('list', { name: 'Feedback' })).toHaveTextContent('Look further ahead.'))
   })
 
-  it('says how to add one when there are none, with no chart', async () => {
+  it('says there are none yet, with no chart', async () => {
     notesByEvent = {}
     rsvps = {}
     summary = []
     openAt('#/evaluations')
     const el = await page()
-    expect(await within(el).findByText('No instructor evaluations yet')).toBeInTheDocument()
+    // Just that: no line under it.
+    expect((await within(el).findByText('No instructor evaluations yet')).nextElementSibling).toBeNull()
     expect(within(el).queryByRole('region', { name: 'Skills wheel' })).not.toBeInTheDocument()
   })
 
@@ -1868,6 +1943,7 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     expect(await within(el).findByText('Sign in to see your instructor evaluations')).toBeInTheDocument()
+    expect(within(el).queryByText('Only you and admins can see what you save.')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('api/notes'))).toHaveLength(0)
   })
 })

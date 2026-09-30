@@ -72,6 +72,8 @@ interface Props {
   onRunGroup?: (id: string) => void
   onBack: () => void
   onDeleted: () => void
+  /** Admins only: Switch driver, in the "…" menu (#362). */
+  switchDriver?: { driver: string | null; onOpen: () => void }
   /** The page's scroll container — drives the collapse. */
   scrollRef: RefObject<HTMLElement | null>
 }
@@ -97,7 +99,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, switchDriver, scrollRef }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -127,10 +129,12 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
           >
             <CompactTitle event={event} status={status} date={date} />
           </div>
-          {/* Same 36px footprint as the back button, so the compact
-              title stays centred. */}
-          <div className="flex h-9 w-9 shrink-0 justify-end">
-            <EventOverflowMenu event={event} onDeleted={onDeleted} />
+          {/* Same 36px footprint as the back button, pulled out to the
+              right edge as far as it is to the left (#354), so the
+              compact title stays centred and the "…" lines up with the
+              content's right edge. */}
+          <div className="-mr-3 flex h-9 w-9 shrink-0 justify-end">
+            <EventOverflowMenu event={event} onDeleted={onDeleted} switchDriver={switchDriver} />
           </div>
         </div>
       </div>
@@ -204,12 +208,14 @@ function TrackLine({ event }: { event: EventConfig }) {
   )
 }
 
+// Pulled out to the header's edge, so the chevron lines up with the
+// content's left edge under it (#354), as iOS's back chevron does.
 export function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       aria-label="Back"
-      className={`-ml-1 ${ICON_BUTTON}`}
+      className={`-ml-4 ${ICON_BUTTON}`}
     >
       <ChevronLeft size={26} strokeWidth={2.25} />
     </button>

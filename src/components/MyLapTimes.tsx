@@ -19,8 +19,6 @@ import { classifyEvent } from '../utils/eventClass'
 import { carName, carTitle } from '../utils/garage'
 import type { Car, SessionPressures } from '../utils/garage'
 import type { GarageStatus } from '../data/GarageContext'
-import { driverName } from '../data/drivers'
-import type { Driver } from '../data/drivers'
 import type { EventConfig, RunGroupConfig } from '../types'
 
 interface Props {
@@ -34,9 +32,7 @@ interface Props {
   allTimeBest?: number
   /** The layout's track page (#274), which the All time best card opens. */
   track?: { name: string; href: string }
-  /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
-  driver?: Driver | null
-  /** Admins only: the Driver picker, above the laps (#288). */
+  /** Admins only, on another driver's notes: the Driver picker, above them, to say whose and switch back (#288, #362). */
   driverPicker?: ReactNode
   /** The group they drove in, and every event (to color groups), for the report card. */
   runGroup?: RunGroupConfig | null
@@ -47,8 +43,8 @@ interface Props {
   onEditEvaluation: () => void
   /**
    * What the driver ran here, from their garage (#344): the car, and each
-   * session's tire pressures. Only the driver's own, so none for another
-   * driver's.
+   * session's tire pressures — the picked driver's, for an admin, shown
+   * just as they'd see it (#364).
    */
   garage?: {
     status: GarageStatus
@@ -68,13 +64,11 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
   const track = trackShortName(event)
-  const name = driver ? driverName(driver) : null
-  const whose = name ? `${name}’s` : 'your'
 
   const loading = log.status === 'loading' || log.status === 'off' || notes.status === 'loading' || garage?.status === 'loading'
   const tde = isTdeEvent(event)
@@ -82,26 +76,30 @@ export function MyLapTimes({
 
   // The car they drove, first of all: one line, which opens its details.
   const carRow = garage?.status === 'ready' && (
-    <div className="mb-3">
+    <div className="mb-5">
       {garage.car
         ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
         : <CarRow compact title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
     </div>
   )
 
-  const header = (<>
-    {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
-    {carRow}
+  // Expand all and Private: at the top until there are sessions to list,
+  // then just over them, by the cards it opens (#361).
+  const toolbar = (
     <LapsToolbar
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
       onOpen={setOpen}
-      whose={name}
     />
+  )
+  const top = (<>
+    {driverPicker && <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>}
+    {carRow}
   </>)
+  const header = <>{top}{toolbar}</>
 
   if (loading || leaving) {
-    return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label={`Loading ${whose} lap times`} /></>
+    return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label="Loading your lap times" /></>
   }
 
   if (log.status === 'error' || notes.status === 'error' || garage?.status === 'error') {
@@ -109,7 +107,7 @@ export function MyLapTimes({
       <>
         {header}
         <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <p className="text-sm font-medium text-gray-700">Couldn’t load {whose} notes</p>
+          <p className="text-sm font-medium text-gray-700">Couldn’t load your notes</p>
           <p className="mt-1 text-xs text-gray-400">Check your connection and try again.</p>
           <button
             onClick={() => {
@@ -147,9 +145,7 @@ export function MyLapTimes({
             <NotebookPen size={20} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No session notes yet</p>
             <p className="mt-1 text-xs text-gray-400">
-              {name
-                ? `On the Schedule tab, tap a session ${name} drove to add their laps or their instructor’s feedback.`
-                : 'On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.'}
+              On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.
             </p>
           </div>
         </div>
@@ -178,7 +174,7 @@ export function MyLapTimes({
 
   return (
     <>
-      {header}
+      {top}
       <div className="fade-in">
         {log.sessions.length > 0 && <div className={`mb-5 grid gap-3 ${track ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <StatCard
@@ -193,7 +189,7 @@ export function MyLapTimes({
               caption={`Across ${plural(layoutBest.events, 'event', 'events')} at this track config`}
               link={trackPage && {
                 href: trackPage.href,
-                label: `See all ${name ? `${name}’s` : 'my'} ${trackPage.name} laps`,
+                label: `See all my ${trackPage.name} laps`,
               }}
             />
           )}
@@ -205,6 +201,7 @@ export function MyLapTimes({
             <LapTrendChart points={trend} label="Best and average lap in each session, in schedule order" noun={['session', 'sessions']} />
           </div>
         )}
+        {toolbar}
         <div className="flex flex-col gap-5">
           {sessions.map(session => (
             <SessionLapsCard

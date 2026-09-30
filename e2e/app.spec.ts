@@ -624,15 +624,16 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   const picker = sheet.getByLabel('Driver')
   await expect(picker.getByRole('option')).toHaveText(['Me', email])
   await picker.selectOption({ label: email })
-  await expect(sheet).toContainText(`Only ${email} and admins can see these lap times.`)
+  // Worded as he'd see it (#364): only the picker says it's his.
+  await expect(sheet).toContainText('Only you and admins can see your lap times.')
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
 
   await expect(sheet).toBeHidden()
   const toast = page.getByRole('status')
-  await expect(toast).toHaveText(`Lap times saved for ${email}`)
-  // It wraps rather than running off the screen.
+  await expect(toast).toHaveText('Lap times saved')
+  // It stays on the screen.
   const pill = (await toast.locator('> div').boundingBox())!
   expect(pill.x).toBeGreaterThanOrEqual(0)
   expect(pill.x + pill.width).toBeLessThanOrEqual(page.viewportSize()!.width)
@@ -778,8 +779,11 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   await page.goto('/#/garage')
-  await page.getByRole('button', { name: 'Add a car' }).click()
-  // A page of its own, over the Garage: Cancel and Save across its top.
+  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeInViewport()
+  // A page of its own, over the Garage: Cancel and Save across its top. It
+  // has a Cancel, so it slides up from the bottom, as on iOS (#356).
+  const slide = await trackSlide(page, () => page.getByRole('button', { name: 'Add a car' }).click(), 'Add a car')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
   const add = page.getByRole('dialog', { name: 'Add a car' })
   await expect(add.getByRole('button', { name: 'Cancel' })).toBeInViewport()
   await expect(add.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -1112,7 +1116,7 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   const garage = await trackSlide(page, () => page.getByRole('link', { name: /^Garage/ }).click(), 'Garage')
   expect(garage).toEqual({ fromBelow: false, fromSide: true })
   // Signed out here, so it asks to sign in.
-  await expect(page.getByText('Sign in to keep your cars and what they run on')).toBeVisible()
+  await expect(page.getByText('Sign in to manage your cars')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/more$/)

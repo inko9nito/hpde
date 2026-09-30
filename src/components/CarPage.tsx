@@ -82,7 +82,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
             <CarTile car={car} size={44} />
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="truncate font-rubik text-lg font-bold leading-tight text-gray-900">{carName(car)}</h1>
-              <p className="truncate text-[13px] leading-tight text-gray-500">{car.nickname ? carTitle(car) : 'Garage'}</p>
+              {car.nickname && <p className="truncate text-[13px] leading-tight text-gray-500">{carTitle(car)}</p>}
             </div>
           </div>
         )}

@@ -6,12 +6,14 @@ import type { Rsvp, Rsvps } from '../utils/rsvp'
 
 // The signed-in driver's answers to "are you going?" (#235), from the rsvps
 // function: which events are theirs, and their run group at each. Nothing
-// is fetched for anyone who isn't signed in.
+// is fetched for anyone who isn't signed in. An admin who has switched to
+// another driver on an event's page (#362) sees that driver's there
+// instead: useDriverRsvps, handed to what's on it with RsvpsScope.
 export const RSVPS_URL = `${import.meta.env.BASE_URL}api/rsvps`
 
 export type RsvpsStatus = 'off' | 'loading' | 'ready' | 'error'
 
-interface RsvpsValue {
+export interface RsvpsValue {
   status: RsvpsStatus
   rsvps: Rsvps
   /** Answers for one event, replacing any answer. Throws with a message to show. */
@@ -36,11 +38,17 @@ function parseRsvps(v: unknown): Rsvps {
 
 const RsvpsContext = createContext<RsvpsValue | null>(null)
 
-export function RsvpsProvider({ children }: { children: ReactNode }) {
+/**
+ * The answers of the signed-in driver (`driverId` undefined), of another
+ * driver an admin picked (their user id, #362), or of nobody (null: off).
+ */
+function useRsvpsStore(driverId: string | null | undefined): RsvpsValue {
   const { status: authStatus, user, authedFetch } = useAuth()
-  const signedIn = authStatus === 'signed-in'
-  const userId = user?.id ?? null
-  // Whose answers these are, so another sign-in on this device never sees them.
+  const signedIn = authStatus === 'signed-in' && driverId !== null
+  // Whose answers these are, so another sign-in on this device never sees
+  // them: the signed-in driver and, for another driver's, theirs.
+  const userId = user ? (driverId ? `${user.id} as ${driverId}` : user.id) : null
+  const url = driverId ? `${RSVPS_URL}?driver=${encodeURIComponent(driverId)}` : RSVPS_URL
   const [loaded, setLoaded] = useState<{ userId: string; rsvps: Rsvps } | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -53,7 +61,7 @@ export function RsvpsProvider({ children }: { children: ReactNode }) {
     setFailed(false)
     ;(async () => {
       try {
-        const res = await authedFetch(RSVPS_URL)
+        const res = await authedFetch(url)
         if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw await errorFrom(res)
         const body = await res.json()
         if (!cancelled) setLoaded({ userId, rsvps: parseRsvps(body?.rsvps) })
@@ -64,15 +72,15 @@ export function RsvpsProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [signedIn, userId, authedFetch])
+  }, [signedIn, userId, url, authedFetch])
 
   const current = signedIn && !!userId && loaded?.userId === userId
   const rsvps = useMemo(() => (current ? loaded!.rsvps : {}), [current, loaded])
   const status: RsvpsStatus = !signedIn ? 'off' : current ? 'ready' : failed ? 'error' : 'loading'
 
   const answer = useCallback(async (eventId: string, rsvp: Omit<Rsvp, 'updatedAt'>) => {
-    if (!userId) throw new Error('Please sign in to continue.')
-    const res = await authedFetch(`${RSVPS_URL}?event=${encodeURIComponent(eventId)}`, {
+    if (!signedIn || !userId) throw new Error('Please sign in to continue.')
+    const res = await authedFetch(`${url}${url.includes('?') ? '&' : '?'}event=${encodeURIComponent(eventId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(rsvp),
@@ -80,9 +88,23 @@ export function RsvpsProvider({ children }: { children: ReactNode }) {
     if (!res.ok) throw await errorFrom(res)
     const saved = (await res.json()).rsvp as Rsvp
     setLoaded(prev => ({ userId, rsvps: { ...(prev?.userId === userId ? prev.rsvps : {}), [eventId]: saved } }))
-  }, [authedFetch, userId])
+  }, [authedFetch, signedIn, userId, url])
 
-  const value = useMemo(() => ({ status, rsvps, answer }), [status, rsvps, answer])
+  return useMemo(() => ({ status, rsvps, answer }), [status, rsvps, answer])
+}
+
+export function RsvpsProvider({ children }: { children: ReactNode }) {
+  const value = useRsvpsStore(undefined)
+  return <RsvpsContext.Provider value={value}>{children}</RsvpsContext.Provider>
+}
+
+/** Another driver's answers, for an admin who switched to them (#362); off for null. */
+export function useDriverRsvps(driverId: string | null): RsvpsValue {
+  return useRsvpsStore(driverId)
+}
+
+/** Whose answers what's inside sees: `value`, from useRsvps or useDriverRsvps. */
+export function RsvpsScope({ value, children }: { value: RsvpsValue; children: ReactNode }) {
   return <RsvpsContext.Provider value={value}>{children}</RsvpsContext.Provider>
 }
 

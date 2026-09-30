@@ -183,7 +183,8 @@ Only they and admins can see them.
   text box. The **My notes** tab opens with *Best lap this event* and
   *All time best* (across every event at the track with the same
   configuration and direction), then each session's figures and lap time summary;
-  tap the figures to open its lap table, or use *Expand all*. The tables'
+  tap the figures to open its lap table, or use *Expand all*, just over
+  the sessions (#361). The tables'
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab counts the
   sessions with laps or an evaluation, and a report card (#340), e.g.
@@ -217,13 +218,21 @@ Only they and admins can see them.
   laps the first time you use them there (like the events), so you can
   test with real data. Laps saved or removed on a preview stay on that
   preview and never touch the real ones; the next deploy copies afresh.
-- **For another driver (admins, #288):** the lap sheet and My notes
-  have a **Driver** picker: *Me*, or anyone who has signed in to the
-  site. Pick someone to see, add, edit or remove their laps. They're
-  saved in that driver's account, so they see them when they sign in,
-  and they count toward that driver's all-time best. While someone else
-  is picked, the Schedule tab shows the picker too, so it's clear whose
-  laps are marked. Another event starts back on *Me*. Someone who has
+- **For another driver (admins, #288):** *Switch driver* in the event's
+  "…" menu (#362), and the lap sheet's **Driver** picker, pick whose laps
+  to show: *Me*, or anyone who has signed in to the site. Pick someone
+  to see, add, edit or remove their laps. They're saved in that driver's
+  account, so they see them when they sign in, and they count toward
+  that driver's all-time best. While someone else is picked, the
+  Schedule and My notes tabs show the picker at the top, so it's clear
+  whose laps are marked, and the menu item says whose are showing.
+  Everything else reads just as that driver would see it — "your laps",
+  "Lap times saved" — so those are the only signs (#364); a track page
+  opened from their laps says "· <name>'s laps" under its title. The
+  event's page then shows that driver's answer to *Did you drive?* /
+  *Are you going?* and their car too, and changes them for them (#362);
+  `/api/rsvps` and `/api/garage` take `driver=<user id>` from admins, as
+  `/api/laps` does. Another event starts back on *Me*. Someone who has
   never signed in isn't on the list: they need to sign in once first.
   - `netlify/functions/drivers.mts` (`/api/drivers`, admins only) lists
     everyone from Netlify Identity's admin API (`@netlify/identity`);
@@ -351,8 +360,13 @@ Private like your notes: only you and admins see it.
   what you changed. The session's row shows a tire; on *My notes* they're
   a small table under the session's laps.
 - **Not yet (phase 2):** maintenance and modification logs,
-  service reminders, alignment and damper setups. An admin looking at
-  another driver's notes (#288) doesn't see or change their garage.
+  service reminders, alignment and damper setups.
+- **Another driver's (admins, #362):** switched to another driver on an
+  event's page, an admin sees and changes that driver's car there — the
+  car row, picking or adding one, its page, and each session's tire
+  pressures — from that driver's garage, shown just as they'd see it:
+  only the Driver banner at the top says whose it is (#364). The Garage
+  under More is always the admin's own.
 - **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
   Netlify Blobs (store `garage`), one record per driver
   (`<user id>/garage`): their cars, each with its change log, and each

@@ -78,14 +78,12 @@ export function useOpenSessions() {
 
 /**
  * Above the laps: Expand all / Collapse all, once there are laps to open
- * (`keys`), and the Private tag. `whose` names another driver's laps, for
- * an admin (#288).
+ * (`keys`), and the Private tag.
  */
-export function LapsToolbar({ keys, open, onOpen, whose }: {
+export function LapsToolbar({ keys, open, onOpen }: {
   keys: string[]
   open: Set<string>
   onOpen: (open: Set<string>) => void
-  whose: string | null
 }) {
   const allOpen = keys.length > 0 && keys.every(k => open.has(k))
   return (
@@ -101,20 +99,21 @@ export function LapsToolbar({ keys, open, onOpen, whose }: {
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
-      <PrivateTag whose={whose} />
+      <PrivateTag />
     </div>
   )
 }
 
 /**
- * "Private", with who can see the laps on hover. `whose` names another
- * driver, for an admin (#288); `what` is what's private, if not lap times.
+ * "Private", with who can see the laps on hover — worded for the driver,
+ * as they'd see it, whoever's looking (#364); `what` is what's private, if
+ * not lap times.
  */
-export function PrivateTag({ whose, what = 'lap times' }: { whose: string | null; what?: string }) {
+export function PrivateTag({ what = 'lap times' }: { what?: string }) {
   return (
     <span
       className="flex shrink-0 items-center gap-1"
-      title={whose ? `Only ${whose} and admins can see these ${what}` : `Only you and admins can see your ${what}`}
+      title={`Only you and admins can see your ${what}`}
     >
       <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
     </span>
