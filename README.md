@@ -282,7 +282,8 @@ Private like your lap times: only you and admins see them.
   a shape on it, the latest solid black and the first dashed gray (tap the
   event chips to show or hide any card). Tap a skill's name for a list of
   its score at each event, newest first, with the change from the card
-  before. *Car aids over activated* isn't on either (lower is better
+  before, each on a 0–100% bar: a gain since the event before is hatched
+  dark on the end of the bar, a drop hatched light over the part it lost. *Car aids over activated* isn't on either (lower is better
   there); it's on each event's card. Under those, **Events**: every event
   you have an evaluation at, TDE or not, newest first, with what the
   instructors said right on its card — about the whole event (on a TDE

@@ -1358,6 +1358,8 @@ describe('Instructor evaluations across events (#345)', () => {
       'Oct 4, 2025TDE at ECR+1580%',
       'Sep 13, 2025TDE at MSRC65%',
     ])
+    // Each on a 0–100% bar, the gain since the event before hatched on.
+    expect([...list.querySelectorAll('[data-bar]')].map(b => b.querySelector('[data-change]')?.getAttribute('data-change') ?? null)).toEqual(['gain', null])
     // Tapped again, it goes.
     await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
     expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()

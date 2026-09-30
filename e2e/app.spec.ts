@@ -920,7 +920,7 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const notes = [
     { eventId: jul.id, evaluation: card(65, 95, 60, 55, 60, 70, 75, 50, 65, 25), sessions: [] },
     { eventId: sep.id, evaluation: card(75, 95, 70, 65, 70, 70, 80, 65, 70, 15), sessions: [] },
-    { eventId: oct.id, evaluation: { ...card(90, 100, 80, 70, 85, 75, 85, 80, 85, 10), notes: 'Smoother on the brakes, and much better at picking up flags early.' }, sessions: [] },
+    { eventId: oct.id, evaluation: { ...card(90, 100, 80, 60, 85, 75, 85, 80, 85, 10), notes: 'Smoother on the brakes, and much better at picking up flags early.' }, sessions: [] },
     // Not a TDE event: no report card, but its feedback is listed too.
     {
       eventId: alpha.id,
@@ -945,7 +945,7 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(overview.getByRole('region', { name: 'Most improved' }).getByRole('listitem'))
     .toHaveText([/References\s*\+30/, /Flags\s*\+25/, /Consistency\s*\+25/])
   await expect(overview.getByRole('region', { name: 'Needs work' }).getByRole('listitem'))
-    .toHaveText([/Vision\s*70%/, /Car control\s*75%/, /Inputs\s*80%/])
+    .toHaveText([/Vision\s*60%/, /Car control\s*75%/, /Inputs\s*80%/])
 
   const wheel = page.getByRole('region', { name: 'Skills wheel' })
   // Every skill's name is on the card, clear of its edges and of the others.
@@ -966,6 +966,23 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await wheel.getByRole('button', { name: 'Calls out all flags' }).click()
   await expect(wheel.getByRole('region', { name: 'Calls out all flags at each event' }).getByRole('listitem'))
     .toHaveText([/Oct 4, 2025.*\+15\s*90%/, /Sep 13, 2025.*\+10\s*75%/, /Jul 19, 2025.*65%/])
+  // Each on a bar, 0% to 100%: the gain since the event before hatched on, a drop hatched light.
+  await wheel.getByRole('button', { name: 'Looks ahead' }).click()
+  const vision = wheel.getByRole('region', { name: 'Looks ahead at each event' })
+  await expect(vision.getByRole('listitem')).toHaveText([/Oct 4, 2025.*−5\s*60%/, /Sep 13, 2025.*\+10\s*65%/, /Jul 19, 2025.*55%/])
+  const bars = await vision.locator('[data-bar]').evaluateAll(els => els.map(el => {
+    const track = el.getBoundingClientRect()
+    const [solid, change] = [...el.children].map(c => c.getBoundingClientRect())
+    const pct = (px: number) => Math.round((px / track.width) * 100)
+    return { solid: pct(solid.width), change: change ? [el.children[1].getAttribute('data-change'), pct(change.left - track.left), pct(change.width)] : null }
+  }))
+  expect(bars).toEqual([
+    { solid: 60, change: ['loss', 60, 5] },
+    { solid: 55, change: ['gain', 55, 10] },
+    { solid: 55, change: null },
+  ])
+  await expect(vision).toContainText('Up since the event before')
+  await expect(vision).toContainText('Down since the event before')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // The events, newest first; one opens on My notes, and Back comes back.
