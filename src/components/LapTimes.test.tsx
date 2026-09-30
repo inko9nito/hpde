@@ -837,6 +837,21 @@ describe('instructor evaluation (#340)', () => {
     expect(screen.queryByRole('button', { name: 'Add evaluation' })).not.toBeInTheDocument()
   })
 
+  it('keeps the whole event’s evaluation after leaving the event and coming back', async () => {
+    openTde()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add evaluation' }))
+    fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('John Harms')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' })[0])
+    await userEvent.click(await screen.findByRole('button', { name: /TDE Day/ }))
+    await userEvent.click(await screen.findByRole('tab', { name: /My notes/ }))
+    expect(await screen.findByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('John Harms')
+  })
+
   it('on a TDE event, adds the report card: skills, recommended groups and notes, with the group from “Did you drive?”', async () => {
     rsvps = { [tde.id]: { status: 'going', runGroup: 'pink' } }
     openTde()

@@ -100,7 +100,8 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
       {scored.length > 0 && (
         <div className="mt-4">
           <h4 className="text-sm font-semibold text-gray-900">Core skills</h4>
-          <ul className="mt-2 flex flex-col gap-2.5" aria-label="Core skills">
+          {/* Each bar hugs its own skill, with room before the next. */}
+          <ul className="mt-3 flex flex-col gap-5" aria-label="Core skills">
             {scored.map(({ id, label }) => {
               const pct = skills![id]!
               return (

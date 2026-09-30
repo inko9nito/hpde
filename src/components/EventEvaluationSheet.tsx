@@ -175,7 +175,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         </div>
 
         <h3 className={sectionHead}>Core skills</h3>
-        <ul className="mt-2 flex flex-col gap-3">
+        {/* Each bar hugs its own skill, with room before the next. */}
+        <ul className="mt-3 flex flex-col gap-5">
           {TDE_SKILLS.map(s => {
             const value = draft.skills[s.id]
             return (
@@ -194,7 +195,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
                     %
                   </span>
                 </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
                   <div className="h-full rounded-full bg-gray-900 transition-[width]" style={{ width: `${value === '' ? 0 : Number(value)}%` }} />
                 </div>
               </li>

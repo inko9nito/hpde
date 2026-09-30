@@ -20,6 +20,8 @@ import { DATE, GROUP, TIME, sessionKey } from '../../src/utils/lapTimes.ts'
 // `<user id>/<event id>`. A deploy preview gets a store of its own, which
 // starts as a copy of the driver's live notes the first time they're used
 // there — so saving or removing notes there never touches the live ones.
+// Each deploy copies afresh: notes saved on a preview last until its next
+// deploy.
 //
 // TypeScript (.mts) so it can share the checks in src/; Netlify bundles it
 // with esbuild (see netlify/lib/functionsLoad.test.ts).

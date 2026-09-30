@@ -276,7 +276,8 @@ Private like your lap times: only you and admins see them.
   Netlify Blobs (store `notes`), one record per driver per event, next to
   the laps and kept the same way: a sign-in for everything, `driver=` for
   admins only (#288), and a deploy preview starts from a copy of your
-  real notes and never changes them (`netlify/lib/driverStore.mts`,
+  real notes and never changes them; each new deploy of a preview starts
+  over, so notes saved there before a push are gone after it (`netlify/lib/driverStore.mts`,
   shared with `/api/laps`). Personal notes and videos (#205) can join
   them there.
 
