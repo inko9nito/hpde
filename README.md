@@ -10,7 +10,8 @@ runs.
 
 - **Three tabs** along the bottom (#274): **Events** (the list and
   calendar of events), **Tracks** (your lap times by track layout) and
-  **Garage** (coming soon)
+  **More** (#345), a list of the rest: **Instructor evaluations** and the
+  **Garage** (coming soon), each sliding in over it
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -272,7 +273,19 @@ Private like your lap times: only you and admins see them.
     isn't picked here: it's your answer to *Did you drive?* (or your
     laps' group), shown to confirm.
   - Attaching a photo or PDF of a paper card is #343.
-- **Where they live:** `netlify/functions/notes.mts` (`/api/notes`) in
+- **Across events (#345):** More → **Instructor evaluations**
+  (`#/evaluations`). At the top, how your TDE report cards have come
+  along: a small line for each core skill, one point per TDE event with a
+  card, oldest to newest, all on one scale (shown under them), with the
+  latest card's score beside each line and the change from the card
+  before. Tap or slide across the lines to see another card's scores.
+  *Car aids over activated* isn't charted (lower is better there); it's on
+  each event's card. Under that, every event you have an evaluation at,
+  newest first, with your instructor and what's there (the report card or
+  the event's evaluation, and how many sessions have one). Tap one for its
+  *My notes*; Back returns to the list.
+- **Where they live:** `netlify/functions/notes.mts` (`/api/notes`; with
+  no `?event=` it returns every event's, for Instructor evaluations) in
   Netlify Blobs (store `notes`), one record per driver per event, next to
   the laps and kept the same way: a sign-in for everything, `driver=` for
   admins only (#288), and a deploy preview starts from a copy of your

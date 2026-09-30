@@ -846,7 +846,7 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(alphaTrack).toContainText('No events yet')
 })
 
-test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks (#274)', async ({ page }) => {
+test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (#274), the Garage from More (#345)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/')
   const bar = page.getByRole('navigation', { name: 'Sections' })
@@ -890,10 +890,71 @@ test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks
   await expect(page).toHaveURL(/#\/tracks$/)
   await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)
 
-  await bar.getByRole('link', { name: 'Garage' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeVisible()
-  await expect(page.getByText('Coming soon')).toBeVisible()
+  await bar.getByRole('link', { name: 'More' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible()
+  const garage = await trackSlide(page, () => page.getByRole('link', { name: /^Garage/ }).click(), 'Garage')
+  expect(garage).toEqual({ fromBelow: false, fromSide: true })
+  await expect(page.locator('p', { hasText: 'Coming soon' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(bar.getByRole('link', { name: 'More' })).toHaveAttribute('aria-current', 'page')
+})
+
+test('Instructor evaluations, from More: TDE report cards’ scores over time, and the events, which open on My notes (#345)', async ({ page }) => {
+  const tde = (id: string, name: string, date: string): EventConfig =>
+    ({ ...alpha, id: `${date}_${id}`, name, organizer: 'The Drivers Edge', days: [{ ...alpha.days[0], date }] })
+  const jul = tde('jul', 'TDE at MSRC', '2025-07-19')
+  const sep = tde('sep', 'TDE at MSRC 2.0', '2025-09-13')
+  const oct = tde('oct', 'TDE at Eagles Canyon Raceway', '2025-10-04')
+  await stubEvents(page, [...TEST_EVENTS, jul, sep, oct])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const card = (flags: number, passing: number, inputs: number, vision: number, consistency: number, carControl: number, pace: number, references: number, awareness: number, carAidsPct: number) =>
+    ({ instructor: 'John Harms', skills: { flags, passing, inputs, vision, consistency, carControl, pace, references, awareness }, carAidsPct })
+  const notes = [
+    { eventId: jul.id, evaluation: card(65, 95, 60, 55, 60, 70, 75, 50, 65, 25), sessions: [] },
+    { eventId: sep.id, evaluation: card(75, 95, 70, 65, 70, 70, 80, 65, 70, 15), sessions: [] },
+    { eventId: oct.id, evaluation: card(90, 100, 80, 70, 85, 75, 85, 80, 85, 10), sessions: [] },
+  ]
+  await page.route(/\/api\/notes(\?|$)/, route => {
+    const id = new URL(route.request().url()).searchParams.get('event')
+    if (!id) return route.fulfill({ json: { events: notes } })
+    const { evaluation, sessions } = notes.find(n => n.eventId === id) ?? { sessions: [] }
+    return route.fulfill({ json: { ...(evaluation ? { evaluation } : {}), sessions } })
+  })
+
+  await page.goto('/#/more')
+  const slide = await trackSlide(page, () => page.getByRole('link', { name: /^Instructor evaluations/ }).click(), 'Instructor evaluations')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  const chart = page.getByRole('region', { name: 'Report card scores' })
+  await expect(chart.locator('[data-score]')).toHaveCount(9)
+  await expect(chart.locator('[data-score="flags"]')).toHaveAttribute('aria-label', 'Calls out all flags: 90%, +15 since Sep 13')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  // Every line is as wide as the card's inside, and nothing overlaps its label.
+  const [lineW, cardW] = await chart.evaluate(el => [el.querySelector('[data-score] svg')!.getBoundingClientRect().width, el.clientWidth])
+  expect(cardW - lineW).toBeCloseTo(32, 0)
+
+  // A tap on the first card's points shows its scores.
+  const plot = chart.getByRole('group')
+  await plot.scrollIntoViewIfNeeded()
+  const box = (await plot.boundingBox())!
+  await page.mouse.move(box.x + 14, box.y + 40)
+  await expect(chart.getByRole('status')).toContainText('TDE at MSRC')
+  await expect(chart.locator('[data-score="flags"]')).toHaveAttribute('aria-label', 'Calls out all flags: 65%')
+
+  // The events, newest first; one opens on My notes, and Back comes back.
+  const events = page.getByRole('region', { name: 'Events' }).getByRole('link')
+  await expect(events).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  await events.first().click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${oct.id}$`))
+  await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
+  await page.getByRole('button', { name: 'Back' }).last().click()
+  await expect(page).toHaveURL(/#\/evaluations$/)
+  await expect(chart).toBeVisible()
 })
 
 test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {

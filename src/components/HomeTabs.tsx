@@ -1,20 +1,36 @@
 import type { ReactNode } from 'react'
-import { CalendarDays, Car, Route } from 'lucide-react'
+import { CalendarDays, Car, ChevronRight, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AppMenu } from './AppMenu'
 import { AccountButton } from './AccountButton'
+import { BackButton } from './EventHeader'
 
 // The app's top-level sections (#274): Events (the list of events), Tracks
-// (lap times by track layout) and Garage (coming soon), picked from a tab
-// bar along the bottom, as in an iOS app. Pushed pages — an event, a
-// track — slide in over them.
+// (lap times by track layout) and More (#345), picked from a tab bar along
+// the bottom, as in an iOS app. More is a list of the rest — Instructor
+// evaluations and the Garage — each of which slides in over it, as pushed
+// pages — an event, a track — slide in over the tabs.
 
-export type HomeTab = 'events' | 'tracks' | 'garage'
+export type HomeTab = 'events' | 'tracks' | 'more'
 
 export const HOME_TAB_HASH: Record<HomeTab, string> = {
   events: '#/',
   tracks: '#/tracks',
+  more: '#/more',
+}
+
+/** The pages the More tab lists (#345). */
+export type MorePage = 'evaluations' | 'garage'
+
+export const MORE_PAGE_HASH: Record<MorePage, string> = {
+  evaluations: '#/evaluations',
   garage: '#/garage',
+}
+
+/** The More page a hash is; null for anything else. */
+export function morePageFromHash(hash: string): MorePage | null {
+  const page = (Object.keys(MORE_PAGE_HASH) as MorePage[]).find(p => MORE_PAGE_HASH[p] === hash)
+  return page ?? null
 }
 
 /** The tab a hash is the page of; null for anything else. */
@@ -29,7 +45,7 @@ export const TAB_BAR_PX = 56
 const TABS: readonly { id: HomeTab; label: string; Icon: LucideIcon }[] = [
   { id: 'events', label: 'Events', Icon: CalendarDays },
   { id: 'tracks', label: 'Tracks', Icon: Route },
-  { id: 'garage', label: 'Garage', Icon: Car },
+  { id: 'more', label: 'More', Icon: Ellipsis },
 ]
 
 export function TabBar({ active }: { active: HomeTab }) {
@@ -76,12 +92,59 @@ export function HomeHeader({ title, children }: { title: string; children?: Reac
   )
 }
 
-/** The Garage tab: coming soon (#120). */
-export function GarageTab() {
+/** A page pushed over a tab: Back, and its title, in a white bar that stays at the top. */
+export function SubPageHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
+      <div className="mx-auto flex min-h-[52px] max-w-lg items-center gap-2 px-4">
+        <BackButton onClick={onBack} />
+        <h1 className="min-w-0 truncate font-rubik text-lg font-bold leading-tight text-gray-900">{title}</h1>
+      </div>
+    </div>
+  )
+}
+
+const MORE_ITEMS: readonly { page: MorePage; label: string; detail: string; Icon: LucideIcon }[] = [
+  { page: 'evaluations', label: 'Instructor evaluations', detail: 'Every event’s, and how your report cards have come along', Icon: ClipboardCheck },
+  { page: 'garage', label: 'Garage', detail: 'Coming soon', Icon: Car },
+]
+
+/** The More tab (#345): a list of the rest of the app, each opening its page over it. */
+export function MoreTab() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <HomeHeader title="Garage" />
+        <HomeHeader title="More" />
+        <ul className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="More">
+          {MORE_ITEMS.map(({ page, label, detail, Icon }) => (
+            <li key={page}>
+              <a
+                href={MORE_PAGE_HASH[page]}
+                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50 active:bg-gray-100"
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-900 text-white">
+                  <Icon size={18} aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-medium text-gray-900">{label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-gray-500">{detail}</span>
+                </span>
+                <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+/** The Garage, from the More tab: coming soon (#120). */
+export function GaragePage({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <SubPageHeader title="Garage" onBack={onBack} />
+      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
           <Car size={22} className="mx-auto text-gray-400" aria-hidden="true" />
           <p className="mt-2 text-sm font-medium text-gray-700">Coming soon</p>
