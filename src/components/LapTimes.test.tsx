@@ -707,6 +707,15 @@ describe('lap times (#210)', () => {
 })
 
 
+// Switch driver, in the event's "…" menu (#362): whose notes are showing.
+async function switchDriver(name: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  await userEvent.click(screen.getByRole('menuitem', { name: /^Switch driver/ }))
+  const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
+  await userEvent.click(await within(sheet).findByRole('radio', { name }))
+  expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+}
+
 describe('an admin logging another driver’s lap times (#288)', () => {
   const blue2 = (ms: number): SessionLaps => ({
     key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms }],
@@ -776,15 +785,23 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     saved = [blue2(99_000)]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
+    // Their own notes: no picker over them; it's in the "…" menu (#362).
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Jason')
     expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
+    // Someone else's: it says whose, and switches back.
+    expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('menuitem', { name: /^Switch driver/ })).toHaveTextContent('Showing Jason')
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     expect(screen.getByText('On the Schedule tab, tap a session Jason drove to add their laps or their instructor’s feedback.')).toBeInTheDocument()
     expect(screen.getByText('Private')).toHaveAttribute('title', 'Only Jason and admins can see these lap times')
 
     // Picked again, they're fetched afresh.
     jasonSaved = [blue2(84_000)]
     await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Me')
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Jason')
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Jason')
     expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
     expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:24')
 
@@ -1249,7 +1266,7 @@ describe('a track page: the events on one layout (#274)', () => {
     jasonSaved = [at('2026-03-07', '11:45', 2, [84_420])]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), await screen.findByRole('option', { name: 'Jason' }))
+    await switchDriver('Jason')
     await userEvent.click(await screen.findByRole('link', { name: 'See all Jason’s MSRC 1.7 CW laps' }))
 
     const page = await trackPage()

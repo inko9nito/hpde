@@ -183,7 +183,8 @@ Only they and admins can see them.
   text box. The **My notes** tab opens with *Best lap this event* and
   *All time best* (across every event at the track with the same
   configuration and direction), then each session's figures and lap time summary;
-  tap the figures to open its lap table, or use *Expand all*. The tables'
+  tap the figures to open its lap table, or use *Expand all*, just over
+  the sessions (#361). The tables'
   columns line up from session to session. While the laps load, a
   skeleton of the cards fades in and out. The tab counts the
   sessions with laps or an evaluation, and a report card (#340), e.g.
@@ -217,13 +218,14 @@ Only they and admins can see them.
   laps the first time you use them there (like the events), so you can
   test with real data. Laps saved or removed on a preview stay on that
   preview and never touch the real ones; the next deploy copies afresh.
-- **For another driver (admins, #288):** the lap sheet and My notes
-  have a **Driver** picker: *Me*, or anyone who has signed in to the
-  site. Pick someone to see, add, edit or remove their laps. They're
-  saved in that driver's account, so they see them when they sign in,
-  and they count toward that driver's all-time best. While someone else
-  is picked, the Schedule tab shows the picker too, so it's clear whose
-  laps are marked. Another event starts back on *Me*. Someone who has
+- **For another driver (admins, #288):** *Switch driver* in the event's
+  "…" menu (#362), and the lap sheet's **Driver** picker, pick whose laps
+  to show: *Me*, or anyone who has signed in to the site. Pick someone
+  to see, add, edit or remove their laps. They're saved in that driver's
+  account, so they see them when they sign in, and they count toward
+  that driver's all-time best. While someone else is picked, the
+  Schedule and My notes tabs show the picker at the top, so it's clear
+  whose laps are marked, and the menu item says whose are showing. Another event starts back on *Me*. Someone who has
   never signed in isn't on the list: they need to sign in once first.
   - `netlify/functions/drivers.mts` (`/api/drivers`, admins only) lists
     everyone from Netlify Identity's admin API (`@netlify/identity`);

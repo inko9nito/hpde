@@ -32,7 +32,7 @@ import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
 import { EvaluationsPage } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
-import { DriverPicker } from './components/DriverPicker'
+import { DriverPicker, SwitchDriverSheet } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useNotesLog } from './data/notesLog'
 import { useDrivers, driverName } from './data/drivers'
@@ -229,6 +229,8 @@ export default function App() {
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
   const [lapDriver, setLapDriver] = useState<Driver | null>(null)
+  // Switch driver's sheet, from the event's "…" menu (#362).
+  const [driverSheetOpen, setDriverSheetOpen] = useState(false)
   const isAdminUser = authStatus === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
   const driver = isAdminUser ? lapDriver : null
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -415,7 +417,7 @@ export default function App() {
   const trackLink = activeLayout && activeLayoutSlug ? { name: activeLayout, href: trackHash(activeLayoutSlug) } : undefined
 
   // Who else an admin can pick, fetched once they open the laps.
-  const drivers = useDrivers(isAdminUser && isOnEventRoute && (lapSlot !== null || activeTab === 'notes'))
+  const drivers = useDrivers(isAdminUser && isOnEventRoute && (lapSlot !== null || activeTab === 'notes' || driverSheetOpen))
   const driverPicker = isAdminUser && user
     ? <DriverPicker driver={driver} onChange={setLapDriver} drivers={drivers} selfId={user.id} />
     : undefined
@@ -441,6 +443,7 @@ export default function App() {
     setLapSlot(null)
     setEvaluationOpen(false)
     setCarSheetOpen(false)
+    setDriverSheetOpen(false)
     setLapDriver(null)
   }
 
@@ -604,6 +607,7 @@ export default function App() {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
           }}
+          switchDriver={isAdminUser ? { driver: driver ? driverName(driver) : null, onOpen: () => setDriverSheetOpen(true) } : undefined}
           scrollRef={pushScrollRef}
         />
 
@@ -704,7 +708,8 @@ export default function App() {
               allTimeBest={allTimeBest}
               track={trackLink}
               driver={driver}
-              driverPicker={driverPicker}
+              // Picked from the "…" menu (#362); here only while it's someone else's, to say whose and switch back.
+              driverPicker={driver ? driverPicker : undefined}
               runGroup={evaluationGroup}
               events={ALL_EVENTS}
               onEdit={(session, view) => setLapSlot({
@@ -881,6 +886,15 @@ export default function App() {
           },
         } : undefined}
         onClose={() => setLapSlot(null)}
+      />
+    )}
+    {driverSheetOpen && isAdminUser && user && isOnEventRoute && !routeMissing && (
+      <SwitchDriverSheet
+        driver={driver}
+        onChange={setLapDriver}
+        drivers={drivers}
+        selfId={user.id}
+        onClose={() => setDriverSheetOpen(false)}
       />
     )}
     {carSheetOpen && ownGarage && isOnEventRoute && !routeMissing && (

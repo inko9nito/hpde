@@ -36,7 +36,7 @@ interface Props {
   track?: { name: string; href: string }
   /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
   driver?: Driver | null
-  /** Admins only: the Driver picker, above the laps (#288). */
+  /** Admins only, on another driver's notes: the Driver picker, above them, to say whose and switch back (#288, #362). */
   driverPicker?: ReactNode
   /** The group they drove in, and every event (to color groups), for the report card. */
   runGroup?: RunGroupConfig | null
@@ -100,7 +100,7 @@ export function MyLapTimes({
     />
   )
   const top = (<>
-    {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
+    {driverPicker && <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>}
     {carRow}
   </>)
   const header = <>{top}{toolbar}</>
