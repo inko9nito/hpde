@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Car as CarIcon, Lock, Plus } from 'lucide-react'
 import { HomeHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
-import { CarSheet } from './CarSheet'
+import { CarFormPage } from './CarFormPage'
 import { CarRow } from './CarRow'
 import { carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
@@ -29,7 +29,9 @@ export function GarageTab({ events, onToast }: {
 }) {
   const { status: authStatus } = useAuth()
   const garage = useGarage()
-  const [adding, setAdding] = useState(false)
+  // Add a car's page, while it's open: a new one each time (see CarPage).
+  const [adding, setAdding] = useState<number | null>(null)
+  const add = () => setAdding(n => (n ?? 0) + 1)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,7 +59,7 @@ export function GarageTab({ events, onToast }: {
             <CarIcon size={22} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
             <button
-              onClick={() => setAdding(true)}
+              onClick={add}
               className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
             >
               Add a car
@@ -77,7 +79,7 @@ export function GarageTab({ events, onToast }: {
             </ul>
             {garage.cars.length < MAX_CARS && (
               <button
-                onClick={() => setAdding(true)}
+                onClick={add}
                 className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
               >
                 <Plus size={16} aria-hidden="true" />
@@ -87,15 +89,8 @@ export function GarageTab({ events, onToast }: {
           </div>
         )}
       </div>
-      {adding && (
-        <CarSheet
-          onSave={async car => {
-            await garage.saveCar(car)
-            setAdding(false)
-            onToast('Car added')
-          }}
-          onClose={() => setAdding(false)}
-        />
+      {adding !== null && (
+        <CarFormPage key={adding} onSaved={() => onToast('Car added')} onClosed={() => setAdding(null)} />
       )}
     </div>
   )

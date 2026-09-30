@@ -29,6 +29,8 @@ export interface GarageValue extends Garage {
   /** Saves an event's setup, replacing any. */
   saveSetup(eventId: string, setup: Omit<EventSetup, 'updatedAt'>): Promise<void>
   removeSetup(eventId: string): Promise<void>
+  /** Makes a car the one driven at each of these events, instead of any other. */
+  driveAt(carId: string, eventIds: string[]): Promise<void>
   reload(): void
 }
 
@@ -186,11 +188,16 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     })
   }, [send, change])
 
+  const driveAt = useCallback(async (carId: string, eventIds: string[]) => {
+    const saved = (await (await send(`car=${encodeURIComponent(carId)}`, put({ events: eventIds }))).json()).events as Record<string, EventSetup>
+    change(g => ({ ...g, events: { ...g.events, ...saved } }))
+  }, [send, change])
+
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
   const value = useMemo(
-    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, reload }),
-    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, reload],
+    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload }),
+    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload],
   )
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
@@ -208,6 +215,7 @@ const OFF: GarageValue = {
   removeEntry: signIn,
   saveSetup: signIn,
   removeSetup: signIn,
+  driveAt: signIn,
   reload() {},
 }
 

@@ -287,14 +287,21 @@ Private like your lap times: only you and admins see them.
 Private like your notes: only you and admins see it.
 
 - **Your cars:** the **Garage** tab lists them, one line each: its photo,
-  what you call it and the last event it went to. **Add a car** there
-  (year, make, model, a nickname and the lug nut torque in ft·lb).
+  what you call it and the last event it went to. **Add a car** opens a
+  page over the Garage (Cancel and Save across its top): a photo from the
+  library or camera, year, make, model, a nickname and the lug nut torque
+  in ft·lb. A photo of any size is made smaller on the phone (to 1280 px,
+  a JPEG) before it's sent; the limit is 3 MB after that, and an error
+  says so.
 - **A car's page** (tap it, `#/garage/<car>`): its **Details** — its
-  photo (**Add a photo** from the library or camera; it's shrunk on the
-  phone to 1280 px before it's sent), then **Edit details** to change or
-  remove the car — its **Consumables** as they are now, each with the
-  date it went on, its **Change log**, and its **Events**, which open on
-  their *My notes* over the car's page (Back returns to it).
+  photo, then **Edit details**, the same page as adding one, to change
+  the photo or the details or remove the car — its **Consumables** as
+  they are now, each with the date it went on, its **Change log**, and
+  its **Events**, which open on their *My notes* over the car's page
+  (Back returns to it). **Add to events** there lists the events you're
+  going to or went to (your answers, #235) that it isn't at yet: pick
+  some or **Select all**. One with another car on it says so, and this
+  car takes its place there (its tire pressures stay).
 - **The change log:** **Log a change** is one job: pick everything that
   was changed — tires, front or rear pads, front or rear rotors, brake
   fluid, engine oil, transmission fluid, diff fluid, coolant — and each
@@ -303,10 +310,11 @@ Private like your notes: only you and admins see it.
   to change or remove it. What's on the car at an event is whatever the
   log last says before it.
 - **At an event:** the car you drove is the first thing on *My notes*,
-  one slim line; **Add your car** picks it from the garage (or adds one).
-  Tap it for its lug nut torque and what was on it at that event, **Car
-  details** (its page, over the event; Back returns to it), **Change car**
-  or taking it off.
+  one slim line; **Add your car** picks it from the garage, or adds one
+  (the Add a car page, over the event). Tap it for its photo and name —
+  which open its page, over the event (Back returns to it) — with
+  **Change** beside them, its lug nut torque, what was on it at that
+  event, and taking it off.
 - **A session's tire pressures:** tap the session on the Schedule tab,
   then **Tire pressures**: each corner before the session (cold, or as
   you set them) and hot after it, in psi, laid out as the car sits, and
@@ -318,7 +326,8 @@ Private like your notes: only you and admins see it.
 - **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
   Netlify Blobs (store `garage`), one record per driver
   (`<user id>/garage`): their cars, each with its change log, and each
-  event's car and pressures; photos in `garage-photos`
+  event's car and pressures (`PUT ?car=<id> {events}` puts a car on
+  several events at once); photos in `garage-photos`
   (`<user id>/<car id>`), fetched with the sign-in like everything else. Kept like the laps and notes
   (`netlify/lib/driverStore.mts`): a sign-in for everything, `driver=` for
   admins only, and a deploy preview starts from a copy of your real

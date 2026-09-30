@@ -11,6 +11,7 @@
 // garage function (which checks what it's sent before saving).
 import { DATE, GROUP, TIME, sessionKey } from './lapTimes'
 import type { EventConfig } from '../types'
+import type { Rsvps } from './rsvp'
 
 /** The consumables a car's log tracks, in the order the forms list them. */
 export const CONSUMABLES = [
@@ -120,6 +121,8 @@ export const MAX_SESSIONS = 100
 export const MAX_LOG = 500
 /** A car photo as uploaded, already shrunk on the phone: at most this many bytes. */
 export const MAX_PHOTO_BYTES = 3_000_000
+/** The limit as it's told to the driver. */
+export const PHOTO_LIMIT = `${MAX_PHOTO_BYTES / 1_000_000} MB`
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 export const MAX_NAME = 60
 export const MAX_PART = 80
@@ -283,6 +286,21 @@ export function carEvents(carId: string, garage: Garage, events: EventConfig[]):
   return events
     .filter(e => garage.events[e.id]?.carId === carId)
     .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
+}
+
+/**
+ * The events a car could be added to from its page: the driver's — ones
+ * they're going to, or went to (#235) — it isn't already at, newest first,
+ * each with the car that's there now, if another is.
+ */
+export function eventsToDriveAt(carId: string, garage: Garage, events: EventConfig[], rsvps: Rsvps): { event: EventConfig; now?: Car }[] {
+  return events
+    .filter(e => rsvps[e.id]?.status === 'going' && garage.events[e.id]?.carId !== carId)
+    .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
+    .map(event => {
+      const now = garage.cars.find(c => c.id === garage.events[event.id]?.carId)
+      return now ? { event, now } : { event }
+    })
 }
 
 /** The car's log, newest first; entries on the same day, the last logged first. */

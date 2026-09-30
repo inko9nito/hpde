@@ -27,6 +27,7 @@ import { emptyPageStack, nextPageStack } from './utils/pageStack'
 import { HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
 import { GarageTab } from './components/GarageTab'
 import { EventCarSheet } from './components/EventCarSheet'
+import { CarFormPage } from './components/CarFormPage'
 import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
 import { TracksTab } from './components/TracksTab'
@@ -218,6 +219,9 @@ export default function App() {
   const [evaluationOpen, setEvaluationOpen] = useState(false)
   // The event's car, open in its sheet (#344).
   const [carSheetOpen, setCarSheetOpen] = useState(false)
+  // The event a car is being added from, on its own page over the event (#344).
+  // A new page each time (see CarPage).
+  const [addingCarFor, setAddingCarFor] = useState<{ eventId: string; n: number } | null>(null)
   // An admin can log another driver's lap times (#288): whose the sheet,
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
@@ -838,7 +842,10 @@ export default function App() {
           setCarSheetOpen(false)
           showToast('Car saved')
         }}
-        onAddCar={garage.saveCar}
+        onAddCar={() => {
+          setCarSheetOpen(false)
+          setAddingCarFor(prev => ({ eventId: activeEvent.id, n: (prev?.n ?? 0) + 1 }))
+        }}
         // Its page, over the event — or, the one the event was opened from, back to it.
         onOpenCar={() => {
           if (!eventCar) return
@@ -855,6 +862,19 @@ export default function App() {
           showToast('Car removed from event')
         }}
         onClose={() => setCarSheetOpen(false)}
+      />
+    )}
+    {addingCarFor !== null && (
+      <CarFormPage
+        key={addingCarFor.n}
+        // Added, it's the car at the event it was added from.
+        onSaved={async car => {
+          const { eventId } = addingCarFor
+          const sessions = garage.events[eventId]?.sessions
+          await garage.saveSetup(eventId, { ...(sessions ? { sessions } : {}), carId: car.id })
+          showToast('Car added')
+        }}
+        onClosed={() => setAddingCarFor(null)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (

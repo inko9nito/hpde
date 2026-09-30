@@ -99,6 +99,24 @@ describe('garage function (#344)', () => {
     expect(events[EVENT].sessions).toEqual({ '2026-09-12 10:25 pink': { key: '2026-09-12 10:25 pink', ...pressures } })
   })
 
+  it('drives a car at several events at once, taking over from another car and keeping their pressures', async () => {
+    await addCar()
+    await addCar('vera-token', { make: 'Mazda', model: 'Miata' })
+    await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup: { ...setup, carId: 'car2' } } })
+    const res = await call('PUT', { token: 'vera-token', query: '?car=car1', body: { events: [EVENT, '2026-10-04_alpha', EVENT] } })
+    expect(res.status).toBe(200)
+    expect(Object.keys((await res.json()).events)).toEqual([EVENT, '2026-10-04_alpha'])
+    const { events } = await garageOf('vera-token')
+    expect(events[EVENT]).toMatchObject({ carId: 'car1' })
+    expect(Object.keys(events[EVENT].sessions)).toEqual(['2026-09-12 10:25 pink'])
+    expect(events['2026-10-04_alpha']).toMatchObject({ carId: 'car1' })
+    const bad = async (body: unknown, query = '?car=car1') => (await call('PUT', { token: 'vera-token', query, body })).status
+    expect(await bad({ events: [] })).toBe(400)
+    expect(await bad({ events: ['../x'] })).toBe(400)
+    expect(await bad({ events: 'all' })).toBe(400)
+    expect(await bad({ events: [EVENT] }, '?car=nope')).toBe(404)
+  })
+
   it('logs jobs on a car — several consumables at once — changes an entry and removes one', async () => {
     await addCar()
     const res = await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: brakeJob } })
@@ -141,7 +159,9 @@ describe('garage function (#344)', () => {
     expect(new Uint8Array(await got.arrayBuffer())).toEqual(bytes)
     // Not a photo: refused.
     expect((await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: 'hi' })).status).toBe(400)
-    expect((await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(3_000_001) })).status).toBe(400)
+    const tooBig = await photo('?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(3_000_001) })
+    expect(tooBig.status).toBe(400)
+    expect((await tooBig.json()).error).toBe('That photo is over the 3 MB limit.')
     // Changing the car's details keeps it.
     await call('PUT', { token: 'vera-token', body: { car: { id: 'car1', ...cayman } } })
     expect((await garageOf('vera-token')).cars[0].photo).toBe(car.photo)

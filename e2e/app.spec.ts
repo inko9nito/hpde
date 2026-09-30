@@ -715,12 +715,14 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('a driver adds their car and its photo in the Garage, logs a brake job, drives it at an event and logs tire pressures (#344)', async ({ page }) => {
+test('a driver adds their car and its photo in the Garage, logs a brake job, adds it to an event and logs tire pressures (#344)', async ({ page }) => {
   await stubEvents(page, [alpha])
   await signInAsAdmin(page)
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
+  // Going to Alpha (#235), so the car's page offers it.
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [alpha.id]: { status: 'going' } } } }))
   type Car = { id: string; photo?: string; log?: object[] }
   const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
   let photo: { type: string; body: Buffer } | null = null
@@ -742,6 +744,11 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, dri
         garage.events[params.get('event')!] = body.setup
         return route.fulfill({ json: { setup: body.setup } })
       }
+      if (params.get('car') && body.events) {
+        const events = Object.fromEntries((body.events as string[]).map(id => [id, { carId: params.get('car') }]))
+        Object.assign(garage.events, events)
+        return route.fulfill({ json: { events } })
+      }
       if (params.get('car')) {
         const entry = { id: 'e1', ...body.entry }
         garage.cars[0].log = [entry]
@@ -757,15 +764,45 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, dri
 
   await page.goto('/#/garage')
   await page.getByRole('button', { name: 'Add a car' }).click()
+  // A page of its own, over the Garage: Cancel and Save across its top.
   const add = page.getByRole('dialog', { name: 'Add a car' })
+  await expect(add.getByRole('button', { name: 'Cancel' })).toBeInViewport()
+  await expect(add.getByRole('button', { name: 'Save' })).toBeDisabled()
   await add.getByLabel('Year').fill('2019')
   await add.getByLabel('Make').fill('Porsche')
   await add.getByLabel('Model').fill('718 Cayman GTS')
   await add.getByRole('textbox', { name: /^Nickname/ }).fill('The Cayman')
   await add.getByRole('textbox', { name: /^Lug nut torque/ }).fill('118')
+
+  // Its photo, picked as it's added: a camera-sized one, over the upload
+  // limit as it is, made smaller before it's sent — even where the browser
+  // can't make a bitmap of it (as iPhone Safari sometimes can't).
+  const picked = await add.getByLabel('Add a photo').evaluate(async input => {
+    window.createImageBitmap = () => Promise.reject(new Error('Not here'))
+    const c = document.createElement('canvas')
+    c.width = 1600
+    c.height = 1200
+    const ctx = c.getContext('2d')!
+    const noise = ctx.createImageData(1600, 1200)
+    for (let i = 0; i < noise.data.length; i++) noise.data[i] = i % 4 === 3 ? 255 : Math.random() * 256
+    ctx.putImageData(noise, 0, 0)
+    const png = await new Promise<Blob>(r => c.toBlob(b => r(b!), 'image/png'))
+    const files = new DataTransfer()
+    files.items.add(new File([png], 'cayman.png', { type: 'image/png' }))
+    ;(input as HTMLInputElement).files = files.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    return png.size
+  })
+  expect(picked).toBeGreaterThan(3_000_000)
+  await expect(add.getByRole('img', { name: 'Your car' })).toBeVisible()
+  await expect(add.getByRole('button', { name: 'Change photo' })).toBeVisible()
   await noSideScroll()
-  await add.getByRole('button', { name: 'Add car' }).click()
+  expect(photo).toBeNull()
+  await add.getByRole('button', { name: 'Save' }).click()
   await expect(add).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Car added')
+  expect(photo!.type).toBe('image/jpeg')
+  expect(photo!.body.length).toBeLessThanOrEqual(3_000_000)
 
   // One line for the car, which opens its page.
   const row = page.getByRole('list', { name: 'Cars' }).getByRole('link')
@@ -774,20 +811,12 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, dri
   await expect(page).toHaveURL(/#\/garage\/car1$/)
   await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
   await expect(page.getByRole('region', { name: 'Details' })).toContainText('Lug nut torque118 ft·lb')
-
-  // A photo: a camera-sized one, shrunk before it's sent.
-  const big = await page.evaluate(async () => {
-    const c = document.createElement('canvas')
-    c.width = 4000
-    c.height = 3000
-    c.getContext('2d')!.fillRect(0, 0, 4000, 3000)
-    return Array.from(new Uint8Array(await (await new Promise<Blob>(r => c.toBlob(b => r(b!), 'image/png'))).arrayBuffer()))
-  })
-  await page.getByLabel('Add a photo').setInputFiles({ name: 'cayman.png', mimeType: 'image/png', buffer: Buffer.from(big) })
-  await expect(page.getByRole('img', { name: 'The Cayman' })).toBeVisible()
-  expect(photo!.type).toBe('image/jpeg')
-  const size = await page.getByRole('img', { name: 'The Cayman' }).evaluate(img => [(img as HTMLImageElement).naturalWidth, (img as HTMLImageElement).naturalHeight])
+  // The photo, shown there — changed from Edit, not over it.
+  const shown = page.getByRole('region', { name: 'Details' }).getByRole('img', { name: 'The Cayman' })
+  await expect(shown).toBeVisible()
+  const size = await shown.evaluate(img => [(img as HTMLImageElement).naturalWidth, (img as HTMLImageElement).naturalHeight])
   expect(size).toEqual([1280, 960])
+  await expect(page.getByRole('button', { name: 'Change photo' })).toHaveCount(0)
 
   // A brake job: pads and rotors on one day at one shop.
   await page.getByRole('button', { name: 'Log a change' }).click()
@@ -808,11 +837,19 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, dri
   await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front pads · Hawk DTC-60Front rotorsat Speed Shop')
   await noSideScroll()
 
-  // At an event: the car's at the very top of My notes.
+  // Added to an event from its page: the events the driver's going to.
+  await page.getByRole('button', { name: 'Add to events' }).click()
+  const pick = page.getByRole('dialog', { name: 'Add to events' })
+  await pick.getByRole('checkbox', { name: new RegExp(`^${alpha.name}`) }).click()
+  await noSideScroll()
+  await pick.getByRole('button', { name: 'Add to event' }).click()
+  await expect(pick).toBeHidden()
+  await expect(page.getByRole('list', { name: 'The Cayman’s events' })).toContainText(alpha.name)
+  expect(garage.events[alpha.id]).toEqual({ carId: 'car1' })
+
+  // At the event: the car's at the very top of My notes.
   await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('tab', { name: 'My notes' }).click()
-  await page.getByRole('button', { name: /^Add your car/ }).click()
-  await page.getByRole('dialog', { name: 'Pick your car' }).getByRole('button', { name: /^The Cayman/ }).click()
   const carRow = page.getByRole('button', { name: 'Your car: The Cayman' })
   await expect(carRow).toBeVisible()
   await expect(page.getByRole('tab', { name: 'My notes (1)' })).toBeVisible()

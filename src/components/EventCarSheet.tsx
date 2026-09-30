@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeftRight, Check, ChevronRight, Lock, Plus } from 'lucide-react'
 import { Sheet } from './Sheet'
-import { CarFields, carDraft, carFromDraft } from './CarSheet'
 import { CarTile, ConsumablesList, DetailRow } from './CarRow'
 import { carName, carTitle, eventStart } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
@@ -12,7 +11,7 @@ import type { EventConfig } from '../types'
  * the car — its photo and name, which open its page, with Change beside
  * them — its lug nut torque and what was on it at this event, from its
  * change log. With none picked yet (or Change), the garage's cars to pick
- * from, and the way to add one.
+ * from, and the way to add one (its own page, over the event).
  */
 export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, onOpenCar, onClose }: {
   event: EventConfig
@@ -20,7 +19,8 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
   /** The event's car, if one's picked. */
   car?: Car
   onPick: (carId: string) => Promise<void>
-  onAddCar: (car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'>) => Promise<Car>
+  /** Opens the page to add a car, which is then the event's. */
+  onAddCar: () => void
   /** Opens the car's page, over the event. */
   onOpenCar: () => void
   /** Takes the car off the event. */
@@ -28,12 +28,9 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
   onClose: () => void
 }) {
   const [picking, setPicking] = useState(!car)
-  const [adding, setAdding] = useState(garage.cars.length === 0)
-  const [draft, setDraft] = useState(() => carDraft())
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const newCar = carFromDraft(draft)
 
   async function run(what: string, action: () => Promise<void>) {
     setBusy(what)
@@ -98,6 +95,7 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
               aria-pressed={car?.id === c.id}
               className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${car?.id === c.id ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
             >
+              <CarTile car={c} size={32} rounded="rounded-lg" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-gray-900">{carName(c)}</span>
                 {c.nickname && <span className="block truncate text-xs text-gray-500">{carTitle(c)}</span>}
@@ -111,39 +109,14 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
                 )}
             </button>
           ))}
-          {!adding && (
-            <button
-              onClick={() => setAdding(true)}
-              className="flex items-center gap-2 rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <Plus size={16} aria-hidden="true" />
-              Add a car to your garage
-            </button>
-          )}
-          {adding && (
-            <div className="flex flex-col rounded-xl border border-gray-200 p-3" role="group" aria-label="New car">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-900">New car</p>
-                {garage.cars.length > 0 && (
-                  <button onClick={() => setAdding(false)} disabled={!!busy} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-                )}
-              </div>
-              <CarFields draft={draft} onChange={setDraft} />
-              <button
-                onClick={() => 'value' in newCar && run('adding', async () => {
-                  const added = await onAddCar(newCar.value)
-                  // In the garage now, so trying again doesn't add it twice.
-                  setAdding(false)
-                  setDraft(carDraft())
-                  await onPick(added.id)
-                })}
-                disabled={!('value' in newCar) || !!busy}
-                className="mt-4 w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-              >
-                {busy === 'adding' ? 'Adding…' : 'Add car'}
-              </button>
-            </div>
-          )}
+          <button
+            onClick={onAddCar}
+            disabled={!!busy}
+            className="flex items-center gap-2 rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add a car to your garage
+          </button>
         </div>
       )}
 

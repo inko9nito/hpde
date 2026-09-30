@@ -1,15 +1,15 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Camera, ChevronRight, Plus } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { CarTile, ConsumablesList, DetailRow } from './CarRow'
-import { CarSheet } from './CarSheet'
+import { CarFormPage } from './CarFormPage'
 import { ChangeSheet } from './ChangeSheet'
+import { DriveAtSheet } from './DriveAtSheet'
 import { TrackIcon } from './TrackIcon'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { carEvents, carName, carTitle, consumableLabel, formatDay, logNewestFirst } from '../utils/garage'
 import type { Car, LogEntry } from '../utils/garage'
-import { shrinkPhoto } from '../utils/photo'
 import { formatDateRange } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -36,81 +36,15 @@ function Card({ title, children, action }: { title: string; children: ReactNode;
   )
 }
 
-/**
- * The car's photo, over its details: picked from the phone's library or
- * taken there and then, shrunk before it's sent. Change or remove it.
- */
-function CarPhoto({ car, onToast }: { car: Car; onToast: (text: string) => void }) {
-  const garage = useGarage()
+/** The car's photo, at the top of its details: changed from Edit. */
+function CarPhoto({ car }: { car: Car }) {
   const src = useCarPhoto(car)
-  const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-
-  async function run(kind: 'saving' | 'removing', action: () => Promise<void>, done: string) {
-    setBusy(kind)
-    setFailure(null)
-    try {
-      await action()
-      onToast(done)
-    } catch (err) {
-      setFailure((err as Error).message)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const pick = (
-    <input
-      ref={input}
-      type="file"
-      accept="image/*"
-      className="sr-only"
-      aria-label={car.photo ? 'Change photo' : 'Add a photo'}
-      tabIndex={-1}
-      onChange={e => {
-        const file = e.target.files?.[0]
-        e.target.value = ''
-        if (file) run('saving', async () => garage.savePhoto(car.id, await shrinkPhoto(file)), car.photo ? 'Photo changed' : 'Photo added')
-      }}
-    />
-  )
+  if (!car.photo) return null
   return (
-    <div className="mb-3">
-      {pick}
-      {car.photo ? (
-        <div className="relative overflow-hidden rounded-xl bg-gray-100">
-          {src
-            ? <img src={src} alt={carName(car)} className="aspect-[16/10] w-full object-cover" data-car-photo />
-            : <div className="aspect-[16/10] w-full animate-pulse" aria-busy="true" />}
-          <div className="absolute bottom-2 right-2 flex gap-2">
-            <button
-              onClick={() => input.current?.click()}
-              disabled={!!busy}
-              className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-sm backdrop-blur hover:bg-white"
-            >
-              {busy === 'saving' ? 'Uploading…' : 'Change photo'}
-            </button>
-            <button
-              onClick={() => run('removing', () => garage.removePhoto(car.id), 'Photo removed')}
-              disabled={!!busy}
-              className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm backdrop-blur hover:bg-white"
-            >
-              {busy === 'removing' ? 'Removing…' : 'Remove'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => input.current?.click()}
-          disabled={!!busy}
-          className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
-        >
-          <Camera size={22} className="text-gray-400" aria-hidden="true" />
-          {busy === 'saving' ? 'Uploading…' : 'Add a photo'}
-        </button>
-      )}
-      {failure && <p role="alert" className="mt-2 text-xs text-red-700">{failure}</p>}
+    <div className="mb-3 mt-2 overflow-hidden rounded-xl bg-gray-100">
+      {src
+        ? <img src={src} alt={carName(car)} className="aspect-[16/10] w-full object-cover" data-car-photo />
+        : <div className="aspect-[16/10] w-full animate-pulse" aria-busy="true" />}
     </div>
   )
 }
@@ -132,7 +66,10 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
 }) {
   const garage = useGarage()
   const car = garage.cars.find(c => c.id === carId)
-  const [editing, setEditing] = useState(false)
+  // Edit's page, while it's open: a new one each time, so one opened while
+  // the last is still sliding away starts afresh.
+  const [editing, setEditing] = useState<number | null>(null)
+  const [addingEvents, setAddingEvents] = useState(false)
   // The log entry open in its sheet: one to change, or a new one.
   const [entry, setEntry] = useState<LogEntry | 'new' | null>(null)
 
@@ -180,9 +117,9 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
       <div className="mx-auto flex max-w-lg flex-col gap-5 px-3 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-6">
         <Card
           title="Details"
-          action={<button onClick={() => setEditing(true)} className={footButton}>Edit details</button>}
+          action={<button onClick={() => setEditing(n => (n ?? 0) + 1)} className={footButton}>Edit details</button>}
         >
-          <div className="mt-2"><CarPhoto car={car} onToast={onToast} /></div>
+          <CarPhoto car={car} />
           <dl>
             {car.year !== undefined && <DetailRow label="Year">{car.year}</DetailRow>}
             <DetailRow label="Make">{car.make}</DetailRow>
@@ -229,9 +166,12 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           )}
         </Card>
 
-        <Card title="Events">
+        <Card
+          title="Events"
+          action={<button onClick={() => setAddingEvents(true)} className={footButton}><Plus size={16} aria-hidden="true" />Add to events</button>}
+        >
           {went.length === 0 ? (
-            <p className="mt-1 text-xs text-gray-500">None yet. Pick this car at the top of an event’s My notes.</p>
+            <p className="mt-1 text-xs text-gray-500">None yet.</p>
           ) : (
             <ul className="mt-2 flex flex-col gap-1" aria-label={`${carName(car)}’s events`}>
               {went.map(e => (
@@ -254,22 +194,30 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         </Card>
       </div>
 
-      {editing && (
-        <CarSheet
+      {editing !== null && (
+        <CarFormPage
+          key={editing}
           car={car}
           events={went.length}
-          onSave={async next => {
-            await garage.saveCar(next)
-            setEditing(false)
-            onToast('Car saved')
-          }}
-          onRemove={async () => {
-            await garage.removeCar(car.id)
-            setEditing(false)
+          onSaved={() => onToast('Car saved')}
+          onRemoved={() => {
             onToast('Car removed')
             onBack()
           }}
-          onClose={() => setEditing(false)}
+          onClosed={() => setEditing(null)}
+        />
+      )}
+      {addingEvents && (
+        <DriveAtSheet
+          car={car}
+          garage={garage}
+          events={events}
+          onSave={async ids => {
+            await garage.driveAt(car.id, ids)
+            setAddingEvents(false)
+            onToast(ids.length === 1 ? 'Added to 1 event' : `Added to ${ids.length} events`)
+          }}
+          onClose={() => setAddingEvents(false)}
         />
       )}
       {entry && (

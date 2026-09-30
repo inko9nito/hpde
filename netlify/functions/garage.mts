@@ -1,7 +1,7 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
 import type { StoreDeps } from '../lib/driverStore.mts'
-import { MAX_CARS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_TYPES, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
+import { MAX_CARS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_LIMIT, PHOTO_TYPES, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
 import type { Car, EventSetup, Garage, LogEntry } from '../../src/utils/garage.ts'
 
 // A signed-in driver's garage (#344), private to them, as their laps and
@@ -20,6 +20,9 @@ import type { Car, EventSetup, Garage, LogEntry } from '../../src/utils/garage.t
 //                                changed on one day — (no id), or changes
 //                                an entry (its id)
 //   DELETE ?car=<id>&entry=<id>  removes an entry from its log
+//   PUT    ?car=<id>  {events}   drives it at these events (their ids): the
+//                                car of each, instead of any other; their
+//                                tire pressures are kept
 //   PUT    ?event=  {setup}      saves an event's setup (replacing any): the
 //                                car, and each session's pressures
 //   DELETE ?event=               removes an event's setup
@@ -104,7 +107,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     if (!PHOTO_TYPES.includes(type)) return json(400, { error: 'The photo must be a JPEG, PNG or WebP image.' })
     const data = await req.arrayBuffer()
     if (data.byteLength === 0) return json(400, { error: 'The photo is empty.' })
-    if (data.byteLength > MAX_PHOTO_BYTES) return json(400, { error: 'That photo is too big.' })
+    if (data.byteLength > MAX_PHOTO_BYTES) return json(400, { error: `That photo is over the ${PHOTO_LIMIT} limit.` })
     await photos.records.set(photoKey, data, { metadata: { contentType: type } })
     const next: Car = { ...car, photo: `${Date.now().toString(36)}${newId().slice(0, 4)}`, updatedAt }
     await replaceCar(next)
@@ -146,6 +149,19 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     body = await req.json()
   } catch {
     return json(400, { error: 'Request body must be JSON.' })
+  }
+
+  if (car && body?.events !== undefined) {
+    const ids = body.events
+    if (!Array.isArray(ids) || ids.length === 0 || !ids.every(id => typeof id === 'string' && EVENT_ID.test(id))) {
+      return json(400, { error: 'Pick the events to drive it at.' })
+    }
+    const unique = [...new Set(ids as string[])]
+    const added = unique.filter(id => !garage.events[id]).length
+    if (Object.keys(garage.events).length + added > MAX_EVENTS) return json(400, { error: 'That’s too many events.' })
+    const setups = Object.fromEntries(unique.map(id => [id, { ...garage.events[id], carId: car.id, updatedAt }]))
+    await put({ ...garage, events: { ...garage.events, ...setups } })
+    return json(200, { events: setups })
   }
 
   if (car) {
