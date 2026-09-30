@@ -828,6 +828,47 @@ test('Events, Tracks and Garage tabs along the bottom; a track opens from Tracks
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {
+  const withGroups: EventConfig = {
+    id: `${isoInDays(20)}_group-day`,
+    name: 'Group Day',
+    runGroups: alpha.runGroups,
+    days: [{ ...alpha.days[0], date: isoInDays(20) }],
+  }
+  await stubEvents(page, [withGroups, upcoming, ...TEST_EVENTS])
+  await signInAsAdmin(page)
+  // Going to Group Day in Blue; drove Alpha in Red, and Bravo with no group said.
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: {
+    [withGroups.id]: { status: 'going', runGroup: 'blue' },
+    [upcoming.id]: { status: 'maybe' },
+    [alpha.id]: { status: 'going', runGroup: 'red' },
+    [TEST_EVENTS[1].id]: { status: 'going' },
+  } } }))
+
+  await page.goto('/#/')
+  await page.getByRole('button', { name: 'All', exact: true }).click()
+  const groupDay = page.getByRole('button', { name: /Group Day/ })
+  const alphaCard = page.getByRole('button', { name: new RegExp(alpha.name) })
+  const bravoCard = page.getByRole('button', { name: new RegExp(TEST_EVENTS[1].name) })
+  await expect(groupDay).toBeVisible()
+  // Both past events, whichever filter is on.
+  await expect(page.getByText('2 events attended')).toBeVisible()
+  // All: no run groups on the cards.
+  await expect(groupDay.getByText('Blue', { exact: true })).toHaveCount(0)
+  await expect(alphaCard.getByText('Red', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'My events' }).click()
+  await expect(groupDay.getByText('Blue', { exact: true })).toBeVisible()
+  await expect(alphaCard.getByText('Red', { exact: true })).toBeVisible()
+  // Before the organizer, as on a track's page.
+  await expect(alphaCard.getByText('Red', { exact: true }).locator('xpath=following-sibling::*[1]')).toHaveText(alpha.organizer!)
+  // No group said, no badge.
+  await expect(bravoCard.getByText('Red', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toBeVisible()
+  await expect(page.getByText('2 events attended')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
+
 test('a driver joins events from the list or the event’s header — going, maybe or not — with their run group; My events has theirs (#235)', async ({ page }) => {
   const withGroups: EventConfig = {
     id: `${isoInDays(20)}_group-day`,

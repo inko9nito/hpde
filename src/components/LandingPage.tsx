@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Check, CircleHelp, List, Plus } from 'lucide-react'
 import { useEvents } from '../data/EventsContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { answerFor, myEvents, needsAnswer } from '../utils/rsvp'
+import { answerFor, myEvents, myRunGroup, needsAnswer } from '../utils/rsvp'
 import { RsvpPicker } from './RsvpPicker'
 import { useAuth } from '../auth/AuthContext'
 import { ADMIN_ROLE } from './NewEventPage'
@@ -13,7 +13,8 @@ import { Footer } from './Footer'
 import { FadedTrack, TrackIcon } from './TrackIcon'
 import { HomeHeader } from './HomeTabs'
 import { StatusBadge } from './EventHeader'
-import type { EventConfig } from '../types'
+import { GroupBadge } from './GroupBadge'
+import type { EventConfig, RunGroupConfig } from '../types'
 
 interface Props {
   onOpenEvent: (event: EventConfig) => void
@@ -52,8 +53,11 @@ const CARD_BOX = `${CARD_FRAME} ${CARD_PADDING}`
 // so swapping between them never shifts the page.
 export const CARD_SHELL = `flex items-center gap-4 ${CARD_BOX}`
 
-/** Event name (with a LIVE pill when it's on today) over its organizer. */
-export function EventTitle({ event, live }: { event: EventConfig; live: boolean }) {
+/**
+ * Event name (with a LIVE pill when it's on today) over its organizer —
+ * after their run group there, on My events (#330).
+ */
+export function EventTitle({ event, live, group }: { event: EventConfig; live: boolean; group?: RunGroupConfig }) {
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
@@ -62,8 +66,11 @@ export function EventTitle({ event, live }: { event: EventConfig; live: boolean 
         </span>
         {live && <StatusBadge status="live" size="sm" />}
       </div>
-      <div className="mt-0.5 truncate text-sm text-gray-500">
-        {event.organizer ?? 'Organizer not set'}
+      <div className="mt-0.5 flex min-w-0 items-center gap-2">
+        {group && <GroupBadge group={group} size="sm" />}
+        <span className="truncate text-sm text-gray-500">
+          {event.organizer ?? 'Organizer not set'}
+        </span>
       </div>
     </div>
   )
@@ -73,11 +80,13 @@ function EventCard({
   event,
   muted,
   live,
+  group,
   onClick,
 }: {
   event: EventConfig
   muted: boolean
   live: boolean
+  group?: RunGroupConfig
   onClick: () => void
 }) {
   return (
@@ -88,7 +97,7 @@ function EventCard({
       }`}
     >
       <DateBlock event={event} muted={muted} />
-      <EventTitle event={event} live={live} />
+      <EventTitle event={event} live={live} group={group} />
       {/* Same dark tile as the event page header; no padding, the SVGs
           carry their own margin. */}
       <TrackIcon trackId={event.trackId} tone="dark" size={48} padding={0} radius="rounded-xl" />
@@ -106,10 +115,13 @@ function FeaturedEventCard({
   event,
   live,
   rsvp,
+  group,
   onClick,
 }: {
   event: EventConfig
   live: boolean
+  /** Their run group, on My events (#330). */
+  group?: RunGroupConfig
   /**
    * Signed in (#235): their answer, as a badge — or 'ask', waiting on it,
    * with a Join event button in the corner that offers the choices.
@@ -135,6 +147,7 @@ function FeaturedEventCard({
               {event.name}
             </div>
             <div className="mt-1 flex min-w-0 items-center gap-2.5">
+              {group && <GroupBadge group={group} size="sm" />}
               <span className="truncate text-sm text-gray-400">
                 {event.organizer ?? 'Organizer not set'}
               </span>
@@ -249,6 +262,15 @@ export function LandingPage({ onOpenEvent }: Props) {
     if (answer === 'going' || answer === 'maybe') return answer
     return needsAnswer(e, rsvps) ? 'ask' as const : undefined
   }
+  // On My events, the run group they said they're in at each (#330).
+  const groupOf = (e: EventConfig) => {
+    if (!mine) return undefined
+    const id = myRunGroup(e, rsvps[e.id])
+    return e.runGroups.find(g => g.id === id)
+  }
+  // How many events they drove (#331): past ones they said yes to — the
+  // same whichever filter is on.
+  const attended = rsvpsReady ? partitionEvents(EVENTS).past.filter(e => answerFor(e, rsvps) === 'going').length : 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -302,6 +324,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                       event={e}
                       live={live.includes(e)}
                       rsvp={rsvpOf(e)}
+                      group={groupOf(e)}
                       onClick={() => onOpenEvent(e)}
                     />
                   ))}
@@ -309,9 +332,16 @@ export function LandingPage({ onOpenEvent }: Props) {
               )}
             </section>
             <section>
-              <h2 className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
-                Past
-              </h2>
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+                  Past
+                </h2>
+                {attended > 0 && (
+                  <span className="font-rubik text-xs text-gray-500">
+                    {attended} {attended === 1 ? 'event' : 'events'} attended
+                  </span>
+                )}
+              </div>
               {past.length === 0 ? (
                 <EmptyRow>{mine ? 'No past events of yours.' : 'No past events.'}</EmptyRow>
               ) : (
@@ -322,6 +352,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                       event={e}
                       muted
                       live={false}
+                      group={groupOf(e)}
                       onClick={() => onOpenEvent(e)}
                     />
                   ))}
