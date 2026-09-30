@@ -17,6 +17,13 @@
   }
 }
 
+/* The page under a pushed page stays put while it's open (#321,
+   src/components/PushPage.tsx). Its scroll position is kept. */
+html.push-page-open,
+html.push-page-open body {
+  overflow: hidden;
+}
+
 /* Hides the Identity widget's modal while the Google sign-in finishes
    (src/auth/identity.ts). */
 html.finishing-sign-in #netlify-identity-widget {
