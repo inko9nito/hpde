@@ -216,10 +216,20 @@ export function BackButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+/** How long scrolling has to have stopped (no finger down) before a
+ *  half-folded header snaps (#305). Momentum scrolling keeps sending
+ *  scroll events, so this only runs once the page has come to rest. */
+const SNAP_DELAY_MS = 150
+
 /**
  * Drives the scroll-linked fade of the title block (written straight to
  * its style, so scrolling doesn't re-render the header every frame) and
  * returns true once it has fully faded — the cue for the compact title.
+ *
+ * It also snaps (#305): a scroll that comes to rest partway through the
+ * title block finishes the move, folding the header if the title had
+ * already faded and opening it again if not, so the page never sits
+ * with the title gone and its empty block still above the tabs.
  */
 function useCollapsed(
   scrollRef: RefObject<HTMLElement | null>,
@@ -238,9 +248,48 @@ function useCollapsed(
       }
       setCollapsed(progress >= 1)
     }
+
+    let settle: ReturnType<typeof setTimeout> | undefined
+    let touching = false
+    const snap = () => {
+      const top = scroller.scrollTop
+      if (top <= 0 || top >= TITLE_BLOCK_PX) return
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      scroller.scrollTo({
+        top: top >= TITLE_FADE_PX ? TITLE_BLOCK_PX : 0,
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      })
+    }
+    // Never under a finger: wait for it to lift, then for the page to stop.
+    const scheduleSnap = () => {
+      clearTimeout(settle)
+      if (!touching) settle = setTimeout(snap, SNAP_DELAY_MS)
+    }
+    const onScroll = () => {
+      update()
+      scheduleSnap()
+    }
+    const onTouchStart = () => {
+      touching = true
+      clearTimeout(settle)
+    }
+    const onTouchEnd = () => {
+      touching = false
+      scheduleSnap()
+    }
+
     update()
-    scroller.addEventListener('scroll', update, { passive: true })
-    return () => scroller.removeEventListener('scroll', update)
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchend', onTouchEnd, { passive: true })
+    scroller.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      clearTimeout(settle)
+      scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      scroller.removeEventListener('touchcancel', onTouchEnd)
+    }
   }, [scrollRef, titleContentRef])
   return collapsed
 }

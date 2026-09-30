@@ -976,3 +976,22 @@ test('a short tab folds the event header all the way', async ({ page }) => {
   const tabs = page.getByRole('tablist', { name: 'Event section' })
   await expect.poll(async () => Math.round((await tabs.boundingBox())!.y)).toBe(52)
 })
+
+// Left partway through the title block, the header snaps (#305): folded
+// the rest of the way once the title has faded (48px), open again before.
+test('a half-folded event header snaps shut or open', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto(`/#/event/${alpha.id}`)
+  const heading = page.getByRole('heading', { level: 1, name: alpha.name })
+  await heading.waitFor()
+  const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  const tabs = page.getByRole('tablist', { name: 'Event section' })
+
+  await scroller.evaluate(el => el.scrollTo(0, 60))
+  await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(96)
+  await expect.poll(async () => Math.round((await tabs.boundingBox())!.y)).toBe(52)
+
+  await scroller.evaluate(el => el.scrollTo(0, 30))
+  await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(0)
+  await expect(heading).toBeVisible()
+})
