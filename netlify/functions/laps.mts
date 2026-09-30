@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
 import type { Store, StoreDeps } from '../lib/driverStore.mts'
-import { cleanSessionLaps, lapStats } from '../../src/utils/lapTimes.ts'
+import { cleanSessionLaps, lapStats, sessionKey } from '../../src/utils/lapTimes.ts'
 import type { Lap, SessionLaps } from '../../src/utils/lapTimes.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
 import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
@@ -17,6 +17,8 @@ import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } f
 // which starts out full of sample laps (see ensureSeeded). The driver those
 // laps belong to gets them in their own account too (see ensureOwnLaps),
 // and the sheet's speeds on the laps they'd already logged (ensureOwnSpeeds).
+// Laps at an event that got the organizer's schedule after the fact move
+// onto its sessions (ensureMovedSessions, #339).
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
@@ -104,6 +106,53 @@ async function ensureOwnLaps({ records: laps, meta }: { records: Store; meta: St
     await laps.setJSON(key, { eventId: record.eventId, sessions })
   }
   await meta.setJSON(doneKey, { at: new Date().toISOString(), kept })
+}
+
+/**
+ * Sessions that moved when an event added without the organizer's schedule
+ * got it (#339): laps were logged at the time they started, which isn't
+ * always the time the schedule gives the session, and sessions are numbered
+ * across every group. Each is the session's day, group and old start time,
+ * and its start time and number in the schedule.
+ */
+export const MOVED_SESSIONS = [
+  {
+    eventId: '2025-10-04_tde-at-ecr-2-7-ccw', issue: 339,
+    moves: [
+      { date: '2025-10-04', group: 'blue', from: '12:25', to: '12:20', sessionNumber: 2 },
+      { date: '2025-10-05', group: 'blue', from: '12:20', to: '12:20', sessionNumber: 2 },
+      { date: '2025-10-05', group: 'blue', from: '14:55', to: '14:55', sessionNumber: 3 },
+      { date: '2025-10-05', group: 'blue', from: '16:25', to: '16:30', sessionNumber: 4 },
+    ],
+  },
+]
+
+/**
+ * Moves a driver's laps onto their sessions in the new schedule
+ * (MOVED_SESSIONS), once per driver in this store — production's, or a
+ * preview's own. Only the session's time, key and number change. One the
+ * sample laps filled in at the new time on a preview (ensureOwnLaps) gives
+ * way to the driver's own. The record of it lists the sessions moved.
+ */
+async function ensureMovedSessions({ records: laps, meta }: { records: Store; meta: Store }, driverId: string) {
+  for (const { eventId, issue, moves } of MOVED_SESSIONS) {
+    const doneKey = `moved-sessions:${eventId}:${issue}:${driverId}`
+    if (await meta.get(doneKey, { type: 'json' })) continue
+    const key = `${driverId}/${eventId}`
+    const record = (await laps.get(key, { type: 'json' })) as EventLaps | null
+    const moved: string[] = []
+    for (const { date, group, from, to, sessionNumber } of moves) {
+      const old = sessionKey(date, from, group)
+      const session = record?.sessions[old]
+      if (!record || !session) continue
+      delete record.sessions[old]
+      const next = sessionKey(date, to, group)
+      record.sessions[next] = { ...session, key: next, time: to, sessionNumber }
+      moved.push(old)
+    }
+    if (record && moved.length) await laps.setJSON(key, record)
+    await meta.setJSON(doneKey, { at: new Date().toISOString(), moved })
+  }
 }
 
 // How far apart a lap the driver logged and a lap in the sheet can be and
@@ -233,6 +282,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   else {
     await ensureCopied(stores, driverId)
     await ensureOwnLaps(stores, driverId, driverEmail, deps.sampleDriverSha256)
+    await ensureMovedSessions(stores, driverId)
     await ensureOwnSpeeds(stores, driverId, driverEmail, deps.sampleDriverSha256)
   }
   const store = stores.records

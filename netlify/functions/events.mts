@@ -1,7 +1,7 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { buildEvent, editDetails, isAdmin } from '../lib/newEvent.mjs'
 import { openStores, listEvents, ensureCopied } from '../lib/eventsStore.mjs'
-import { ensurePastEvents } from '../lib/pastEvents.mjs'
+import { ensurePastEvents, ensurePastSchedules } from '../lib/pastEvents.mjs'
 import { applySchedule } from '../../src/utils/scheduleEditor.ts'
 
 // Every event (#232), kept in a Netlify Blobs store keyed by event id. GET
@@ -49,6 +49,11 @@ export default async function handler(req: Request, context: unknown, deps: Reco
     await ensurePastEvents(stores)
   } catch (err) {
     console.error('events: adding the past events failed:', err)
+  }
+  try {
+    await ensurePastSchedules(stores)
+  } catch (err) {
+    console.error('events: adding the past events’ schedules failed:', err)
   }
 
   if (req.method === 'GET') {
