@@ -15,7 +15,7 @@ import type { EventConfig } from '../types'
 
 const CAR_HASH_PREFIX = '#/garage/'
 
-/** A car's page (#344), under the Garage tab. */
+/** A car's page (#344), over the Garage (More › Garage). */
 export function carHash(carId: string): string {
   return `${CAR_HASH_PREFIX}${encodeURIComponent(carId)}`
 }

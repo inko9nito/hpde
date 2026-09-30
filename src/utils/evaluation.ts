@@ -29,17 +29,20 @@ export interface SessionNotes {
   loggedBy?: string
 }
 
-/** The Drivers Edge's core skills, as their report card lists them. */
+/**
+ * The Drivers Edge's core skills, as their report card lists them — and a
+ * word for each, where there's only room for one (the skills wheel, #345).
+ */
 export const TDE_SKILLS = [
-  { id: 'flags', label: 'Calls out all flags' },
-  { id: 'passing', label: 'Clean passing & signals' },
-  { id: 'inputs', label: 'Smooth inputs (brake, steering, gas, shift)' },
-  { id: 'vision', label: 'Looks ahead' },
-  { id: 'consistency', label: 'Consistency' },
-  { id: 'carControl', label: 'Car control' },
-  { id: 'pace', label: 'Pace with group' },
-  { id: 'references', label: 'Uses reference points' },
-  { id: 'awareness', label: 'Track location awareness' },
+  { id: 'flags', label: 'Calls out all flags', short: 'Flags' },
+  { id: 'passing', label: 'Clean passing & signals', short: 'Passing' },
+  { id: 'inputs', label: 'Smooth inputs (brake, steering, gas, shift)', short: 'Inputs' },
+  { id: 'vision', label: 'Looks ahead', short: 'Vision' },
+  { id: 'consistency', label: 'Consistency', short: 'Consistency' },
+  { id: 'carControl', label: 'Car control', short: 'Car control' },
+  { id: 'pace', label: 'Pace with group', short: 'Pace' },
+  { id: 'references', label: 'Uses reference points', short: 'References' },
+  { id: 'awareness', label: 'Track location awareness', short: 'Awareness' },
 ] as const
 
 export type TdeSkillId = typeof TDE_SKILLS[number]['id']

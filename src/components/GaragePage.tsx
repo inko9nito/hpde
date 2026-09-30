@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Car as CarIcon, Lock, Plus } from 'lucide-react'
-import { HomeHeader } from './HomeTabs'
+import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
 import { CarRow } from './CarRow'
@@ -18,13 +18,15 @@ function lastSeen(car: Car, garage: Garage, events: EventConfig[]): string {
 }
 
 /**
- * The Garage tab (#344): the driver's cars, one line each — what it's
- * called and the last event it went to — each opening its page, where its
- * details, consumables and their change log are.
+ * The Garage (#344), a page over the More tab (#345): the driver's cars,
+ * one line each — what it's called and the last event it went to — each
+ * opening its page, where its details, consumables and their change log
+ * are.
  */
-export function GarageTab({ events, onToast }: {
+export function GaragePage({ events, onBack, onToast }: {
   /** Every event, to find a car's last. */
   events: EventConfig[]
+  onBack: () => void
   onToast: (text: string) => void
 }) {
   const { status: authStatus } = useAuth()
@@ -35,8 +37,8 @@ export function GarageTab({ events, onToast }: {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <HomeHeader title="Garage" />
+      <SubPageHeader title="Garage" onBack={onBack} />
+      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
           <SignInPrompt reason="keep your cars and what they run on" />
         ) : garage.status === 'loading' || garage.status === 'off' ? (

@@ -10,8 +10,9 @@ runs.
 
 - **Three tabs** along the bottom (#274): **Events** (the list and
   calendar of events), **Tracks** (your lap times by track layout) and
+  **More** (#345), a list of the rest: **Instructor evaluations** and the
   **Garage** (your cars, a dated log of their tires, brakes and fluids,
-  and each session's tire pressures)
+  and each session's tire pressures), each sliding in over it
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -273,7 +274,36 @@ Private like your lap times: only you and admins see them.
     isn't picked here: it's your answer to *Did you drive?* (or your
     laps' group), shown to confirm.
   - Attaching a photo or PDF of a paper card is #343.
-- **Where they live:** `netlify/functions/notes.mts` (`/api/notes`) in
+- **Across events (#345):** More → **Instructor evaluations**
+  (`#/evaluations`). At the top, your TDE report cards summed up: the
+  three skills **most improved** since your first card, and the three that
+  **need work** most (the lowest on your latest). Then the **skills
+  wheel**: a spoke for each core skill, 0% at the middle and 100% at the
+  rim (rings every 20%), and every card as
+  a shape on it. The cards' chips scroll sideways, newest first, after
+  **All** (every card; tapped again, just the newest); tap one to hide or
+  show it; a picked chip is filled black, as a picked skill's name is. The
+  four newest cards shown each have a marker at their points (●, ■, ▲, ◆)
+  and a solid line, newer darker (the page says so), in their chips and
+  the list too; any older ones shown are thin
+  light lines behind them, since more than four can't be told apart
+  (hide newer ones to bring an older one forward). Not a color: every hue
+  is a run group's somewhere. Tap a skill's name for a list of
+  its score at each event, newest first, with the change from the card
+  before, each on a 0–100% bar: a gain since the event before is hatched
+  soft green on the end of the bar, a drop hatched soft rose over the part
+  it lost, and the change beside it is green or rose to match. *Car aids over activated* isn't on either (lower is better
+  there); it's on each event's card. Under those, **Events**: every event
+  you have an evaluation at, TDE or not, newest first, with what the
+  instructors said right on its card — about the whole event (on a TDE
+  event, the report card's notes) and each
+  session, with who said it: the whole event's is the instructor's name
+  over their notes (or *No notes*). Events you went to (you said you drove, or
+  have laps there) with none yet are in the list too, with **Add
+  instructor evaluation**, which opens the event's *My notes* with the
+  form up. Tap an event for its *My notes*; Back returns to the list.
+- **Where they live:** `netlify/functions/notes.mts` (`/api/notes`; with
+  no `?event=` it returns every event's, for Instructor evaluations) in
   Netlify Blobs (store `notes`), one record per driver per event, next to
   the laps and kept the same way: a sign-in for everything, `driver=` for
   admins only (#288), and a deploy preview starts from a copy of your
@@ -286,7 +316,7 @@ Private like your lap times: only you and admins see them.
 
 Private like your notes: only you and admins see it.
 
-- **Your cars:** the **Garage** tab lists them, one line each: its photo,
+- **Your cars:** the **Garage** (More → Garage) lists them, one line each: its photo,
   what you call it and the last event it went to. **Add a car** opens a
   page over the Garage (Cancel and Save across its top): a photo from the
   library or camera, year, make, model, a nickname and the lug nut torque

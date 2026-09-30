@@ -24,12 +24,13 @@ import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
-import { HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
-import { GarageTab } from './components/GarageTab'
+import { HOME_TAB_HASH, MORE_PAGE_HASH, MoreTab, TAB_BAR_PX, TabBar, homeTabFromHash, morePageFromHash } from './components/HomeTabs'
+import { GaragePage } from './components/GaragePage'
 import { EventCarSheet } from './components/EventCarSheet'
 import { CarFormPage } from './components/CarFormPage'
 import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
+import { EvaluationsPage } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker } from './components/DriverPicker'
 import { useLapLog, useLapSummary } from './data/lapLog'
@@ -117,6 +118,7 @@ type Overlay = { kind: 'new-event' } | { kind: 'widget' } | { kind: 'share'; eve
 const PAGE_HASHES = {
   event: (hash: string) => eventIdFromHash(hash) ?? eventIdFromEditScheduleHash(hash) ?? eventIdFromEditEventHash(hash),
   track: trackSlugFromHash,
+  more: morePageFromHash,
 }
 
 function overlayFromHash(hash: string): Overlay | null {
@@ -212,6 +214,7 @@ export default function App() {
   const activeTab = isEventTabId(storedTab) ? storedTab : 'schedule'
   const pushScrollRef = useRef<HTMLDivElement>(null)
   const trackScrollRef = useRef<HTMLDivElement>(null)
+  const moreScrollRef = useRef<HTMLDivElement>(null)
   // The session whose lap times are open in the sheet (#210), if any — and
   // what of it: what it has, or its laps or evaluation (#340).
   const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
@@ -282,12 +285,22 @@ export default function App() {
   // …and a car's page opened from an event's, over it.
   const [carRaised, setCarRaised] = useState(false)
   if (carRouteId !== null && carRaised !== (eventUnderCar !== null)) setCarRaised(eventUnderCar !== null)
-  // The tab under everything (#274): Events, Tracks or Garage. A track page
-  // of its own (not over an event) is the Tracks tab's, and a car's page the
-  // Garage's. Pages pushed over a tab leave it as it was, and go back to it.
+  // A More page (#345), and the one under the event's page opened from it.
+  const morePage = morePageFromHash(hash)
+  const moreUnderEvent = isOnEventRoute || trackOverEventId !== null ? stack.moreUnderEvent : null
+  // A car's page opened from the Garage (#344) has the Garage under it —
+  // and so does an event's page opened from that car's.
+  const carFromGarage = (carRouteId !== null && eventUnderCar === null) || (isOnEventRoute && carUnderEvent !== null)
+  const morePageShowing = morePage
+    ?? (moreUnderEvent !== null ? morePageFromHash(moreUnderEvent) : null)
+    ?? (carFromGarage ? 'garage' : null)
+  // The tab under everything (#274): Events, Tracks or More. A track page
+  // of its own (not over an event) is the Tracks tab's; a More page, and a
+  // car's page from the Garage, More's. Pages pushed over a tab leave it as
+  // it was, and go back to it.
   const hashTab = homeTabFromHash(hash)
     ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
-    ?? (carRouteId !== null && eventUnderCar === null ? 'garage' : null)
+    ?? (morePage !== null || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // A link to an event we don't have (yet): an app-created one before the
@@ -318,6 +331,13 @@ export default function App() {
   }, [trackPageSlug])
   const shownTrackSlug = trackPageSlug ?? lastTrackSlug
   const [trackEntered, setTrackEntered] = useState(false)
+
+  // …and a More page.
+  const [lastMorePage, setLastMorePage] = useState(morePageShowing)
+  useEffect(() => {
+    if (morePageShowing) setLastMorePage(morePageShowing)
+  }, [morePageShowing])
+  const shownMorePage = morePageShowing ?? lastMorePage
 
   // Same for New event / Share / iOS widget: the last one opened stays
   // mounted through its slide-out.
@@ -512,15 +532,45 @@ export default function App() {
 
   return (
     <>
-    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownOverlay || !!shownCarId}>
+    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownMorePage || !!shownOverlay || !!shownCarId}>
       {/* Room at the bottom for the tab bar. */}
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))` }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
         {homeTab === 'tracks' && <TracksTab />}
-        {homeTab === 'garage' && <GarageTab events={ALL_EVENTS} onToast={showToast} />}
+        {homeTab === 'more' && <MoreTab />}
       </div>
     </PullToRefresh>
     <TabBar active={homeTab} />
+    {/* Before the event's page, which goes over it when opened from it. */}
+    {shownMorePage && (
+      <PushPage
+        key={shownMorePage}
+        open={morePageShowing !== null}
+        onExited={() => setLastMorePage(null)}
+        scrollRef={moreScrollRef}
+        skipEnterAnimation={bootHashRef.current !== null}
+        // Gray to the top, as a tab is (#345).
+        whiteHeader={false}
+      >
+        {shownMorePage === 'evaluations' ? (
+          <PullToRefresh disabled={morePage === null || !!shownOverlay} scrollContainerRef={moreScrollRef}>
+          <EvaluationsPage
+            events={ALL_EVENTS}
+            eventsLoaded={eventsLoaded}
+            active={morePage !== null}
+            onBack={backToTab}
+            onOpenEvent={event => openEventNotes(event)}
+            onAddEvaluation={event => {
+              openEventNotes(event)
+              setEvaluationOpen(true)
+            }}
+          />
+          </PullToRefresh>
+        ) : (
+          <GaragePage events={ALL_EVENTS} onBack={backToTab} onToast={showToast} />
+        )}
+      </PushPage>
+    )}
     {pushMounted && (
     <PushPage
       // A fresh page when it goes over the track or a car's page, so it slides in.
@@ -547,6 +597,7 @@ export default function App() {
           onBack={
             trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent))
               : carUnderEvent !== null ? () => setHash(carHash(carUnderEvent))
+              : moreUnderEvent !== null ? () => setHash(moreUnderEvent)
               : backToTab
           }
           onDeleted={() => {
@@ -694,7 +745,8 @@ export default function App() {
         <CarPage
           carId={shownCarId}
           events={ALL_EVENTS}
-          onBack={eventUnderCar !== null ? () => setHash(eventHash(eventUnderCar)) : backToTab}
+          // Back to the event it was opened from, or the Garage.
+          onBack={() => setHash(eventUnderCar !== null ? eventHash(eventUnderCar) : MORE_PAGE_HASH.garage)}
           // One of its events opens over it, on My notes, where its car is —
           // or, the one it was opened from, back to it.
           onOpenEvent={event => {
@@ -899,7 +951,7 @@ export default function App() {
       />
     )}
     {/* Clear of the tab bar while a tab is showing. */}
-    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || carPageId !== null || overlay !== null ? 0 : TAB_BAR_PX} />
+    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || morePageShowing !== null || carPageId !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>
   )
 }
