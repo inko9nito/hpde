@@ -7,8 +7,8 @@ import { groupFor } from './LapTimesSheet'
 import { CARD_SHELL } from './LandingPage'
 import { DateBlock } from './DateBlock'
 import { PrivateTag, plural, useSkeletonFade } from './LapSessions'
-import { SkillTrends, scoredCards } from './SkillTrends'
-import type { ReportCardPoint } from './SkillTrends'
+import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
+import type { ReportCardPoint } from './ReportCardSkills'
 import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
@@ -141,8 +141,9 @@ interface Props {
 
 /**
  * Instructor evaluations (#345), from the More tab: every event the driver
- * has one at, newest first, under a chart of how their TDE report cards'
- * scores have come along. Private: it needs a sign-in.
+ * has one at, newest first, under how their TDE report cards have come
+ * along — the skills most improved and needing the most work, and the
+ * skills wheel. Private: it needs a sign-in.
  */
 export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEvent }: Props) {
   const { status: authStatus } = useAuth()
@@ -199,13 +200,10 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
           <PrivateTag whose={null} what="evaluations" />
         </div>
         {scored > 0 && (
-          <section aria-label="Report card scores" className="mb-8 rounded-2xl border border-gray-200 bg-white p-4">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h2 className="text-[13px] font-semibold text-gray-500">TDE report cards</h2>
-              <span className="text-xs text-gray-400">{plural(scored, 'event', 'events')}</span>
-            </div>
-            <SkillTrends points={cards} />
-          </section>
+          <div className="mb-8 flex flex-col gap-4">
+            <SkillOverview points={cards} />
+            <SkillsWheel points={cards} />
+          </div>
         )}
         <section aria-labelledby="evaluations-events-heading">
           <h2 id="evaluations-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">

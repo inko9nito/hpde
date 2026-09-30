@@ -1320,25 +1320,43 @@ describe('Instructor evaluations across events (#345)', () => {
     }
   })
 
-  it('charts each report card score across the TDE events, the latest’s beside each line, with the change since the one before', async () => {
+  it('sums the report cards up: most improved since the first, and what needs work on the latest', async () => {
     openAt('#/evaluations')
     const el = await page()
-    const chart = await within(el).findByRole('region', { name: 'Report card scores' })
-    expect(within(chart).getByText('2 events')).toBeInTheDocument()
-    // Only the skills scored on some card, in the card's order; not car aids, which is on the event's card.
-    expect([...chart.querySelectorAll('[data-score]')].map(r => r.getAttribute('data-score'))).toEqual(['flags', 'vision', 'pace'])
-    expect(score(chart, 'flags')).toBe('Calls out all flags: 80%, +15 since Sep 13')
-    expect(score(chart, 'vision')).toBe('Looks ahead: 70%, ±0 since Sep 13')
-    expect(score(chart, 'pace')).toBe('Pace with group: 90%')
-    expect(within(chart).getByRole('status')).toHaveTextContent('TDE at ECR')
+    const overview = await within(el).findByRole('region', { name: 'Report card overview' })
+    expect(within(overview).getByText('2 events')).toBeInTheDocument()
+    const items = (name: string) => within(within(overview).getByRole('region', { name })).getAllByRole('listitem').map(li => li.textContent)
+    // Only what went up: vision stayed at 70, and pace is on one card.
+    expect(items('Most improved')).toEqual(['Flags+15'])
+    expect(items('Needs work')).toEqual(['Vision70%', 'Flags80%', 'Pace90%'])
+  })
 
-    // Stepping back to the first card shows its scores.
-    const plot = within(chart).getByRole('group')
-    plot.focus()
-    fireEvent.keyDown(plot, { key: 'ArrowLeft' })
-    expect(within(chart).getByRole('status')).toHaveTextContent('TDE at MSRC')
-    expect(score(chart, 'flags')).toBe('Calls out all flags: 65%')
-    expect(score(chart, 'pace')).toBe('Pace with group: not scored')
+  it('draws each report card on the skills wheel, and lists a skill’s score at each event when it’s tapped', async () => {
+    openAt('#/evaluations')
+    const el = await page()
+    const wheel = await within(el).findByRole('region', { name: 'Skills wheel' })
+    // The first and the latest card, both on at first; one can be hidden, not both.
+    const chips = within(within(wheel).getByRole('group', { name: 'Report cards shown' })).getAllByRole('button')
+    expect(chips.map(c => [c.textContent, c.getAttribute('aria-pressed')])).toEqual([['Sep 13', 'true'], ['Oct 4', 'true']])
+    expect([...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))).toEqual([tdeSep.id, tdeOct.id])
+    await userEvent.click(chips[0])
+    expect([...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))).toEqual([tdeOct.id])
+    await userEvent.click(chips[1])
+    expect(chips[1]).toHaveAttribute('aria-pressed', 'true')
+
+    // A spoke for each skill scored; not car aids.
+    expect(within(wheel).getAllByRole('button', { pressed: false }).map(b => b.getAttribute('aria-label')).filter(Boolean))
+      .toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
+    expect(within(wheel).getByText('Tap a skill for its score at each event.')).toBeInTheDocument()
+    await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
+    const list = within(wheel).getByRole('region', { name: 'Calls out all flags at each event' })
+    expect(within(list).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+      'Oct 4, 2025TDE at ECR+1580%',
+      'Sep 13, 2025TDE at MSRC65%',
+    ])
+    // Tapped again, it goes.
+    await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
+    expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
   })
 
   it('lists every event with an evaluation, newest first, and opens one on My notes; Back returns here', async () => {
@@ -1371,7 +1389,7 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     expect(await within(el).findByText('No instructor evaluations yet')).toBeInTheDocument()
-    expect(within(el).queryByRole('region', { name: 'Report card scores' })).not.toBeInTheDocument()
+    expect(within(el).queryByRole('region', { name: 'Skills wheel' })).not.toBeInTheDocument()
   })
 
   it('asks anyone signed out to sign in, and fetches nothing', async () => {

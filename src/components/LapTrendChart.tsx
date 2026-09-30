@@ -139,72 +139,6 @@ export function labelled(xs: number[], texts: string[]): number[] {
   return taken
 }
 
-/**
- * Which of a chart's `n` points is picked, and the handlers that pick it,
- * for the element the points are laid out in (`x` is a point's distance
- * from its left edge). A mouse picks as it moves. A finger only once it
- * taps or scrubs sideways (#332): one that comes down on the chart and
- * scrolls the page (the browser takes it over, and cancels it) leaves the
- * chart alone, so a thumb scrolling past doesn't pop it open. Left and
- * right arrows step through them; focus starts on the latest.
- */
-export function useScrub(n: number, x: (i: number) => number) {
-  const [active, setActive] = useState<number | null>(null)
-  const touch = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null)
-
-  function pick(e: PointerEvent<HTMLElement>) {
-    const box = e.currentTarget.getBoundingClientRect()
-    const px = e.clientX - box.left
-    let nearest = 0
-    for (let i = 0; i < n; i++) if (Math.abs(x(i) - px) < Math.abs(x(nearest) - px)) nearest = i
-    setActive(nearest)
-  }
-
-  const handlers = {
-    onPointerDown(e: PointerEvent<HTMLElement>) {
-      if (e.pointerType === 'mouse') pick(e)
-      else touch.current = { x: e.clientX, y: e.clientY, scrubbing: false }
-    },
-    onPointerMove(e: PointerEvent<HTMLElement>) {
-      if (e.pointerType === 'mouse') return pick(e)
-      const t = touch.current
-      if (!t) return
-      const dx = Math.abs(e.clientX - t.x)
-      if (!t.scrubbing && dx > TAP_SLOP && dx > Math.abs(e.clientY - t.y)) t.scrubbing = true
-      if (t.scrubbing) pick(e)
-    },
-    onPointerUp(e: PointerEvent<HTMLElement>) {
-      const t = touch.current
-      touch.current = null
-      if (e.pointerType === 'mouse' || !t || t.scrubbing) return
-      if (Math.abs(e.clientX - t.x) <= TAP_SLOP && Math.abs(e.clientY - t.y) <= TAP_SLOP) pick(e)
-    },
-    onPointerCancel() {
-      touch.current = null
-    },
-    onPointerLeave(e: PointerEvent<HTMLElement>) {
-      if (e.pointerType === 'mouse') setActive(null)
-    },
-    onKeyDown(e: KeyboardEvent<HTMLElement>) {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault()
-        const from = active ?? n - 1
-        setActive(Math.max(0, Math.min(n - 1, from + (e.key === 'ArrowLeft' ? -1 : 1))))
-      } else if (e.key === 'Escape') {
-        setActive(null)
-      }
-    },
-    onFocus() {
-      setActive(a => a ?? n - 1)
-    },
-    onBlur() {
-      setActive(null)
-    },
-  }
-  return { active, handlers }
-}
-
-/** The element a chart is laid out in, and its width once it's measured. */
 export function useWidth() {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
@@ -243,6 +177,8 @@ export function LapTrendChart({ points, label, noun }: {
   const [ref, measured] = useWidth()
   // Before it's measured (or where nothing can be, as in tests), a phone's width.
   const width = measured || 300
+  const [active, setActive] = useState<number | null>(null)
+
   const n = points.length
   const hasSpeed = points.some(p => p.topSpeed !== undefined)
   const right = hasSpeed ? SPEED_AXIS : RIGHT
@@ -258,7 +194,6 @@ export function LapTrendChart({ points, label, noun }: {
     : null
   const ySpeed = (mph: number) => (speedAxis ? PLOT_HEIGHT - ((mph - speedAxis.min) / (speedAxis.max - speedAxis.min)) * PLOT_HEIGHT : 0)
   const speedPath = speeds.map((s, k) => `${k ? 'L' : 'M'}${x(s.i)},${ySpeed(s.mph)}`).join(' ')
-  const { active, handlers } = useScrub(n, x)
   const shownTicks = labelled(points.map((_, i) => x(i)), points.map(p => p.tick))
   // A tick's group goes under the first tick shown, and wherever it changes.
   const groups = new Map(shownTicks.map((i, k) => {
@@ -271,6 +206,51 @@ export function LapTrendChart({ points, label, noun }: {
   const last = points[n - 1]
   const showBestEnd = !hasSpeed
   const showAverageEnd = showBestEnd && Math.abs(y(last.average) - y(last.best)) >= 13
+
+  function pick(e: PointerEvent<HTMLDivElement>) {
+    const box = e.currentTarget.getBoundingClientRect()
+    const px = e.clientX - box.left
+    let nearest = 0
+    points.forEach((_, i) => { if (Math.abs(x(i) - px) < Math.abs(x(nearest) - px)) nearest = i })
+    setActive(nearest)
+  }
+
+  // A mouse shows the readout as it moves. A finger only once it taps or
+  // scrubs sideways (#332): one that comes down on the chart and scrolls
+  // the page (the browser takes it over, and cancels it) leaves the chart
+  // alone, so a thumb scrolling past doesn't pop it open.
+  const touch = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null)
+
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse') pick(e)
+    else touch.current = { x: e.clientX, y: e.clientY, scrubbing: false }
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse') return pick(e)
+    const t = touch.current
+    if (!t) return
+    const dx = Math.abs(e.clientX - t.x)
+    if (!t.scrubbing && dx > TAP_SLOP && dx > Math.abs(e.clientY - t.y)) t.scrubbing = true
+    if (t.scrubbing) pick(e)
+  }
+
+  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
+    const t = touch.current
+    touch.current = null
+    if (e.pointerType === 'mouse' || !t || t.scrubbing) return
+    if (Math.abs(e.clientX - t.x) <= TAP_SLOP && Math.abs(e.clientY - t.y) <= TAP_SLOP) pick(e)
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const from = active ?? n - 1
+      setActive(Math.max(0, Math.min(n - 1, from + (e.key === 'ArrowLeft' ? -1 : 1))))
+    } else if (e.key === 'Escape') {
+      setActive(null)
+    }
+  }
 
   const shown = active !== null ? points[active] : null
   // Wider with a speed in it, so "mph top speed" keeps to one line.
@@ -299,7 +279,14 @@ export function LapTrendChart({ points, label, noun }: {
         tabIndex={0}
         role="group"
         aria-label={`${label}${hasSpeed ? ', with top speed in mph on the right' : ''}: ${n} ${n === 1 ? noun[0] : noun[1]}. Left and right arrows step through them.`}
-        {...handlers}
+        onPointerMove={onPointerMove}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => { touch.current = null }}
+        onPointerLeave={e => { if (e.pointerType === 'mouse') setActive(null) }}
+        onKeyDown={onKeyDown}
+        onFocus={() => setActive(a => a ?? n - 1)}
+        onBlur={() => setActive(null)}
       >
         <svg width={width} height={PLOT_HEIGHT + xAxis} className="block overflow-visible" aria-hidden="true">
           {ticks.map(t => (

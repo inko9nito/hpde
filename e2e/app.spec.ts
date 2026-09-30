@@ -902,7 +902,7 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(bar.getByRole('link', { name: 'More' })).toHaveAttribute('aria-current', 'page')
 })
 
-test('Instructor evaluations, from More: TDE report cards’ scores over time, and the events, which open on My notes (#345)', async ({ page }) => {
+test('Instructor evaluations, from More: the TDE report cards’ overview and skills wheel, and the events, which open on My notes (#345)', async ({ page }) => {
   const tde = (id: string, name: string, date: string): EventConfig =>
     ({ ...alpha, id: `${date}_${id}`, name, organizer: 'The Drivers Edge', days: [{ ...alpha.days[0], date }] })
   const jul = tde('jul', 'TDE at MSRC', '2025-07-19')
@@ -930,21 +930,32 @@ test('Instructor evaluations, from More: TDE report cards’ scores over time, a
   await page.goto('/#/more')
   const slide = await trackSlide(page, () => page.getByRole('link', { name: /^Instructor evaluations/ }).click(), 'Instructor evaluations')
   expect(slide).toEqual({ fromBelow: false, fromSide: true })
-  const chart = page.getByRole('region', { name: 'Report card scores' })
-  await expect(chart.locator('[data-score]')).toHaveCount(9)
-  await expect(chart.locator('[data-score="flags"]')).toHaveAttribute('aria-label', 'Calls out all flags: 90%, +15 since Sep 13')
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  // Every line is as wide as the card's inside, and nothing overlaps its label.
-  const [lineW, cardW] = await chart.evaluate(el => [el.querySelector('[data-score] svg')!.getBoundingClientRect().width, el.clientWidth])
-  expect(cardW - lineW).toBeCloseTo(32, 0)
+  const overview = page.getByRole('region', { name: 'Report card overview' })
+  await expect(overview.getByRole('region', { name: 'Most improved' }).getByRole('listitem'))
+    .toHaveText([/References\s*\+30/, /Flags\s*\+25/, /Consistency\s*\+25/])
+  await expect(overview.getByRole('region', { name: 'Needs work' }).getByRole('listitem'))
+    .toHaveText([/Vision\s*70%/, /Car control\s*75%/, /Inputs\s*80%/])
 
-  // A tap on the first card's points shows its scores.
-  const plot = chart.getByRole('group')
-  await plot.scrollIntoViewIfNeeded()
-  const box = (await plot.boundingBox())!
-  await page.mouse.move(box.x + 14, box.y + 40)
-  await expect(chart.getByRole('status')).toContainText('TDE at MSRC')
-  await expect(chart.locator('[data-score="flags"]')).toHaveAttribute('aria-label', 'Calls out all flags: 65%')
+  const wheel = page.getByRole('region', { name: 'Skills wheel' })
+  // Every skill's name is on the card, clear of its edges and of the others.
+  const names = wheel.getByRole('button', { name: /^(?!.*\d)/ }).filter({ hasNot: page.locator('svg') })
+  await expect(names).toHaveCount(9)
+  const frame = (await wheel.boundingBox())!
+  const boxes = await names.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON() as DOMRect))
+  for (const b of boxes) {
+    expect(b.left).toBeGreaterThanOrEqual(frame.x)
+    expect(b.right).toBeLessThanOrEqual(frame.x + frame.width)
+  }
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const [a, b] = [boxes[i], boxes[j]]
+    expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true)
+  }
+  // The first and latest cards are drawn; a tap on a skill lists it at every event.
+  await expect(wheel.locator('[data-card]')).toHaveCount(2)
+  await wheel.getByRole('button', { name: 'Calls out all flags' }).click()
+  await expect(wheel.getByRole('region', { name: 'Calls out all flags at each event' }).getByRole('listitem'))
+    .toHaveText([/Oct 4, 2025.*\+15\s*90%/, /Sep 13, 2025.*\+10\s*75%/, /Jul 19, 2025.*65%/])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // The events, newest first; one opens on My notes, and Back comes back.
   const events = page.getByRole('region', { name: 'Events' }).getByRole('link')
@@ -954,7 +965,7 @@ test('Instructor evaluations, from More: TDE report cards’ scores over time, a
   await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
   await page.getByRole('button', { name: 'Back' }).last().click()
   await expect(page).toHaveURL(/#\/evaluations$/)
-  await expect(chart).toBeVisible()
+  await expect(wheel).toBeVisible()
 })
 
 test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {
