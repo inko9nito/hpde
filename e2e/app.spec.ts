@@ -715,23 +715,28 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-test('a driver adds their car in the Garage, brings it to an event with its consumables, and logs tire pressures (#344)', async ({ page }) => {
+test('a driver adds their car in the Garage, logs a consumable change, drives it at an event and logs tire pressures (#344)', async ({ page }) => {
   await stubEvents(page, [alpha])
   await signInAsAdmin(page)
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
-  type Setup = { carId?: string; sessions?: Record<string, object> } & Record<string, unknown>
-  const garage: { cars: { id: string }[]; events: Record<string, Setup> } = { cars: [], events: {} }
+  type Car = { id: string; log?: object[] }
+  const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
   await page.route(/\/api\/garage(\?|$)/, async route => {
     const req = route.request()
     expect(req.headers().authorization).toBe('Bearer token')
-    const eventId = new URL(req.url()).searchParams.get('event')
+    const params = new URL(req.url()).searchParams
     if (req.method() === 'PUT') {
       const body = req.postDataJSON()
-      if (eventId) {
-        garage.events[eventId] = body.setup
+      if (params.get('event')) {
+        garage.events[params.get('event')!] = body.setup
         return route.fulfill({ json: { setup: body.setup } })
+      }
+      if (params.get('car')) {
+        const change = { id: 'ch1', ...body.change }
+        garage.cars[0].log = [change]
+        return route.fulfill({ json: { change } })
       }
       const car = { id: 'car1', ...body.car }
       garage.cars = [car]
@@ -752,23 +757,42 @@ test('a driver adds their car in the Garage, brings it to an event with its cons
   await noSideScroll()
   await add.getByRole('button', { name: 'Add car' }).click()
   await expect(add).toBeHidden()
-  const car = page.getByRole('region', { name: 'The Cayman' })
-  await expect(car).toContainText('Lug nut torque118 ft·lb')
 
-  // To an event: My notes has the way to bring it.
+  // One line for the car, which opens its page.
+  const row = page.getByRole('list', { name: 'Cars' }).getByRole('link')
+  await expect(row).toContainText('No events yet')
+  await row.click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+  await expect(page.getByRole('region', { name: 'Details' })).toContainText('Lug nut torque118 ft·lb')
+
+  // New pads, dated.
+  await page.getByRole('button', { name: 'Log a change' }).click()
+  const change = page.getByRole('dialog', { name: 'Log a change' })
+  await change.getByRole('button', { name: 'Front pads' }).click()
+  await change.getByLabel('Date').fill('2026-03-01')
+  await change.getByLabel(/^What went on/).fill('Hawk DTC-60')
+  await noSideScroll()
+  await change.getByRole('button', { name: 'Log front pads change' }).click()
+  await expect(change).toBeHidden()
+  await expect(page.getByRole('region', { name: 'Consumables' })).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
+  await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front padsHawk DTC-60')
+  await noSideScroll()
+
+  // At an event: the car's at the very top of My notes.
   await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('tab', { name: 'My notes' }).click()
   await page.getByRole('button', { name: /^Add your car/ }).click()
-  const setup = page.getByRole('dialog', { name: 'Car and consumables' })
-  await expect(setup.getByRole('button', { name: /^The Cayman/ })).toHaveAttribute('aria-pressed', 'true')
-  await setup.getByLabel('Tires').fill('Hoosier R7, 245/40R17')
-  await setup.getByLabel('Front pads').fill('Hawk DTC-60')
-  await noSideScroll()
-  await setup.getByRole('button', { name: 'Save' }).click()
-  await expect(setup).toBeHidden()
-  const card = page.getByRole('region', { name: 'Car and consumables' })
-  await expect(card).toContainText('Lug nut torque118 ft·lb')
-  await expect(card).toContainText('TiresHoosier R7, 245/40R17')
+  await page.getByRole('dialog', { name: 'Pick your car' }).getByRole('button', { name: /^The Cayman/ }).click()
+  const carRow = page.getByRole('button', { name: 'Your car: The Cayman' })
+  await expect(carRow).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toBeVisible()
+  await carRow.click()
+  const details = page.getByRole('dialog', { name: 'The Cayman' })
+  await expect(details).toContainText('Lug nut torque118 ft·lb')
+  await expect(details.getByLabel('Consumables')).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
+  await details.getByRole('button', { name: 'Close' }).click()
+  await expect(details).toBeHidden()
 
   // A session's pressures, each corner, from the schedule.
   await page.getByRole('tab', { name: 'Schedule' }).click()
@@ -791,17 +815,21 @@ test('a driver adds their car in the Garage, brings it to an event with its cons
   await expect(sheet).toBeHidden()
   await expect(page.getByRole('status')).toHaveText('Tire pressures saved')
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (tire pressures)' })).toBeVisible()
-  expect(garage.events[alpha.id]).toMatchObject({ carId: 'car1', tires: 'Hoosier R7, 245/40R17' })
+  expect(garage.events[alpha.id]).toMatchObject({ carId: 'car1' })
 
   await page.getByRole('tab', { name: 'My notes (2)' }).click()
   const session = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   await expect(session.getByRole('table', { name: 'Tire pressures' })).toContainText('After36.536.536.536.5')
   await noSideScroll()
 
-  // The Garage lists the event, and it opens again from there.
-  await page.goto('/#/garage')
-  await page.getByRole('region', { name: 'The Cayman' }).getByRole('button', { name: new RegExp(`^${alpha.name}`) }).click()
+  // The car's page lists the event; it opens over the car's page, and Back returns there.
+  await page.goto('/#/garage/car1')
+  await page.getByRole('list', { name: 'The Cayman’s events' }).getByRole('button', { name: new RegExp(`^${alpha.name}`) }).click()
   await expect(page.getByRole('tab', { name: 'My notes (2)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: 'Your car: The Cayman' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Back' }).first().click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
 })
 
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {

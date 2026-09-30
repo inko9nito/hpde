@@ -1,19 +1,23 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
 import type { StoreDeps } from '../lib/driverStore.mts'
-import { MAX_CARS, MAX_EVENTS, cleanCar, cleanSetup } from '../../src/utils/garage.ts'
-import type { Car, EventSetup, Garage } from '../../src/utils/garage.ts'
+import { MAX_CARS, MAX_EVENTS, MAX_LOG, cleanCar, cleanChange, cleanSetup } from '../../src/utils/garage.ts'
+import type { Car, ConsumableChange, EventSetup, Garage } from '../../src/utils/garage.ts'
 
 // A signed-in driver's garage (#344), private to them, as their laps and
 // notes are: every request needs their sign-in and only reaches their own
 // — or, for an admin, the test account's (#309) or the driver named by
 // `driver=<user id>` (#288).
 //   GET                          their cars, and each event's setup: { cars, events }
-//   PUT    {car}                 adds a car (no id) or changes one (its id)
-//   DELETE ?car=<id>             removes a car; events it went to keep
-//                                their consumables and pressures
+//   PUT    {car}                 adds a car (no id) or changes one (its id);
+//                                its log is kept as it is
+//   DELETE ?car=<id>             removes a car and its log; events it went
+//                                to keep their tire pressures
+//   PUT    ?car=<id>  {change}   logs a consumable's change on the car (no
+//                                id), or changes an entry (its id)
+//   DELETE ?car=<id>&change=<id> removes an entry from its log
 //   PUT    ?event=  {setup}      saves an event's setup (replacing any): the
-//                                car, its consumables, each session's pressures
+//                                car, and each session's pressures
 //   DELETE ?event=               removes an event's setup
 //
 // Kept in Netlify Blobs, one record per driver, keyed `<user id>/garage`.
@@ -33,7 +37,7 @@ const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
 
 type Deps = StoreDeps & { fetch?: typeof fetch; newId?: () => string }
 
-const newCarId = () => crypto.randomUUID().slice(0, 8)
+const randomId = () => crypto.randomUUID().slice(0, 8)
 
 export default async function handler(req: Request, context: unknown, deps: Deps = {}) {
   if (!['GET', 'PUT', 'DELETE'].includes(req.method)) return json(405, { error: 'Method not allowed.' })
@@ -64,10 +68,21 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const eventId = params.get('event')
   const carId = params.get('car')
 
+  const car = carId !== null ? garage.cars.find(c => c.id === carId) : undefined
+  if (carId !== null && !car) return json(404, { error: 'That car isn’t in the garage.' })
+  const newId = deps.newId ?? randomId
+
   if (req.method === 'DELETE') {
+    const changeId = params.get('change')
+    if (car && changeId !== null) {
+      if (!car.log?.some(c => c.id === changeId)) return json(404, { error: 'That change isn’t in the car’s log.' })
+      const log = car.log.filter(c => c.id !== changeId)
+      const { log: _old, ...rest } = car
+      await put({ ...garage, cars: garage.cars.map(c => (c.id === car.id ? { ...rest, ...(log.length ? { log } : {}) } : c)) })
+      return json(200, { deleted: changeId })
+    }
     if (carId !== null) {
-      if (!garage.cars.some(c => c.id === carId)) return json(404, { error: 'That car isn’t in the garage.' })
-      // Its events keep what they ran, without the car.
+      // Its events keep their tire pressures, without the car.
       const events = Object.fromEntries(Object.entries(garage.events).flatMap(([id, setup]): [string, EventSetup][] => {
         if (setup.carId !== carId) return [[id, setup]]
         const { carId: _gone, ...rest } = setup
@@ -91,6 +106,23 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     return json(400, { error: 'Request body must be JSON.' })
   }
 
+  if (car) {
+    const cleaned = cleanChange(body?.change)
+    if ('error' in cleaned) return json(400, { error: cleaned.error })
+    const log = car.log ?? []
+    const id = body?.change?.id
+    if (id !== undefined && id !== null && !log.some(c => c.id === id)) return json(404, { error: 'That change isn’t in the car’s log.' })
+    if (id === undefined || id === null) {
+      if (log.length >= MAX_LOG) return json(400, { error: 'That’s too many changes for one car.' })
+    }
+    let fresh = id ?? newId()
+    while ((id === undefined || id === null) && log.some(c => c.id === fresh)) fresh = randomId()
+    const change: ConsumableChange = { id: fresh, ...cleaned.value }
+    const next = id ? log.map(c => (c.id === id ? change : c)) : [...log, change]
+    await put({ ...garage, cars: garage.cars.map(c => (c.id === car.id ? { ...c, log: next, updatedAt } : c)) })
+    return json(200, { change })
+  }
+
   if (eventId !== null) {
     if (!EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
     const cleaned = cleanSetup(body?.setup, garage.cars.map(c => c.id))
@@ -107,15 +139,16 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   if ('error' in cleaned) return json(400, { error: cleaned.error })
   const id = body?.car?.id
   if (id !== undefined && id !== null) {
-    if (!garage.cars.some(c => c.id === id)) return json(404, { error: 'That car isn’t in the garage.' })
-    const car: Car = { id, ...cleaned.value, updatedAt }
-    await put({ ...garage, cars: garage.cars.map(c => (c.id === id ? car : c)) })
-    return json(200, { car })
+    const old = garage.cars.find(c => c.id === id)
+    if (!old) return json(404, { error: 'That car isn’t in the garage.' })
+    const changed: Car = { id, ...cleaned.value, ...(old.log ? { log: old.log } : {}), updatedAt }
+    await put({ ...garage, cars: garage.cars.map(c => (c.id === id ? changed : c)) })
+    return json(200, { car: changed })
   }
   if (garage.cars.length >= MAX_CARS) return json(400, { error: `That’s too many cars (at most ${MAX_CARS}).` })
-  let fresh = (deps.newId ?? newCarId)()
-  while (garage.cars.some(c => c.id === fresh)) fresh = newCarId()
-  const car: Car = { id: fresh, ...cleaned.value, updatedAt }
-  await put({ ...garage, cars: [...garage.cars, car] })
-  return json(200, { car })
+  let fresh = newId()
+  while (garage.cars.some(c => c.id === fresh)) fresh = randomId()
+  const added: Car = { id: fresh, ...cleaned.value, updatedAt }
+  await put({ ...garage, cars: [...garage.cars, added] })
+  return json(200, { car: added })
 }

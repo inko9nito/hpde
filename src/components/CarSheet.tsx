@@ -115,14 +115,15 @@ export function CarFields({ draft, onChange }: { draft: CarDraft; onChange: (dra
 
 /**
  * Adds a car to the garage, or changes or removes one (#344). Removing a
- * car leaves the events it went to with what they ran.
+ * car takes its change log with it; the events it went to keep their
+ * sessions' tire pressures.
  */
 export function CarSheet({ car, events, onSave, onRemove, onClose }: {
   /** The car to change; none to add one. */
   car?: Car
   /** How many events it's been to, so Remove can say. */
   events?: number
-  onSave: (car: Omit<Car, 'id' | 'updatedAt'> & { id?: string }) => Promise<void>
+  onSave: (car: Omit<Car, 'id' | 'log' | 'updatedAt'> & { id?: string }) => Promise<void>
   onRemove?: () => Promise<void>
   onClose: () => void
 }) {
@@ -175,8 +176,8 @@ export function CarSheet({ car, events, onSave, onRemove, onClose }: {
         {car && onRemove && confirmingRemove && (
           <div className="flex flex-col items-center gap-1.5 text-sm">
             <span className="text-center text-gray-700">
-              Remove this car?
-              {!!events && ` Its ${events === 1 ? 'event keeps' : `${events} events keep`} their tires, brakes and pressures.`}
+              Remove this car and its change log?
+              {!!events && ` Its ${events === 1 ? 'event keeps its' : `${events} events keep their`} tire pressures.`}
             </span>
             <div className="flex items-center gap-3">
               <button onClick={() => run('removing', onRemove)} disabled={!!busy} className="font-semibold text-red-600 hover:text-red-700">

@@ -4,7 +4,7 @@ import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
 import type { SessionHead } from './LapSessions'
 import { AddEventEvaluation, EventEvaluationCard } from './EventEvaluationCard'
-import { AddEventSetup, EventSetupCard } from './EventSetupCard'
+import { CarRow } from './CarRow'
 import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
@@ -16,8 +16,8 @@ import type { LapLog } from '../data/lapLog'
 import type { NotesLog } from '../data/notesLog'
 import { isTdeEvent } from '../utils/evaluation'
 import { classifyEvent } from '../utils/eventClass'
-import { hasConsumables } from '../utils/garage'
-import type { Car, EventSetup, SessionPressures } from '../utils/garage'
+import { carName, carTitle } from '../utils/garage'
+import type { Car, SessionPressures } from '../utils/garage'
 import type { GarageStatus } from '../data/GarageContext'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
@@ -46,16 +46,16 @@ interface Props {
   /** Opens the report card's form (#340). */
   onEditEvaluation: () => void
   /**
-   * What the driver ran here, from their garage (#344): the car and its
-   * consumables, and each session's tire pressures. Only the driver's own,
-   * so none for another driver's.
+   * What the driver ran here, from their garage (#344): the car, and each
+   * session's tire pressures. Only the driver's own, so none for another
+   * driver's.
    */
   garage?: {
     status: GarageStatus
-    setup?: EventSetup
     car?: Car
     pressures: Map<string, SessionPressures>
-    onEditSetup: () => void
+    /** Opens the car's details, or with none picked, the garage's cars to pick from. */
+    onOpenCar: () => void
     reload: () => void
   }
 }
@@ -80,8 +80,18 @@ export function MyLapTimes({
   const tde = isTdeEvent(event)
   const leaving = useSkeletonFade(loading)
 
+  // The car they drove, first of all: one line, which opens its details.
+  const carRow = garage?.status === 'ready' && (
+    <div className="mb-4">
+      {garage.car
+        ? <CarRow title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : 'The car you drove'} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
+        : <CarRow title="Add your car" subtitle="The car you’re driving, from your garage" onClick={garage.onOpenCar} dashed />}
+    </div>
+  )
+
   const header = (<>
     {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
+    {carRow}
     <LapsToolbar
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
@@ -121,11 +131,6 @@ export function MyLapTimes({
   const reportCard = notes.evaluation
     ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
     : classifyEvent(event) !== 'upcoming' ? <AddEventEvaluation tde={tde} onAdd={onEditEvaluation} /> : null
-  // The car they ran here, or the way to add it — before the event too, to prep.
-  const setupCard = !garage ? null
-    : garage.setup && (garage.car || hasConsumables(garage.setup))
-      ? <EventSetupCard setup={garage.setup} car={garage.car} onEdit={garage.onEditSetup} />
-      : <AddEventSetup onAdd={garage.onEditSetup} />
 
   // Every session with something saved: laps, an evaluation, tire pressures.
   const heads = new Map<string, SessionHead>()
@@ -138,7 +143,6 @@ export function MyLapTimes({
         {header}
         <div className="fade-in flex flex-col gap-5">
           {reportCard}
-          {setupCard}
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
             <NotebookPen size={20} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No session notes yet</p>
@@ -195,7 +199,6 @@ export function MyLapTimes({
           )}
         </div>}
         {reportCard && <div className="mb-5">{reportCard}</div>}
-        {setupCard && <div className="mb-5">{setupCard}</div>}
         {trend.length > 0 && (
           <div className="mb-5 rounded-2xl border border-gray-200 bg-white p-4">
             <p className="mb-3 text-[13px] font-semibold text-gray-500">Lap times by session</p>

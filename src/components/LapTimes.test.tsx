@@ -11,7 +11,7 @@ import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { EventEvaluation, SessionNotes } from '../utils/evaluation'
-import { cleanCar, cleanSetup } from '../utils/garage'
+import { cleanCar, cleanChange, cleanSetup } from '../utils/garage'
 import type { Garage } from '../utils/garage'
 import { LapTimesSheet } from './LapTimesSheet'
 
@@ -91,6 +91,7 @@ let notesByEvent: Record<string, Notes> = {}
 // The garage function (#344), in memory: the signed-in driver's cars and setups.
 let garageData: Garage = { cars: [], events: {} }
 let carCount = 0
+let changeCount = 0
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -137,8 +138,19 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token')
     const params = new URL(url, 'https://x').searchParams
     const eventId = params.get('event')
+    const carId = params.get('car')
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body))
+      if (carId) {
+        const cleaned = cleanChange(body.change)
+        if ('error' in cleaned) return json(cleaned, 400)
+        const change = { id: body.change.id ?? `change${++changeCount}`, ...cleaned.value }
+        garageData = {
+          ...garageData,
+          cars: garageData.cars.map(c => (c.id === carId ? { ...c, log: [...(c.log ?? []).filter(e => e.id !== change.id), change] } : c)),
+        }
+        return json({ change })
+      }
       if (eventId) {
         const setup = cleanSetup(body.setup, garageData.cars.map(c => c.id))
         if ('error' in setup) return json(setup, 400)
@@ -147,12 +159,17 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       }
       const cleaned = cleanCar(body.car)
       if ('error' in cleaned) return json(cleaned, 400)
-      const car = { id: body.car.id ?? `car${++carCount}`, ...cleaned.value }
+      const old = garageData.cars.find(c => c.id === body.car.id)
+      const car = { id: body.car.id ?? `car${++carCount}`, ...cleaned.value, ...(old?.log ? { log: old.log } : {}) }
       garageData = { ...garageData, cars: [...garageData.cars.filter(c => c.id !== car.id), car] }
       return json({ car })
     }
     if (init?.method === 'DELETE') {
-      const carId = params.get('car')
+      const changeId = params.get('change')
+      if (carId && changeId) {
+        garageData = { ...garageData, cars: garageData.cars.map(c => (c.id === carId ? { ...c, log: (c.log ?? []).filter(e => e.id !== changeId) } : c)) }
+        return json({ deleted: changeId })
+      }
       if (carId) {
         garageData = {
           cars: garageData.cars.filter(c => c.id !== carId),
@@ -270,6 +287,7 @@ beforeEach(() => {
   notesByEvent = {}
   garageData = { cars: [], events: {} }
   carCount = 0
+  changeCount = 0
   failSaves = false
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -1328,12 +1346,21 @@ describe('the Events, Tracks and Garage tabs (#274)', () => {
 })
 
 describe('the garage (#344)', () => {
-  const cayman = { id: 'cayman', year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman', lugNutTorque: 118 }
+  const cayman = {
+    id: 'cayman', year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman', lugNutTorque: 118,
+    log: [
+      { id: 'l1', date: '2026-02-20', part: 'tires' as const, what: 'Hoosier R7' },
+      { id: 'l2', date: '2026-02-20', part: 'frontPads' as const, what: 'Hawk DTC-60' },
+      { id: 'l3', date: '2026-04-15', part: 'tires' as const, what: 'Yokohama A052' },
+    ],
+  }
   const openWithGarage = (hash: string) => {
     window.location.hash = hash
     render(<AuthProvider><EventsProvider><GarageProvider><App /></GarageProvider></EventsProvider></AuthProvider>)
   }
   const body = (call: unknown[]) => JSON.parse(String((call[1] as RequestInit).body))
+  // The car's page: the one pushed over the Garage.
+  const carPage = async (name: string) => (await screen.findByRole('heading', { level: 1, name })).closest<HTMLElement>('.fixed')!
 
   it('asks anyone signed out to sign in, and fetches nothing', async () => {
     signedIn = false
@@ -1342,7 +1369,7 @@ describe('the garage (#344)', () => {
     expect(garageCalls('GET')).toHaveLength(0)
   })
 
-  it('adds a car in the Garage, changes it and removes it', async () => {
+  it('adds a car in the Garage: one line, the last event it went to, opening its page', async () => {
     openWithGarage('#/garage')
     expect(await screen.findByText('No cars yet')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add a car' }))
@@ -1359,86 +1386,154 @@ describe('the garage (#344)', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Car added')
     expect(body(garageCalls('PUT')[0]).car).toEqual({ year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman', lugNutTorque: 118 })
 
-    const card = screen.getByRole('region', { name: 'The Cayman' })
-    expect(card).toHaveTextContent('2019 Porsche 718 Cayman GTS')
-    expect(card).toHaveTextContent('Lug nut torque118 ft·lb')
-    expect(card).toHaveTextContent('None yet')
+    const cars = screen.getByRole('list', { name: 'Cars' })
+    expect(within(cars).getByRole('link')).toHaveTextContent('The CaymanNo events yet')
+    expect(within(cars).getByRole('link')).toHaveAttribute('href', '#/garage/car1')
+  })
 
-    await userEvent.click(within(card).getByRole('button', { name: 'Edit The Cayman' }))
+  it('says where each car was last', async () => {
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' }, [sameLayout.id]: { carId: 'cayman' } } }
+    openWithGarage('#/garage')
+    const cars = await screen.findByRole('list', { name: 'Cars' })
+    expect(within(cars).getByRole('link')).toHaveTextContent('The CaymanLast at Lap Day · Mar 7, 2026')
+  })
+
+  it('a car’s page has its details, what’s on it and its change log; a change is logged, edited and removed', async () => {
+    garageData = { cars: [cayman], events: {} }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    expect(within(page).getByRole('region', { name: 'Details' })).toHaveTextContent('Year2019MakePorscheModel718 Cayman GTSNicknameThe CaymanLug nut torque118 ft·lb')
+    const on = within(page).getByRole('region', { name: 'Consumables' })
+    expect(on).toHaveTextContent('TiresYokohama A052since Apr 15, 2026Front padsHawk DTC-60since Feb 20, 2026')
+    const log = within(page).getByRole('list', { name: 'Change log' })
+    expect(within(log).getAllByRole('button').map(b => b.textContent)).toEqual([
+      'Apr 15, 2026TiresYokohama A052', 'Feb 20, 2026Front padsHawk DTC-60', 'Feb 20, 2026TiresHoosier R7',
+    ])
+
+    // A brake fluid flush, dated.
+    await userEvent.click(within(on).getByRole('button', { name: 'Log a change' }))
+    const sheet = screen.getByRole('dialog', { name: 'Log a change' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Brake fluid' }))
+    fireEvent.change(within(sheet).getByLabelText('Date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(within(sheet).getByLabelText(/^What went on/), { target: { value: 'Motul RBF 660' } })
+    fireEvent.change(within(sheet).getByRole('textbox', { name: /^Note/ }), { target: { value: 'Full flush.' } })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Log brake fluid change' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('Change logged')
+    expect(garageCalls('PUT')[0][0]).toContain('car=cayman')
+    expect(body(garageCalls('PUT')[0]).change).toEqual({ date: '2026-05-01', part: 'brakeFluid', what: 'Motul RBF 660', note: 'Full flush.' })
+    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('Brake fluidMotul RBF 660since May 1, 2026')
+    expect(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[0]).toHaveTextContent('May 1, 2026Brake fluidMotul RBF 660Full flush.')
+
+    // An entry opens to change it, or take it out.
+    await userEvent.click(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[1])
+    const edit = screen.getByRole('dialog', { name: 'Edit change' })
+    expect(within(edit).getByRole('button', { name: 'Tires' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(edit).getByRole('button', { name: 'Remove from log' }))
+    await userEvent.click(within(edit).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&change=l3')
+    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('TiresHoosier R7since Feb 20, 2026')
+  })
+
+  it('edits a car’s details from its page, and removes it', async () => {
+    garageData = { cars: [cayman], events: {} }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    await userEvent.click(within(page).getByRole('button', { name: 'Edit details' }))
     const edit = screen.getByRole('dialog', { name: 'Edit car' })
     const torque = within(edit).getByRole('textbox', { name: /^Lug nut torque/ })
     await userEvent.clear(torque)
     await userEvent.type(torque, '96')
     await userEvent.click(within(edit).getByRole('button', { name: 'Save car' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('region', { name: 'The Cayman' })).toHaveTextContent('Lug nut torque96 ft·lb')
-    expect(body(garageCalls('PUT')[1]).car).toMatchObject({ id: 'car1', lugNutTorque: 96 })
+    expect(within(page).getByRole('region', { name: 'Details' })).toHaveTextContent('Lug nut torque96 ft·lb')
+    expect(body(garageCalls('PUT')[0]).car).toMatchObject({ id: 'cayman', lugNutTorque: 96 })
+    expect(body(garageCalls('PUT')[0]).car).not.toHaveProperty('log')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit The Cayman' }))
+    await userEvent.click(within(page).getByRole('button', { name: 'Edit details' }))
     await userEvent.click(screen.getByRole('button', { name: 'Remove from garage' }))
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(garageCalls('DELETE')[0][0]).toContain('car=car1')
-    expect(screen.getByText('No cars yet')).toBeInTheDocument()
+    await waitFor(() => expect(window.location.hash).toBe('#/garage'))
+    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman')
+    expect(await screen.findByText('No cars yet')).toBeInTheDocument()
   })
 
-  it('lists the events a car went to, and what it ran last; an event opens on My notes', async () => {
-    garageData = { cars: [cayman], events: {
-      [event.id]: { carId: 'cayman', tires: 'Hoosier R7', frontPads: 'Hawk DTC-60' },
-      [sameLayout.id]: { carId: 'cayman', tires: 'Yokohama A052' },
-    } }
-    openWithGarage('#/garage')
-    const card = await screen.findByRole('region', { name: 'The Cayman' })
-    expect(card).toHaveTextContent('ConsumablesAt Lap DayTiresHoosier R7Front padsHawk DTC-60')
-    const events = within(card).getByRole('list', { name: 'The Cayman’s events' })
+  it('lists a car’s events on its page; one opens over it on My notes, and Back returns to the car', async () => {
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' }, [sameLayout.id]: { carId: 'cayman' } } }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    const events = within(page).getByRole('list', { name: 'The Cayman’s events' })
     expect(within(events).getAllByRole('button').map(b => b.textContent)).toEqual(['Lap DayMar 7, 2026', 'EarlierFeb 7, 2026'])
     await userEvent.click(within(events).getByRole('button', { name: /^Lap Day/ }))
     expect(window.location.hash).toBe(`#/event/${event.id}`)
     expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
-    const setup = await screen.findByRole('region', { name: 'Car and consumables' })
-    expect(setup).toHaveTextContent('The Cayman')
-    expect(setup).toHaveTextContent('Lug nut torque118 ft·lb')
-    expect(setup).toHaveTextContent('TiresHoosier R7')
+    expect(await screen.findByRole('button', { name: 'Your car: The Cayman' })).toBeInTheDocument()
+
+    // The event's page is over the car's; its Back goes back to it.
+    const eventPage = screen.getByRole('tab', { name: 'My notes (1)' }).closest<HTMLElement>('.fixed')!
+    expect(eventPage).toContainElement(screen.getByRole('button', { name: 'Your car: The Cayman' }))
+    await userEvent.click(within(eventPage).getAllByRole('button', { name: 'Back' })[0])
+    expect(window.location.hash).toBe('#/garage/cayman')
+    expect(screen.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInTheDocument()
   })
 
-  it('picks the car for an event on My notes; its consumables carry over from its last event', async () => {
-    garageData = { cars: [cayman], events: { [sameLayout.id]: { carId: 'cayman', tires: 'Hoosier R7', frontPads: 'Hawk DTC-60' } } }
+  it('puts the car at the very top of My notes; it opens to what was on it at the event', async () => {
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
+    openWithGarage(`#/event/${event.id}`)
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    const row = await screen.findByRole('button', { name: 'Your car: The Cayman' })
+    expect(row).toHaveTextContent('The Cayman2019 Porsche 718 Cayman GTS')
+    await userEvent.click(row)
+    const sheet = screen.getByRole('dialog', { name: 'The Cayman' })
+    expect(sheet).toHaveTextContent('Lug nut torque118 ft·lb')
+    // The event was Mar 7: the tires changed in April aren't on yet.
+    expect(within(sheet).getByLabelText('Consumables')).toHaveTextContent('TiresHoosier R7since Feb 20, 2026Front padsHawk DTC-60since Feb 20, 2026')
+  })
+
+  it('picks the event’s car on My notes', async () => {
+    garageData = { cars: [cayman, { id: 'miata', make: 'Mazda', model: 'Miata' }], events: {} }
     openWithGarage(`#/event/${event.id}`)
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Add your car/ }))
-    const sheet = screen.getByRole('dialog', { name: 'Car and consumables' })
-    // The only car in the garage, picked; what it ran at Earlier, filled in.
-    expect(within(sheet).getByRole('button', { name: /^The Cayman/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(sheet).toHaveTextContent('As they were at Earlier.')
-    expect(within(sheet).getByLabelText('Tires')).toHaveValue('Hoosier R7')
-    fireEvent.change(within(sheet).getByLabelText('Rear pads'), { target: { value: 'Hawk DTC-30' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
+    const sheet = screen.getByRole('dialog', { name: 'Pick your car' })
+    await userEvent.click(within(sheet).getByRole('button', { name: /^Mazda Miata/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Car and consumables saved')
-    expect(garageCalls('PUT')[0][0]).toContain(`event=${event.id}`)
-    expect(body(garageCalls('PUT')[0]).setup).toEqual({ carId: 'cayman', tires: 'Hoosier R7', frontPads: 'Hawk DTC-60', rearPads: 'Hawk DTC-30' })
-    expect(screen.getByRole('region', { name: 'Car and consumables' })).toHaveTextContent('Rear padsHawk DTC-30')
+    expect(screen.getByRole('status')).toHaveTextContent('Car saved')
+    expect(body(garageCalls('PUT')[0]).setup).toEqual({ carId: 'miata' })
+    expect(screen.getByRole('button', { name: 'Your car: Mazda Miata' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
+
+    // Changed to the other, then taken off.
+    await userEvent.click(screen.getByRole('button', { name: 'Your car: Mazda Miata' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Change car' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^The Cayman/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(body(garageCalls('PUT')[1]).setup).toEqual({ carId: 'cayman' })
+    await userEvent.click(screen.getByRole('button', { name: 'Your car: The Cayman' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from event' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(garageCalls('DELETE')[0][0]).toContain(`event=${event.id}`)
+    expect(screen.getByRole('button', { name: /^Add your car/ })).toBeInTheDocument()
   })
 
   it('adds the car from the event when the garage has none', async () => {
     openWithGarage(`#/event/${event.id}`)
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Add your car/ }))
-    const sheet = screen.getByRole('dialog', { name: 'Car and consumables' })
-    const car = within(sheet).getByRole('group', { name: 'New car' })
+    const car = within(screen.getByRole('dialog', { name: 'Pick your car' })).getByRole('group', { name: 'New car' })
     await userEvent.type(within(car).getByLabelText('Make'), 'Mazda')
     await userEvent.type(within(car).getByLabelText('Model'), 'Miata')
-    fireEvent.change(within(sheet).getByLabelText('Tires'), { target: { value: 'Falken RT660' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(car).getByRole('button', { name: 'Add car' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(body(garageCalls('PUT')[0]).car).toEqual({ make: 'Mazda', model: 'Miata' })
-    expect(body(garageCalls('PUT')[1]).setup).toMatchObject({ carId: 'car1', tires: 'Falken RT660' })
-    expect(screen.getByRole('region', { name: 'Car and consumables' })).toHaveTextContent('Mazda Miata')
+    expect(body(garageCalls('PUT')[1]).setup).toEqual({ carId: 'car1' })
+    expect(screen.getByRole('button', { name: 'Your car: Mazda Miata' })).toBeInTheDocument()
   })
 
   it('logs a session’s tire pressures from the schedule, and shows them on My notes', async () => {
-    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman', tires: 'Hoosier R7' } } }
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
     openWithGarage(`#/event/${event.id}`)
     await tapSession('Lap times: 11:45 AM, Blue', null)
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
@@ -1454,9 +1549,9 @@ describe('the garage (#344)', () => {
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save tire pressures' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('status')).toHaveTextContent('Tire pressures saved')
-    // Saved with the event's car and consumables, which stay as they were.
+    // Saved with the event's car, which stays.
     expect(body(garageCalls('PUT')[0]).setup).toEqual({
-      carId: 'cayman', tires: 'Hoosier R7',
+      carId: 'cayman',
       sessions: { '2026-03-07 11:45 blue': {
         key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2,
         cold: { fl: 30, fr: 30, rl: 28.5, rr: 28.5 }, hot: { fl: 36.2 }, note: 'Bled the fronts.',
@@ -1477,7 +1572,7 @@ describe('the garage (#344)', () => {
     await userEvent.click(within(again).getByRole('button', { name: 'Remove from session' }))
     await userEvent.click(within(again).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(body(garageCalls('PUT')[1]).setup).toEqual({ carId: 'cayman', tires: 'Hoosier R7' })
+    expect(body(garageCalls('PUT')[1]).setup).toEqual({ carId: 'cayman' })
     expect(screen.getByText('No session notes yet')).toBeInTheDocument()
   })
 

@@ -50,7 +50,8 @@ const pressures = {
   date: '2026-09-12', time: '10:25', group: 'pink', sessionNumber: 2,
   cold: { fl: 30, fr: 30, rl: 28.5, rr: 28.5 }, hot: { fl: 36, fr: 36.5 }, note: 'Bled the fronts to 36.',
 }
-const setup = { carId: 'car1', tires: 'Hoosier R7', frontPads: 'Hawk DTC-60', sessions: { x: pressures } }
+const setup = { carId: 'car1', sessions: { x: pressures } }
+const padsChange = { date: '2026-09-01', part: 'frontPads', what: 'Hawk DTC-60', note: 'At 12,400 miles.' }
 
 const garageOf = async (token: string, query?: string) => (await (await call('GET', { token, query })).json())
 const addCar = async (token = 'vera-token', car: unknown = cayman) => (await (await call('PUT', { token, body: { car } })).json()).car
@@ -58,7 +59,7 @@ const addCar = async (token = 'vera-token', car: unknown = cayman) => (await (aw
 describe('garage function (#344)', () => {
   beforeEach(() => {
     blobs.clear()
-    ids = ['car1', 'car2', 'car3']
+    ids = ['car1', 'car2', 'car3', 'ch1', 'ch2', 'ch3']
   })
 
   it('needs a sign-in for everything', async () => {
@@ -88,14 +89,37 @@ describe('garage function (#344)', () => {
     expect((await call('PUT', { token: 'vera-token', body: { car: { id: 'nope', ...cayman } } })).status).toBe(404)
   })
 
-  it('saves an event’s setup: its car, consumables and each session’s pressures, keyed as its laps are', async () => {
+  it('saves an event’s setup: its car and each session’s pressures, keyed as its laps are', async () => {
     await addCar()
-    const res = await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup: { ...setup, rearPads: '  ' } } })
+    const res = await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup: { ...setup, tires: 'not kept here' } } })
     expect(res.status).toBe(200)
     const { events } = await garageOf('vera-token')
-    expect(events[EVENT]).toMatchObject({ carId: 'car1', tires: 'Hoosier R7', frontPads: 'Hawk DTC-60' })
-    expect(events[EVENT]).not.toHaveProperty('rearPads')
+    expect(events[EVENT]).toMatchObject({ carId: 'car1' })
+    expect(events[EVENT]).not.toHaveProperty('tires')
     expect(events[EVENT].sessions).toEqual({ '2026-09-12 10:25 pink': { key: '2026-09-12 10:25 pink', ...pressures } })
+  })
+
+  it('logs a car’s consumable changes, changes an entry and removes one', async () => {
+    await addCar()
+    const res = await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: padsChange } })
+    expect(res.status).toBe(200)
+    expect((await res.json()).change).toEqual({ id: 'car2', ...padsChange })
+    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { date: '2026-09-01', part: 'brakeFluid' } } })
+    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { id: 'car2', ...padsChange, what: 'Hawk DTC-70' } } })
+    let [car] = (await garageOf('vera-token')).cars
+    expect(car.log).toEqual([{ id: 'car2', ...padsChange, what: 'Hawk DTC-70' }, { id: 'car3', date: '2026-09-01', part: 'brakeFluid' }])
+
+    // Changing the car's details keeps its log.
+    await call('PUT', { token: 'vera-token', body: { car: { id: 'car1', ...cayman, lugNutTorque: 96 } } })
+    ;[car] = (await garageOf('vera-token')).cars
+    expect(car.log).toHaveLength(2)
+
+    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&change=car2' })).status).toBe(200)
+    ;[car] = (await garageOf('vera-token')).cars
+    expect(car.log.map((c: { id: string }) => c.id)).toEqual(['car3'])
+    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&change=car2' })).status).toBe(404)
+    expect((await call('PUT', { token: 'vera-token', query: '?car=car1', body: { change: { id: 'nope', ...padsChange } } })).status).toBe(404)
+    expect((await call('PUT', { token: 'vera-token', query: '?car=nope', body: { change: padsChange } })).status).toBe(404)
   })
 
   it('removes an event’s setup', async () => {
@@ -106,7 +130,7 @@ describe('garage function (#344)', () => {
     expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}` })).status).toBe(404)
   })
 
-  it('removes a car; its events keep what they ran, and the record goes with the last of it', async () => {
+  it('removes a car and its log; its events keep their pressures, and the record goes with the last of it', async () => {
     await addCar()
     await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup } })
     await call('PUT', { token: 'vera-token', query: '?event=other', body: { setup: { carId: 'car1' } } })
@@ -116,7 +140,7 @@ describe('garage function (#344)', () => {
     // Nothing left of the other event's but the car.
     expect(Object.keys(garage.events)).toEqual([EVENT])
     expect(garage.events[EVENT]).not.toHaveProperty('carId')
-    expect(garage.events[EVENT].tires).toBe('Hoosier R7')
+    expect(Object.keys(garage.events[EVENT].sessions)).toEqual(['2026-09-12 10:25 pink'])
     await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}` })
     expect(store.size).toBe(0)
     expect((await call('DELETE', { token: 'vera-token', query: '?car=car1' })).status).toBe(404)
@@ -136,8 +160,12 @@ describe('garage function (#344)', () => {
     expect(await bad({ setup: { sessions: { x: { ...pressures, time: '10:25 AM' } } } }, q)).toBe(400)
     expect(await bad({ setup: { sessions: { x: { date: '2026-09-12', time: '10:25', group: 'pink' } } } }, q)).toBe(400)
     expect(await bad({ setup }, '?event=../../x')).toBe(400)
+    expect(await bad({ change: { part: 'tires' } }, '?car=car1')).toBe(400)
+    expect(await bad({ change: { date: '2026-09-01', part: 'wipers' } }, '?car=car1')).toBe(400)
+    expect(await bad({ change: { ...padsChange, note: 'x'.repeat(501) } }, '?car=car1')).toBe(400)
     expect(await bad('not json')).toBe(400)
     expect(Object.keys((await garageOf('vera-token')).events)).toEqual([])
+    expect((await garageOf('vera-token')).cars[0]).not.toHaveProperty('log')
   })
 
   it('keeps at most 20 cars', async () => {

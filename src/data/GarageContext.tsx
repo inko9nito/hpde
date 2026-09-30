@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import type { Car, EventSetup, Garage } from '../utils/garage'
+import type { Car, ConsumableChange, EventSetup, Garage } from '../utils/garage'
 import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's garage (#344), from the garage function: their
@@ -16,8 +16,11 @@ export type GarageStatus = 'off' | 'loading' | 'ready' | 'error'
 export interface GarageValue extends Garage {
   status: GarageStatus
   /** Adds a car (no id) or changes one; resolves to it as saved. Throws with a message to show. */
-  saveCar(car: Omit<Car, 'id' | 'updatedAt'> & { id?: string }): Promise<Car>
+  saveCar(car: Omit<Car, 'id' | 'log' | 'updatedAt'> & { id?: string }): Promise<Car>
   removeCar(id: string): Promise<void>
+  /** Logs a consumable's change on a car (no id), or changes an entry. */
+  saveChange(carId: string, change: Omit<ConsumableChange, 'id'> & { id?: string }): Promise<void>
+  removeChange(carId: string, changeId: string): Promise<void>
   /** Saves an event's setup, replacing any. */
   saveSetup(eventId: string, setup: Omit<EventSetup, 'updatedAt'>): Promise<void>
   removeSetup(eventId: string): Promise<void>
@@ -102,7 +105,7 @@ export function GarageProvider({ children }: { children: ReactNode }) {
     body: JSON.stringify(body),
   })
 
-  const saveCar = useCallback(async (car: Omit<Car, 'id' | 'updatedAt'> & { id?: string }) => {
+  const saveCar = useCallback(async (car: Omit<Car, 'id' | 'log' | 'updatedAt'> & { id?: string }) => {
     const saved = (await (await send('', put({ car }))).json()).car as Car
     change(g => ({
       ...g,
@@ -113,15 +116,32 @@ export function GarageProvider({ children }: { children: ReactNode }) {
 
   const removeCar = useCallback(async (id: string) => {
     await send(`car=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    // As the function does: its events keep what they ran, without it.
+    // As the function does: its events keep their tire pressures, without it.
     change(g => ({
       cars: g.cars.filter(c => c.id !== id),
       events: Object.fromEntries(Object.entries(g.events).flatMap(([eventId, setup]): [string, EventSetup][] => {
         if (setup.carId !== id) return [[eventId, setup]]
         const { carId: _gone, ...rest } = setup
-        return Object.keys(rest).some(k => k !== 'updatedAt') ? [[eventId, rest]] : []
+        return rest.sessions ? [[eventId, rest]] : []
       })),
     }))
+  }, [send, change])
+
+  const saveChange = useCallback(async (carId: string, entry: Omit<ConsumableChange, 'id'> & { id?: string }) => {
+    const saved = (await (await send(`car=${encodeURIComponent(carId)}`, put({ change: entry }))).json()).change as ConsumableChange
+    change(g => ({
+      ...g,
+      cars: g.cars.map(c => {
+        if (c.id !== carId) return c
+        const log = c.log ?? []
+        return { ...c, log: log.some(e => e.id === saved.id) ? log.map(e => (e.id === saved.id ? saved : e)) : [...log, saved] }
+      }),
+    }))
+  }, [send, change])
+
+  const removeChange = useCallback(async (carId: string, changeId: string) => {
+    await send(`car=${encodeURIComponent(carId)}&change=${encodeURIComponent(changeId)}`, { method: 'DELETE' })
+    change(g => ({ ...g, cars: g.cars.map(c => (c.id === carId ? { ...c, log: (c.log ?? []).filter(e => e.id !== changeId) } : c)) }))
   }, [send, change])
 
   const saveSetup = useCallback(async (eventId: string, setup: Omit<EventSetup, 'updatedAt'>) => {
@@ -140,8 +160,8 @@ export function GarageProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
   const value = useMemo(
-    () => ({ status, ...garage, saveCar, removeCar, saveSetup, removeSetup, reload }),
-    [status, garage, saveCar, removeCar, saveSetup, removeSetup, reload],
+    () => ({ status, ...garage, saveCar, removeCar, saveChange, removeChange, saveSetup, removeSetup, reload }),
+    [status, garage, saveCar, removeCar, saveChange, removeChange, saveSetup, removeSetup, reload],
   )
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
@@ -152,6 +172,8 @@ const OFF: GarageValue = {
   ...EMPTY,
   saveCar: signIn,
   removeCar: signIn,
+  saveChange: signIn,
+  removeChange: signIn,
   saveSetup: signIn,
   removeSetup: signIn,
   reload() {},

@@ -26,7 +26,8 @@ import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './c
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
 import { HOME_TAB_HASH, TAB_BAR_PX, TabBar, homeTabFromHash } from './components/HomeTabs'
 import { GarageTab } from './components/GarageTab'
-import { EventSetupSheet } from './components/EventSetupSheet'
+import { EventCarSheet } from './components/EventCarSheet'
+import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker } from './components/DriverPicker'
@@ -42,7 +43,6 @@ import { useEvents } from './data/EventsContext'
 import { useRsvps } from './data/RsvpsContext'
 import { useGarage } from './data/GarageContext'
 import { myRunGroup } from './utils/rsvp'
-import { hasConsumables } from './utils/garage'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
@@ -216,8 +216,8 @@ export default function App() {
   const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
   // A TDE event's report card, open in its sheet (#340).
   const [evaluationOpen, setEvaluationOpen] = useState(false)
-  // The event's car and consumables, open in their sheet (#344).
-  const [setupOpen, setSetupOpen] = useState(false)
+  // The event's car, open in its sheet (#344).
+  const [carSheetOpen, setCarSheetOpen] = useState(false)
   // An admin can log another driver's lap times (#288): whose the sheet,
   // My notes and the schedule's saved marks are showing. Null for their
   // own; back to that on another event.
@@ -260,7 +260,11 @@ export default function App() {
   // The tab under everything (#274): Events, Tracks or Garage. A track page
   // of its own (not over an event) is the Tracks tab's. Pages pushed over a
   // tab leave it as it was, and go back to it.
-  const hashTab = homeTabFromHash(hash) ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
+  // A car's page (#344) is the Garage's.
+  const carRouteId = carIdFromHash(hash)
+  const hashTab = homeTabFromHash(hash)
+    ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
+    ?? (carRouteId !== null ? 'garage' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // A link to an event we don't have (yet): an app-created one before the
@@ -273,6 +277,20 @@ export default function App() {
   useEffect(() => {
     if (eventPageOpen) setPushMounted(true)
   }, [eventPageOpen])
+
+  // An event opened from a car's page goes over it, and Back returns to it:
+  // the car whose page is under the event's, until somewhere else is opened.
+  const [carUnderEvent, setCarUnderEvent] = useState<string | null>(null)
+  if (carUnderEvent !== null && !isOnEventRoute && carRouteId !== carUnderEvent) setCarUnderEvent(null)
+  const carPageId = carRouteId ?? (isOnEventRoute ? carUnderEvent : null)
+  const eventRaised = eventOverTrack || (isOnEventRoute && carUnderEvent !== null)
+  // It stays mounted through its slide-out.
+  const [lastCarId, setLastCarId] = useState(carPageId)
+  useEffect(() => {
+    if (carPageId) setLastCarId(carPageId)
+  }, [carPageId])
+  const shownCarId = carPageId ?? lastCarId
+  const [carEntered, setCarEntered] = useState(false)
 
   // The track page stays mounted through its slide-out too.
   const [lastTrackSlug, setLastTrackSlug] = useState(trackPageSlug)
@@ -319,7 +337,7 @@ export default function App() {
   // the page has slid in, not while it's still on its way — until a
   // gray Share page has slid in over it.
   const [pushEntered, setPushEntered] = useState(false)
-  useChromeColor(((eventPageOpen && pushEntered) || trackEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
+  useChromeColor(((eventPageOpen && pushEntered) || trackEntered || carEntered) && !overlayEntered ? HEADER_CHROME_COLOR : null)
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -344,9 +362,8 @@ export default function App() {
   const eventCar = eventSetup?.carId ? garage.cars.find(c => c.id === eventSetup.carId) : undefined
   const pressuresByKey = new Map(Object.values(eventSetup?.sessions ?? {}).map(p => [p.key, p]))
   const pressureKeys = new Set(pressuresByKey.keys())
-  const setupSaved = !!eventCar || hasConsumables(eventSetup)
   // Sessions with anything saved, the report card and the car: "My notes (3)".
-  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys, ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (setupSaved ? 1 : 0)
+  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys, ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (eventCar ? 1 : 0)
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
@@ -384,7 +401,7 @@ export default function App() {
     setActiveTab('schedule')
     setLapSlot(null)
     setEvaluationOpen(false)
-    setSetupOpen(false)
+    setCarSheetOpen(false)
     setLapDriver(null)
   }
 
@@ -476,30 +493,20 @@ export default function App() {
 
   return (
     <>
-    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownOverlay}>
+    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownOverlay || !!shownCarId}>
       {/* Room at the bottom for the tab bar. */}
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))` }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
         {homeTab === 'tracks' && <TracksTab />}
-        {homeTab === 'garage' && (
-          <GarageTab
-            events={ALL_EVENTS}
-            // An event a car went to opens on My notes, where its car is.
-            onOpenEvent={event => {
-              switchEvent(event)
-              setActiveTab('notes')
-            }}
-            onToast={showToast}
-          />
-        )}
+        {homeTab === 'garage' && <GarageTab events={ALL_EVENTS} onToast={showToast} />}
       </div>
     </PullToRefresh>
     <TabBar active={homeTab} />
     {pushMounted && (
     <PushPage
-      // A fresh page when it goes over the track page, so it slides in.
-      key={eventOverTrack ? 'event over track' : 'event'}
-      raised={eventOverTrack}
+      // A fresh page when it goes over the track or a car's page, so it slides in.
+      key={eventRaised ? 'event raised' : 'event'}
+      raised={eventRaised}
       open={eventPageOpen}
       onExited={() => setPushMounted(false)}
       onEnteredChange={setPushEntered}
@@ -518,7 +525,11 @@ export default function App() {
           onTabChange={setActiveTab}
           notesCount={notesCount}
           onRunGroup={id => setSelectedGroups([id])}
-          onBack={trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent)) : backToTab}
+          onBack={
+            trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent))
+              : carUnderEvent !== null ? () => setHash(carHash(carUnderEvent))
+              : backToTab
+          }
           onDeleted={() => {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
@@ -636,10 +647,9 @@ export default function App() {
               onEditEvaluation={() => setEvaluationOpen(true)}
               garage={ownGarage ? {
                 status: garage.status,
-                setup: eventSetup,
                 car: eventCar,
                 pressures: pressuresByKey,
-                onEditSetup: () => setSetupOpen(true),
+                onOpenCar: () => setCarSheetOpen(true),
                 reload: garage.reload,
               } : undefined}
             />
@@ -652,6 +662,28 @@ export default function App() {
     </div>
     </PullToRefresh>
     </PushPage>
+    )}
+    {shownCarId && (
+      <PushPage
+        key={`car ${shownCarId}`}
+        open={carPageId !== null}
+        onExited={() => setLastCarId(null)}
+        onEnteredChange={setCarEntered}
+        skipEnterAnimation={bootHashRef.current !== null}
+      >
+        <CarPage
+          carId={shownCarId}
+          events={ALL_EVENTS}
+          onBack={backToTab}
+          // One of its events opens over it, on My notes, where its car is.
+          onOpenEvent={event => {
+            setCarUnderEvent(shownCarId)
+            switchEvent(event)
+            setActiveTab('notes')
+          }}
+          onToast={showToast}
+        />
+      </PushPage>
     )}
     {shownTrackSlug && (
       <PushPage
@@ -772,27 +804,27 @@ export default function App() {
         onClose={() => setLapSlot(null)}
       />
     )}
-    {setupOpen && ownGarage && isOnEventRoute && !routeMissing && (
-      <EventSetupSheet
+    {carSheetOpen && ownGarage && isOnEventRoute && !routeMissing && (
+      <EventCarSheet
         key={activeEvent.id}
         event={activeEvent}
-        events={ALL_EVENTS}
         garage={garage}
-        onSaveCar={garage.saveCar}
-        onSave={async setup => {
-          await garage.saveSetup(activeEvent.id, setup)
-          setSetupOpen(false)
-          showToast('Car and consumables saved')
+        car={eventCar}
+        onPick={async carId => {
+          await garage.saveSetup(activeEvent.id, { ...(eventSetup?.sessions ? { sessions: eventSetup.sessions } : {}), carId })
+          setCarSheetOpen(false)
+          showToast('Car saved')
         }}
+        onAddCar={garage.saveCar}
         onRemove={async () => {
           // Each session's pressures stay.
           const sessions = eventSetup?.sessions
           if (sessions) await garage.saveSetup(activeEvent.id, { sessions })
           else await garage.removeSetup(activeEvent.id)
-          setSetupOpen(false)
-          showToast('Car and consumables removed')
+          setCarSheetOpen(false)
+          showToast('Car removed from event')
         }}
-        onClose={() => setSetupOpen(false)}
+        onClose={() => setCarSheetOpen(false)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
@@ -817,7 +849,7 @@ export default function App() {
       />
     )}
     {/* Clear of the tab bar while a tab is showing. */}
-    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || overlay !== null ? 0 : TAB_BAR_PX} />
+    <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || carPageId !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>
   )
 }
