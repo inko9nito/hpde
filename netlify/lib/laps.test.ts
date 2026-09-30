@@ -402,13 +402,28 @@ describe('laps function (#210)', () => {
         ...mine,
         laps: typed.map((lap, i) => ({ ...lap, topMph: flying[i].topMph, avgMph: flying[i].avgMph })),
       })
-      expect(blobs.data('site:laps-meta').get(`sheet-speeds:${JASON}`)).toMatchObject({
+      expect(blobs.data('site:laps-meta').get(`sheet-speeds-2:${JASON}`)).toMatchObject({
         sessions: [{ session: `${EVENT} ${key}`, added: typed.length, of: typed.length }],
       })
 
       // Once: laps changed afterwards stay as they are.
       store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [key]: mine } })
       expect((await sessionsOf('jason-token')).find((s: { key: string }) => s.key === key)).toEqual(mine)
+    })
+
+    it('puts right speeds the first version put on the wrong lap, once', async () => {
+      const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!
+      const [key, sheet] = Object.entries(sample.sessions)[1]
+      const flying = sheet.laps.filter(lap => !lap.kind)
+      // Two laps' speeds swapped, as pairing by time alone could leave them.
+      const swapped = flying.map((lap, i) => ({ ms: lap.ms, topMph: flying[i ^ 1]?.topMph ?? lap.topMph, avgMph: flying[i ^ 1]?.avgMph ?? lap.avgMph }))
+      const mine = { ...sheet, laps: swapped }
+      store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [key]: mine } })
+      blobs.data('site:laps-meta').set(`filled-own-laps:${JASON}`, { at: 'then', kept: [`${EVENT} ${key}`] })
+      blobs.data('site:laps-meta').set(`sheet-speeds:${JASON}`, { at: 'then', sessions: [] })
+
+      const got = (await sessionsOf('jason-token')).find((s: { key: string }) => s.key === key)
+      expect(got.laps).toEqual(flying.map(lap => ({ ms: lap.ms, topMph: lap.topMph, avgMph: lap.avgMph })))
     })
 
     it('adds the speeds on a preview too, after copying the live laps', async () => {
@@ -457,21 +472,54 @@ describe('withSheetSpeeds (#322)', () => {
     expect(laps.map(lap => lap.topMph)).toEqual([90, 104.9, 105.7, 104.7, 105.3])
   })
 
-  it('otherwise matches each lap to the closest in time, each sheet lap once', () => {
-    const mine = [{ ms: 86_660 }, { ms: 85_930 }, { ms: 85_860, note: 'Traffic' }]
+  it('otherwise pairs them in order, skipping a lap either side doesn’t have', () => {
+    // The out lap left out, and a lap the sheet doesn't have.
+    const mine = [{ ms: 85_900 }, { ms: 85_900, note: 'Traffic' }, { ms: 99_000 }, { ms: 86_700 }, { ms: 133_700, kind: 'in' as const }]
     const { laps, added } = withSheetSpeeds(mine, sheet)
-    expect(added).toBe(3)
+    expect(added).toBe(4)
     expect(laps).toEqual([
-      { ms: 86_660, topMph: 104.7, avgMph: 71.1 },
-      { ms: 85_930, topMph: 105.7, avgMph: 71.6 },
-      { ms: 85_860, note: 'Traffic', topMph: 104.9, avgMph: 71.7 },
+      { ms: 85_900, topMph: 104.9, avgMph: 71.7 },
+      { ms: 85_900, note: 'Traffic', topMph: 105.7, avgMph: 71.6 },
+      { ms: 99_000 },
+      { ms: 86_700, topMph: 104.7, avgMph: 71.1 },
+      { ms: 133_700, kind: 'in', topMph: 105.3, avgMph: 44.7 },
     ])
   })
 
-  it('leaves a lap with no match, or with speeds already, as it is', () => {
+  it('gives every lap in the sheet its own speeds, however it was typed', () => {
+    const ways: [string, (ms: number) => number][] = [
+      ['to the thousandth', ms => ms],
+      ['to the hundredth', ms => Math.round(ms / 10) * 10],
+      ['to the tenth', ms => Math.round(ms / 100) * 100],
+      ['cut to the tenth', ms => Math.floor(ms / 100) * 100],
+    ]
+    for (const record of TEST_ACCOUNT_LAPS) {
+      for (const session of Object.values(record.sessions)) {
+        for (const [way, typed] of ways) {
+          for (const outAndIn of [true, false]) {
+            const kept = session.laps.filter(lap => outAndIn || !lap.kind)
+            const mine = kept.map(lap => ({ ms: typed(lap.ms), ...(lap.kind ? { kind: lap.kind } : {}) }))
+            const { laps } = withSheetSpeeds(mine, session.laps)
+            expect(laps, `${session.key}, ${way}${outAndIn ? '' : ', no out or in laps'}`).toEqual(
+              kept.map((lap, i) => ({ ...mine[i], topMph: lap.topMph, avgMph: lap.avgMph })),
+            )
+          }
+        }
+      }
+    }
+  })
+
+  it('leaves a lap with no match, or with speeds of its own, as it is', () => {
     const mine = [{ ms: 85_857, topMph: 100 }, { ms: 95_000 }, { ms: 85_930 }]
     const { laps, added } = withSheetSpeeds(mine, sheet)
     expect(added).toBe(1)
     expect(laps).toEqual([{ ms: 85_857, topMph: 100 }, { ms: 95_000 }, { ms: 85_930, topMph: 105.7, avgMph: 71.6 }])
+  })
+
+  it('moves speeds from the sheet that were on the wrong lap to the right one', () => {
+    const mine = [{ ms: 85_800, topMph: 105.7, avgMph: 71.6 }, { ms: 85_900, topMph: 104.9, avgMph: 71.7 }]
+    const { laps, added } = withSheetSpeeds(mine, sheet)
+    expect(added).toBe(2)
+    expect(laps).toEqual([{ ms: 85_800, topMph: 104.9, avgMph: 71.7 }, { ms: 85_900, topMph: 105.7, avgMph: 71.6 }])
   })
 })

@@ -150,35 +150,59 @@ export const SAME_LAP_MS = 1000
 const hasSpeed = (lap: Lap) => lap.topMph !== undefined || lap.avgMph !== undefined
 
 /**
- * A session's laps with the sheet's speeds (#322) on each lap that has none,
- * taken from the sheet's lap in the same session that's the same lap: the
- * one at the same place when both list the same laps (each within
- * SAME_LAP_MS), otherwise the closest in time within SAME_LAP_MS, each sheet
- * lap used once. Nothing else about a lap changes; a lap with no match, or
- * that has a speed already, is left as it is.
+ * Which of the driver's laps is which of the sheet's, as index pairs: laps
+ * are logged in order, so this pairs them in order — as many as it can,
+ * each within SAME_LAP_MS, and of those, the pairing closest in time —
+ * skipping any lap on either side that isn't in the other (an in lap left
+ * out, a stop the app can't hold).
  */
-export function withSheetSpeeds(mine: Lap[], sheet: Lap[]): { laps: Lap[]; added: number } {
-  const close = (a: Lap, b: Lap) => Math.abs(a.ms - b.ms) <= SAME_LAP_MS
-  const from = new Map<number, Lap>()
-  if (mine.length === sheet.length && mine.every((lap, i) => close(lap, sheet[i]))) {
-    mine.forEach((_, i) => from.set(i, sheet[i]))
-  } else {
-    const pairs = mine.flatMap((lap, i) => sheet.flatMap((s, j) => (close(lap, s) ? [{ i, j, off: Math.abs(lap.ms - s.ms) }] : [])))
-    pairs.sort((a, b) => a.off - b.off || Math.abs(a.i - a.j) - Math.abs(b.i - b.j))
-    const used = new Set<number>()
-    for (const { i, j } of pairs) {
-      if (from.has(i) || used.has(j)) continue
-      from.set(i, sheet[j])
-      used.add(j)
+function sameLaps(mine: Lap[], sheet: Lap[]): Map<number, number> {
+  type Best = { count: number; off: number; step: 'pair' | 'skip mine' | 'skip sheet' | 'end' }
+  const better = (a: Best, b: Best) => a.count > b.count || (a.count === b.count && a.off < b.off)
+  // best[i][j]: the best pairing of mine[i..] with sheet[j..].
+  const best: Best[][] = Array.from({ length: mine.length + 1 }, () =>
+    Array.from({ length: sheet.length + 1 }, () => ({ count: 0, off: 0, step: 'end' as const })))
+  for (let i = mine.length - 1; i >= 0; i--) {
+    for (let j = sheet.length - 1; j >= 0; j--) {
+      const off = Math.abs(mine[i].ms - sheet[j].ms)
+      const options: Best[] = [
+        ...(off <= SAME_LAP_MS ? [{ count: best[i + 1][j + 1].count + 1, off: best[i + 1][j + 1].off + off, step: 'pair' as const }] : []),
+        { ...best[i + 1][j], step: 'skip mine' },
+        { ...best[i][j + 1], step: 'skip sheet' },
+      ]
+      best[i][j] = options.reduce((a, b) => (better(b, a) ? b : a))
     }
   }
+  const pairs = new Map<number, number>()
+  for (let i = 0, j = 0; i < mine.length && j < sheet.length; ) {
+    const { step } = best[i][j]
+    if (step === 'pair') pairs.set(i++, j++)
+    else if (step === 'skip mine') i++
+    else j++
+  }
+  return pairs
+}
+
+/**
+ * A session's laps with the sheet's speeds (#322): each lap takes the top
+ * and average speed of the same lap in the sheet's session (see sameLaps).
+ * Only a lap with no speed, or with speeds that came from the sheet, is
+ * given them; nothing else about a lap changes, and a lap that isn't in the
+ * sheet is left as it is. `added` counts the laps whose speeds changed.
+ */
+export function withSheetSpeeds(mine: Lap[], sheet: Lap[]): { laps: Lap[]; added: number } {
+  const pairs = sameLaps(mine, sheet)
+  const fromSheet = (lap: Lap) => sheet.some(s => hasSpeed(s) && s.topMph === lap.topMph && s.avgMph === lap.avgMph)
   let added = 0
   const laps = mine.map((lap, i) => {
-    const match = from.get(i)
-    if (hasSpeed(lap) || !match || !hasSpeed(match)) return lap
+    const j = pairs.get(i)
+    const match = j === undefined ? undefined : sheet[j]
+    if (!match || !hasSpeed(match) || (hasSpeed(lap) && !fromSheet(lap))) return lap
+    if (lap.topMph === match.topMph && lap.avgMph === match.avgMph) return lap
     added++
+    const { topMph: _top, avgMph: _avg, ...rest } = lap
     return {
-      ...lap,
+      ...rest,
       ...(match.topMph !== undefined ? { topMph: match.topMph } : {}),
       ...(match.avgMph !== undefined ? { avgMph: match.avgMph } : {}),
     }
@@ -192,11 +216,17 @@ export function withSheetSpeeds(mine: Lap[], sheet: Lap[]): { laps: Lap[]; added
  * were logged before speeds were (#322). Once, after that fill, each of
  * their sessions the sheet has gets the sheet's speeds on its laps (see
  * withSheetSpeeds) — only the speeds; their times, notes and in/out laps
- * stay theirs. The record of it says how many laps got speeds, per session.
+ * stay theirs. The record of it says how many laps' speeds it set, per
+ * session.
+ *
+ * Its first version (recorded as `sheet-speeds:<id>`) paired laps by time
+ * alone, not order, so two laps logged a few hundredths apart could swap
+ * speeds; this one runs once more with laps in order, and puts right any
+ * speeds that came from the sheet onto the wrong lap.
  */
 async function ensureOwnSpeeds({ laps, meta }: { laps: Store; meta: Store }, driverId: string, email: string | undefined, sha256?: string) {
   if (!isSampleDriver(email, sha256)) return
-  const doneKey = `sheet-speeds:${driverId}`
+  const doneKey = `sheet-speeds-2:${driverId}`
   if (await meta.get(doneKey, { type: 'json' })) return
   const sessions: { session: string; added: number; of: number }[] = []
   for (const record of TEST_ACCOUNT_LAPS) {
@@ -206,9 +236,9 @@ async function ensureOwnSpeeds({ laps, meta }: { laps: Store; meta: Store }, dri
     let changed = false
     for (const [k, sheet] of Object.entries(record.sessions)) {
       const mine = existing.sessions[k]
-      if (!mine || mine.laps.every(hasSpeed)) continue
+      if (!mine) continue
       const { laps: withSpeeds, added } = withSheetSpeeds(mine.laps, sheet.laps)
-      sessions.push({ session: `${record.eventId} ${k}`, added, of: mine.laps.length })
+      if (added || !withSpeeds.every(hasSpeed)) sessions.push({ session: `${record.eventId} ${k}`, added, of: mine.laps.length })
       if (!added) continue
       existing.sessions[k] = { ...mine, laps: withSpeeds }
       changed = true
