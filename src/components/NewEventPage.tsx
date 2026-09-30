@@ -350,7 +350,7 @@ export function FormPage({ title, subtitle, onClose, children }: {
 }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 pb-8 pt-3 sm:px-4 sm:pt-5">
+      <div className="mx-auto max-w-lg px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:pt-5">
         <PageHeader title={title} subtitle={subtitle} onClose={onClose} />
         <div className="mt-4">{children}</div>
       </div>

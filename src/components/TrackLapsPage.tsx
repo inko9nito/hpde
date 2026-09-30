@@ -341,7 +341,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
   return (
     <div className="min-h-screen bg-gray-50">
       {header}
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {title && authStatus === 'signed-in' && (
           <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
             <PrivateTag whose={name} />

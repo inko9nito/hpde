@@ -128,7 +128,7 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-4 py-4 sm:py-6">
+      <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-gray-900">iOS widget</h1>
           <a

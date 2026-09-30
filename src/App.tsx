@@ -471,7 +471,7 @@ export default function App() {
           scrollRef={pushScrollRef}
         />
 
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {/* Tab panel. Keyed on activeTab so a fresh element mounts on
             change — CSS keyframe (see index.css) plays a ~10 ms fade,
             matching iOS's near-instant tab switch. */}
