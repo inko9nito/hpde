@@ -445,51 +445,71 @@ test('a page iOS has swiped away, or back, doesn’t slide across again after it
   }
 })
 
-// The next page to slide, caught as its slide starts and held `at` each of
-// these many ms into it: where it is, as a share of the screen, and whether
-// the page under it is still kept from scrolling then.
-async function slideAt(page: Page, move: () => Promise<unknown>, at: number[]) {
-  const caught = page.evaluate(at => new Promise<{ x: number; y: number; locked: boolean }[]>(resolve => {
+// The page with this heading, caught as its slide starts and held — with
+// everything that started moving with it — `at` each of these many ms into
+// it: where it is, and the tab bar under it, as a share of the screen; how
+// dark it makes what's under it; and whether that's still kept from
+// scrolling.
+async function slideAt(page: Page, move: () => Promise<unknown>, heading: string, at: number[]) {
+  const caught = page.evaluate(({ heading, at }) => new Promise<{ x: number; y: number; tabs: number; dim: number | null; locked: boolean }[]>(resolve => {
     addEventListener('transitionrun', function onRun(e) {
       const el = e.target as HTMLElement
       if (e.propertyName !== 'transform' || !el.classList.contains('fixed')) return
+      if (![...el.querySelectorAll('h1')].some(h => h.textContent === heading)) return
       removeEventListener('transitionrun', onRun, true)
-      const slide = el.getAnimations().find(a => (a as CSSTransition).transitionProperty === 'transform')!
-      slide.pause()
+      const moving = document.getAnimations()
+      moving.forEach(a => a.pause())
+      const tabBar = document.querySelector('nav[aria-label="Sections"]')!
+      const dim = el.previousElementSibling?.matches('[data-covering-dim]') ? el.previousElementSibling : null
       const seen = at.map(ms => {
-        slide.currentTime = ms
+        moving.forEach(a => { a.currentTime = ms })
         const { left, top } = el.getBoundingClientRect()
-        return { x: left / innerWidth, y: top / innerHeight, locked: document.documentElement.classList.contains('push-page-open') }
+        return {
+          x: left / innerWidth,
+          y: top / innerHeight,
+          tabs: tabBar.getBoundingClientRect().left / innerWidth,
+          dim: dim && Number(getComputedStyle(dim).opacity),
+          locked: document.documentElement.classList.contains('push-page-open'),
+        }
       })
-      slide.play()
+      moving.forEach(a => a.play())
       resolve(seen)
     }, true)
-  }), at)
+  }), { heading, at })
   await move()
   return caught
 }
 
-test('pages slide in and out, and up, with iOS’s own spring; the page under stays still until one has slid out (#367)', async ({ page }) => {
+test('pages slide in and out, and up, with iOS’s own spring, the tabs a third as far under them; the page under stays still until one has slid out (#367)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
   await page.goto('/#/')
   const along = (ms: number) => iosSpring(ms)
 
-  // Pushed: from the right, halfway 0.1 s in, as on iOS.
-  const pushed = await slideAt(page, () => page.getByRole('button', { name: new RegExp(alpha.name) }).click(), [100, 200])
+  // Pushed: from the right, halfway 0.1 s in, as on iOS — and the tabs
+  // slide a third as far left, darkening, as it covers them.
+  const pushed = await slideAt(page, () => page.getByRole('button', { name: new RegExp(alpha.name) }).click(), alpha.name, [100, 200])
   expect(pushed.map(p => p.x)).toEqual([expect.closeTo(1 - along(100), 2), expect.closeTo(1 - along(200), 2)])
+  expect(pushed.map(p => p.tabs)).toEqual([expect.closeTo(-0.3 * along(100), 2), expect.closeTo(-0.3 * along(200), 2)])
+  expect(pushed.map(p => p.dim)).toEqual([expect.closeTo(0.1 * along(100), 2), expect.closeTo(0.1 * along(200), 2)])
   await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
 
-  // Back: out to the right, just as fast; the list stays still till it's gone.
-  const popped = await slideAt(page, () => page.getByRole('button', { name: 'Back' }).click(), [100, 200])
+  // Back: out to the right, just as fast, and the tabs back with it; the
+  // list stays still till it's gone.
+  const popped = await slideAt(page, () => page.getByRole('button', { name: 'Back' }).click(), alpha.name, [100, 200])
   expect(popped.map(p => p.x)).toEqual([expect.closeTo(along(100), 2), expect.closeTo(along(200), 2)])
+  expect(popped.map(p => p.tabs)).toEqual([expect.closeTo(-0.3 * (1 - along(100)), 2), expect.closeTo(-0.3 * (1 - along(200)), 2)])
+  expect(popped.map(p => p.dim)).toEqual([expect.closeTo(0.1 * (1 - along(100)), 2), expect.closeTo(0.1 * (1 - along(200)), 2)])
   expect(popped.every(p => p.locked)).toBe(true)
   await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('push-page-open'))).toBe(false)
+  await expect.poll(async () => (await page.getByRole('navigation', { name: 'Sections' }).boundingBox())?.x).toBe(0)
 
-  // A page with Cancel: up from the bottom, on the same spring.
-  const up = await slideAt(page, () => page.getByRole('link', { name: 'Add event' }).click(), [100])
+  // A page with Cancel: up from the bottom, on the same spring, over the
+  // tabs as they are.
+  const up = await slideAt(page, () => page.getByRole('link', { name: 'Add event' }).click(), 'New event', [100])
   expect(up.map(p => p.y)).toEqual([expect.closeTo(1 - along(100), 2)])
+  expect(up.map(p => [p.tabs, p.dim])).toEqual([[0, null]])
 })
 
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
