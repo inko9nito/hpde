@@ -278,12 +278,15 @@ Private like your lap times: only you and admins see them.
   three skills **most improved** since your first card, and the three that
   **need work** most (the lowest on your latest). Then the **skills
   wheel**: a spoke for each core skill, 0% at the middle and 100% at the
-  rim (rings every 20%), and each card as
-  a shape on it, the latest solid black and the first dashed gray (tap the
-  event chips to show or hide any card). Tap a skill's name for a list of
+  rim (rings every 20%), and every card as
+  a shape on it (tap its chip to hide or show it). Each card has its own
+  marker at its points (newest ●, then ■, ▲, ◆) and line (newest solid
+  black, older ones grayer and broken), in its chip and the lists too —
+  not a color, since every hue is a run group's somewhere. Tap a skill's name for a list of
   its score at each event, newest first, with the change from the card
   before, each on a 0–100% bar: a gain since the event before is hatched
-  dark on the end of the bar, a drop hatched light over the part it lost. *Car aids over activated* isn't on either (lower is better
+  soft green on the end of the bar, a drop hatched soft rose over the part
+  it lost, and the change beside it is green or rose to match. *Car aids over activated* isn't on either (lower is better
   there); it's on each event's card. Under those, **Events**: every event
   you have an evaluation at, TDE or not, newest first, with what the
   instructors said right on its card — about the whole event (on a TDE

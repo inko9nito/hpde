@@ -161,44 +161,74 @@ export function SkillOverview({ points }: { points: ReportCardPoint[] }) {
   )
 }
 
-// How each card's shape is drawn: the latest solid black and shaded, the
-// first dashed gray, any between solid mid gray.
+// Which report card is which, on the wheel, its chips and a skill's list:
+// a marker shape at its points (newest ●, then ■, ▲, ◆) and a line, newest
+// solid black and shaded, older ones grayer and broken. Not by hue: every
+// hue is a run group's somewhere in the app, and the one color here (green
+// and rose) means up or down.
 const INK = '#111827'
 const RING = '#e5e7eb'
-const LATEST = { stroke: INK, dash: undefined, width: 2, fill: 'rgba(17, 24, 39, 0.08)' }
-const FIRST = { stroke: '#9ca3af', dash: '4 3', width: 1.75, fill: 'none' }
-const BETWEEN = { stroke: '#6b7280', dash: undefined, width: 1.5, fill: 'none' }
+type Shape = 'circle' | 'square' | 'triangle' | 'diamond'
+const SHAPES: Shape[] = ['circle', 'square', 'triangle', 'diamond']
+const LINES = [
+  { stroke: INK, dash: undefined, width: 2, fill: 'rgba(17, 24, 39, 0.07)' },
+  { stroke: '#4b5563', dash: undefined, width: 1.75, fill: 'none' },
+  { stroke: '#6b7280', dash: '5 3', width: 1.75, fill: 'none' },
+  { stroke: '#9ca3af', dash: '1.5 3', width: 1.75, fill: 'none' },
+]
 
-function lineStyle(i: number, n: number) {
-  return i === n - 1 ? LATEST : i === 0 ? FIRST : BETWEEN
+/** Card `k` of `n` (oldest first): by how recent it is. Past the fourth newest, the shapes come round again, hollow. */
+export function cardStyle(k: number, n: number) {
+  const recency = n - 1 - k
+  const line = LINES[Math.min(recency, LINES.length - 1)]
+  return { ...line, shape: SHAPES[recency % SHAPES.length], hollow: recency >= SHAPES.length }
 }
 
-/** A card's line, as a legend swatch. */
-function LineKey({ i, n }: { i: number; n: number }) {
-  const { stroke, dash } = lineStyle(i, n)
+/** A card's marker at (x, y), `r` from its middle to its edge. */
+function Marker({ shape, hollow, x, y, r, color }: { shape: Shape; hollow: boolean; x: number; y: number; r: number; color: string }) {
+  const paint = { fill: hollow ? '#ffffff' : color, stroke: hollow ? color : '#ffffff', strokeWidth: 1.25 }
+  if (shape === 'circle') return <circle cx={x} cy={y} r={r} {...paint} />
+  if (shape === 'square') return <rect x={x - r * 0.85} y={y - r * 0.85} width={r * 1.7} height={r * 1.7} {...paint} />
+  if (shape === 'triangle') {
+    const h = r * 1.15
+    return <polygon points={`${x},${y - h} ${x + h},${y + h * 0.75} ${x - h},${y + h * 0.75}`} {...paint} />
+  }
+  return <polygon points={`${x},${y - r * 1.2} ${x + r * 1.2},${y} ${x},${y + r * 1.2} ${x - r * 1.2},${y}`} {...paint} />
+}
+
+/** A card's line with its marker on it, for its chip and a skill's list. */
+function CardKey({ k, n }: { k: number; n: number }) {
+  const style = cardStyle(k, n)
   return (
-    <svg aria-hidden="true" width={14} height={2} className="shrink-0">
-      <line x1={0} x2={14} y1={1} y2={1} stroke={stroke} strokeWidth={2} strokeDasharray={dash} />
+    <svg aria-hidden="true" width={20} height={10} className="shrink-0 overflow-visible" data-shape={style.shape}>
+      <line x1={0} x2={20} y1={5} y2={5} stroke={style.stroke} strokeWidth={2} strokeDasharray={style.dash} />
+      <Marker shape={style.shape} hollow={style.hollow} x={10} y={5} r={3.5} color={style.stroke} />
     </svg>
   )
 }
 
-// A change from the event before, on a skill's bar: what it gained, dark
-// hatching that carries the bar on; what it lost, light hatching over the
-// part of the bar it no longer fills. Hatched, not green and red, as the
-// report card's bars are black.
-const GAIN = 'repeating-linear-gradient(-45deg, #111827 0 1.5px, #9ca3af 1.5px 3.5px)'
-const LOSS = 'repeating-linear-gradient(-45deg, #9ca3af 0 1.5px, #ffffff 1.5px 3.5px)'
+// A change from the event before, on a skill's bar, in soft green and rose
+// — the only color here, and only for up and down: what it gained, hatched
+// on the end of the bar; what it lost, hatched over the part of the bar it
+// no longer fills.
+const GAIN = 'repeating-linear-gradient(-45deg, #34d399 0 1.5px, #d1fae5 1.5px 3.5px)'
+const LOSS = 'repeating-linear-gradient(-45deg, #fb7185 0 1.5px, #ffe4e6 1.5px 3.5px)'
 
 function Swatch({ pattern }: { pattern: string }) {
-  return <span aria-hidden="true" className="inline-block h-2 w-4 rounded-sm border border-gray-300" style={{ background: pattern }} />
+  return <span aria-hidden="true" className="inline-block h-2 w-4 rounded-sm" style={{ background: pattern }} />
+}
+
+/** The change beside a score: green up, rose down, gray none. */
+function Change({ change }: { change: number }) {
+  const tone = change > 0 ? 'text-emerald-700' : change < 0 ? 'text-rose-700' : 'text-gray-500'
+  return <span className={`shrink-0 text-xs font-medium tabular-nums ${tone}`}>{signed(change)}</span>
 }
 
 /**
  * A skill's score at one event, 0% to 100%, as the report card draws it:
  * black up to the score — or, after a gain, up to the score before it, and
- * hatched on to the score; after a drop, black to the score, and the part
- * it lost hatched light.
+ * hatched green on to the score; after a drop, black to the score, and the
+ * part it lost hatched rose.
  */
 export function ScoreBar({ score, change }: { score: number; change?: number }) {
   const before = change !== undefined ? score - change : score
@@ -209,7 +239,7 @@ export function ScoreBar({ score, change }: { score: number; change?: number }) 
       <div className="absolute inset-y-0 left-0 bg-gray-900" style={{ width: pct(solid) }} />
       {change !== undefined && change !== 0 && (
         <div
-          className={`absolute inset-y-0 ${change < 0 ? 'border-y border-r border-gray-300' : ''}`}
+          className="absolute inset-y-0"
           style={{ left: pct(solid), width: pct(Math.abs(change)), background: change > 0 ? GAIN : LOSS }}
           data-change={change > 0 ? 'gain' : 'loss'}
         />
@@ -223,10 +253,10 @@ const LABEL_W = 64
 const LABEL_GAP = 12
 
 /**
- * The skills wheel (#345): a spoke for each core skill scored, 100% at the
- * rim. Each report card picked is a shape on it — at first, the first and
- * the latest. Tap a skill's name for its score at each event, listed under
- * the wheel, newest first.
+ * The skills wheel (#345): a spoke for each core skill scored, 0% at the
+ * middle and 100% at the rim. Each report card is a shape on it — all of
+ * them at first; its chip hides or shows it. Tap a skill's name for its
+ * score at each event, listed under the wheel, newest first.
  */
 export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
   const [ref, measured] = useWidth()
@@ -234,11 +264,11 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
   const { cards, skills } = scoredCards(points)
   const n = cards.length
   const [picked, setPicked] = useState<TdeSkillId | null>(null)
-  // The cards picked; at first (or once none of them is left), the first and the latest.
+  // The cards picked; at first (or once none of them is left), all of them.
   const [picks, setPicks] = useState<ReadonlySet<string> | null>(null)
   if (!n || !skills.length) return null
   const kept = cards.filter(c => picks?.has(c.key)).map(c => c.key)
-  const shown: ReadonlySet<string> = new Set(kept.length ? kept : [cards[0].key, cards[n - 1].key])
+  const shown: ReadonlySet<string> = new Set(kept.length ? kept : cards.map(c => c.key))
 
   // As big as leaves room for the names across the widest spokes.
   const R = Math.max(60, Math.min(130, width / 2 - LABEL_W - LABEL_GAP))
@@ -278,7 +308,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
                   on ? 'border-gray-900 font-semibold text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'
                 }`}
               >
-                <LineKey i={i} n={n} />
+                <CardKey k={i} n={n} />
                 {day(c.date)}
               </button>
             )
@@ -296,7 +326,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
           })}
           {cards.map((c, k) => {
             if (!shown.has(c.key)) return null
-            const style = lineStyle(k, n)
+            const style = cardStyle(k, n)
             const pts = skills.flatMap((s, i) => {
               const v = scoreOf(c, s.id)
               return v === undefined ? [] : [at(i, v).join(',')]
@@ -306,9 +336,9 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
                 <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} strokeLinejoin="round" />
                 {skills.map((s, i) => {
                   const v = scoreOf(c, s.id)
-                  if (v === undefined || (k !== n - 1 && i !== pickedIndex)) return null
+                  if (v === undefined) return null
                   const [x, y] = at(i, v)
-                  return <circle key={s.id} cx={x} cy={y} r={i === pickedIndex ? 4.5 : 3} fill={style.stroke} stroke="#ffffff" strokeWidth={1.5} />
+                  return <Marker key={s.id} shape={style.shape} hollow={style.hollow} x={x} y={y} r={i === pickedIndex ? 4.5 : 3.25} color={style.stroke} />
                 })}
               </g>
             )
@@ -345,12 +375,12 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
                 return (
                   <li key={card.key} className="py-2.5" data-skill-score={card.key}>
                     <div className="flex items-center gap-3">
-                      <LineKey i={k} n={n} />
+                      <CardKey k={k} n={n} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-gray-900">{fullDay(card.date)}</p>
                         <p className="truncate text-xs text-gray-500">{card.title}</p>
                       </div>
-                      {change !== undefined && <span className="shrink-0 text-xs tabular-nums text-gray-500">{signed(change)}</span>}
+                      {change !== undefined && <Change change={change} />}
                       <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900">{score}%</span>
                     </div>
                     <ScoreBar score={score} change={change} />
