@@ -162,10 +162,14 @@ export function SkillOverview({ points }: { points: ReportCardPoint[] }) {
 }
 
 // Which report card is which, on the wheel, its chips and a skill's list:
-// a marker shape at its points (newest ●, then ■, ▲, ◆) and a line, newest
-// solid black and shaded, older ones grayer and broken. Not by hue: every
-// hue is a run group's somewhere in the app, and the one color here (green
-// and rose) means up or down.
+// the four newest of the cards shown each get a marker at their points
+// (●, ■, ▲, ◆) and a line — the newest solid black and shaded, the others
+// grayer and broken. More than four such can't be told apart, however
+// they're drawn (a driver may have 20 cards), so any older card shown is a
+// thin light line behind them: the history, not one to pick out. Hide
+// newer ones to bring an older one forward. Not by hue: every hue is a run
+// group's somewhere in the app, and the one color here (green and rose)
+// means up or down.
 const INK = '#111827'
 const RING = '#e5e7eb'
 type Shape = 'circle' | 'square' | 'triangle' | 'diamond'
@@ -176,17 +180,31 @@ const LINES = [
   { stroke: '#6b7280', dash: '5 3', width: 1.75, fill: 'none' },
   { stroke: '#9ca3af', dash: '1.5 3', width: 1.75, fill: 'none' },
 ]
+const BACKGROUND = { stroke: '#d1d5db', dash: undefined, width: 1, fill: 'none' }
 
-/** Card `k` of `n` (oldest first): by how recent it is. Past the fourth newest, the shapes come round again, hollow. */
-export function cardStyle(k: number, n: number) {
-  const recency = n - 1 - k
-  const line = LINES[Math.min(recency, LINES.length - 1)]
-  return { ...line, shape: SHAPES[recency % SHAPES.length], hollow: recency >= SHAPES.length }
+export interface CardLook {
+  stroke: string
+  dash?: string
+  width: number
+  fill: string
+  /** None for an older card, drawn behind the four newest. */
+  shape: Shape | null
+  /** Newest first among the cards shown. */
+  rank: number
+}
+
+/** How each card shown is drawn, by its place among them, newest first. */
+export function cardLooks(cards: ReportCardPoint[], shown: ReadonlySet<string>): Map<string, CardLook> {
+  const newestFirst = [...cards].reverse().filter(c => shown.has(c.key))
+  return new Map(newestFirst.map((c, rank) => [
+    c.key,
+    rank < SHAPES.length ? { ...LINES[rank], shape: SHAPES[rank], rank } : { ...BACKGROUND, shape: null, rank },
+  ]))
 }
 
 /** A card's marker at (x, y), `r` from its middle to its edge. */
-function Marker({ shape, hollow, x, y, r, color }: { shape: Shape; hollow: boolean; x: number; y: number; r: number; color: string }) {
-  const paint = { fill: hollow ? '#ffffff' : color, stroke: hollow ? color : '#ffffff', strokeWidth: 1.25 }
+function Marker({ shape, x, y, r, color }: { shape: Shape; x: number; y: number; r: number; color: string }) {
+  const paint = { fill: color, stroke: '#ffffff', strokeWidth: 1.25 }
   if (shape === 'circle') return <circle cx={x} cy={y} r={r} {...paint} />
   if (shape === 'square') return <rect x={x - r * 0.85} y={y - r * 0.85} width={r * 1.7} height={r * 1.7} {...paint} />
   if (shape === 'triangle') {
@@ -196,13 +214,13 @@ function Marker({ shape, hollow, x, y, r, color }: { shape: Shape; hollow: boole
   return <polygon points={`${x},${y - r * 1.2} ${x + r * 1.2},${y} ${x},${y + r * 1.2} ${x - r * 1.2},${y}`} {...paint} />
 }
 
-/** A card's line with its marker on it, for its chip and a skill's list. */
-function CardKey({ k, n }: { k: number; n: number }) {
-  const style = cardStyle(k, n)
+/** A card's line with its marker on it, for its chip and a skill's list; room for one, for a card not shown. */
+function CardKey({ look }: { look?: CardLook }) {
+  if (!look) return <span aria-hidden="true" className="inline-block w-5 shrink-0" />
   return (
-    <svg aria-hidden="true" width={20} height={10} className="shrink-0 overflow-visible" data-shape={style.shape}>
-      <line x1={0} x2={20} y1={5} y2={5} stroke={style.stroke} strokeWidth={2} strokeDasharray={style.dash} />
-      <Marker shape={style.shape} hollow={style.hollow} x={10} y={5} r={3.5} color={style.stroke} />
+    <svg aria-hidden="true" width={20} height={10} className="shrink-0 overflow-visible" data-shape={look.shape ?? 'line'}>
+      <line x1={0} x2={20} y1={5} y2={5} stroke={look.stroke} strokeWidth={look.shape ? 2 : 1.5} strokeDasharray={look.dash} />
+      {look.shape && <Marker shape={look.shape} x={10} y={5} r={3.5} color={look.stroke} />}
     </svg>
   )
 }
@@ -255,8 +273,10 @@ const LABEL_GAP = 12
 /**
  * The skills wheel (#345): a spoke for each core skill scored, 0% at the
  * middle and 100% at the rim. Each report card is a shape on it — all of
- * them at first; its chip hides or shows it. Tap a skill's name for its
- * score at each event, listed under the wheel, newest first.
+ * them at first. Its chip, in a row that scrolls sideways, newest first,
+ * hides or shows it; All, before them, shows every one (or, with every one
+ * shown, just the newest). Tap a skill's name for its score at each event,
+ * listed under the wheel, newest first.
  */
 export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
   const [ref, measured] = useWidth()
@@ -286,6 +306,13 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
     } else next.add(key)
     setPicks(next)
   }
+  const allShown = shown.size === n
+  const looks = cardLooks(cards, shown)
+  // Drawn oldest first, so the newest is on top.
+  const drawn = [...cards].filter(c => shown.has(c.key)).sort((a, b) => looks.get(b.key)!.rank - looks.get(a.key)!.rank)
+  const chip = (on: boolean) => `inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+    on ? 'border-gray-900 font-semibold text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'
+  }`
   const pickedSkill = skills.find(s => s.id === picked)
   const pickedIndex = skills.findIndex(s => s.id === picked)
   const history = pickedSkill ? skillHistory(pickedSkill.id, cards) : []
@@ -294,25 +321,28 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
     <section aria-label="Skills wheel" className={CARD}>
       <CardHead title="Skills wheel" meta="0% at the middle, 100% at the rim" />
       {n > 1 && (
-        <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Report cards shown">
-          {cards.map((c, i) => {
-            const on = shown.has(c.key)
-            return (
-              <button
-                key={c.key}
-                type="button"
-                aria-pressed={on}
-                title={c.title}
-                onClick={() => toggle(c.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                  on ? 'border-gray-900 font-semibold text-gray-900' : 'border-gray-200 text-gray-500 hover:border-gray-400'
-                }`}
-              >
-                <CardKey k={i} n={n} />
-                {day(c.date)}
-              </button>
-            )
-          })}
+        <div className="-mx-4 mb-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex w-max gap-1.5 pb-0.5" role="group" aria-label="Report cards shown">
+            <button
+              type="button"
+              aria-pressed={allShown}
+              onClick={() => setPicks(new Set(allShown ? [cards[n - 1].key] : cards.map(c => c.key)))}
+              className={chip(allShown)}
+            >
+              All
+            </button>
+            {[...cards].reverse().map(c => {
+              const on = shown.has(c.key)
+              return (
+                <button key={c.key} type="button" aria-pressed={on} title={c.title} onClick={() => toggle(c.key)} className={chip(on)}>
+                  {on && <CardKey look={looks.get(c.key)} />}
+                  {day(c.date)}
+                  {/* The year, where it isn't the newest card's. */}
+                  {c.date.slice(0, 4) !== cards[n - 1].date.slice(0, 4) && <span className="font-normal text-gray-400">’{c.date.slice(2, 4)}</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
       <div ref={ref} className="relative" style={{ height }}>
@@ -324,9 +354,8 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
             const [x2, y2] = at(i, 100)
             return <line key={s.id} x1={cx} y1={cy} x2={x2} y2={y2} stroke={i === pickedIndex ? '#9ca3af' : RING} strokeWidth={1} />
           })}
-          {cards.map((c, k) => {
-            if (!shown.has(c.key)) return null
-            const style = cardStyle(k, n)
+          {drawn.map(c => {
+            const style = looks.get(c.key)!
             const pts = skills.flatMap((s, i) => {
               const v = scoreOf(c, s.id)
               return v === undefined ? [] : [at(i, v).join(',')]
@@ -334,11 +363,11 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
             return (
               <g key={c.key} data-card={c.key}>
                 <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} strokeLinejoin="round" />
-                {skills.map((s, i) => {
+                {style.shape && skills.map((s, i) => {
                   const v = scoreOf(c, s.id)
                   if (v === undefined) return null
                   const [x, y] = at(i, v)
-                  return <Marker key={s.id} shape={style.shape} hollow={style.hollow} x={x} y={y} r={i === pickedIndex ? 4.5 : 3.25} color={style.stroke} />
+                  return <Marker key={s.id} shape={style.shape!} x={x} y={y} r={i === pickedIndex ? 4.5 : 3.25} color={style.stroke} />
                 })}
               </g>
             )
@@ -354,6 +383,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
               type="button"
               aria-pressed={on}
               aria-label={s.label}
+              data-spoke={s.id}
               onClick={() => setPicked(on ? null : s.id)}
               className={`absolute whitespace-nowrap rounded-md px-1.5 py-1 text-[11px] leading-none transition-colors hover:text-gray-900 ${
                 on ? 'bg-gray-900 font-semibold text-white hover:text-white' : 'text-gray-500'
@@ -371,11 +401,10 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
             <h3 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h3>
             <ul className="mt-1 divide-y divide-gray-100">
               {[...history].reverse().map(({ card, score, change }) => {
-                const k = cards.indexOf(card)
                 return (
                   <li key={card.key} className="py-2.5" data-skill-score={card.key}>
                     <div className="flex items-center gap-3">
-                      <CardKey k={k} n={n} />
+                      <CardKey look={looks.get(card.key)} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-gray-900">{fullDay(card.date)}</p>
                         <p className="truncate text-xs text-gray-500">{card.title}</p>

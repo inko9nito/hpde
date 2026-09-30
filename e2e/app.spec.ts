@@ -949,7 +949,7 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
 
   const wheel = page.getByRole('region', { name: 'Skills wheel' })
   // Every skill's name is on the card, clear of its edges and of the others.
-  const names = wheel.getByRole('button', { name: /^(?!.*\d)/ }).filter({ hasNot: page.locator('svg') })
+  const names = wheel.locator('[data-spoke]')
   await expect(names).toHaveCount(9)
   const frame = (await wheel.boundingBox())!
   const boxes = await names.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON() as DOMRect))
@@ -963,9 +963,9 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   }
   // Every card is drawn, each with its own marker; a tap on a skill lists it at every event.
   await expect(wheel.locator('[data-card]')).toHaveCount(3)
-  await expect(wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button', { pressed: true })).toHaveCount(3)
+  await expect(wheel.getByRole('group', { name: 'Report cards shown' }).getByRole('button', { pressed: true })).toHaveText(['All', /Oct 4/, /Sep 13/, /Jul 19/])
   expect(await wheel.getByRole('group', { name: 'Report cards shown' }).locator('[data-shape]').evaluateAll(els => els.map(el => el.getAttribute('data-shape'))))
-    .toEqual(['triangle', 'square', 'circle'])
+    .toEqual(['circle', 'square', 'triangle'])
   await wheel.getByRole('button', { name: 'Calls out all flags' }).click()
   await expect(wheel.getByRole('region', { name: 'Calls out all flags at each event' }).getByRole('listitem'))
     .toHaveText([/Oct 4, 2025.*\+15\s*90%/, /Sep 13, 2025.*\+10\s*75%/, /Jul 19, 2025.*65%/])

@@ -1339,14 +1339,23 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     const wheel = await within(el).findByRole('region', { name: 'Skills wheel' })
-    // The first and the latest card, both on at first; one can be hidden, not both.
+    // All, then the cards newest first, every one on at first; one can be hidden, not every one.
     const chips = within(within(wheel).getByRole('group', { name: 'Report cards shown' })).getAllByRole('button')
-    expect(chips.map(c => [c.textContent, c.getAttribute('aria-pressed')])).toEqual([['Sep 13', 'true'], ['Oct 4', 'true']])
-    expect([...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))).toEqual([tdeSep.id, tdeOct.id])
-    await userEvent.click(chips[0])
-    expect([...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))).toEqual([tdeOct.id])
+    expect(chips.map(c => [c.textContent, c.getAttribute('aria-pressed')])).toEqual([['All', 'true'], ['Oct 4', 'true'], ['Sep 13', 'true']])
+    const drawn = () => [...wheel.querySelectorAll('[data-card]')].map(g => g.getAttribute('data-card'))
+    // The newest drawn last, on top.
+    expect(drawn()).toEqual([tdeSep.id, tdeOct.id])
+    await userEvent.click(chips[2])
+    expect(drawn()).toEqual([tdeOct.id])
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(chips[1])
     expect(chips[1]).toHaveAttribute('aria-pressed', 'true')
+    // All shows every card; again, just the newest.
+    await userEvent.click(chips[0])
+    expect(drawn()).toEqual([tdeSep.id, tdeOct.id])
+    await userEvent.click(chips[0])
+    expect(drawn()).toEqual([tdeOct.id])
+    await userEvent.click(chips[0])
 
     // A spoke for each skill scored; not car aids.
     expect(within(wheel).getAllByRole('button', { pressed: false }).map(b => b.getAttribute('aria-label')).filter(Boolean))

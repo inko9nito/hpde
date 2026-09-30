@@ -279,10 +279,14 @@ Private like your lap times: only you and admins see them.
   **need work** most (the lowest on your latest). Then the **skills
   wheel**: a spoke for each core skill, 0% at the middle and 100% at the
   rim (rings every 20%), and every card as
-  a shape on it (tap its chip to hide or show it). Each card has its own
-  marker at its points (newest ●, then ■, ▲, ◆) and line (newest solid
-  black, older ones grayer and broken), in its chip and the lists too —
-  not a color, since every hue is a run group's somewhere. Tap a skill's name for a list of
+  a shape on it. The cards' chips scroll sideways, newest first, after
+  **All** (every card; tapped again, just the newest); tap one to hide or
+  show it. The four newest cards shown each have a marker at their points
+  (●, ■, ▲, ◆) and a line (the newest solid black, the others grayer and
+  broken), in their chips and the list too; any older ones shown are thin
+  light lines behind them, since more than four can't be told apart
+  (hide newer ones to bring an older one forward). Not a color: every hue
+  is a run group's somewhere. Tap a skill's name for a list of
   its score at each event, newest first, with the change from the card
   before, each on a 0–100% bar: a gain since the event before is hatched
   soft green on the end of the bar, a drop hatched soft rose over the part

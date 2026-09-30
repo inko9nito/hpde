@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scoredCards, skillHistory, skillMoves } from './ReportCardSkills'
+import { cardLooks, scoredCards, skillHistory, skillMoves } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 
 const card = (key: string, date: string, skills: Record<string, number>, carAidsPct?: number): ReportCardPoint =>
@@ -36,5 +36,15 @@ describe('report card skills (#345)', () => {
   it('has nothing improved with one card, or when nothing went up', () => {
     expect(skillMoves([card('a', '2025-07-19', { flags: 65 })]).improved).toEqual([])
     expect(skillMoves([card('a', '2025-07-19', { flags: 65 }), card('b', '2025-09-13', { flags: 60 })]).improved).toEqual([])
+  })
+
+  it('gives the four newest cards shown a marker each, and any older one a plain line behind them', () => {
+    const cards = ['a', 'b', 'c', 'd', 'e', 'f'].map((k, i) => card(k, `2025-0${i + 1}-01`, { flags: 60 }))
+    const all = cardLooks(cards, new Set(cards.map(c => c.key)))
+    expect(['f', 'e', 'd', 'c', 'b', 'a'].map(k => all.get(k)!.shape)).toEqual(['circle', 'square', 'triangle', 'diamond', null, null])
+    // Hide the newest two, and the older ones come forward.
+    const some = cardLooks(cards, new Set(['a', 'b', 'c', 'd']))
+    expect(['d', 'c', 'b', 'a'].map(k => some.get(k)!.shape)).toEqual(['circle', 'square', 'triangle', 'diamond'])
+    expect(some.has('f')).toBe(false)
   })
 })
