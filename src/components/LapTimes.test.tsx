@@ -1416,14 +1416,15 @@ describe('the garage (#344)', () => {
     await userEvent.click(within(sheet).getByRole('button', { name: 'Brake fluid' }))
     fireEvent.change(within(sheet).getByLabelText('Date'), { target: { value: '2026-05-01' } })
     fireEvent.change(within(sheet).getByLabelText(/^What went on/), { target: { value: 'Motul RBF 660' } })
+    fireEvent.change(within(sheet).getByLabelText(/^Shop/), { target: { value: 'Speed Shop' } })
     fireEvent.change(within(sheet).getByRole('textbox', { name: /^Note/ }), { target: { value: 'Full flush.' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Log brake fluid change' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('status')).toHaveTextContent('Change logged')
     expect(garageCalls('PUT')[0][0]).toContain('car=cayman')
-    expect(body(garageCalls('PUT')[0]).change).toEqual({ date: '2026-05-01', part: 'brakeFluid', what: 'Motul RBF 660', note: 'Full flush.' })
+    expect(body(garageCalls('PUT')[0]).change).toEqual({ date: '2026-05-01', part: 'brakeFluid', what: 'Motul RBF 660', shop: 'Speed Shop', note: 'Full flush.' })
     expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('Brake fluidMotul RBF 660since May 1, 2026')
-    expect(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[0]).toHaveTextContent('May 1, 2026Brake fluidMotul RBF 660Full flush.')
+    expect(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[0]).toHaveTextContent('May 1, 2026Brake fluidMotul RBF 660at Speed ShopFull flush.')
 
     // An entry opens to change it, or take it out.
     await userEvent.click(within(within(page).getByRole('list', { name: 'Change log' })).getAllByRole('button')[1])
@@ -1483,7 +1484,9 @@ describe('the garage (#344)', () => {
     openWithGarage(`#/event/${event.id}`)
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     const row = await screen.findByRole('button', { name: 'Your car: The Cayman' })
-    expect(row).toHaveTextContent('The Cayman2019 Porsche 718 Cayman GTS')
+    expect(row).toHaveTextContent('The Cayman · 2019 Porsche 718 Cayman GTS')
+    // One slim line: it's seldom changed.
+    expect(row.querySelector('svg')).toHaveAttribute('width', '16')
     await userEvent.click(row)
     const sheet = screen.getByRole('dialog', { name: 'The Cayman' })
     expect(sheet).toHaveTextContent('Lug nut torque118 ft·lb')

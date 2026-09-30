@@ -51,7 +51,7 @@ const pressures = {
   cold: { fl: 30, fr: 30, rl: 28.5, rr: 28.5 }, hot: { fl: 36, fr: 36.5 }, note: 'Bled the fronts to 36.',
 }
 const setup = { carId: 'car1', sessions: { x: pressures } }
-const padsChange = { date: '2026-09-01', part: 'frontPads', what: 'Hawk DTC-60', note: 'At 12,400 miles.' }
+const padsChange = { date: '2026-09-01', part: 'frontPads', what: 'Hawk DTC-60', shop: 'Speed Shop', note: 'At 12,400 miles.' }
 
 const garageOf = async (token: string, query?: string) => (await (await call('GET', { token, query })).json())
 const addCar = async (token = 'vera-token', car: unknown = cayman) => (await (await call('PUT', { token, body: { car } })).json()).car

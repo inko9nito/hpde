@@ -3,7 +3,7 @@ import { Lock } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { SuggestInput } from './SuggestInput'
 import { inputClass } from './SessionEvaluationForm'
-import { CONSUMABLES, MAX_NOTE, MAX_PART, carName, cleanChange, consumableLabel, partOptions } from '../utils/garage'
+import { CONSUMABLES, MAX_NAME, MAX_NOTE, MAX_PART, carName, cleanChange, consumableLabel, partOptions, shopOptions } from '../utils/garage'
 import type { Car, ConsumableChange, ConsumableId, Garage } from '../utils/garage'
 import { todayLocalISO } from '../utils/time'
 
@@ -12,7 +12,7 @@ const label = 'text-xs font-medium text-gray-700'
 /**
  * Logs a consumable's change on a car (#344), or changes or removes an
  * entry: what was changed — picked from the consumables, two by two — the
- * day it was done, what went on and a note.
+ * day it was done, what went on, the shop that did it and a note.
  */
 export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: {
   car: Car
@@ -27,12 +27,13 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
   const [part, setPart] = useState<ConsumableId | null>(change?.part ?? null)
   const [date, setDate] = useState(change?.date ?? todayLocalISO())
   const [what, setWhat] = useState(change?.what ?? '')
+  const [shop, setShop] = useState(change?.shop ?? '')
   const [note, setNote] = useState(change?.note ?? '')
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const id = useId()
-  const cleaned = cleanChange({ date, part, what, note })
+  const cleaned = cleanChange({ date, part, what, shop, note })
 
   async function run(kind: 'saving' | 'removing', action: () => Promise<void>) {
     setBusy(kind)
@@ -98,6 +99,19 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
         className={inputClass}
       />
 
+      <label htmlFor={`${id}-shop`} className={`mt-4 flex items-baseline justify-between ${label}`}>
+        Shop
+        <span className="font-normal text-gray-400">Optional</span>
+      </label>
+      <SuggestInput
+        id={`${id}-shop`}
+        value={shop}
+        onChange={v => setShop(v.slice(0, MAX_NAME))}
+        options={shopOptions(garage)}
+        placeholder="Where it was done"
+        className={inputClass}
+      />
+
       <label htmlFor={`${id}-note`} className={`mt-4 flex items-baseline justify-between ${label}`}>
         Note
         <span className="font-normal text-gray-400">Optional</span>
@@ -108,7 +122,7 @@ export function ChangeSheet({ car, garage, change, onSave, onRemove, onClose }: 
         onChange={e => setNote(e.target.value)}
         rows={2}
         maxLength={MAX_NOTE}
-        placeholder="Mileage, who did it, why…"
+        placeholder="Mileage, why…"
         className={`${inputClass} resize-y`}
       />
 

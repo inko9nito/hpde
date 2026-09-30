@@ -60,9 +60,10 @@ describe('garage (#344)', () => {
   })
 
   it('reads a log entry: a day and a consumable needed', () => {
-    expect(cleanChange({ date: '2026-04-15', part: 'brakeFluid', what: ' Motul RBF 660 ', note: '' })).toEqual({
-      value: { date: '2026-04-15', part: 'brakeFluid', what: 'Motul RBF 660' },
+    expect(cleanChange({ date: '2026-04-15', part: 'brakeFluid', what: ' Motul RBF 660 ', shop: 'Speed Shop', note: '' })).toEqual({
+      value: { date: '2026-04-15', part: 'brakeFluid', what: 'Motul RBF 660', shop: 'Speed Shop' },
     })
+    expect(cleanChange({ date: '2026-04-15', part: 'brakeFluid', shop: 'x'.repeat(61) })).toHaveProperty('error')
     expect(cleanChange({ date: '2026-04-15', part: 'wipers' })).toHaveProperty('error')
     expect(cleanChange({ date: '4/15/2026', part: 'tires' })).toHaveProperty('error')
     expect(cleanChange({ date: '2026-02-31x', part: 'tires' })).toHaveProperty('error')

@@ -36,7 +36,9 @@ export interface ConsumableChange {
   part: ConsumableId
   /** What went on: "Hawk DTC-60". */
   what?: string
-  /** Anything else: the mileage, who did it, why. */
+  /** Where it was done: "Mike's Motorsports". */
+  shop?: string
+  /** Anything else: the mileage, why. */
   note?: string
 }
 
@@ -147,13 +149,15 @@ export function cleanCar(raw: unknown, thisYear = new Date().getFullYear()): Cle
   }
 }
 
-/** A log entry as sent: the day and the consumable required; what went on and a note optional. */
+/** A log entry as sent: the day and the consumable required; what went on, the shop and a note optional. */
 export function cleanChange(raw: unknown): Cleaned<Omit<ConsumableChange, 'id'>> {
   const r = (raw ?? {}) as Record<string, unknown>
   if (typeof r.date !== 'string' || !DATE.test(r.date) || Number.isNaN(Date.parse(r.date))) return { error: 'Add the day it was done.' }
   if (!CONSUMABLES.some(c => c.id === r.part)) return { error: 'Pick what was changed.' }
   const what = text(r.what, MAX_PART, 'What went on')
   if ('error' in what) return what
+  const shop = text(r.shop, MAX_NAME, 'The shop')
+  if ('error' in shop) return shop
   const note = text(r.note, MAX_NOTE, 'The note')
   if ('error' in note) return note
   return {
@@ -161,6 +165,7 @@ export function cleanChange(raw: unknown): Cleaned<Omit<ConsumableChange, 'id'>>
       date: r.date,
       part: r.part as ConsumableId,
       ...(what.value ? { what: what.value } : {}),
+      ...(shop.value ? { shop: shop.value } : {}),
       ...(note.value ? { note: note.value } : {}),
     },
   }
@@ -277,6 +282,15 @@ export function partOptions(part: ConsumableId, garage: Garage): string[] {
   const counts = new Map<string, number>()
   for (const car of garage.cars) {
     for (const c of car.log ?? []) if (c.part === part && c.what) counts.set(c.what, (counts.get(c.what) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
+}
+
+/** Every shop that's done work on any car, most used first — for the form's suggestions. */
+export function shopOptions(garage: Garage): string[] {
+  const counts = new Map<string, number>()
+  for (const car of garage.cars) {
+    for (const c of car.log ?? []) if (c.shop) counts.set(c.shop, (counts.get(c.shop) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
 }

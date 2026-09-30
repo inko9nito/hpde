@@ -133,6 +133,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-gray-900">{consumableLabel(c.part)}</span>
                       {c.what && <span className="block text-sm text-gray-700">{c.what}</span>}
+                      {c.shop && <span className="block text-xs text-gray-500">at {c.shop}</span>}
                       {c.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{c.note}</span>}
                     </span>
                     <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />

@@ -295,11 +295,12 @@ Private like your notes: only you and admins see it.
   which open on their *My notes* over the car's page (Back returns to it).
 - **The change log:** **Log a change** picks what was changed — tires,
   front or rear pads, front or rear rotors, brake fluid, engine oil — the
-  day it was done, what went on (suggesting what you've used before) and
-  a note (mileage, who did it). An entry opens to change or remove it.
+  day it was done, what went on (suggesting what you've used before),
+  the shop that did it and a note (mileage, why) — all but the first two
+  optional. An entry opens to change or remove it.
   What's on the car at an event is whatever the log last says before it.
 - **At an event:** the car you drove is the first thing on *My notes*,
-  one line; **Add your car** picks it from the garage (or adds one). Tap
+  one slim line; **Add your car** picks it from the garage (or adds one). Tap
   it for its lug nut torque and what was on it at that event, to change
   the car or to take it off.
 - **A session's tire pressures:** tap the session on the Schedule tab,
