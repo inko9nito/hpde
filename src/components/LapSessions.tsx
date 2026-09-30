@@ -112,6 +112,9 @@ export function PrivateTag({ whose }: { whose: string | null }) {
   )
 }
 
+/** In line with the lap heading's text, past its timer: the figures and the note (#324). */
+const indent = 'pl-[19px]'
+
 /**
  * One session's laps (#210): its time and group, then its lap count and a
  * small table of its average and best lap and speeds (#324), which open
@@ -180,13 +183,12 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
                 />
               </button>
             </div>
-            {/* In line with the heading's text, past its timer. */}
-            <div className="pl-[19px]">
+            <div className={indent}>
               <SessionFigures laps={session.laps} allTimeBest={allTimeBest} />
             </div>
           </div>
           {session.summary && (
-            <p className="text-sm text-gray-700" data-lap-summary>{session.summary}</p>
+            <p className={`${indent} text-sm text-gray-700`} data-lap-summary>{session.summary}</p>
           )}
           {expanded && (
             <div id={tableId}>
