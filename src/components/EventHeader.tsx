@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
+import { DateBlock, firstDayParts } from './DateBlock'
 import { EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
 import { RsvpPicker } from './RsvpPicker'
 import { ICON_BUTTON } from './iconButton'
 import { formatDateRangeWithWeekday } from '../utils/time'
+import { layoutName } from '../utils/trackStats'
 import type { EventStatus } from '../utils/eventClass'
 import type { EventConfig } from '../types'
 
@@ -15,7 +17,7 @@ import type { EventConfig } from '../types'
 const TOP_BAR_PX = 52
 /** Height of the title block under it — fixed (the name truncates) so
  *  the header knows exactly how far to scroll before it sticks. */
-const TITLE_BLOCK_PX = 78
+const TITLE_BLOCK_PX = 96
 /** Scroll distance over which the title block fades out as it rises
  *  toward the top bar — fully gone before it reaches the chevron row
  *  (Figma 2043:6837). The compact title takes over from here. */
@@ -73,7 +75,9 @@ interface Props {
  * along its bottom edge — holding three bands:
  *
  *   1. Top bar: back chevron · compact title · admin "…" menu
- *   2. Title block: track icon + name + date line with LIVE/PAST badge
+ *   2. Title block: the big stacked date (#305), then the name over the
+ *      date line (with the LIVE/PAST badge) and, smaller, the track —
+ *      the track's own page leads with its shape, the event with its date
  *   3. Tabs
  *
  * The header sticks at `top: -TITLE_BLOCK_PX`, so scrolling first slides
@@ -115,16 +119,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
                 : 'pointer-events-none translate-y-1 opacity-0'
             }`}
           >
-            <div className="flex min-w-0 items-center gap-2">
-              <TrackIcon trackId={event.trackId} tone="dark" size={38} padding={0} radius="rounded-lg" />
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="truncate font-rubik text-[13px] font-bold leading-tight text-gray-900">{event.name}</span>
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-[10px] leading-none text-gray-500">{date}</span>
-                  <StatusBadge status={status} size="sm" />
-                </span>
-              </div>
-            </div>
+            <CompactTitle event={event} status={status} date={date} />
           </div>
           {/* Same 36px footprint as the back button, so the compact
               title stays centred. */}
@@ -135,18 +130,25 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
       </div>
 
       <div style={{ height: TITLE_BLOCK_PX }}>
-        <div ref={titleContentRef} className="mx-auto flex h-full max-w-lg items-center gap-3 px-6">
-          {/* No padding: the track SVGs already carry their own margin
-              inside a square viewBox. */}
-          <TrackIcon trackId={event.trackId} tone="dark" size={58} padding={0} radius="rounded-xl" />
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <h1 className="truncate font-rubik text-xl font-bold leading-tight text-gray-900">{event.name}</h1>
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="truncate text-[13px] leading-tight text-gray-500">{date}</span>
-              <StatusBadge status={status} />
-              {/* Join event, or their answer (#235), across from the date. */}
-              <div className="ml-auto flex shrink-0">
-                <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
+        <div ref={titleContentRef} className="mx-auto flex h-full max-w-lg items-center px-6 pb-1">
+          {/* On one baseline, the month's and the name's: the date lines up
+              with the text instead of floating beside it. */}
+          <div className="flex min-w-0 flex-1 items-baseline gap-4">
+            <DateBlock event={event} muted={status === 'past'} size="lg" />
+            <div aria-hidden="true" className="w-px self-stretch bg-gray-200" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <h1 className="truncate font-rubik text-xl font-bold leading-tight text-gray-900">{event.name}</h1>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="truncate text-[13px] leading-tight text-gray-500">{date}</span>
+                <StatusBadge status={status} />
+              </div>
+              {/* The track, then Join event or their answer (#235) across
+                  from it: the date line keeps the width to itself. */}
+              <div className="flex min-h-7 min-w-0 items-center gap-2.5">
+                <TrackLine event={event} />
+                <div className="ml-auto flex shrink-0">
+                  <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
+                </div>
               </div>
             </div>
           </div>
@@ -157,6 +159,42 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
         <EventTabs active={activeTab} onChange={onTabChange} notesCount={notesCount} />
       </div>
     </div>
+  )
+}
+
+/** The collapsed title in the top bar: the small date (#305) beside the
+ *  name over the date line. A two-row grid, each row on one baseline, so
+ *  the month lines up with the name and the day with the date line. */
+function CompactTitle({ event, status, date }: { event: EventConfig; status: EventStatus; date: string }) {
+  const parts = firstDayParts(event)
+  const monthColor = status === 'past' ? 'text-gray-500' : 'text-red-600'
+  return (
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2.5 gap-y-0.5">
+      <span className={`text-center font-rubik text-[10px] font-medium uppercase leading-none tracking-wider ${monthColor}`}>
+        {parts?.month}
+      </span>
+      <span className="truncate font-rubik text-[13px] font-bold leading-tight text-gray-900">{event.name}</span>
+      <span className="text-center font-rubik text-lg font-bold leading-none text-gray-900">{parts?.day}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-[10px] leading-none text-gray-500">{date}</span>
+        <StatusBadge status={status} size="sm" />
+      </span>
+    </div>
+  )
+}
+
+/** The track, second to the date (#305): its shape, small, and its
+ *  layout ("MSRC 1.7 CW") — the name its track page goes by — or just the
+ *  track's name without a layout. */
+function TrackLine({ event }: { event: EventConfig }) {
+  const name = layoutName(event) ?? event.track?.trim()
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {/* No padding: the track SVGs already carry their own margin
+          inside a square viewBox. */}
+      <TrackIcon trackId={event.trackId} tone="dark" size={18} padding={0} radius="rounded" />
+      {name && <span className="truncate text-xs leading-tight text-gray-500">{name}</span>}
+    </span>
   )
 }
 
