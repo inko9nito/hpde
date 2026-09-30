@@ -248,7 +248,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
 
   let body
   if (authStatus !== 'signed-in') {
-    body = <SignInPrompt reason="see your instructor evaluations" />
+    body = <SignInPrompt reason="see your instructor evaluations" privacyNote={false} />
   } else if (loading || leaving) {
     body = <EvaluationsSkeleton leaving={leaving} />
   } else if (notes.status === 'error') {
@@ -269,9 +269,6 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
       <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
         <ClipboardCheck size={20} className="mx-auto text-gray-400" aria-hidden="true" />
         <p className="mt-2 text-sm font-medium text-gray-700">No instructor evaluations yet</p>
-        <p className="mt-1 text-xs text-gray-400">
-          Add one on an event’s My notes tab, or tap a session you drove on its Schedule.
-        </p>
       </div>
     )
   } else {

@@ -1115,7 +1115,7 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   const garage = await trackSlide(page, () => page.getByRole('link', { name: /^Garage/ }).click(), 'Garage')
   expect(garage).toEqual({ fromBelow: false, fromSide: true })
   // Signed out here, so it asks to sign in.
-  await expect(page.getByText('Sign in to keep your cars and what they run on')).toBeVisible()
+  await expect(page.getByText('Sign in to manage your cars')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/more$/)
