@@ -778,8 +778,11 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   await page.goto('/#/garage')
-  await page.getByRole('button', { name: 'Add a car' }).click()
-  // A page of its own, over the Garage: Cancel and Save across its top.
+  await expect(page.getByRole('heading', { level: 1, name: 'Garage' })).toBeInViewport()
+  // A page of its own, over the Garage: Cancel and Save across its top. It
+  // has a Cancel, so it slides up from the bottom, as on iOS (#356).
+  const slide = await trackSlide(page, () => page.getByRole('button', { name: 'Add a car' }).click(), 'Add a car')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
   const add = page.getByRole('dialog', { name: 'Add a car' })
   await expect(add.getByRole('button', { name: 'Cancel' })).toBeInViewport()
   await expect(add.getByRole('button', { name: 'Save' })).toBeDisabled()
