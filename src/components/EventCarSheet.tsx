@@ -13,10 +13,8 @@ import type { EventConfig } from '../types'
  * change log. With none picked yet (or Change), the garage's cars to pick
  * from, and the way to add one (its own page, over the event).
  */
-export function EventCarSheet({ event, garage, car, driver, onPick, onAddCar, onRemove, onOpenCar, onClose }: {
+export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, onOpenCar, onClose }: {
   event: EventConfig
-  /** Another driver's name, whose car it is, for an admin (#362). */
-  driver?: string
   garage: Garage
   /** The event's car, if one's picked. */
   car?: Car
@@ -45,17 +43,15 @@ export function EventCarSheet({ event, garage, car, driver, onPick, onAddCar, on
     }
   }
 
-  const whose = driver ? `${driver}’s` : 'your'
-  const heading = picking ? `Pick ${whose} car` : `${driver ? whose : 'Your'} car`
   return (
     <Sheet
-      label={heading}
+      label={picking ? 'Pick your car' : 'Your car'}
       busy={!!busy}
       onClose={onClose}
       data-event-car-sheet
       heading={<>
         <p className="text-xs text-gray-500">{event.name}</p>
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">{heading}</h2>
+        <h2 className="mt-0.5 text-lg font-bold text-gray-900">{picking ? 'Pick your car' : 'Your car'}</h2>
       </>}
     >
       {!picking && car && (<>
@@ -119,7 +115,7 @@ export function EventCarSheet({ event, garage, car, driver, onPick, onAddCar, on
             className="flex items-center gap-2 rounded-xl border border-dashed border-gray-300 px-3 py-2.5 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <Plus size={16} aria-hidden="true" />
-            Add a car to {whose} garage
+            Add a car to your garage
           </button>
         </div>
       )}
@@ -148,7 +144,7 @@ export function EventCarSheet({ event, garage, car, driver, onPick, onAddCar, on
         )}
         <p className="flex items-center gap-1 text-[11px] text-gray-400">
           <Lock size={11} aria-hidden="true" />
-          {driver ? `Only ${driver} and admins can see their garage.` : 'Only you and admins can see your garage.'}
+          Only you and admins can see your garage.
         </p>
       </div>
     </Sheet>

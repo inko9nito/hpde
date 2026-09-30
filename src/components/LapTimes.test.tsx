@@ -1763,7 +1763,7 @@ describe('the garage (#344)', () => {
     expect(within(nav).getByRole('button', { name: /^Tire pressures/ })).toBeInTheDocument()
   })
 
-  it('shows the switched-to driver’s car and answer on the event, and picks a car from their garage (#362)', async () => {
+  it('shows the switched-to driver’s car and answer on the event, as they’d see them, and picks a car from their garage (#364)', async () => {
     roles = ['admin']
     const miata = { id: 'miata', make: 'Mazda', model: 'Miata' }
     garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
@@ -1778,16 +1778,17 @@ describe('the garage (#344)', () => {
     await switchDriver('Jason')
     // His answer, and no car yet: from his garage, not the admin's.
     expect(await screen.findByRole('button', { name: /^Drove/ })).toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: /^Add Jason’s car/ }))
-    const sheet = screen.getByRole('dialog', { name: 'Pick Jason’s car' })
+    // Just as he'd see it: only the Driver banner says it's his.
+    await userEvent.click(await screen.findByRole('button', { name: /^Add your car/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Pick your car' })
     expect(within(sheet).queryByText('The Cayman')).not.toBeInTheDocument()
     await userEvent.click(within(sheet).getByRole('button', { name: /Mazda Miata/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Car saved for Jason')
+    expect(screen.getByRole('status')).toHaveTextContent('Car saved')
     const [url] = garageCalls('PUT').at(-1)!
     expect(String(url)).toContain(`driver=${JASON}`)
     expect(String(url)).toContain(`event=${encodeURIComponent(event.id)}`)
-    expect(await screen.findByRole('button', { name: 'Jason’s car: Mazda Miata' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Your car: Mazda Miata' })).toBeInTheDocument()
 
     // Back to the admin's own.
     await switchDriver('Me')

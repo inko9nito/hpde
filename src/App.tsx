@@ -250,8 +250,6 @@ export default function App() {
   function showToast(text: string) {
     setToast({ id: Date.now(), text })
   }
-  // Says whose, for the driver an admin picked (#288, #362).
-  const forDriver = (text: string) => (driver ? `${text} for ${driverName(driver)}` : text)
   // True until the first real navigation into an event (switchEvent).
   // Landing directly on an event route — a fresh load, a reload, or the
   // empty-hash-redirects-to-today's-live-event effect below — should show
@@ -904,14 +902,14 @@ export default function App() {
           onSave: async pressures => {
             await garage.saveSetup(activeEvent.id, withPressures(eventSetup, pressures.key, pressures))
             setLapSlot(null)
-            showToast(forDriver('Tire pressures saved'))
+            showToast('Tire pressures saved')
           },
           onRemove: async key => {
             const next = withPressures(eventSetup, key, null)
             if (Object.keys(next).length) await garage.saveSetup(activeEvent.id, next)
             else await garage.removeSetup(activeEvent.id)
             setLapSlot(null)
-            showToast(forDriver('Tire pressures removed'))
+            showToast('Tire pressures removed')
           },
         } : undefined}
         onClose={() => setLapSlot(null)}
@@ -932,11 +930,10 @@ export default function App() {
         event={activeEvent}
         garage={garage}
         car={eventCar}
-        driver={driver ? driverName(driver) : undefined}
         onPick={async carId => {
           await garage.saveSetup(activeEvent.id, { ...(eventSetup?.sessions ? { sessions: eventSetup.sessions } : {}), carId })
           setCarSheetOpen(false)
-          showToast(forDriver('Car saved'))
+          showToast('Car saved')
         }}
         onAddCar={() => {
           setCarSheetOpen(false)
@@ -955,7 +952,7 @@ export default function App() {
           if (sessions) await garage.saveSetup(activeEvent.id, { sessions })
           else await garage.removeSetup(activeEvent.id)
           setCarSheetOpen(false)
-          showToast(forDriver('Car removed from event'))
+          showToast('Car removed from event')
         }}
         onClose={() => setCarSheetOpen(false)}
       />
@@ -968,7 +965,7 @@ export default function App() {
           const { eventId } = addingCarFor
           const sessions = garage.events[eventId]?.sessions
           await garage.saveSetup(eventId, { ...(sessions ? { sessions } : {}), carId: car.id })
-          showToast(forDriver('Car added'))
+          showToast('Car added')
         }}
         onClosed={() => setAddingCarFor(null)}
       />

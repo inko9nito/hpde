@@ -361,8 +361,9 @@ Private like your notes: only you and admins see it.
 - **Another driver's (admins, #362):** switched to another driver on an
   event's page, an admin sees and changes that driver's car there — the
   car row, picking or adding one, its page, and each session's tire
-  pressures — from that driver's garage. The Garage under More is always
-  the admin's own.
+  pressures — from that driver's garage, shown just as they'd see it:
+  only the Driver banner at the top says whose it is (#364). The Garage
+  under More is always the admin's own.
 - **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
   Netlify Blobs (store `garage`), one record per driver
   (`<user id>/garage`): their cars, each with its change log, and each

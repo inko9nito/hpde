@@ -47,7 +47,8 @@ interface Props {
   onEditEvaluation: () => void
   /**
    * What the driver ran here, from their garage (#344): the car, and each
-   * session's tire pressures — the picked driver's, for an admin (#362).
+   * session's tire pressures — the picked driver's, for an admin, shown
+   * just as they'd see it (#364).
    */
   garage?: {
     status: GarageStatus
@@ -83,8 +84,8 @@ export function MyLapTimes({
   const carRow = garage?.status === 'ready' && (
     <div className="mb-5">
       {garage.car
-        ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`${name ? `${name}’s` : 'Your'} car: ${carName(garage.car)}`} />
-        : <CarRow compact title={name ? `Add ${name}’s car` : 'Add your car'} subtitle={name ? 'from their garage' : 'from your garage'} onClick={garage.onOpenCar} dashed />}
+        ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
+        : <CarRow compact title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
     </div>
   )
 
