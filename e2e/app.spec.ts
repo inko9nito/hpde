@@ -544,6 +544,49 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+test('a finger scrolling the page over the lap chart leaves its readout shut; a tap or a sideways scrub opens it (#332)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  const sessions = [
+    { key: '2026-03-07 08:00 red', date: '2026-03-07', time: '08:00', group: 'red', sessionNumber: 1, laps: [{ ms: 106_000 }, { ms: 104_000 }] },
+    { key: '2026-03-07 08:30 blue', date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1, laps: [{ ms: 103_000 }, { ms: 105_000 }] },
+  ]
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions } : { events: [] },
+  }))
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  const chart = page.getByRole('group', { name: /^Best and average lap in each session/ })
+  const readout = chart.getByRole('status')
+  await chart.scrollIntoViewIfNeeded()
+  const box = (await chart.boundingBox())!
+  // What a browser sends for a finger at (x, y) from the chart's corner.
+  const touch = (type: string, x: number, y: number) =>
+    chart.dispatchEvent(type, { pointerType: 'touch', pointerId: 7, isPrimary: true, clientX: box.x + x, clientY: box.y + y })
+  const left = 50
+  const right = box.width - 50
+  const middle = box.height / 2
+
+  // A thumb comes down on the chart and scrolls the page: the browser takes
+  // the gesture over and cancels the pointer.
+  await touch('pointerdown', right, middle)
+  await touch('pointermove', right, middle - 4)
+  await touch('pointercancel', right, middle - 4)
+  await expect(readout).toBeEmpty()
+
+  // A tap opens the session under it.
+  await touch('pointerdown', right, middle)
+  await touch('pointerup', right, middle)
+  await expect(readout).toContainText('8:30 AM · Blue')
+
+  // Scrubbing sideways moves it along.
+  await touch('pointerdown', right, middle)
+  await touch('pointermove', left, middle + 3)
+  await expect(readout).toContainText('8:00 AM · Red')
+  await touch('pointerup', left, middle + 3)
+  await expect(readout).toContainText('8:00 AM · Red')
+})
+
 test('an admin logs another driver’s lap times, picked in the sheet (#288)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)

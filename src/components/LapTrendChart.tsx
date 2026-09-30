@@ -67,6 +67,8 @@ const RIGHT = 50
 const SPEED_AXIS = 34
 // Keeps the first and last points off the plot's edges.
 const INSET = 10
+// How far a finger can move, in px, and still be a tap (#332).
+const TAP_SLOP = 10
 const TICK_STEPS = [500, 1000, 2000, 5000, 10_000, 15_000, 30_000, 60_000]
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -213,6 +215,33 @@ export function LapTrendChart({ points, label, noun }: {
     setActive(nearest)
   }
 
+  // A mouse shows the readout as it moves. A finger only once it taps or
+  // scrubs sideways (#332): one that comes down on the chart and scrolls
+  // the page (the browser takes it over, and cancels it) leaves the chart
+  // alone, so a thumb scrolling past doesn't pop it open.
+  const touch = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null)
+
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse') pick(e)
+    else touch.current = { x: e.clientX, y: e.clientY, scrubbing: false }
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse') return pick(e)
+    const t = touch.current
+    if (!t) return
+    const dx = Math.abs(e.clientX - t.x)
+    if (!t.scrubbing && dx > TAP_SLOP && dx > Math.abs(e.clientY - t.y)) t.scrubbing = true
+    if (t.scrubbing) pick(e)
+  }
+
+  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
+    const t = touch.current
+    touch.current = null
+    if (e.pointerType === 'mouse' || !t || t.scrubbing) return
+    if (Math.abs(e.clientX - t.x) <= TAP_SLOP && Math.abs(e.clientY - t.y) <= TAP_SLOP) pick(e)
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault()
@@ -250,8 +279,10 @@ export function LapTrendChart({ points, label, noun }: {
         tabIndex={0}
         role="group"
         aria-label={`${label}${hasSpeed ? ', with top speed in mph on the right' : ''}: ${n} ${n === 1 ? noun[0] : noun[1]}. Left and right arrows step through them.`}
-        onPointerMove={pick}
-        onPointerDown={pick}
+        onPointerMove={onPointerMove}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => { touch.current = null }}
         onPointerLeave={e => { if (e.pointerType === 'mouse') setActive(null) }}
         onKeyDown={onKeyDown}
         onFocus={() => setActive(a => a ?? n - 1)}
