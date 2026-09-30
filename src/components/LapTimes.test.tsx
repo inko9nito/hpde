@@ -818,12 +818,21 @@ describe('instructor evaluation (#340)', () => {
 
     fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
     fireEvent.change(within(sheet).getByLabelText('Car'), { target: { value: 'Porsche Panamera' } })
-    // Recommendations are the app's run group pills; never Instructors.
-    const same = within(sheet).getByRole('radiogroup', { name: 'Same track & direction' })
-    expect(within(same).getAllByRole('radio').map(r => r.textContent)).toEqual(['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Pink', 'Purple'])
-    await userEvent.click(within(same).getByRole('radio', { name: 'Blue' }))
-    expect(within(same).getByRole('radio', { name: 'Blue' })).toHaveAttribute('aria-checked', 'true')
-    await userEvent.click(within(within(sheet).getByRole('radiogroup', { name: 'New track' })).getByRole('radio', { name: 'Green' }))
+    // Recommendations are picked from a menu of the app's run group
+    // badges, as the Schedule tab filters them; never Instructors.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Same track & direction: none' }))
+    const menu = within(sheet).getByRole('listbox', { name: 'Same track & direction' })
+    expect(within(menu).getAllByRole('option').map(o => o.textContent)).toEqual(['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Pink', 'Purple'])
+    await userEvent.click(within(menu).getByRole('option', { name: 'Blue' }))
+    expect(within(sheet).queryByRole('listbox')).not.toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Same track & direction: Blue' })).toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'New track: none' }))
+    await userEvent.click(within(within(sheet).getByRole('listbox', { name: 'New track' })).getByRole('option', { name: 'Green' }))
+    // Escape closes a menu, not the sheet.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'New direction: none' }))
+    await userEvent.keyboard('{Escape}')
+    expect(within(sheet).queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Instructor evaluation' })).toBeInTheDocument()
     // Scores: digits only, at most 100.
     fireEvent.change(within(sheet).getByLabelText('Calls out all flags'), { target: { value: '65' } })
     fireEvent.change(within(sheet).getByLabelText('Looks ahead'), { target: { value: '8o0' } })
@@ -852,8 +861,8 @@ describe('instructor evaluation (#340)', () => {
     expect(card).toHaveTextContent('Same track & directionBlue')
     expect(card).not.toHaveTextContent('New direction')
     expect(within(card).getByRole('list', { name: 'Core skills' })).toHaveTextContent('Calls out all flags65%Looks ahead80%Consistency100%')
-    expect(card).toHaveTextContent('Aggressiveness = skill: Yes')
-    expect(card).toHaveTextContent('Car aids over activated: 25%')
+    expect(card).toHaveTextContent('Aggressiveness = skillYes')
+    expect(card).toHaveTextContent('Car aids over activated25%')
     expect(card).toHaveTextContent('Instructor notesVery smooth.')
     // It counts on the tab.
     expect(screen.getByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()

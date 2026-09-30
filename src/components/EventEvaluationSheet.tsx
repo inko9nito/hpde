@@ -1,7 +1,9 @@
 import { useId, useState } from 'react'
-import { Check, Lock } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Lock } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { GroupBadge } from './GroupBadge'
+import { RunGroupSelect } from './RunGroupSelect'
 import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
 import { MAX_NAME, MAX_NOTES, NEXT_GROUPS, TDE_SKILLS, cleanEventEvaluation } from '../utils/evaluation'
@@ -56,6 +58,18 @@ function pctInput(t: string): string {
 
 const label = 'text-xs font-medium text-gray-700'
 const sectionHead = 'mt-6 text-sm font-semibold text-gray-900'
+const pctClass = 'w-14 rounded-lg border border-gray-300 px-2 py-1 text-right text-base font-semibold tabular-nums text-gray-900 placeholder:font-normal placeholder:text-gray-300 focus:border-gray-900 focus:outline-none sm:text-sm'
+
+/** A line item: what it is, and its answer on the right — as on the report card. */
+function Row({ label: text, id, htmlFor, children }: { label: string; id?: string; htmlFor?: string; children: ReactNode }) {
+  const Label = htmlFor ? 'label' : 'span'
+  return (
+    <div className="flex min-h-12 items-center justify-between gap-3 border-b border-gray-100 py-2 last:border-b-0">
+      <Label id={id} htmlFor={htmlFor} className="text-sm text-gray-900">{text}</Label>
+      {children}
+    </div>
+  )
+}
 
 /**
  * The Drivers Edge's report card, filled in from the paper one (#340): who
@@ -129,43 +143,30 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         className={inputClass}
       />
 
-      <div className="mt-4 flex min-h-11 items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2">
-        <span className="text-sm text-gray-700">{driver ? `${driverName(driver)} drove in` : 'You drove in'}</span>
-        {runGroup
-          ? <GroupBadge group={runGroup} size="sm" />
-          : <span className="text-right text-xs text-gray-500">Say which with “Did you drive?” at the top</span>}
+      <div className="mt-3">
+        <Row label={driver ? `${driverName(driver)} drove in` : 'You drove in'}>
+          {runGroup
+            ? <GroupBadge group={runGroup} size="sm" />
+            : <span className="text-right text-xs text-gray-500">Answer “Did you drive?” at the top</span>}
+        </Row>
       </div>
 
       <h3 className={sectionHead}>Recommended run group</h3>
-      {NEXT_GROUPS.map(g => {
-        const picked = draft.next[g.id]
-        return (
-          <div key={g.id} className="mt-3">
-            <p id={`${id}-next-${g.id}`} className={label}>{g.label}</p>
-            {/* Colored like the run group picker in "Did you drive?" (#235). */}
-            <div role="radiogroup" aria-labelledby={`${id}-next-${g.id}`} className="mt-1.5 flex flex-wrap gap-1.5">
-              {groups.map(group => {
-                const checked = group.label.toLowerCase() === picked.toLowerCase()
-                return (
-                  <button
-                    key={group.id}
-                    role="radio"
-                    aria-checked={checked}
-                    // Tapped again, it's unpicked: not every card fills in all three.
-                    onClick={() => set({ next: { ...draft.next, [g.id]: checked ? '' : group.label } })}
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-sm font-semibold transition-opacity ${group.bgClass} ${group.textClass} ${
-                      checked ? 'ring-2 ring-gray-900 ring-offset-1' : picked ? 'opacity-40 hover:opacity-70' : 'hover:opacity-80'
-                    }`}
-                  >
-                    {checked && <Check size={12} strokeWidth={3} aria-hidden="true" />}
-                    {group.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
+      <div className="mt-1">
+        {NEXT_GROUPS.map(g => {
+          const picked = groups.find(group => group.label.toLowerCase() === draft.next[g.id].toLowerCase())
+          return (
+            <Row key={g.id} label={g.label}>
+              <RunGroupSelect
+                groups={groups}
+                value={picked?.id ?? null}
+                onChange={groupId => set({ next: { ...draft.next, [g.id]: groups.find(group => group.id === groupId)?.label ?? '' } })}
+                label={g.label}
+              />
+            </Row>
+          )
+        })}
+      </div>
 
       <h3 className={sectionHead}>Core skills</h3>
       <ul className="mt-2 flex flex-col gap-3">
@@ -182,7 +183,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
                     onChange={e => set({ skills: { ...draft.skills, [s.id]: pctInput(e.target.value) } })}
                     inputMode="numeric"
                     placeholder="—"
-                    className="w-14 rounded-lg border border-gray-300 px-2 py-1 text-right text-base font-semibold tabular-nums text-gray-900 placeholder:font-normal placeholder:text-gray-300 focus:border-gray-900 focus:outline-none sm:text-sm"
+                    className={pctClass}
                   />
                   %
                 </span>
@@ -195,34 +196,35 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, driver
         })}
       </ul>
 
-      <div className="mt-5 flex items-center justify-between gap-3">
-        <span id={`${id}-aggr`} className="text-sm text-gray-900">Aggressiveness = skill</span>
-        <div className="flex shrink-0 rounded-lg bg-gray-100 p-0.5" role="group" aria-labelledby={`${id}-aggr`}>
-          {([true, false] as const).map(v => (
-            <button
-              key={String(v)}
-              onClick={() => set({ aggressivenessIsSkill: draft.aggressivenessIsSkill === v ? null : v })}
-              aria-pressed={draft.aggressivenessIsSkill === v}
-              className={`rounded-md px-3.5 py-1 text-sm font-medium ${draft.aggressivenessIsSkill === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-            >
-              {v ? 'Yes' : 'No'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <label htmlFor={`${id}-aids`} className="text-sm text-gray-900">Car aids over activated</label>
-        <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
-          <input
-            id={`${id}-aids`}
-            value={draft.carAidsPct}
-            onChange={e => set({ carAidsPct: pctInput(e.target.value) })}
-            inputMode="numeric"
-            placeholder="—"
-            className="w-14 rounded-lg border border-gray-300 px-2 py-1 text-right text-base font-semibold tabular-nums text-gray-900 placeholder:font-normal placeholder:text-gray-300 focus:border-gray-900 focus:outline-none sm:text-sm"
-          />
-          %
-        </span>
+      <div className="mt-3">
+        <Row label="Aggressiveness = skill" id={`${id}-aggr`}>
+          <div className="flex shrink-0 rounded-lg bg-gray-100 p-0.5" role="group" aria-labelledby={`${id}-aggr`}>
+            {([true, false] as const).map(v => (
+              <button
+                key={String(v)}
+                // Tapped again, it's unanswered: not every card says.
+                onClick={() => set({ aggressivenessIsSkill: draft.aggressivenessIsSkill === v ? null : v })}
+                aria-pressed={draft.aggressivenessIsSkill === v}
+                className={`rounded-md px-3.5 py-1 text-sm font-medium ${draft.aggressivenessIsSkill === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                {v ? 'Yes' : 'No'}
+              </button>
+            ))}
+          </div>
+        </Row>
+        <Row label="Car aids over activated" htmlFor={`${id}-aids`}>
+          <span className="flex shrink-0 items-center gap-1 text-sm text-gray-500">
+            <input
+              id={`${id}-aids`}
+              value={draft.carAidsPct}
+              onChange={e => set({ carAidsPct: pctInput(e.target.value) })}
+              inputMode="numeric"
+              placeholder="—"
+              className={pctClass}
+            />
+            %
+          </span>
+        </Row>
       </div>
 
       <label htmlFor={`${id}-notes`} className={`mt-6 ${label}`}>Instructor notes</label>

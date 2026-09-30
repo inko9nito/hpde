@@ -118,18 +118,14 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
       )}
 
       {(aggressivenessIsSkill !== undefined || carAidsPct !== undefined) && (
-        <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-700">
+        <dl className="mt-3">
           {aggressivenessIsSkill !== undefined && (
-            <span className="rounded-lg bg-gray-50 px-3 py-1.5">
-              Aggressiveness = skill: <span className="font-semibold text-gray-900">{aggressivenessIsSkill ? 'Yes' : 'No'}</span>
-            </span>
+            <Row label="Aggressiveness = skill">{aggressivenessIsSkill ? 'Yes' : 'No'}</Row>
           )}
           {carAidsPct !== undefined && (
-            <span className="rounded-lg bg-gray-50 px-3 py-1.5">
-              Car aids over activated: <span className="font-semibold tabular-nums text-gray-900">{carAidsPct}%</span>
-            </span>
+            <Row label="Car aids over activated"><span className="tabular-nums">{carAidsPct}%</span></Row>
           )}
-        </div>
+        </dl>
       )}
 
       {notes && (

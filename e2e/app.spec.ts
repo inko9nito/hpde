@@ -691,14 +691,14 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   const card = page.getByRole('dialog', { name: 'Instructor evaluation' })
   await expect(card).toContainText('You drove inBlue')
   await card.getByLabel('Instructor', { exact: true }).fill('John Harms')
-  // The pills wrap inside the sheet, on the narrowest phone too.
-  const same = card.getByRole('radiogroup', { name: 'Same track & direction' })
-  await same.getByRole('radio', { name: 'Green' }).click()
-  const sheetBox = (await card.boundingBox())!
-  for (const pill of await same.getByRole('radio').all()) {
-    const box = (await pill.boundingBox())!
-    expect(box.x + box.width).toBeLessThanOrEqual(sheetBox.x + sheetBox.width)
-  }
+  // Picked from a menu of run group badges, which stays on screen.
+  await card.getByRole('button', { name: 'Same track & direction: none' }).click()
+  const menu = card.getByRole('listbox', { name: 'Same track & direction' })
+  const menuBox = (await menu.boundingBox())!
+  expect(menuBox.x).toBeGreaterThanOrEqual(0)
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await menu.getByRole('option', { name: 'Green' }).click()
+  await expect(card.getByRole('button', { name: 'Same track & direction: Green' })).toBeVisible()
   await card.getByLabel('Calls out all flags').fill('65')
   await card.getByLabel('Instructor notes').fill('Very smooth; got faster as the day went on.')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)

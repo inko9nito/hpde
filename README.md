@@ -263,9 +263,10 @@ Private like your lap times: only you and admins see them.
   (organizer *The Drivers Edge*, or a name starting *TDE*), *My notes*
   has a whole-event **Instructor evaluation**, filled in from TDE's paper
   card: the instructor and your car, the run group they recommend for
-  the same track and direction, a new direction and a new track (the
-  app's run group pills), a score for each core skill, *Aggressiveness =
-  skill*, *Car aids over activated* and their notes. It's in black, not
+  the same track and direction, a new direction and a new track (each
+  picked from a menu of run group badges, like the Schedule tab's
+  filter), a score for each core skill, *Aggressiveness = skill*, *Car
+  aids over activated* and their notes. It's in black, not
   TDE's red. The group you drove in isn't picked here: it's your answer
   to *Did you drive?* (or your laps' group), shown to confirm.
 - **Where they live:** `netlify/functions/notes.mts` (`/api/notes`) in
