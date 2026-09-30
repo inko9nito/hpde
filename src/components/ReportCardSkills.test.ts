@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scoredCards, skillHistory, skillMoves, wheelScale } from './ReportCardSkills'
+import { scoredCards, skillHistory, skillMoves } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 
 const card = (key: string, date: string, skills: Record<string, number>, carAidsPct?: number): ReportCardPoint =>
@@ -36,11 +36,5 @@ describe('report card skills (#345)', () => {
   it('has nothing improved with one card, or when nothing went up', () => {
     expect(skillMoves([card('a', '2025-07-19', { flags: 65 })]).improved).toEqual([])
     expect(skillMoves([card('a', '2025-07-19', { flags: 65 }), card('b', '2025-09-13', { flags: 60 })]).improved).toEqual([])
-  })
-
-  it('puts 100% at the rim and 50% at the middle, or lower in tens for a lower score', () => {
-    expect(wheelScale([65, 95])).toEqual({ min: 50, max: 100 })
-    expect(wheelScale([42, 90])).toEqual({ min: 40, max: 100 })
-    expect(wheelScale([0])).toEqual({ min: 0, max: 100 })
   })
 })

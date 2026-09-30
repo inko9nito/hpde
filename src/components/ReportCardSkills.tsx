@@ -81,14 +81,10 @@ export function skillMoves(cards: ReportCardPoint[], count = 3): { improved: Ski
   return { improved, needsWork }
 }
 
-/**
- * The wheel's scale: 100% at the rim, and at the middle 50%, or lower in
- * tens to take in a lower score.
- */
-export function wheelScale(scores: number[]): { min: number; max: number } {
-  const lowest = Math.min(50, ...scores)
-  return { min: Math.max(0, Math.floor(lowest / 10) * 10), max: 100 }
-}
+// The wheel's scale: 0% at the middle, 100% at the rim, a ring every 20%.
+// A middle above zero put a 50% score on the center point, where it read as
+// no score at all.
+const RINGS = [20, 40, 60, 80, 100]
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const day = (iso: string) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`
@@ -209,17 +205,15 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
   const kept = cards.filter(c => picks?.has(c.key)).map(c => c.key)
   const shown: ReadonlySet<string> = new Set(kept.length ? kept : [cards[0].key, cards[n - 1].key])
 
-  const { min, max } = wheelScale(cards.flatMap(c => skills.map(s => scoreOf(c, s.id)).filter((v): v is number => v !== undefined)))
   // As big as leaves room for the names across the widest spokes.
   const R = Math.max(60, Math.min(130, width / 2 - LABEL_W - LABEL_GAP))
   const height = 2 * (R + LABEL_GAP + 18)
   const [cx, cy] = [width / 2, height / 2]
   const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / skills.length
   const at = (i: number, score: number): [number, number] => {
-    const r = ((Math.max(min, score) - min) / (max - min)) * R
+    const r = (Math.max(0, Math.min(100, score)) / 100) * R
     return [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))]
   }
-  const rings = Array.from({ length: (max - min) / 10 }, (_, k) => min + (k + 1) * 10)
   const toggle = (key: string) => {
     const next = new Set(shown)
     if (next.has(key)) {
@@ -233,7 +227,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
 
   return (
     <section aria-label="Skills wheel" className={CARD}>
-      <CardHead title="Skills wheel" meta={`${min}% at the middle, 100% at the rim`} />
+      <CardHead title="Skills wheel" meta="0% at the middle, 100% at the rim" />
       {n > 1 && (
         <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Report cards shown">
           {cards.map((c, i) => {
@@ -258,11 +252,11 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
       )}
       <div ref={ref} className="relative" style={{ height }}>
         <svg width={width} height={height} className="block" aria-hidden="true">
-          {rings.map(v => (
+          {RINGS.map(v => (
             <polygon key={v} points={skills.map((_, i) => at(i, v).join(',')).join(' ')} fill="none" stroke={RING} strokeWidth={1} />
           ))}
           {skills.map((s, i) => {
-            const [x2, y2] = at(i, max)
+            const [x2, y2] = at(i, 100)
             return <line key={s.id} x1={cx} y1={cy} x2={x2} y2={y2} stroke={i === pickedIndex ? '#9ca3af' : RING} strokeWidth={1} />
           })}
           {cards.map((c, k) => {

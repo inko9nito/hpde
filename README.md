@@ -277,17 +277,20 @@ Private like your lap times: only you and admins see them.
   (`#/evaluations`). At the top, your TDE report cards summed up: the
   three skills **most improved** since your first card, and the three that
   **need work** most (the lowest on your latest). Then the **skills
-  wheel**: a spoke for each core skill, 100% at the rim, and each card as
+  wheel**: a spoke for each core skill, 0% at the middle and 100% at the
+  rim (rings every 20%), and each card as
   a shape on it, the latest solid black and the first dashed gray (tap the
   event chips to show or hide any card). Tap a skill's name for a list of
   its score at each event, newest first, with the change from the card
   before. *Car aids over activated* isn't on either (lower is better
-  there); it's on each event's card. Under those, **Feedback by event**:
-  every event you have an evaluation at, TDE or not, newest first, with
-  what the instructors said right on its card — about the whole event
-  (on a TDE event, the report card's notes, and how many skills it
-  scored) and each session, with who said it. Tap an event for its
-  *My notes*; Back returns to the list.
+  there); it's on each event's card. Under those, **Events**: every event
+  you have an evaluation at, TDE or not, newest first, with what the
+  instructors said right on its card — about the whole event (on a TDE
+  event, the report card's notes, and how many skills it scored) and each
+  session, with who said it. Events you went to (you said you drove, or
+  have laps there) with none yet are in the list too, with **Add
+  instructor evaluation**, which opens the event's *My notes* with the
+  form up. Tap an event for its *My notes*; Back returns to the list.
 - **Where they live:** `netlify/functions/notes.mts` (`/api/notes`; with
   no `?event=` it returns every event's, for Instructor evaluations) in
   Netlify Blobs (store `notes`), one record per driver per event, next to

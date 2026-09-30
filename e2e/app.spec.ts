@@ -910,6 +910,8 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const oct = tde('oct', 'TDE at Eagles Canyon Raceway', '2025-10-04')
   await stubEvents(page, [...TEST_EVENTS, jul, sep, oct])
   await signInAsAdmin(page)
+  const bravo = TEST_EVENTS.find(e => e.name === 'Bravo HPDE')!
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [bravo.id]: { status: 'going' } } } }))
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
@@ -967,20 +969,27 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // The events, newest first; one opens on My notes, and Back comes back.
-  const feedback = page.getByRole('region', { name: 'Feedback by event' })
+  const feedback = page.getByRole('region', { name: 'Events' })
   const events = feedback.getByRole('link')
-  await expect(events).toHaveText([/Alpha Track Day/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  // Bravo has no evaluation, but they drove it: it's there to add one to.
+  await expect(events).toHaveText([/Alpha Track Day/, /Bravo HPDE/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  await expect(feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ })).toBeVisible()
   const alphaCard = feedback.getByRole('article', { name: 'Alpha Track Day' })
   await expect(alphaCard.getByRole('listitem')).toHaveText([
     /Whole event.*Sam Ortiz.*Carry more speed/,
     /Session 1 · 8:30 AM.*Sam Ortiz.*Unwind the wheel sooner/,
   ])
-  await events.nth(1).click()
+  await events.nth(2).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${oct.id}$`))
   await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
   await page.getByRole('button', { name: 'Back' }).last().click()
   await expect(page).toHaveURL(/#\/evaluations$/)
   await expect(wheel).toBeVisible()
+
+  // Adding one to Bravo opens its My notes with the form up.
+  await feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${bravo.id}$`))
+  await expect(page.getByRole('dialog', { name: 'Instructor evaluation' })).toBeVisible()
 })
 
 test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {

@@ -1304,10 +1304,9 @@ describe('Instructor evaluations across events (#345)', () => {
   const tdeOct: EventConfig = { ...sameLayout, id: '2025-10-04_tde', name: 'TDE at ECR', organizer: 'The Drivers Edge', days: [{ ...event.days[0], date: '2025-10-04' }] }
   const openAt = (hash: string) => {
     window.location.hash = hash
-    render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
   }
   const page = async () => (await screen.findByRole('heading', { level: 1, name: 'Instructor evaluations' })).closest<HTMLElement>('.fixed')!
-  const score = (el: HTMLElement, id: string) => el.querySelector(`[data-score="${id}"]`)!.getAttribute('aria-label')
 
   beforeEach(() => {
     moreEvents = [tdeSep, tdeOct]
@@ -1320,6 +1319,9 @@ describe('Instructor evaluations across events (#345)', () => {
         sessions: [{ key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, evaluation: { feedback: 'Eyes up.', instructor: 'Jo' } }],
       },
     }
+    // Events they went to with nothing yet: one they said they drove, one they've laps at. Not one they didn't go to.
+    rsvps = { [sameLayout.id]: { status: 'going' }, [tdeSep.id]: { status: 'not-going' } }
+    summary = [{ eventId: otherWay.id, best: 90_000, sessions: 1 }]
   })
 
   it('sums the report cards up: most improved since the first, and what needs work on the latest', async () => {
@@ -1366,19 +1368,24 @@ describe('Instructor evaluations across events (#345)', () => {
     await userEvent.click(await screen.findByRole('link', { name: /Instructor evaluations/ }))
     expect(window.location.hash).toBe('#/evaluations')
     const el = await page()
-    const section = await within(el).findByRole('region', { name: 'Feedback by event' })
+    const section = await within(el).findByRole('region', { name: 'Events' })
+    await waitFor(() => expect(within(section).getAllByRole('article')).toHaveLength(5))
     const cards = within(section).getAllByRole('article')
-    expect(cards.map(c => c.getAttribute('aria-label'))).toEqual(['Lap Day', 'TDE at ECR', 'TDE at MSRC'])
+    // With the events they went to that have none yet, newest first.
+    expect(cards.map(c => c.getAttribute('aria-label'))).toEqual(['Lap Day', 'Earlier', 'CCW', 'TDE at ECR', 'TDE at MSRC'])
+    expect(within(cards[1]).getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
+    expect(within(cards[2]).getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
+    expect(within(cards[0]).queryByRole('button', { name: /^Add instructor evaluation/ })).not.toBeInTheDocument()
     const feedback = (card: HTMLElement) => within(within(card).getByRole('list', { name: 'Feedback' })).getAllByRole('listitem').map(li => li.textContent)
     // The whole event's, then each session's, each with who said it.
     expect(feedback(cards[0])).toEqual([
       'Whole event· JoBrake later into turn 1.',
       'Session 2 · 11:45 AM· JoEyes up.',
     ])
-    expect(feedback(cards[1])).toEqual(['Report card3 skills scored· Amy LeeSmoother on the brakes.'])
-    expect(feedback(cards[2])).toEqual(['Report card2 skills scored· John Harms'])
+    expect(feedback(cards[3])).toEqual(['Report card3 skills scored· Amy LeeSmoother on the brakes.'])
+    expect(feedback(cards[4])).toEqual(['Report card2 skills scored· John Harms'])
 
-    await userEvent.click(within(cards[1]).getByRole('link'))
+    await userEvent.click(within(cards[3]).getByRole('link'))
     expect(window.location.hash).toBe(`#/event/${tdeOct.id}`)
     expect(await screen.findByRole('tab', { name: /My notes/, selected: true })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('Amy Lee')
@@ -1387,8 +1394,30 @@ describe('Instructor evaluations across events (#345)', () => {
     expect(window.location.hash).toBe('#/evaluations')
   })
 
+  it('adds an evaluation to an event they went to: its My notes, with the form open', async () => {
+    openAt('#/evaluations')
+    const el = await page()
+    const earlier = await within(el).findByRole('article', { name: 'Earlier' })
+    await userEvent.click(within(earlier).getByRole('button', { name: /^Add instructor evaluation/ }))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: /My notes/, selected: true })).toBeInTheDocument()
+    const form = await screen.findByRole('dialog', { name: 'Instructor evaluation' })
+    await userEvent.type(within(form).getByLabelText('Instructor', { exact: true }), 'Sam')
+    await userEvent.type(within(form).getByLabelText('Instructor notes'), 'Look further ahead.')
+    await userEvent.click(within(form).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(notesByEvent[sameLayout.id]?.evaluation).toMatchObject({ instructor: 'Sam', notes: 'Look further ahead.' }))
+
+    // Back on the page, it has feedback now.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Back' }).at(-1)!)
+    expect(window.location.hash).toBe('#/evaluations')
+    const card = await within(el).findByRole('article', { name: 'Earlier' })
+    await waitFor(() => expect(within(card).getByRole('list', { name: 'Feedback' })).toHaveTextContent('Look further ahead.'))
+  })
+
   it('says how to add one when there are none, with no chart', async () => {
     notesByEvent = {}
+    rsvps = {}
+    summary = []
     openAt('#/evaluations')
     const el = await page()
     expect(await within(el).findByText('No instructor evaluations yet')).toBeInTheDocument()

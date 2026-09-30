@@ -491,6 +491,10 @@ export default function App() {
             active={morePage !== null}
             onBack={backToTab}
             onOpenEvent={event => openEventNotes(event)}
+            onAddEvaluation={event => {
+              openEventNotes(event)
+              setEvaluationOpen(true)
+            }}
           />
           </PullToRefresh>
         ) : (
