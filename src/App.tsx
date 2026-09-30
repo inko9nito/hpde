@@ -79,21 +79,39 @@ function defaultDay(event: EventConfig): DaySchedule {
   return findTodayDay(event) ?? event.days[0]
 }
 
+/**
+ * The page's hash, and whether the browser already animated the move to
+ * it (#355): an iOS swipe back or forward slides the pages across itself,
+ * before telling the page — which mustn't then slide them again.
+ */
 function useHashRoute() {
-  const [hash, setHashState] = useState(() => window.location.hash)
+  const [route, setRoute] = useState(() => ({ hash: window.location.hash, swiped: false }))
   useEffect(() => {
+    // A history move fires popstate, then hashchange. Safari holds what's
+    // on screen until its swipe has finished, then shows the page as it
+    // is by then: slid in or out on its own, the page would show up
+    // partway across and finish the slide a second time.
+    let swiped = false
+    const onPopState = (e: PopStateEvent) => {
+      swiped = e.hasUAVisualTransition === true
+    }
     const onHashChange = () => {
-      setHashState(window.location.hash)
+      setRoute({ hash: window.location.hash, swiped })
+      swiped = false
       window.scrollTo(0, 0)
     }
+    window.addEventListener('popstate', onPopState)
     window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('hashchange', onHashChange)
+    }
   }, [])
   function setHash(next: string) {
     if (window.location.hash === next) return
     window.location.hash = next
   }
-  return [hash, setHash] as const
+  return [route.hash, setHash, route.swiped] as const
 }
 
 const EVENT_HASH_PREFIX = '#/event/'
@@ -210,7 +228,7 @@ function DriverScope({ garage, rsvps, children }: { garage: GarageValue; rsvps: 
 }
 
 export default function App() {
-  const [hash, setHash] = useHashRoute()
+  const [hash, setHash, swiped] = useHashRoute()
   const { status: authStatus, user } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
   const ownRsvps = useRsvps()
@@ -571,6 +589,7 @@ export default function App() {
         onExited={() => setLastMorePage(null)}
         scrollRef={moreScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
         // Gray to the top, as a tab is (#345).
         whiteHeader={false}
       >
@@ -604,6 +623,7 @@ export default function App() {
       onEnteredChange={setPushEntered}
       scrollRef={pushScrollRef}
       skipEnterAnimation={skipPushEnterAnimationRef.current}
+      instant={swiped}
     >
     <PullToRefresh disabled={!isOnEventRoute || !!shownOverlay} scrollContainerRef={pushScrollRef}>
     <div className="min-h-screen bg-gray-50" style={routeMissing ? undefined : { minHeight: EVENT_PAGE_MIN_HEIGHT }}>
@@ -768,6 +788,7 @@ export default function App() {
         onExited={() => setLastCarId(null)}
         onEnteredChange={setCarEntered}
         skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
       >
         <CarPage
           carId={shownCarId}
@@ -802,6 +823,7 @@ export default function App() {
         onEnteredChange={setTrackEntered}
         scrollRef={trackScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
       >
         <PullToRefresh disabled={trackSlug === null || !!shownOverlay} scrollContainerRef={trackScrollRef}>
         <TrackLapsPage
@@ -828,6 +850,7 @@ export default function App() {
         onExited={() => setLastOverlay(null)}
         onEnteredChange={setOverlayEntered}
         skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
         whiteHeader={false}
         from="bottom"
       >

@@ -46,6 +46,52 @@ describe('PushPage entered state (#245)', () => {
   })
 })
 
+describe('PushPage after a swipe the browser animated (#355)', () => {
+  it('closes in place, gone at once rather than sliding out again', async () => {
+    const onExited = vi.fn()
+    const onEnteredChange = vi.fn()
+    const { container, rerender } = render(<PushPage open onExited={onExited} onEnteredChange={onEnteredChange}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    await act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+    slideEnd(page)
+    expect(onEnteredChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<PushPage open={false} instant onExited={onExited} onEnteredChange={onEnteredChange}><div /></PushPage>)
+    expect(page.style.transform).toBe('translateX(100%)')
+    expect(page.style.transition).toBe('none')
+    expect(onEnteredChange).toHaveBeenLastCalledWith(false)
+    expect(onExited).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens in place, rather than sliding in after the browser has', () => {
+    const onEnteredChange = vi.fn()
+    const { container } = render(<PushPage open instant onEnteredChange={onEnteredChange}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    expect(page.style.transform).toBe('translateX(0)')
+    expect(page.style.transition).toBe('none')
+    expect(onEnteredChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('reopens in place too, when swiped forward to while still mounted', async () => {
+    const { container, rerender } = render(<PushPage open={false}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    rerender(<PushPage open instant><div /></PushPage>)
+    expect(page.style.transform).toBe('translateX(0)')
+  })
+
+  it('still slides for any other move', async () => {
+    const onExited = vi.fn()
+    const { container, rerender } = render(<PushPage open instant onExited={onExited}><div /></PushPage>)
+    const page = container.firstElementChild as HTMLElement
+    rerender(<PushPage open={false} onExited={onExited}><div /></PushPage>)
+    expect(page.style.transform).toBe('translateX(100%)')
+    expect(page.style.transition).toContain('transform')
+    expect(onExited).not.toHaveBeenCalled()
+    slideEnd(page)
+    expect(onExited).toHaveBeenCalled()
+  })
+})
+
 describe('PushPage direction (#278)', () => {
   it('pushes in from the right by default', async () => {
     const { container, rerender } = render(<PushPage open><div /></PushPage>)
