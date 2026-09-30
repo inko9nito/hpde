@@ -236,7 +236,10 @@ Only they and admins can see them.
   - The sample is one real driver's laps. The first time that driver's
     laps are used (by them, or an admin who picks them), they're filled
     into their own account too, once (#310). Sessions they already had
-    are kept as they were. The driver is matched by a SHA-256 of their
+    are kept as they were, and then, once, get the sample's speeds on
+    their laps (#322): each lap takes the speeds of the sample's lap in
+    that session with the same time (within a second); nothing else
+    changes. The driver is matched by a SHA-256 of their
     sign-in email (`SAMPLE_DRIVER_EMAIL_SHA256`), so the address isn't in
     the repo.
 

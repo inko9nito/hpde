@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
-import handler, { TEST_SEED_KEY, isSampleDriver } from '../functions/laps.mts'
+import handler, { TEST_SEED_KEY, isSampleDriver, withSheetSpeeds } from '../functions/laps.mts'
 import { fakeBlobs } from './fakeBlobs'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount'
 import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps'
@@ -377,12 +377,49 @@ describe('laps function (#210)', () => {
     })
 
     it('keeps a session they already have as it is', async () => {
-      const mine = { key: '2026-09-13 09:30 orange', date: '2026-09-13', time: '09:30', group: 'orange', sessionNumber: 1, laps: [{ ms: 90_000 }] }
+      // A lap no lap in the sheet is near, so it gets no speeds either (#322).
+      const mine = { key: '2026-09-13 09:30 orange', date: '2026-09-13', time: '09:30', group: 'orange', sessionNumber: 1, laps: [{ ms: 60_000 }] }
       store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [mine.key]: mine } })
       const sessions = await sessionsOf('jason-token')
       expect(sessions.find((s: { key: string }) => s.key === mine.key)).toEqual(mine)
       expect(sessions.length).toBeGreaterThan(1)
       expect(blobs.data('site:laps-meta').get(`filled-own-laps:${JASON}`)).toMatchObject({ kept: [`${EVENT} ${mine.key}`] })
+    })
+
+    it('puts the sheet’s speeds on the laps of a session they already had, once (#322)', async () => {
+      const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!
+      const [key, sheet] = Object.entries(sample.sessions)[0]
+      // Logged by hand before speeds were: times to a hundredth, a note, and
+      // the in lap left out.
+      const typed = sheet.laps.filter(lap => !lap.kind).map(lap => ({ ms: Math.round(lap.ms / 10) * 10 }))
+      typed[0] = { ...typed[0], note: 'Traffic' } as never
+      const mine = { key, date: sheet.date, time: sheet.time, group: sheet.group, sessionNumber: sheet.sessionNumber, laps: typed, summary: 'Mine' }
+      store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [key]: mine } })
+
+      const got = (await sessionsOf('jason-token')).find((s: { key: string }) => s.key === key)
+      const flying = sheet.laps.filter(lap => !lap.kind)
+      expect(got).toEqual({
+        ...mine,
+        laps: typed.map((lap, i) => ({ ...lap, topMph: flying[i].topMph, avgMph: flying[i].avgMph })),
+      })
+      expect(blobs.data('site:laps-meta').get(`sheet-speeds:${JASON}`)).toMatchObject({
+        sessions: [{ session: `${EVENT} ${key}`, added: typed.length, of: typed.length }],
+      })
+
+      // Once: laps changed afterwards stay as they are.
+      store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [key]: mine } })
+      expect((await sessionsOf('jason-token')).find((s: { key: string }) => s.key === key)).toEqual(mine)
+    })
+
+    it('adds the speeds on a preview too, after copying the live laps', async () => {
+      const sample = TEST_ACCOUNT_LAPS.find(e => e.eventId === EVENT)!
+      const [key, sheet] = Object.entries(sample.sessions)[0]
+      const mine = { ...sheet, laps: sheet.laps.map(lap => ({ ms: lap.ms })) }
+      store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [key]: mine } })
+      const got = (await sessionsOf('jason-token', { deploy: { context: 'deploy-preview' } })).find((s: { key: string }) => s.key === key)
+      expect(got.laps).toEqual(sheet.laps.map(lap => ({ ms: lap.ms, topMph: lap.topMph, avgMph: lap.avgMph })))
+      // The live laps are untouched.
+      expect(store.get(`${JASON}/${EVENT}`)).toEqual({ eventId: EVENT, sessions: { [key]: mine } })
     })
 
     it('fills them when an admin picks the driver too', async () => {
@@ -400,5 +437,41 @@ describe('laps function (#210)', () => {
       expect(await summary('jason-token')).toEqual([])
       expect(store.size).toBe(0)
     })
+  })
+})
+
+describe('withSheetSpeeds (#322)', () => {
+  const sheet = [
+    { ms: 139_000, kind: 'out' as const, topMph: 90, avgMph: 40 },
+    { ms: 85_857, topMph: 104.9, avgMph: 71.7 },
+    { ms: 85_930, topMph: 105.7, avgMph: 71.6 },
+    { ms: 86_659, topMph: 104.7, avgMph: 71.1 },
+    { ms: 133_721, kind: 'in' as const, topMph: 105.3, avgMph: 44.7 },
+  ]
+
+  it('takes each lap’s speeds from the lap at the same place when both list the same laps', () => {
+    // Cut to whole seconds, every lap is within a second of its own.
+    const mine = sheet.map(lap => ({ ms: Math.floor(lap.ms / 1000) * 1000, ...(lap.kind ? { kind: lap.kind } : {}) }))
+    const { laps, added } = withSheetSpeeds(mine, sheet)
+    expect(added).toBe(5)
+    expect(laps.map(lap => lap.topMph)).toEqual([90, 104.9, 105.7, 104.7, 105.3])
+  })
+
+  it('otherwise matches each lap to the closest in time, each sheet lap once', () => {
+    const mine = [{ ms: 86_660 }, { ms: 85_930 }, { ms: 85_860, note: 'Traffic' }]
+    const { laps, added } = withSheetSpeeds(mine, sheet)
+    expect(added).toBe(3)
+    expect(laps).toEqual([
+      { ms: 86_660, topMph: 104.7, avgMph: 71.1 },
+      { ms: 85_930, topMph: 105.7, avgMph: 71.6 },
+      { ms: 85_860, note: 'Traffic', topMph: 104.9, avgMph: 71.7 },
+    ])
+  })
+
+  it('leaves a lap with no match, or with speeds already, as it is', () => {
+    const mine = [{ ms: 85_857, topMph: 100 }, { ms: 95_000 }, { ms: 85_930 }]
+    const { laps, added } = withSheetSpeeds(mine, sheet)
+    expect(added).toBe(1)
+    expect(laps).toEqual([{ ms: 85_857, topMph: 100 }, { ms: 95_000 }, { ms: 85_930, topMph: 105.7, avgMph: 71.6 }])
   })
 })
