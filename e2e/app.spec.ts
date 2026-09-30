@@ -723,18 +723,35 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   }))
   type Car = { id: string; photo?: string; log?: object[] }
   const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
-  let photo: { type: string; body: Buffer } | null = null
+  let photo: { type: string; body: Buffer | null } | null = null
+  // The photo as the app sent it, kept in the page too: WebKit doesn't hand
+  // Playwright a Blob body, so the stand-in server can't read it from there.
+  await page.addInitScript(() => {
+    const fetch = window.fetch
+    window.fetch = (input, init) => {
+      if (String(input).includes('photo=1') && init?.method === 'PUT') (window as unknown as { sentPhoto: unknown }).sentPhoto = init.body
+      return fetch(input, init)
+    }
+  })
+  const sentPhoto = async () => {
+    photo!.body ??= Buffer.from(await page.evaluate(() => new Promise<string>(resolve => {
+      const read = new FileReader()
+      read.onload = () => resolve(String(read.result).split(',')[1])
+      read.readAsDataURL((window as unknown as { sentPhoto: Blob }).sentPhoto)
+    })), 'base64')
+    return photo!.body
+  }
   await page.route(/\/api\/garage(\?|$)/, async route => {
     const req = route.request()
     expect(req.headers().authorization).toBe('Bearer token')
     const params = new URL(req.url()).searchParams
     if (params.get('photo')) {
       if (req.method() === 'PUT') {
-        photo = { type: req.headers()['content-type'], body: req.postDataBuffer()! }
+        photo = { type: req.headers()['content-type'], body: req.postDataBuffer() }
         garage.cars[0].photo = 'p1'
         return route.fulfill({ json: { car: garage.cars[0] } })
       }
-      return route.fulfill({ contentType: photo!.type, body: photo!.body })
+      return route.fulfill({ contentType: photo!.type, body: await sentPhoto() })
     }
     if (req.method() === 'PUT') {
       const body = req.postDataJSON()
@@ -800,7 +817,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(add).toBeHidden()
   await expect(page.getByRole('status')).toHaveText('Car added')
   expect(photo!.type).toBe('image/jpeg')
-  expect(photo!.body.length).toBeLessThanOrEqual(3_000_000)
+  expect((await sentPhoto()).length).toBeLessThanOrEqual(3_000_000)
 
   // One line for the car, which opens its page.
   const row = page.getByRole('list', { name: 'Cars' }).getByRole('link')
