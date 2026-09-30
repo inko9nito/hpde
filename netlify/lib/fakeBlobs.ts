@@ -20,6 +20,12 @@ export function fakeBlobs() {
       delete: async (key: string) => {
         data.delete(key)
       },
+      // Binary, with its metadata (a garage photo, #344).
+      set: async (key: string, value: ArrayBuffer, o?: { metadata?: Record<string, unknown> }) => {
+        data.set(key, { data: value, metadata: o?.metadata ?? {} })
+        return { modified: true }
+      },
+      getWithMetadata: async (key: string) => (data.get(key) as { data: ArrayBuffer; metadata: Record<string, unknown> } | undefined) ?? null,
     }
   }
 

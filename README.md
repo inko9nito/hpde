@@ -11,7 +11,8 @@ runs.
 - **Three tabs** along the bottom (#274): **Events** (the list and
   calendar of events), **Tracks** (your lap times by track layout) and
   **More** (#345), a list of the rest: **Instructor evaluations** and the
-  **Garage** (coming soon), each sliding in over it
+  **Garage** (your cars, a dated log of their tires, brakes and fluids,
+  and each session's tire pressures), each sliding in over it
 - **Live "now" line** shows what's happening at this moment and counts down
   to what's next
 - **Run group filter** — pick your color(s) and the schedule highlights just
@@ -310,6 +311,58 @@ Private like your lap times: only you and admins see them.
   over, so notes saved there before a push are gone after it (`netlify/lib/driverStore.mts`,
   shared with `/api/laps`). Personal notes and videos (#205) can join
   them there.
+
+## Garage (signed in, #344)
+
+Private like your notes: only you and admins see it.
+
+- **Your cars:** the **Garage** (More → Garage) lists them, one line each: its photo,
+  what you call it and the last event it went to. **Add a car** opens a
+  page over the Garage (Cancel and Save across its top): a photo from the
+  library or camera, year, make, model, a nickname and the lug nut torque
+  in ft·lb. A photo of any size is made smaller on the phone (to 1280 px,
+  a JPEG) before it's sent; the limit is 3 MB after that, and an error
+  says so.
+- **A car's page** (tap it, `#/garage/<car>`): its **Details** — its
+  photo, then **Edit details**, the same page as adding one, to change
+  the photo or the details or remove the car — its **Consumables** as
+  they are now, each with the date it went on, its **Change log**, and
+  its **Events**, which open on their *My notes* over the car's page
+  (Back returns to it). **Add to events** there lists the events it isn't
+  at yet, all but those you said you didn't go to or aren't going to
+  (#235): pick some or **Select all**. One with another car on it says so, and this
+  car takes its place there (its tire pressures stay).
+- **The change log:** **Log a change** is one job: pick everything that
+  was changed — tires, front or rear pads, front or rear rotors, brake
+  fluid, engine oil, transmission fluid, diff fluid, coolant — and each
+  one picked asks what went on (suggesting what you've used before); then
+  the day it was done, the shop and a note (mileage, why). An entry opens
+  to change or remove it. What's on the car at an event is whatever the
+  log last says before it.
+- **At an event:** the car you drove is the first thing on *My notes*,
+  one slim line; **Add your car** picks it from the garage, or adds one
+  (the Add a car page, over the event). Tap it for its photo and name —
+  which open its page, over the event (Back returns to it) — with
+  **Change** beside them, its lug nut torque, what was on it at that
+  event, and taking it off.
+- **A session's tire pressures:** tap the session on the Schedule tab,
+  then **Tire pressures**: each corner before the session (cold, or as
+  you set them) and hot after it, in psi, laid out as the car sits, and
+  what you changed. The session's row shows a tire; on *My notes* they're
+  a small table under the session's laps.
+- **Not yet (phase 2):** maintenance and modification logs,
+  service reminders, alignment and damper setups. An admin looking at
+  another driver's notes (#288) doesn't see or change their garage.
+- **Where it lives:** `netlify/functions/garage.mts` (`/api/garage`) in
+  Netlify Blobs (store `garage`), one record per driver
+  (`<user id>/garage`): their cars, each with its change log, and each
+  event's car and pressures (`PUT ?car=<id> {events}` puts a car on
+  several events at once); photos in `garage-photos`
+  (`<user id>/<car id>`), fetched with the sign-in like everything else. Kept like the laps and notes
+  (`netlify/lib/driverStore.mts`): a sign-in for everything, `driver=` for
+  admins only, and a deploy preview starts from a copy of your real
+  garage and never changes it. The checks the app and the function share
+  are in `src/utils/garage.ts`.
 
 ---
 

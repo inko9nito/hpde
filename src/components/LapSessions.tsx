@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Lock } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Lock } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
@@ -9,6 +9,8 @@ import { formatTime, formatAmPm } from '../utils/time'
 import { formatLapTime } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
+import { CORNERS, formatPsi } from '../utils/garage'
+import type { Corners, SessionPressures } from '../utils/garage'
 import type { RunGroupConfig } from '../types'
 
 // The pieces My notes (#210) lists saved laps with — the best-lap cards,
@@ -122,14 +124,16 @@ export function PrivateTag({ whose, what = 'lap times' }: { whose: string | null
 /**
  * One session's notes on My notes (#210): its time and group, then what's
  * saved for it (#324) — its lap count and a small table of its average and
- * best lap and speeds, which open onto the lap table; and its instructor's
- * evaluation (#340), which opens in the session's sheet. `onEdit` adds an
+ * best lap and speeds, which open onto the lap table; its instructor's
+ * evaluation (#340) and its tire pressures (#344), which open in the
+ * session's sheet. `onEdit` adds an
  * Edit button, for everything the session has.
  */
-export function SessionLapsCard({ session, laps, notes, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, tableId }: {
+export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, tableId }: {
   session: SessionHead
   laps?: SessionLaps
   notes?: SessionNotes
+  pressures?: SessionPressures
   runGroups: RunGroupConfig[]
   /** Show the day too — the event runs more than one. */
   showDate: boolean
@@ -140,6 +144,7 @@ export function SessionLapsCard({ session, laps, notes, runGroups, showDate, col
   onToggle: () => void
   onEdit?: () => void
   onOpenEvaluation?: () => void
+  onOpenPressures?: () => void
   /** Unique on the page. */
   tableId: string
 }) {
@@ -202,6 +207,7 @@ export function SessionLapsCard({ session, laps, notes, runGroups, showDate, col
           </div>
         )}
         {notes && <EvaluationRow notes={notes} title={title} onOpen={onOpenEvaluation} />}
+        {pressures && <PressuresRow pressures={pressures} title={title} onOpen={onOpenPressures} />}
       </div>
     </section>
   )
@@ -232,6 +238,60 @@ function EvaluationRow({ notes, title, onOpen }: { notes: SessionNotes; title: s
         )}
       </div>
       <p className={`${FIGURES_INDENT} whitespace-pre-line text-sm text-gray-900`}>{feedback}</p>
+    </div>
+  )
+}
+
+/**
+ * A session's tire pressures on its card (#344): a small table, a column
+ * for each corner, a row for before and after — and what was changed. The
+ * chevron opens them in the session's sheet; its button stretches over the row.
+ */
+function PressuresRow({ pressures, title, onOpen }: { pressures: SessionPressures; title: string; onOpen?: () => void }) {
+  const rows = ([['Before', pressures.cold], ['After', pressures.hot]] as [string, Corners | undefined][])
+    .flatMap(([label, corners]) => (corners ? [[label, corners] as const] : []))
+  return (
+    <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-pressures>
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+          <Disc3 size={13} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">Tire pressures · psi</span>
+        </p>
+        {onOpen && (
+          <button
+            onClick={onOpen}
+            aria-label={`Open the tire pressures for ${title}`}
+            className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {rows.length > 0 && (
+        <div className={FIGURES_INDENT}>
+        <table className="text-sm" aria-label="Tire pressures">
+          <thead>
+            <tr>
+              <th />
+              {CORNERS.map(c => (
+                <th key={c.id} scope="col" className="px-2 text-right text-[11px] font-medium text-gray-400" title={c.label}>{c.short}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([label, corners]) => (
+              <tr key={label}>
+                <th scope="row" className="pr-2 text-left text-xs font-normal text-gray-500">{label}</th>
+                {CORNERS.map(c => (
+                  <td key={c.id} className="px-2 text-right font-mono tabular-nums text-gray-900">{formatPsi(corners[c.id])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      )}
+      {pressures.note && <p className={`${FIGURES_INDENT} whitespace-pre-line text-sm text-gray-700`}>{pressures.note}</p>}
     </div>
   )
 }

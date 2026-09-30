@@ -271,6 +271,8 @@ async function signInAsAdmin(page: Page) {
   await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: {} } }))
   // No notes either (#340); a test about them routes its own.
   await page.route(/\/api\/notes(\?|$)/, route => route.fulfill({ json: { sessions: [] } }))
+  // And an empty garage (#344).
+  await page.route(/\/api\/garage(\?|$)/, route => route.fulfill({ json: { cars: [], events: {} } }))
   await page.addInitScript(() => {
     const user = { id: 'a', email: 'admin@example.com', app_metadata: { roles: ['admin'] }, jwt: async () => 'token' }
     ;(window as unknown as { netlifyIdentity: unknown }).netlifyIdentity = {
@@ -713,6 +715,220 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+test('a driver adds their car and its photo in the Garage, logs a brake job, adds it to an event and logs tire pressures (#344)', async ({ page }) => {
+  await stubEvents(page, [alpha])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  type Car = { id: string; photo?: string; log?: object[] }
+  const garage: { cars: Car[]; events: Record<string, object> } = { cars: [], events: {} }
+  let photo: { type: string; body: Buffer | null } | null = null
+  // The photo as the app sent it, kept in the page too: WebKit doesn't hand
+  // Playwright a Blob body, so the stand-in server can't read it from there.
+  await page.addInitScript(() => {
+    const fetch = window.fetch
+    window.fetch = (input, init) => {
+      if (String(input).includes('photo=1') && init?.method === 'PUT') (window as unknown as { sentPhoto: unknown }).sentPhoto = init.body
+      return fetch(input, init)
+    }
+  })
+  const sentPhoto = async () => {
+    photo!.body ??= Buffer.from(await page.evaluate(() => new Promise<string>(resolve => {
+      const read = new FileReader()
+      read.onload = () => resolve(String(read.result).split(',')[1])
+      read.readAsDataURL((window as unknown as { sentPhoto: Blob }).sentPhoto)
+    })), 'base64')
+    return photo!.body
+  }
+  await page.route(/\/api\/garage(\?|$)/, async route => {
+    const req = route.request()
+    expect(req.headers().authorization).toBe('Bearer token')
+    const params = new URL(req.url()).searchParams
+    if (params.get('photo')) {
+      if (req.method() === 'PUT') {
+        photo = { type: req.headers()['content-type'], body: req.postDataBuffer() }
+        garage.cars[0].photo = 'p1'
+        return route.fulfill({ json: { car: garage.cars[0] } })
+      }
+      return route.fulfill({ contentType: photo!.type, body: await sentPhoto() })
+    }
+    if (req.method() === 'PUT') {
+      const body = req.postDataJSON()
+      if (params.get('event')) {
+        garage.events[params.get('event')!] = body.setup
+        return route.fulfill({ json: { setup: body.setup } })
+      }
+      if (params.get('car') && body.events) {
+        const events = Object.fromEntries((body.events as string[]).map(id => [id, { carId: params.get('car') }]))
+        Object.assign(garage.events, events)
+        return route.fulfill({ json: { events } })
+      }
+      if (params.get('car')) {
+        const entry = { id: 'e1', ...body.entry }
+        garage.cars[0].log = [entry]
+        return route.fulfill({ json: { entry } })
+      }
+      const car = { id: 'car1', ...body.car }
+      garage.cars = [car]
+      return route.fulfill({ json: { car } })
+    }
+    return route.fulfill({ json: garage })
+  })
+  const noSideScroll = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.goto('/#/garage')
+  await page.getByRole('button', { name: 'Add a car' }).click()
+  // A page of its own, over the Garage: Cancel and Save across its top.
+  const add = page.getByRole('dialog', { name: 'Add a car' })
+  await expect(add.getByRole('button', { name: 'Cancel' })).toBeInViewport()
+  await expect(add.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await add.getByLabel('Year').fill('2019')
+  await add.getByLabel('Make').fill('Porsche')
+  await add.getByLabel('Model').fill('718 Cayman GTS')
+  await add.getByRole('textbox', { name: /^Nickname/ }).fill('The Cayman')
+  await add.getByRole('textbox', { name: /^Lug nut torque/ }).fill('118')
+
+  // Its photo, picked as it's added: a camera-sized one, over the upload
+  // limit as it is, made smaller before it's sent — even where the browser
+  // can't make a bitmap of it (as iPhone Safari sometimes can't).
+  const picked = await add.getByLabel('Add a photo').evaluate(async input => {
+    window.createImageBitmap = () => Promise.reject(new Error('Not here'))
+    const c = document.createElement('canvas')
+    c.width = 1600
+    c.height = 1200
+    const ctx = c.getContext('2d')!
+    const noise = ctx.createImageData(1600, 1200)
+    for (let i = 0; i < noise.data.length; i++) noise.data[i] = i % 4 === 3 ? 255 : Math.random() * 256
+    ctx.putImageData(noise, 0, 0)
+    const png = await new Promise<Blob>(r => c.toBlob(b => r(b!), 'image/png'))
+    const files = new DataTransfer()
+    files.items.add(new File([png], 'cayman.png', { type: 'image/png' }))
+    ;(input as HTMLInputElement).files = files.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    return png.size
+  })
+  expect(picked).toBeGreaterThan(3_000_000)
+  await expect(add.getByRole('img', { name: 'Your car' })).toBeVisible()
+  await expect(add.getByRole('button', { name: 'Change photo' })).toBeVisible()
+  await noSideScroll()
+  expect(photo).toBeNull()
+  await add.getByRole('button', { name: 'Save' }).click()
+  await expect(add).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Car added')
+  expect(photo!.type).toBe('image/jpeg')
+  expect((await sentPhoto()).length).toBeLessThanOrEqual(3_000_000)
+
+  // One line for the car, which opens its page.
+  const row = page.getByRole('list', { name: 'Cars' }).getByRole('link')
+  await expect(row).toContainText('No events yet')
+  await row.click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+  await expect(page.getByRole('region', { name: 'Details' })).toContainText('Lug nut torque118 ft·lb')
+  // The photo, shown there — changed from Edit, not over it.
+  const shown = page.getByRole('region', { name: 'Details' }).getByRole('img', { name: 'The Cayman' })
+  await expect(shown).toBeVisible()
+  const size = await shown.evaluate(img => [(img as HTMLImageElement).naturalWidth, (img as HTMLImageElement).naturalHeight])
+  expect(size).toEqual([1280, 960])
+  await expect(page.getByRole('button', { name: 'Change photo' })).toHaveCount(0)
+
+  // A brake job: pads and rotors on one day at one shop.
+  await page.getByRole('button', { name: 'Log a change' }).click()
+  const change = page.getByRole('dialog', { name: 'Log a change' })
+  await change.getByRole('button', { name: 'Front pads' }).click()
+  await change.getByRole('button', { name: 'Front rotors' }).click()
+  await change.getByLabel('Front pads', { exact: true }).and(page.getByRole('combobox')).fill('Hawk DTC-60')
+  await change.getByLabel('Date').fill('2026-03-01')
+  await change.getByLabel(/^Shop/).fill('Speed Shop')
+  // The date sits inside the sheet, like the boxes around it (iOS ran it wider).
+  const date = (await change.getByLabel('Date').boundingBox())!
+  const shop = (await change.getByLabel(/^Shop/).boundingBox())!
+  expect(Math.round(date.x + date.width)).toBe(Math.round(shop.x + shop.width))
+  await noSideScroll()
+  await change.getByRole('button', { name: 'Log 2 changes' }).click()
+  await expect(change).toBeHidden()
+  await expect(page.getByRole('region', { name: 'Consumables' })).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
+  await expect(page.getByRole('list', { name: 'Change log' })).toContainText('Mar 1, 2026Front pads · Hawk DTC-60Front rotorsat Speed Shop')
+  await noSideScroll()
+
+  // Added to an event from its page: any the driver didn't say they're not going to.
+  await page.getByRole('button', { name: 'Add to events' }).click()
+  const pick = page.getByRole('dialog', { name: 'Add to events' })
+  await pick.getByRole('checkbox', { name: new RegExp(`^${alpha.name}`) }).click()
+  await noSideScroll()
+  await pick.getByRole('button', { name: 'Add to event' }).click()
+  await expect(pick).toBeHidden()
+  await expect(page.getByRole('list', { name: 'The Cayman’s events' })).toContainText(alpha.name)
+  expect(garage.events[alpha.id]).toEqual({ carId: 'car1' })
+
+  // At the event: the car's at the very top of My notes.
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes' }).click()
+  const carRow = page.getByRole('button', { name: 'Your car: The Cayman' })
+  await expect(carRow).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toBeVisible()
+  await carRow.click()
+  const details = page.getByRole('dialog', { name: 'Your car' })
+  await expect(details).toContainText('Lug nut torque118 ft·lb')
+  await expect(details.getByLabel('Consumables')).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
+  // Its page, over the event; Back returns to the event.
+  await details.getByRole('button', { name: 'The Cayman: car details' }).click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Back' }).last().click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
+  await expect(carRow).toBeInViewport()
+
+  // A session's pressures, each corner, from the schedule.
+  await page.getByRole('tab', { name: 'Schedule' }).click()
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Tire pressures/ }).click()
+  for (const corner of ['Front left', 'Front right', 'Rear left', 'Rear right']) {
+    await sheet.getByLabel(`${corner}, before the session`).fill('30')
+    await sheet.getByLabel(`${corner}, after the session`).fill('36.5')
+  }
+  // The four corners sit two by two, as on the car.
+  const fl = (await sheet.getByLabel('Front left, before the session').boundingBox())!
+  const fr = (await sheet.getByLabel('Front right, before the session').boundingBox())!
+  const rl = (await sheet.getByLabel('Rear left, before the session').boundingBox())!
+  expect(fr.y).toBe(fl.y)
+  expect(fr.x).toBeGreaterThan(fl.x)
+  expect(rl.y).toBeGreaterThan(fl.y)
+  await noSideScroll()
+  await sheet.getByRole('button', { name: 'Save tire pressures' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Tire pressures saved')
+  await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (tire pressures)' })).toBeVisible()
+  expect(garage.events[alpha.id]).toMatchObject({ carId: 'car1' })
+
+  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  const session = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
+  await expect(session.getByRole('table', { name: 'Tire pressures' })).toContainText('After36.536.536.536.5')
+  await noSideScroll()
+
+  // The car's page lists the event; it opens over the car's page, and Back returns there.
+  await page.goto('/#/garage/car1')
+  await page.getByRole('list', { name: 'The Cayman’s events' }).getByRole('button', { name: new RegExp(`^${alpha.name}`) }).click()
+  await expect(page.getByRole('tab', { name: 'My notes (2)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: 'Your car: The Cayman' })).toBeInViewport()
+  const eventPage = page.locator('.fixed.inset-0', { has: page.getByRole('button', { name: 'Your car: The Cayman' }) })
+  await eventPage.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/garage\/car1$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+
+  // Back from the car's page is the Garage, under More (#345); Back from there, More.
+  const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Cayman' }) })
+  await carPage.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/garage$/)
+  await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'More' })).toHaveAttribute('aria-current', 'page')
+  await page.locator('.fixed.inset-0', { has: page.getByRole('list', { name: 'Cars' }) }).getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
+})
+
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {
   // An earlier event on the same layout as Alpha.
   const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }
@@ -895,7 +1111,8 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible()
   const garage = await trackSlide(page, () => page.getByRole('link', { name: /^Garage/ }).click(), 'Garage')
   expect(garage).toEqual({ fromBelow: false, fromSide: true })
-  await expect(page.locator('p', { hasText: 'Coming soon' })).toBeVisible()
+  // Signed out here, so it asks to sign in.
+  await expect(page.getByText('Sign in to keep your cars and what they run on')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/more$/)

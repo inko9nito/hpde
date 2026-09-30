@@ -4,6 +4,7 @@ import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
 import type { SessionHead } from './LapSessions'
 import { AddEventEvaluation, EventEvaluationCard } from './EventEvaluationCard'
+import { CarRow } from './CarRow'
 import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
@@ -15,6 +16,9 @@ import type { LapLog } from '../data/lapLog'
 import type { NotesLog } from '../data/notesLog'
 import { isTdeEvent } from '../utils/evaluation'
 import { classifyEvent } from '../utils/eventClass'
+import { carName, carTitle } from '../utils/garage'
+import type { Car, SessionPressures } from '../utils/garage'
+import type { GarageStatus } from '../data/GarageContext'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -41,6 +45,19 @@ interface Props {
   onEdit: (session: SessionHead, view: SessionView) => void
   /** Opens the report card's form (#340). */
   onEditEvaluation: () => void
+  /**
+   * What the driver ran here, from their garage (#344): the car, and each
+   * session's tire pressures. Only the driver's own, so none for another
+   * driver's.
+   */
+  garage?: {
+    status: GarageStatus
+    car?: Car
+    pressures: Map<string, SessionPressures>
+    /** Opens the car's details, or with none picked, the garage's cars to pick from. */
+    onOpenCar: () => void
+    reload: () => void
+  }
 }
 
 /**
@@ -51,7 +68,7 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, runGroup, events, onEdit, onEditEvaluation,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, driver = null, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
@@ -59,12 +76,22 @@ export function MyLapTimes({
   const name = driver ? driverName(driver) : null
   const whose = name ? `${name}’s` : 'your'
 
-  const loading = log.status === 'loading' || log.status === 'off' || notes.status === 'loading'
+  const loading = log.status === 'loading' || log.status === 'off' || notes.status === 'loading' || garage?.status === 'loading'
   const tde = isTdeEvent(event)
   const leaving = useSkeletonFade(loading)
 
+  // The car they drove, first of all: one line, which opens its details.
+  const carRow = garage?.status === 'ready' && (
+    <div className="mb-3">
+      {garage.car
+        ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
+        : <CarRow compact title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
+    </div>
+  )
+
   const header = (<>
     {driverPicker && <div className="mb-4 px-1">{driverPicker}</div>}
+    {carRow}
     <LapsToolbar
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
@@ -77,7 +104,7 @@ export function MyLapTimes({
     return <>{header}<LapsSkeleton cards={track ? 2 : 1} leaving={leaving} label={`Loading ${whose} lap times`} /></>
   }
 
-  if (log.status === 'error' || notes.status === 'error') {
+  if (log.status === 'error' || notes.status === 'error' || garage?.status === 'error') {
     return (
       <>
         {header}
@@ -88,6 +115,7 @@ export function MyLapTimes({
             onClick={() => {
               if (log.status === 'error') log.reload()
               if (notes.status === 'error') notes.reload()
+              if (garage?.status === 'error') garage.reload()
             }}
             className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
           >
@@ -104,9 +132,9 @@ export function MyLapTimes({
     ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
     : classifyEvent(event) !== 'upcoming' ? <AddEventEvaluation tde={tde} onAdd={onEditEvaluation} /> : null
 
-  // Every session with something saved: laps, an evaluation or both.
+  // Every session with something saved: laps, an evaluation, tire pressures.
   const heads = new Map<string, SessionHead>()
-  for (const s of [...log.sessions, ...notes.sessions]) if (!heads.has(s.key)) heads.set(s.key, s)
+  for (const s of [...log.sessions, ...notes.sessions, ...(garage?.pressures.values() ?? [])]) if (!heads.has(s.key)) heads.set(s.key, s)
   const sessions = [...heads.values()].sort((a, b) => a.key.localeCompare(b.key))
 
   if (sessions.length === 0) {
@@ -121,7 +149,7 @@ export function MyLapTimes({
             <p className="mt-1 text-xs text-gray-400">
               {name
                 ? `On the Schedule tab, tap a session ${name} drove to add their laps or their instructor’s feedback.`
-                : 'On the Schedule tab, tap a session you drove to add your laps or your instructor’s feedback.'}
+                : 'On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.'}
             </p>
           </div>
         </div>
@@ -184,6 +212,7 @@ export function MyLapTimes({
               session={session}
               laps={log.byKey.get(session.key)}
               notes={notes.byKey.get(session.key)}
+              pressures={garage?.pressures.get(session.key)}
               runGroups={runGroups}
               showDate={days.size > 1}
               columns={columns}
@@ -192,6 +221,7 @@ export function MyLapTimes({
               onToggle={() => toggle(session.key)}
               onEdit={() => onEdit(session, 'menu')}
               onOpenEvaluation={() => onEdit(session, 'evaluation')}
+              onOpenPressures={() => onEdit(session, 'pressures')}
               tableId={`laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`}
             />
           ))}

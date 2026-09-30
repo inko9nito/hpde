@@ -6,6 +6,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { EventsProvider } from './data/EventsContext'
 import { RsvpsProvider } from './data/RsvpsContext'
+import { GarageProvider } from './data/GarageContext'
 import { SiteMovedPage } from './components/SiteMovedPage'
 import { isOldSite } from './utils/siteMoved'
 
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <EventsProvider>
           <RsvpsProvider>
-            <App />
+            <GarageProvider>
+              <App />
+            </GarageProvider>
           </RsvpsProvider>
         </EventsProvider>
       </AuthProvider>

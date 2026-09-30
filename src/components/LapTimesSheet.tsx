@@ -1,15 +1,17 @@
 import { useId, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Lock, Timer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Lock, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import { Sheet } from './Sheet'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
+import { TirePressuresForm, pressuresText } from './TirePressuresForm'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
+import type { SessionPressures } from '../utils/garage'
 import { gapToBest } from '../utils/trackStats'
 import { opensElsewhere } from '../utils/links'
 import { driverName } from '../data/drivers'
@@ -25,8 +27,11 @@ export interface SessionSlot {
   groups: string[]
 }
 
-/** What the sheet shows: what can be added to the session (#205), its laps, or its instructor evaluation (#340). */
-export type SessionView = 'menu' | 'laps' | 'evaluation'
+/**
+ * What the sheet shows: what can be added to the session (#205), its laps,
+ * its instructor evaluation (#340) or its tire pressures (#344).
+ */
+export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures'
 
 interface Props {
   slot: SessionSlot
@@ -54,6 +59,15 @@ interface Props {
   onRemove: (key: string) => Promise<void>
   onSaveEvaluation: (session: Omit<SessionNotes, 'key' | 'updatedAt'>) => Promise<void>
   onRemoveEvaluation: (key: string) => Promise<void>
+  /**
+   * The session's tire pressures (#344), from the garage — only the
+   * driver's own, so none for another driver's.
+   */
+  pressures?: {
+    saved: (key: string) => SessionPressures | undefined
+    onSave: (pressures: SessionPressures) => Promise<void>
+    onRemove: (key: string) => Promise<void>
+  }
   onClose: () => void
 }
 
@@ -75,7 +89,7 @@ export function shortDate(iso: string): string {
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null, driverPicker,
-  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, onClose,
+  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, pressures, onClose,
 }: Props) {
   const [view, setView] = useState<SessionView>(startView)
   // With more than one group on track, start from the one that already has
@@ -83,10 +97,14 @@ export function LapTimesSheet({
   // be lost.
   const savedGroup = () =>
     slot.groups.length === 1 ? slot.groups[0]
-      : slot.groups.find(g => saved(sessionKey(slot.date, slot.time, g)) ?? savedNotes(sessionKey(slot.date, slot.time, g))) ?? null
+      : slot.groups.find(g => {
+        const k = sessionKey(slot.date, slot.time, g)
+        return saved(k) ?? savedNotes(k) ?? pressures?.saved(k)
+      }) ?? null
   const [group, setGroup] = useState<string | null>(savedGroup)
   const existing = group ? saved(sessionKey(slot.date, slot.time, group)) : undefined
   const notes = group ? savedNotes(sessionKey(slot.date, slot.time, group)) : undefined
+  const tires = group ? pressures?.saved(sessionKey(slot.date, slot.time, group)) : undefined
   const [evaluationBusy, setEvaluationBusy] = useState(false)
   const [text, setText] = useState(() => (existing ? lapsToText(existing.laps) : ''))
   const [textTouched, setTextTouched] = useState(false)
@@ -255,6 +273,16 @@ export function LapTimesSheet({
             disabled={group === null}
             onClick={() => setView('evaluation')}
           />
+          {pressures && (
+            <MenuRow
+              icon={Disc3}
+              title="Tire pressures"
+              detail={tires ? pressuresText(tires) : 'Each corner, before the session and hot after it'}
+              saved={!!tires}
+              disabled={group === null}
+              onClick={() => setView('pressures')}
+            />
+          )}
         </nav>
       )}
 
@@ -425,10 +453,22 @@ export function LapTimesSheet({
         />
       )}
 
+      {view === 'pressures' && pressures && group !== null && key !== null && !waiting && (
+        <TirePressuresForm
+          key={key}
+          session={{ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber }}
+          existing={tires}
+          onBusyChange={setEvaluationBusy}
+          onSave={pressures.onSave}
+          onRemove={() => pressures.onRemove(key)}
+        />
+      )}
+
       <p className={`${view === 'laps' ? 'mt-3' : 'mt-5'} flex items-center justify-center gap-1 text-[11px] text-gray-400`}>
         <Lock size={11} aria-hidden="true" />
         {view === 'laps'
           ? (driver ? `Only ${driverName(driver)} and admins can see these lap times.` : 'Only you and admins can see your lap times.')
+          : view === 'pressures' ? 'Only you and admins can see your garage.'
           : (driver ? `Only ${driverName(driver)} and admins can see these notes.` : 'Only you and admins can see your notes.')}
       </p>
     </Sheet>

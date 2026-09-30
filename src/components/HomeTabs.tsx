@@ -114,7 +114,7 @@ export function SubPageHeader({ title, onBack }: { title: string; onBack: () => 
 
 const MORE_ITEMS: readonly { page: MorePage; label: string; detail: string; Icon: LucideIcon }[] = [
   { page: 'evaluations', label: 'Instructor evaluations', detail: 'Every event’s, and how your report cards have come along', Icon: ClipboardCheck },
-  { page: 'garage', label: 'Garage', detail: 'Coming soon', Icon: Car },
+  { page: 'garage', label: 'Garage', detail: 'Your cars, what they run on and their tire pressures', Icon: Car },
 ]
 
 /** The More tab (#345): a list of the rest of the app, each opening its page over it. */
@@ -142,24 +142,6 @@ export function MoreTab() {
             </li>
           ))}
         </ul>
-      </div>
-    </div>
-  )
-}
-
-/** The Garage, from the More tab: coming soon (#120). */
-export function GaragePage({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <SubPageHeader title="Garage" onBack={onBack} />
-      <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-          <Car size={22} className="mx-auto text-gray-400" aria-hidden="true" />
-          <p className="mt-2 text-sm font-medium text-gray-700">Coming soon</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Your car’s setup, parts and service history, event by event.
-          </p>
-        </div>
       </div>
     </div>
   )
