@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock, Timer } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Lock } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapTable, SessionFigures } from './LapList'
+import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { formatTime, formatAmPm } from '../utils/time'
-import { formatLapTime, lapSpeeds, lapStats } from '../utils/lapTimes'
+import { formatLapTime } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { RunGroupConfig } from '../types'
 
@@ -112,9 +112,6 @@ export function PrivateTag({ whose }: { whose: string | null }) {
   )
 }
 
-/** In line with the lap heading's text, past its timer: the figures and the note (#324). */
-const indent = 'pl-[19px]'
-
 /**
  * One session's laps (#210): its time and group, then its lap count and a
  * small table of its average and best lap and speeds (#324), which open
@@ -135,9 +132,6 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
   tableId: string
 }) {
   const title = sessionTitle(session)
-  const { count } = lapStats(session.laps)
-  const { top, average } = lapSpeeds(session.laps)
-  const hasSpeeds = top !== undefined || average !== undefined
   return (
     <section aria-label={`${title}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
       <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-widest text-gray-400">
@@ -165,10 +159,7 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
           {/* The heading and figures open the table: the chevron's button stretches over them. */}
           <div className="relative flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-3">
-              <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                <Timer size={13} aria-hidden="true" />
-                {hasSpeeds ? 'Laps & speeds' : 'Lap times'} · {plural(count, 'lap', 'laps')}
-              </p>
+              <LapsHeading laps={session.laps} />
               <button
                 onClick={onToggle}
                 aria-expanded={expanded}
@@ -183,12 +174,12 @@ export function SessionLapsCard({ session, runGroups, showDate, columns, allTime
                 />
               </button>
             </div>
-            <div className={indent}>
+            <div className={FIGURES_INDENT}>
               <SessionFigures laps={session.laps} allTimeBest={allTimeBest} />
             </div>
           </div>
           {session.summary && (
-            <p className={`${indent} text-sm text-gray-700`} data-lap-summary>{session.summary}</p>
+            <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{session.summary}</p>
           )}
           {expanded && (
             <div id={tableId}>
@@ -250,7 +241,7 @@ export function LapsSkeleton({ cards, leaving, label }: {
         </div>
         <div className="flex flex-col gap-2.5 border-t border-gray-100 pt-3">
           <div className={`h-3 w-28 ${bar}`} />
-          <div className="flex flex-col gap-2 pl-[19px]">
+          <div className={`flex flex-col gap-2 ${FIGURES_INDENT}`}>
             {[0, 1].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
           </div>
         </div>

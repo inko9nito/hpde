@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight, Lock, X } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { LapFigures, LapTable, SpeedFigures } from './LapList'
+import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
@@ -238,17 +238,22 @@ export function LapTimesSheet({
 
         {group !== null && existing && !editing && !waiting && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
-            <div className="flex items-start gap-3">
-              <LapFigures laps={existing.laps} allTimeBest={allTimeBest} />
-              <button
-                onClick={() => setEditing(true)}
-                className="shrink-0 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                Edit
-              </button>
+            {/* Like the session's card on My notes (#324). */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <LapsHeading laps={existing.laps} />
+                <button
+                  onClick={() => setEditing(true)}
+                  className="-my-2 shrink-0 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+                >
+                  Edit
+                </button>
+              </div>
+              <div className={FIGURES_INDENT}>
+                <SessionFigures laps={existing.laps} allTimeBest={allTimeBest} />
+              </div>
             </div>
-            <SpeedFigures laps={existing.laps} />
-            {existing.summary && <p className="text-sm text-gray-700" data-lap-summary>{existing.summary}</p>}
+            {existing.summary && <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{existing.summary}</p>}
             <LapTable laps={existing.laps} allTimeBest={allTimeBest} />
             {track && <TrackLink track={track} laps={existing} allTimeBest={allTimeBest} driver={driver} onOpen={onOpenTrack} />}
           </section>
@@ -298,8 +303,12 @@ export function LapTimesSheet({
 
             {parsed.laps.length > 0 && (
               <section aria-label="Laps read" className="mt-4 flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-                <LapFigures laps={parsed.laps} allTimeBest={allTimeBest} />
-                <SpeedFigures laps={parsed.laps} />
+                <div className="flex flex-col gap-1.5">
+                  <LapsHeading laps={parsed.laps} />
+                  <div className={FIGURES_INDENT}>
+                    <SessionFigures laps={parsed.laps} allTimeBest={allTimeBest} />
+                  </div>
+                </div>
                 <LapTable laps={parsed.laps} allTimeBest={allTimeBest} />
               </section>
             )}

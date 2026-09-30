@@ -143,25 +143,27 @@ async function tapSession(name: string) {
   await userEvent.click(await screen.findByRole('button', { name }))
 }
 
-// The figures above a table of laps, by label.
-function figures(el: HTMLElement, label = 'Session figures'): Record<string, string> {
+// An event's figures on a track page, by label.
+function figures(el: HTMLElement, label: string): Record<string, string> {
   const dl = el.querySelector(`dl[aria-label="${label}"]`)!
   const out: Record<string, string> = {}
   dl.querySelectorAll('dt').forEach(dt => { out[dt.textContent!] = dt.nextElementSibling!.textContent! })
   return out
 }
 
-// A session card's figures table (#324), as text, row by row: the column
-// headings, then each row's label and figures.
+// A session's figures table (#324), on its card or in the sheet, as text,
+// row by row: the column headings, then each row's label and figures.
 function sessionFigures(card: HTMLElement): string[][] {
   return within(within(card).getByRole('table', { name: 'Session figures' })).getAllByRole('row')
     .map(row => [...row.children].map(cell => cell.textContent ?? ''))
 }
 
-// A table of laps, as text, header first. Lines stacked in one cell (start
+// A table of laps, as text, header first: the one given, or the one in it
+// (not the figures table above it, #324). Lines stacked in one cell (start
 // over finish) are joined with a dash.
 function rows(el: HTMLElement): string[][] {
-  return within(el).getAllByRole('row').map(row => [...row.children].map(cell =>
+  const table = el.matches('table') ? el : within(el).getByRole('table', { name: 'Laps' })
+  return within(table).getAllByRole('row').map(row => [...row.children].map(cell =>
     cell.children.length > 1 ? [...cell.children].map(line => line.textContent).join(' – ') : cell.textContent ?? ''))
 }
 
@@ -213,7 +215,11 @@ describe('lap times (#210)', () => {
 
     // What was read, before saving: the out lap doesn't count.
     const read = within(sheet).getByRole('region', { name: 'Laps read' })
-    expect(figures(read)).toEqual({ Laps: '2', Average: '1:50.0', Best: '1:44' })
+    expect(read).toHaveTextContent('Lap times · 2 laps')
+    expect(sessionFigures(read)).toEqual([
+      ['', 'Average', 'Best'],
+      ['Lap time', '1:50.0', '1:44'],
+    ])
     // Columns in the order they're entered; the best lap in a chip.
     expect(rows(read)).toEqual([
       ['Lap', 'From / To', 'Lap time', 'Note'],
@@ -221,10 +227,10 @@ describe('lap times (#210)', () => {
       ['1', '11:48:51 AM – 11:50:47 AM', '1:56', ''],
       ['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'],
     ])
-    // The chip is in both; only the table's is pulled left, to line up with
-    // the times above and below it.
+    // The chip is in both, pulled left in each so its digits line up with
+    // the heading and times above and below it.
     const [inFigures, inTable] = read.querySelectorAll('[data-best-lap]')
-    expect(inFigures).not.toHaveClass('-ml-1.5')
+    expect(inFigures).toHaveClass('-ml-1.5')
     expect(inTable).toHaveClass('-ml-1.5')
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
@@ -255,7 +261,7 @@ describe('lap times (#210)', () => {
     // The laps are folded away until asked for.
     expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     await userEvent.click(within(card).getByRole('button', { name: 'Show laps for Session 2' }))
-    expect(rows(within(card).getByRole('table', { name: 'Laps' }))[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
+    expect(rows(card)[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
     await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
     expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     expect(screen.getByText('Private')).toBeInTheDocument()
@@ -348,10 +354,15 @@ describe('lap times (#210)', () => {
     await tapSession('Lap times: 11:45 AM, Blue')
     const sheet = screen.getByRole('dialog')
     fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '2:13, 4:09, 5:57' } })
-    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' })).Laps).toBe('3')
+    expect(within(sheet).getByRole('region', { name: 'Laps read' })).toHaveTextContent('Lap times · 3 laps')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Video timestamps' }))
-    expect(figures(within(sheet).getByRole('region', { name: 'Laps read' }))).toEqual({ Laps: '2', Average: '1:52.0', Best: '1:48' })
+    const read = within(sheet).getByRole('region', { name: 'Laps read' })
+    expect(read).toHaveTextContent('Lap times · 2 laps')
+    expect(sessionFigures(read)).toEqual([
+      ['', 'Average', 'Best'],
+      ['Lap time', '1:52.0', '1:48'],
+    ])
   })
 
   it('keeps the sheet open with the reason when a save fails', async () => {

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { Timer } from 'lucide-react'
 import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
@@ -25,41 +24,25 @@ export function BestChip({ ms, allTime, aligned }: { ms: number; allTime?: boole
 }
 
 /**
- * Laps, average and best — worked out from the laps, never typed in
- * (#210). Out and in laps don't count. `allTimeBest` is the best on this
- * layout across every event, to mark the best lap when it's that too.
+ * Heads a session's figures (#324): its laps that count, and whether its
+ * speeds are in too. Out and in laps don't count.
  */
-export function LapFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: number }) {
-  const stats = lapStats(laps)
-  // Laps is a number or two; the best, with the all-time best's timer in
-  // its chip, needs the most room.
-  return <Figures label="Session figures" columns="grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,2.4fr)]" figures={[
-    { label: 'Laps', value: String(stats.count) },
-    { label: 'Average', value: stats.average !== undefined ? formatAverage(laps, stats.average) : '—' },
-    {
-      label: 'Best',
-      value: stats.best !== undefined ? <BestChip ms={stats.best} allTime={stats.best === allTimeBest} /> : '—',
-    },
-  ]} />
-}
-
-/**
- * A session's top and average speed (#298), in a line under its figures —
- * a fourth tile wouldn't fit a phone. Nothing without speeds.
- */
-export function SpeedFigures({ laps }: { laps: Lap[] }) {
+export function LapsHeading({ laps }: { laps: Lap[] }) {
+  const { count } = lapStats(laps)
   const { top, average } = lapSpeeds(laps)
-  if (top === undefined && average === undefined) return null
   return (
-    <dl className="flex gap-3 text-xs" aria-label="Session speeds" data-speed-figures>
-      {top !== undefined && <Speedline label="Top" mph={top} />}
-      {average !== undefined && <Speedline label="Avg" mph={average} />}
-    </dl>
+    <p className="flex items-center gap-1.5 text-xs text-gray-500">
+      <Timer size={13} aria-hidden="true" />
+      {top !== undefined || average !== undefined ? 'Laps & speeds' : 'Lap times'} · {count} {count === 1 ? 'lap' : 'laps'}
+    </p>
   )
 }
 
+/** In line with the heading's text, past its timer: the figures and a note under it. */
+export const FIGURES_INDENT = 'pl-[19px]'
+
 /**
- * A session card's figures (#324), in a small table: the average and best
+ * A session's figures (#324), in a small table: the average and best
  * lap, and under them the average and top speed when they're logged
  * (#298). The best lap and the top speed are in chips, pulled left so
  * their digits line up with the column's heading. Out and in laps don't
@@ -112,39 +95,6 @@ function Mph({ mph, top }: { mph: number; top?: boolean }) {
       {top ? <span className={`-ml-1.5 ${chip}`} data-top-speed>{formatSpeed(mph)}</span> : formatSpeed(mph)}
       {' '}<span className="font-sans font-normal text-gray-400">mph</span>
     </>
-  )
-}
-
-function Speedline({ label, mph }: { label: string; mph: number }) {
-  return (
-    <div className="flex items-baseline gap-1">
-      <dt className="text-gray-500">{label}</dt>
-      <dd className="font-mono font-semibold tabular-nums text-gray-900">{formatSpeed(mph)}</dd>
-      <span className="text-gray-400">mph</span>
-    </div>
-  )
-}
-
-/**
- * Three figures in gray tiles, side by side: a session's, or an event's on
- * a track page (#274). `columns` sizes them for what they hold — the same
- * on every card, so the tiles line up down the page.
- */
-export function Figures({ label, figures, columns }: {
-  label: string
-  figures: { label: string; value: ReactNode }[]
-  /** A Tailwind grid-cols-[…] class. */
-  columns: string
-}) {
-  return (
-    <dl className={`grid flex-1 gap-2 ${columns}`} aria-label={label}>
-      {figures.map(f => (
-        <div key={f.label} className="min-w-0 rounded-lg bg-gray-50 px-2.5 py-2">
-          <dt className="text-[11px] font-medium text-gray-500">{f.label}</dt>
-          <dd className="mt-0.5 font-mono text-base font-semibold tabular-nums text-gray-900">{f.value}</dd>
-        </div>
-      ))}
-    </dl>
   )
 }
 
