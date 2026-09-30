@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
-import { DateBlock } from './DateBlock'
+import { DateBlock, firstDayParts } from './DateBlock'
 import { EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
@@ -119,16 +119,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
                 : 'pointer-events-none translate-y-1 opacity-0'
             }`}
           >
-            <div className="flex min-w-0 items-center gap-2">
-              <DateBlock event={event} muted={status === 'past'} size="sm" />
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="truncate font-rubik text-[13px] font-bold leading-tight text-gray-900">{event.name}</span>
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-[10px] leading-none text-gray-500">{date}</span>
-                  <StatusBadge status={status} size="sm" />
-                </span>
-              </div>
-            </div>
+            <CompactTitle event={event} status={status} date={date} />
           </div>
           {/* Same 36px footprint as the back button, so the compact
               title stays centred. */}
@@ -139,21 +130,25 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
       </div>
 
       <div style={{ height: TITLE_BLOCK_PX }}>
-        <div ref={titleContentRef} className="mx-auto flex h-full max-w-lg items-center gap-4 px-6 pb-1">
-          <DateBlock event={event} muted={status === 'past'} size="lg" />
-          <div aria-hidden="true" className="w-px self-stretch bg-gray-200" style={{ marginBlock: 14 }} />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h1 className="truncate font-rubik text-xl font-bold leading-tight text-gray-900">{event.name}</h1>
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="truncate text-[13px] leading-tight text-gray-500">{date}</span>
-              <StatusBadge status={status} />
-            </div>
-            {/* The track, then Join event or their answer (#235) across
-                from it: the date line keeps the width to itself. */}
-            <div className="flex min-h-7 min-w-0 items-center gap-2.5">
-              <TrackLine event={event} />
-              <div className="ml-auto flex shrink-0">
-                <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
+        <div ref={titleContentRef} className="mx-auto flex h-full max-w-lg items-center px-6 pb-1">
+          {/* On one baseline, the month's and the name's: the date lines up
+              with the text instead of floating beside it. */}
+          <div className="flex min-w-0 flex-1 items-baseline gap-4">
+            <DateBlock event={event} muted={status === 'past'} size="lg" />
+            <div aria-hidden="true" className="w-px self-stretch bg-gray-200" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <h1 className="truncate font-rubik text-xl font-bold leading-tight text-gray-900">{event.name}</h1>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="truncate text-[13px] leading-tight text-gray-500">{date}</span>
+                <StatusBadge status={status} />
+              </div>
+              {/* The track, then Join event or their answer (#235) across
+                  from it: the date line keeps the width to itself. */}
+              <div className="flex min-h-7 min-w-0 items-center gap-2.5">
+                <TrackLine event={event} />
+                <div className="ml-auto flex shrink-0">
+                  <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
+                </div>
               </div>
             </div>
           </div>
@@ -163,6 +158,27 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
       <div className="mx-auto max-w-lg">
         <EventTabs active={activeTab} onChange={onTabChange} notesCount={notesCount} />
       </div>
+    </div>
+  )
+}
+
+/** The collapsed title in the top bar: the small date (#305) beside the
+ *  name over the date line. A two-row grid, each row on one baseline, so
+ *  the month lines up with the name and the day with the date line. */
+function CompactTitle({ event, status, date }: { event: EventConfig; status: EventStatus; date: string }) {
+  const parts = firstDayParts(event)
+  const monthColor = status === 'past' ? 'text-gray-500' : 'text-red-600'
+  return (
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2.5 gap-y-0.5">
+      <span className={`text-center font-rubik text-[10px] font-medium uppercase leading-none tracking-wider ${monthColor}`}>
+        {parts?.month}
+      </span>
+      <span className="truncate font-rubik text-[13px] font-bold leading-tight text-gray-900">{event.name}</span>
+      <span className="text-center font-rubik text-lg font-bold leading-none text-gray-900">{parts?.day}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-[10px] leading-none text-gray-500">{date}</span>
+        <StatusBadge status={status} size="sm" />
+      </span>
     </div>
   )
 }
