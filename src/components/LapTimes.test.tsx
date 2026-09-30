@@ -1527,13 +1527,17 @@ describe('the garage (#344)', () => {
     // One slim line: it's seldom changed.
     expect(row.querySelector('svg')).toHaveAttribute('width', '16')
     await userEvent.click(row)
-    const sheet = screen.getByRole('dialog', { name: 'The Cayman' })
+    const sheet = screen.getByRole('dialog', { name: 'Your car' })
     expect(sheet).toHaveTextContent('Lug nut torque118 ft·lb')
+    // The car first, with the way to change it beside it.
+    expect(within(sheet).getByRole('button', { name: 'The Cayman: car details' })).toHaveTextContent('The Cayman2019 Porsche 718 Cayman GTS')
+    expect(within(sheet).getByRole('button', { name: 'Change' })).toBeInTheDocument()
+    expect(sheet).not.toHaveTextContent('Speed Shop')
     // The event was Mar 7: the tires changed in April aren't on yet.
     expect(within(sheet).getByLabelText('Consumables')).toHaveTextContent('TiresHoosier R7since Feb 20, 2026Front padsHawk DTC-60since Feb 20, 2026')
 
     // Its page, over the event; Back returns to the event.
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Car details' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'The Cayman: car details' }))
     expect(window.location.hash).toBe('#/garage/cayman')
     const page = await carPage('The Cayman')
     expect(within(page).getByRole('region', { name: 'Details' })).toBeInTheDocument()
@@ -1557,7 +1561,7 @@ describe('the garage (#344)', () => {
 
     // Changed to the other, then taken off.
     await userEvent.click(screen.getByRole('button', { name: 'Your car: Mazda Miata' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Change car' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }))
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^The Cayman/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(body(garageCalls('PUT')[1]).setup).toEqual({ carId: 'cayman' })

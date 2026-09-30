@@ -1,17 +1,18 @@
 import { useState } from 'react'
-import { Check, Lock, Plus } from 'lucide-react'
+import { ArrowLeftRight, Check, ChevronRight, Lock, Plus } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { CarFields, carDraft, carFromDraft } from './CarSheet'
-import { ConsumablesList, DetailRow } from './CarRow'
+import { CarTile, ConsumablesList, DetailRow } from './CarRow'
 import { carName, carTitle, eventStart } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
 import type { EventConfig } from '../types'
 
 /**
  * The car an event was driven in (#344), from the top of its My notes:
- * its lug nut torque and what was on it at this event, from its change
- * log, and the way to its page — or, with none picked yet (or Change car),
- * the garage's cars to pick from, and the way to add one.
+ * the car — its photo and name, which open its page, with Change beside
+ * them — its lug nut torque and what was on it at this event, from its
+ * change log. With none picked yet (or Change), the garage's cars to pick
+ * from, and the way to add one.
  */
 export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, onOpenCar, onClose }: {
   event: EventConfig
@@ -47,18 +48,40 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
 
   return (
     <Sheet
-      label={picking ? 'Pick your car' : carName(car!)}
+      label={picking ? 'Pick your car' : 'Your car'}
       busy={!!busy}
       onClose={onClose}
       data-event-car-sheet
       heading={<>
         <p className="text-xs text-gray-500">{event.name}</p>
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">{picking ? 'Pick your car' : carName(car!)}</h2>
+        <h2 className="mt-0.5 text-lg font-bold text-gray-900">{picking ? 'Pick your car' : 'Your car'}</h2>
       </>}
     >
       {!picking && car && (<>
-        <dl className="mt-3">
-          {car.nickname && <DetailRow label="Car">{carTitle(car)}</DetailRow>}
+        {/* The car: its page from its name, and Change beside it. */}
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-200 p-2 pr-1">
+          <button
+            onClick={onOpenCar}
+            aria-label={`${carName(car)}: car details`}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:bg-gray-50"
+          >
+            <CarTile car={car} size={44} rounded="rounded-lg" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-base font-semibold text-gray-900">{carName(car)}</span>
+              {car.nickname && <span className="block truncate text-xs text-gray-500">{carTitle(car)}</span>}
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </button>
+          <span className="h-8 w-px shrink-0 bg-gray-200" aria-hidden="true" />
+          <button
+            onClick={() => setPicking(true)}
+            className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
+            <ArrowLeftRight size={14} aria-hidden="true" />
+            Change
+          </button>
+        </div>
+        <dl className="mt-2">
           <DetailRow label="Lug nut torque">{car.lugNutTorque !== undefined ? `${car.lugNutTorque} ft·lb` : '—'}</DetailRow>
         </dl>
         <h3 className="mt-4 text-sm font-semibold text-gray-900">At this event</h3>
@@ -127,22 +150,6 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
       {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        {!picking && (
-          <div className="grid w-full grid-cols-2 gap-2">
-            <button
-              onClick={onOpenCar}
-              className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-700"
-            >
-              Car details
-            </button>
-            <button
-              onClick={() => setPicking(true)}
-              className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
-            >
-              Change car
-            </button>
-          </div>
-        )}
         {picking && car && (
           <button onClick={() => setPicking(false)} disabled={!!busy} className="text-sm text-gray-600 hover:text-gray-800">Cancel</button>
         )}

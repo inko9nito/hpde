@@ -817,11 +817,11 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, dri
   await expect(carRow).toBeVisible()
   await expect(page.getByRole('tab', { name: 'My notes (1)' })).toBeVisible()
   await carRow.click()
-  const details = page.getByRole('dialog', { name: 'The Cayman' })
+  const details = page.getByRole('dialog', { name: 'Your car' })
   await expect(details).toContainText('Lug nut torque118 ft·lb')
   await expect(details.getByLabel('Consumables')).toContainText('Front padsHawk DTC-60since Mar 1, 2026')
   // Its page, over the event; Back returns to the event.
-  await details.getByRole('button', { name: 'Car details' }).click()
+  await details.getByRole('button', { name: 'The Cayman: car details' }).click()
   await expect(page).toHaveURL(/#\/garage\/car1$/)
   await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
   await page.getByRole('button', { name: 'Back' }).last().click()
