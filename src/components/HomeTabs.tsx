@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { CalendarDays, Car, ChevronRight, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
+import { CalendarDays, Car, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AppMenu } from './AppMenu'
 import { AccountButton } from './AccountButton'
@@ -7,8 +7,8 @@ import { BackButton } from './EventHeader'
 
 // The app's top-level sections (#274): Events (the list of events), Tracks
 // (lap times by track layout) and More (#345), picked from a tab bar along
-// the bottom, as in an iOS app. More is a list of the rest — Instructor
-// evaluations and the Garage — each of which slides in over it, as pushed
+// the bottom, as in an iOS app. More is the rest — Instructor evaluations
+// and the Garage — as tiles, each of which slides in over it, as pushed
 // pages — an event, a track — slide in over the tabs.
 
 export type HomeTab = 'events' | 'tracks' | 'more'
@@ -63,10 +63,12 @@ export function TabBar({ active, style }: { active: HomeTab; style?: CSSProperti
               key={id}
               href={HOME_TAB_HASH[id]}
               aria-current={current ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center justify-center gap-1 font-rubik text-[11px] transition-colors ${
-                current ? 'font-medium text-gray-900' : 'text-gray-400 hover:text-gray-600'
+              className={`relative flex flex-1 flex-col items-center justify-center gap-1 font-rubik text-[11px] transition-colors ${
+                current ? 'font-medium text-red-600' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
+              {/* The current tab is red, with a line along the top over the bar's border (#371). */}
+              {current && <span className="absolute inset-x-2 -top-px h-0.5 bg-red-600" aria-hidden="true" />}
               <Icon size={22} strokeWidth={current ? 2.25 : 2} aria-hidden="true" />
               {label}
             </a>
@@ -118,24 +120,25 @@ const MORE_ITEMS: readonly { page: MorePage; label: string; Icon: LucideIcon }[]
   { page: 'garage', label: 'Garage', Icon: Car },
 ]
 
-/** The More tab (#345): a list of the rest of the app, each opening its page over it. */
+/**
+ * The More tab (#345): the rest of the app, as tiles (#371) — each opening
+ * its page over it — with outlined icons, as in the tab bar it's the
+ * overflow of (white on black is for tracks).
+ */
 export function MoreTab() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="More" />
-        <ul className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="More">
+        <ul className="grid grid-cols-2 gap-3" aria-label="More">
           {MORE_ITEMS.map(({ page, label, Icon }) => (
-            <li key={page}>
+            <li key={page} className="flex">
               <a
                 href={MORE_PAGE_HASH[page]}
-                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50 active:bg-gray-100"
+                className="flex min-h-[112px] w-full flex-col items-center gap-2.5 rounded-2xl border border-gray-200 bg-white px-3 py-5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
               >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-900 text-white">
-                  <Icon size={18} aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1 text-[15px] font-medium text-gray-900">{label}</span>
-                <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
+                <Icon size={28} strokeWidth={1.75} className="shrink-0 text-gray-700" aria-hidden="true" />
+                <span className="font-rubik text-[15px] leading-tight text-gray-900">{label}</span>
               </a>
             </li>
           ))}
