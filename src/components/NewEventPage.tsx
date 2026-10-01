@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useAuth, SignedOutError } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
@@ -127,8 +127,18 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
  * saved in place, to edit one (#232). Admins only; the events function
  * enforces it.
  */
-export function EventDetailsForm({ event, onDone }: { event?: EventConfig; onDone: (event: EventConfig) => void }) {
+export function EventDetailsForm({ event, onDone, title, subtitle, onCancel, notice }: {
+  event?: EventConfig
+  onDone: (event: EventConfig) => void
+  /** The page it's on (see FormPage): its Save is in the page's toolbar. */
+  title: string
+  subtitle?: string
+  onCancel: () => void
+  /** Shown above the form. */
+  notice?: React.ReactNode
+}) {
   const { authedFetch } = useAuth()
+  const formId = useId()
   const { events, allEvents, addEvent } = useEvents()
   const [saved] = useState<FormState>(() => (event ? formFrom(event) : EMPTY))
   const [form, setForm] = useState<FormState>(() => (event && readDraft(event.id, saved)) || saved)
@@ -243,8 +253,19 @@ export function EventDetailsForm({ event, onDone }: { event?: EventConfig; onDon
     }
   }
 
+  // Cancel drops the changes then and there, not once the page has slid away.
+  function cancel() {
+    if (event) writeDraft(event.id, null)
+    onCancel()
+  }
+
+  const save = event
+    ? { label: saving ? 'Saving…' : 'Save', disabled: saving || unchanged, form: formId }
+    : { label: saving ? 'Creating…' : 'Create', disabled: saving, form: formId }
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <FormPage title={title} subtitle={subtitle} onCancel={cancel} cancelDisabled={saving} save={save}>
+    {notice}
+    <form id={formId} onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <Field label="Title">
           <input required value={form.name} onChange={set('name')} className={inputClass} placeholder="SCCA at MSRC 1.7 CW" />
@@ -325,34 +346,34 @@ export function EventDetailsForm({ event, onDone }: { event?: EventConfig; onDon
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={saving || unchanged}
-        className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
-      >
-        {event ? (saving ? 'Saving…' : 'Save') : (saving ? 'Creating…' : 'Create event')}
-      </button>
       <p className="text-center text-xs text-gray-400">
         {event
           ? 'Changing the dates moves the schedule with them.'
           : 'The schedule can be added after the event is created.'}
       </p>
     </form>
+    </FormPage>
   )
 }
 
-/** Page shell shared with the details editor: title bar, then the form. */
-export function FormPage({ title, subtitle, onClose, children }: {
+/**
+ * Page shell shared with the details editor: the toolbar — Cancel, the
+ * page's name, Save — then what's on it. It slides up over the page it's
+ * opened from (#368).
+ */
+export function FormPage({ title, subtitle, onCancel, cancelDisabled, save, children }: {
   title: string
   subtitle?: string
-  onClose: () => void
+  onCancel: () => void
+  cancelDisabled?: boolean
+  save: React.ComponentProps<typeof PageHeader>['save']
   children: React.ReactNode
 }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:pt-5">
-        <PageHeader title={title} subtitle={subtitle} onClose={onClose} />
-        <div className="mt-4">{children}</div>
+      <PageHeader title={title} subtitle={subtitle} onCancel={onCancel} cancelDisabled={cancelDisabled} save={save} />
+      <div className="mx-auto max-w-lg px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4 sm:px-4 sm:pt-6">
+        {children}
       </div>
     </div>
   )
@@ -361,13 +382,13 @@ export function FormPage({ title, subtitle, onClose, children }: {
 /** "New event" (#229): the details form, blank. */
 export function NewEventPage({ onCreated, onClose }: { onCreated: (event: EventConfig) => void; onClose: () => void }) {
   const { status, user } = useAuth()
-  let content: React.ReactNode
-  if (status !== 'signed-in') {
-    content = <SignInPrompt reason="add events" />
-  } else if (!user?.roles.includes(ADMIN_ROLE)) {
-    content = <Notice title="Only admins can add events." detail={`Signed in as ${user?.email}`} />
-  } else {
-    content = <EventDetailsForm onDone={onCreated} />
-  }
-  return <FormPage title="New event" onClose={onClose}>{content}</FormPage>
+  const page = { title: 'New event', onCancel: onClose }
+  if (status === 'signed-in' && user?.roles.includes(ADMIN_ROLE)) return <EventDetailsForm {...page} onDone={onCreated} />
+  return (
+    <FormPage {...page} save={{ label: 'Create', disabled: true }}>
+      {status !== 'signed-in'
+        ? <SignInPrompt reason="add events" />
+        : <Notice title="Only admins can add events." detail={`Signed in as ${user?.email}`} />}
+    </FormPage>
+  )
 }

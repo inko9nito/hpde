@@ -6,15 +6,14 @@ import { SignInPrompt } from './SignInPrompt'
 import { Notice, SignedOutNotice } from './Notice'
 import type { EventConfig } from '../types'
 
-export const EDIT_EVENT_HASH_PREFIX = '#/edit-event/'
-
+// A sub-page of the event's (#368), like Share: it slides up over the event's page.
 export function editEventHash(eventId: string): string {
-  return `${EDIT_EVENT_HASH_PREFIX}${encodeURIComponent(eventId)}`
+  return `#/event/${encodeURIComponent(eventId)}/edit`
 }
 
 export function eventIdFromEditEventHash(hash: string): string | null {
-  if (!hash.startsWith(EDIT_EVENT_HASH_PREFIX)) return null
-  return decodeURIComponent(hash.slice(EDIT_EVENT_HASH_PREFIX.length))
+  const m = /^#\/event\/([^/]+)\/edit$/.exec(hash)
+  return m ? decodeURIComponent(m[1]) : null
 }
 
 interface Props {
@@ -26,7 +25,8 @@ interface Props {
 /**
  * "Edit details" (#232): the New event form, filled in with the event's
  * details, dates included. Saving keeps the event's id (so links to it
- * still work) and moves its schedule to the new dates.
+ * still work) and moves its schedule to the new dates. It slides up over
+ * the event's page, Cancel and Save across its top (#368).
  */
 export function EditEventPage({ eventId, onClose, onSaved }: Props) {
   const { status, user } = useAuth()
@@ -37,6 +37,7 @@ export function EditEventPage({ eventId, onClose, onSaved }: Props) {
   // it for the sign-in prompt.
   const wasEditing = useRef(false)
 
+  const page = { title: 'Edit details', subtitle: event?.name, onCancel: onClose }
   let content: React.ReactNode
   if (status === 'loading' || (!loaded && (!event || isStored(eventId)))) {
     // Wait for the fresh list, so the form never starts from a stale copy.
@@ -51,17 +52,20 @@ export function EditEventPage({ eventId, onClose, onSaved }: Props) {
     content = <Notice title="Test events can’t be edited." detail="They ship with the app." />
   } else {
     wasEditing.current = true
-    content = (
-      <>
-        {status !== 'signed-in' && (
+    return (
+      <EventDetailsForm
+        key={event.id}
+        {...page}
+        event={event}
+        onDone={onSaved}
+        notice={status !== 'signed-in' && (
           <div className="mb-4">
             <SignedOutNotice detail="Sign in again to save. Your changes are kept." />
           </div>
         )}
-        <EventDetailsForm key={event.id} event={event} onDone={onSaved} />
-      </>
+      />
     )
   }
 
-  return <FormPage title="Edit details" subtitle={event?.name} onClose={onClose}>{content}</FormPage>
+  return <FormPage {...page} save={{ label: 'Save', disabled: true }}>{content}</FormPage>
 }

@@ -326,7 +326,7 @@ test('an admin adds an event from beside the list/calendar toggle; the page slid
   expect(slide).toEqual({ fromBelow: true, fromSide: false })
   await expect(page.getByLabel('Title')).toBeInViewport()
 
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'New event' })).toHaveCount(0)
   await expect(page).toHaveURL(/#\/$/)
   await expect(add).toBeInViewport()
@@ -347,7 +347,7 @@ test('the page under a pushed page doesn’t scroll while it’s open (#321)', a
   expect(await documentScrolls()).toBe(false)
   const scroller = heading.locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
   expect(await scroller.evaluate(el => getComputedStyle(el).overscrollBehaviorY)).toBe('contain')
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(heading).toHaveCount(0)
   expect(await documentScrolls()).toBe(true)
 
@@ -536,7 +536,9 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   await expect(more).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('link', { name: 'Add schedule' }).click()
+  // Up from the bottom, over the event's page (#368).
+  const slide = await trackSlide(page, () => page.getByRole('link', { name: 'Add schedule' }).click(), 'Edit schedule')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
   const textarea = page.getByRole('textbox', { name: 'Schedule' })
   await expect(textarea).toHaveValue(new RegExp(`## ${upcoming.days[0].label} \\| ${upcoming.days[0].date}`))
   // 16px, or iOS zooms the page in when a field is tapped.
@@ -547,7 +549,7 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   const text = (await textarea.inputValue()).replace(/\/\/ (\d{1,2}:\d\d|break)/g, '$1')
   await textarea.fill(text.replace('7:00 AM general', '7:00 general'))
   await expect(page.getByRole('list', { name: 'Problems' })).toContainText('“7:00” needs AM or PM')
-  await expect(page.getByRole('button', { name: 'Save schedule' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
   await textarea.fill(text)
   await expect(page.getByRole('list', { name: 'Problems' })).toHaveCount(0)
 
@@ -560,11 +562,15 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   await novice.getByRole('textbox', { name: 'Novice description' }).fill('First timers')
   await expect(novice.getByRole('textbox', { name: 'Novice description' })).toHaveCSS('font-size', '16px')
 
-  // Scrolled all the way down, the Edit / Preview tabs are still on screen.
-  const scrollRoot = page.locator('[data-scroll-root]')
+  // Scrolled all the way down, the toolbar and the Edit / Preview tabs are still on screen.
+  const scrollRoot = page.getByRole('heading', { level: 1, name: 'Edit schedule' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
   await scrollRoot.evaluate(el => el.scrollTo(0, el.scrollHeight))
   await expect.poll(() => scrollRoot.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
   await expect(page.getByRole('tab', { name: 'Preview' })).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeInViewport()
+  // …the tabs just under the toolbar, not behind it.
+  const [bar, tabs] = [await page.getByRole('button', { name: 'Save' }).boundingBox(), await page.getByRole('tablist', { name: 'Editor view' }).boundingBox()]
+  expect(tabs!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height)
   // Nothing wider than the screen.
   expect(await scrollRoot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
@@ -573,10 +579,12 @@ test('an admin adds a schedule: days in markdown, group colors picked from names
   await expect(page.getByText('Novice', { exact: true }).first()).toHaveCSS('background-color', hexToRgb(resolveTailwindBgColor('bg-rungreen-500')))
   expect(await scrollRoot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
-  await page.getByRole('button', { name: 'Save schedule' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Schedule saved')).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
-  await expect(page.getByText('Registration & tech')).toBeVisible()
+  // The event's page, under the editor as it slides back down, has the new schedule.
+  await expect(page.getByRole('tabpanel', { name: 'Schedule' }).getByText('Registration & tech')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit schedule' })).toHaveCount(0)
   expect(body!.runGroups).toEqual([
     { label: 'Novice', bgClass: 'bg-rungreen-500', description: 'First timers' },
     { label: 'Intermediate', bgClass: 'bg-runorange-500' },
@@ -596,9 +604,17 @@ test('an admin edits an event’s details: renamed and a day added (#232)', asyn
   })
 
   await page.goto(`/#/event/${upcoming.id}`)
+  // Up from the bottom, over the event's page, and Cancel takes it back down (#368).
   await page.getByRole('button', { name: 'More actions' }).click()
-  await page.getByRole('menuitem', { name: 'Edit details' }).click()
-  await expect(page.getByRole('heading', { name: 'Edit details' })).toBeVisible()
+  let slide = await trackSlide(page, () => page.getByRole('menuitem', { name: 'Edit details' }).click(), 'Edit details')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit details' })).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
+
+  await page.getByRole('button', { name: 'More actions' }).click()
+  slide = await trackSlide(page, () => page.getByRole('menuitem', { name: 'Edit details' }).click(), 'Edit details')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
   const title = page.getByLabel('Title')
   await expect(title).toHaveValue('Upcoming Track Day')
   await expect(page.getByLabel('Location')).toHaveValue('Charlie Raceway')

@@ -14,7 +14,8 @@ PR; the session title isn't, so keep it accurate.
 
 A page closed with Cancel (or ✕) is a modal: it slides up from the bottom
 and back down when dismissed, as on iOS — `PushPage` with `from="bottom"`.
-Only pages closed with Back slide in from the right.
+Only pages closed with Back slide in from the right. Its toolbar is
+`PageHeader` (#368): Cancel, the page's name, and Save.
 
 ## Keeping GitHub issues up to date
 

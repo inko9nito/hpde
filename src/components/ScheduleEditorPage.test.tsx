@@ -81,7 +81,7 @@ function open(hash: string, as: string[] = ['admin']) {
 }
 
 const editor = () => screen.findByRole('textbox', { name: 'Schedule' }) as Promise<HTMLTextAreaElement>
-const saveButton = () => screen.getByRole('button', { name: 'Save schedule' })
+const saveButton = () => screen.getByRole('button', { name: 'Save' })
 
 const groupRow = (name: string) => within(screen.getByRole('listitem', { name }))
 
@@ -117,11 +117,11 @@ describe('schedule editor (#232)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Edit schedule/ }))
     expect(await editor()).toBeInTheDocument()
-    expect(window.location.hash).toBe(`#/edit-schedule/${blank.id}`)
+    expect(window.location.hash).toBe(`#/event/${blank.id}/edit-schedule`)
   })
 
   it('lists what it can’t read, by line, and won’t save until it’s fixed', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE + '7:00 general | Gates\n## Sunday | 2099-10-04\n' } })
 
     const problems = within(screen.getByRole('list', { name: 'Problems' }))
@@ -135,7 +135,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('never recolors a group because another one’s color changed', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: Novice, Advanced\n' } })
     expect(groupRow('Novice').getByText('Novice')).toHaveClass('bg-runred-500')
     expect(groupRow('Advanced').getByText('Advanced')).toHaveClass('bg-runorange-500')
@@ -146,7 +146,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('lists the groups the sessions name, below the schedule, with colors picked from their names', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: '## Saturday | 2099-10-03\n08:00 session 1 | track: Instructors, Novice, Blue | class: novice\n' } })
 
     const section = screen.getByRole('region', { name: 'Run groups' })
@@ -160,7 +160,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('lets a picked color be changed, and a description added, and saves them', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE.replace('track: Red', 'track: Red, Novice') } })
 
     const novice = groupRow('Novice')
@@ -191,7 +191,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('previews the schedule as it will look', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
     expect(screen.getByText('Drivers meeting')).toBeInTheDocument()
@@ -208,7 +208,7 @@ describe('schedule editor (#232)', () => {
         : new Response(JSON.stringify({ events: [twoDay] }), { headers: { 'Content-Type': 'application/json' } }),
     )
     try {
-      open(`#/edit-schedule/${blank.id}`)
+      open(`#/event/${blank.id}/edit-schedule`)
       fireEvent.change(await editor(), { target: { value: `${SCHEDULE}\n## Sunday | 2099-10-04\n09:00 general | Sunday briefing\n` } })
       await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
 
@@ -225,7 +225,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('saves the groups and the markdown, then shows the event with its new schedule', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
 
@@ -246,11 +246,11 @@ describe('schedule editor (#232)', () => {
 
   it('shows the server’s reason when a save is refused, and stays put', async () => {
     refusePut = 'Only admins can change events.'
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('Only admins can change events.')
-    expect(window.location.hash).toBe(`#/edit-schedule/${blank.id}`)
+    expect(window.location.hash).toBe(`#/event/${blank.id}/edit-schedule`)
     expect((await editor()).value).toBe(SCHEDULE)
   })
 
@@ -262,7 +262,7 @@ describe('schedule editor (#232)', () => {
     localStorage.setItem('gotrue.user', JSON.stringify({
       id: 'u', token: { access_token: 'stale', refresh_token: 'r2', expires_at: Date.now() - 1000 },
     }))
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
 
@@ -273,7 +273,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('finds out a sign-in has lapsed when the app comes back to the front, not at save', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     renewalFails = true
     document.dispatchEvent(new Event('visibilitychange'))
@@ -282,7 +282,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('says so when the sign-in has lapsed, and keeps the changes for after signing back in', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     renewalFails = true
     await userEvent.click(saveButton())
@@ -298,18 +298,18 @@ describe('schedule editor (#232)', () => {
 
   it('says when the server can’t be reached, with the browser’s reason', async () => {
     putThrows = true
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     await userEvent.click(saveButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach the server. Check your connection and try again. (Load failed)')
   })
 
   it('keeps unsaved changes — groups and schedule — if you leave, and offers to discard them', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     fireEvent.change(await editor(), { target: { value: SCHEDULE } })
     cleanup()
 
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     expect((await editor()).value).toBe(SCHEDULE)
     expect(groupRow('Red').getByText('Red')).toBeInTheDocument()
     expect(screen.getByText('Your unsaved changes are back.')).toBeInTheDocument()
@@ -320,7 +320,7 @@ describe('schedule editor (#232)', () => {
   })
 
   it('is for admins only', async () => {
-    open(`#/edit-schedule/${blank.id}`, [])
+    open(`#/event/${blank.id}/edit-schedule`, [])
     expect(await screen.findByText('Only admins can edit schedules.')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
@@ -333,14 +333,14 @@ describe('schedule editor (#232)', () => {
     expect(item).toHaveTextContent('Test events can’t be edited')
     cleanup()
 
-    open('#/edit-schedule/test-live')
+    open('#/event/test-live/edit-schedule')
     expect(await screen.findByText('Test events can’t be edited.')).toBeInTheDocument()
   })
 
   it('closes back to the event', async () => {
-    open(`#/edit-schedule/${blank.id}`)
+    open(`#/event/${blank.id}/edit-schedule`)
     await editor()
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(window.location.hash).toBe(`#/event/${blank.id}`))
   })
 })

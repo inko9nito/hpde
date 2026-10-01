@@ -151,7 +151,7 @@ describe('deleting an event from the header menu (#229, #216, #232)', () => {
     renderApp()
     await userEvent.type(await screen.findByLabelText('Title'), 'Fresh Event')
     fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2099-11-11' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Create event' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(window.location.hash).toBe('#/event/2099-11-11_fresh'))
     expect(await screen.findByRole('status')).toHaveTextContent('“Fresh Event” created')

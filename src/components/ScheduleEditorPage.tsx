@@ -4,7 +4,7 @@ import { useAuth, SignedOutError } from '../auth/AuthContext'
 import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SignInPrompt } from './SignInPrompt'
-import { PageHeader } from './PageHeader'
+import { PageHeader, PAGE_HEADER_PX } from './PageHeader'
 import { Notice, SignedOutNotice } from './Notice'
 import { Timeline } from './Timeline'
 import { Legend } from './Legend'
@@ -16,15 +16,14 @@ import type { GroupInput, ScheduleProblem } from '../utils/scheduleEditor'
 import { RUN_GROUP_BG_CLASSES } from '../theme/runGroupColors'
 import type { EventConfig } from '../types'
 
-export const EDIT_SCHEDULE_HASH_PREFIX = '#/edit-schedule/'
-
+// A sub-page of the event's (#368), like Share: it slides up over the event's page.
 export function editScheduleHash(eventId: string): string {
-  return `${EDIT_SCHEDULE_HASH_PREFIX}${encodeURIComponent(eventId)}`
+  return `#/event/${encodeURIComponent(eventId)}/edit-schedule`
 }
 
 export function eventIdFromEditScheduleHash(hash: string): string | null {
-  if (!hash.startsWith(EDIT_SCHEDULE_HASH_PREFIX)) return null
-  return decodeURIComponent(hash.slice(EDIT_SCHEDULE_HASH_PREFIX.length))
+  const m = /^#\/event\/([^/]+)\/edit-schedule$/.exec(hash)
+  return m ? decodeURIComponent(m[1]) : null
 }
 
 // Unsaved changes, per event, so leaving the page (or the phone killing the
@@ -85,7 +84,8 @@ interface Props {
  * picked from its name, which can be changed below the schedule. Admins
  * only; the events function checks that, and checks the groups and the
  * schedule again itself before saving. The event's details — dates
- * included — aren't edited here.
+ * included — aren't edited here. It slides up over the event's page,
+ * Cancel and Save across its top (#368).
  */
 export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   const { status, user } = useAuth()
@@ -94,6 +94,7 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   // Set once the editor has been shown, so a sign-in that lapses mid-edit
   // says so (changes kept) rather than showing the generic prompt.
   const wasEditing = useRef(false)
+  const page = { title: 'Edit schedule', subtitle: event?.name, onCancel: onClose }
 
   let content: React.ReactNode
   if (status === 'loading' || (!loaded && (!event || isStored(eventId)))) {
@@ -109,25 +110,25 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
     content = <Notice title="Test events can’t be edited." detail="They ship with the app." />
   } else {
     wasEditing.current = true
-    content = <Editor key={event.id} event={event} onSaved={onSaved} />
+    return <Editor key={event.id} event={event} onSaved={onSaved} page={page} />
   }
 
   return (
-    // Its own scroll area, like the event page's (PushPage): html and body
-    // clip overflow-x, which stops `sticky` from working against the window,
-    // and the Edit / Preview tabs stick to the top of this instead.
-    <div data-scroll-root className="fixed inset-0 overflow-y-auto overflow-x-hidden bg-gray-50">
-      <div className="mx-auto max-w-lg px-3 pt-3 sm:px-4 sm:pt-5">
-        <PageHeader title="Edit schedule" subtitle={event?.name} onClose={onClose} />
-        {content}
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <PageHeader {...page} save={{ label: 'Save', disabled: true }} />
+      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6">{content}</div>
     </div>
   )
 }
 
 type Tab = 'edit' | 'preview'
 
-function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: EventConfig) => void }) {
+function Editor({ event, onSaved, page }: {
+  event: EventConfig
+  onSaved: (event: EventConfig) => void
+  /** Its toolbar, but for Save: see PageHeader. */
+  page: { title: string; subtitle?: string; onCancel: () => void }
+}) {
   const { authedFetch } = useAuth()
   const { addEvent } = useEvents()
   // As saved, when the page opened.
@@ -151,8 +152,6 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const barRef = useRef<HTMLDivElement>(null)
-  const [barHeight, setBarHeight] = useState(0)
 
   const groups = useMemo(() => deriveGroups(text, settings), [text, settings])
   const edit = useMemo(() => readScheduleEdit(event, groups, text), [event, groups, text])
@@ -178,16 +177,6 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight + 2}px`
   }, [text, tab])
-
-  // The save bar is fixed to the bottom of the screen, so the page gets
-  // room for it underneath, however tall the problem list makes it.
-  useEffect(() => {
-    const el = barRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => setBarHeight(el.offsetHeight))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
 
   function discardDraft() {
     setSettings(saved.groups)
@@ -255,7 +244,13 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
     }`
 
   return (
-    <div style={{ paddingBottom: barHeight + 16 }}>
+    <div className="flex min-h-screen flex-col bg-gray-50">
+      <PageHeader
+        {...page}
+        cancelDisabled={saving}
+        save={{ label: saving ? 'Saving…' : 'Save', disabled: saving || !changed || blocking.length > 0, onClick: handleSave }}
+      />
+      <div className="mx-auto w-full max-w-lg flex-1 px-3 pb-4 pt-3 sm:px-4 sm:pt-5">
       {restored && changed && (
         <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <span>
@@ -269,8 +264,9 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
       <div
         role="tablist"
         aria-label="Editor view"
-        // Stays at the top while the page scrolls, so you can switch any time.
-        className="sticky top-0 z-10 -mx-3 mb-5 flex gap-8 border-b border-gray-200 bg-gray-50 px-4 sm:-mx-4 sm:px-5"
+        // Stays under the toolbar while the page scrolls, so you can switch any time.
+        style={{ top: PAGE_HEADER_PX }}
+        className="sticky z-10 -mx-3 mb-5 flex gap-8 border-b border-gray-200 bg-gray-50 px-4 sm:-mx-4 sm:px-5"
       >
         <button role="tab" aria-selected={tab === 'edit'} onClick={() => setTab('edit')} className={tabClass('edit')}>
           Edit
@@ -304,23 +300,21 @@ function Editor({ event, onSaved }: { event: EventConfig; onSaved: (event: Event
         <Preview event={{ ...event, runGroups: edit.runGroups, days: edit.days }} />
       )}
 
-      <div ref={barRef} className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-gray-50/95 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur">
-        <div className="mx-auto max-w-lg px-3 sm:px-4">
-          <Problems problems={edit.problems} onGoTo={goTo} />
-          {error && (
-            <p role="alert" className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving || !changed || blocking.length > 0}
-            className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save schedule'}
-          </button>
-        </div>
       </div>
+
+      {/* What stops Save, or what it said: kept on screen at the bottom. */}
+      {(edit.problems.length > 0 || error) && (
+        <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-gray-50/95 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur">
+          <div className="mx-auto max-w-lg space-y-2 px-3 sm:px-4">
+            <Problems problems={edit.problems} onGoTo={goTo} />
+            {error && (
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -440,7 +434,7 @@ function Problems({ problems, onGoTo }: { problems: ScheduleProblem[]; onGoTo: (
   if (problems.length === 0) return null
   const blocking = problems.filter(p => p.blocking).length
   return (
-    <div className="mb-2">
+    <div>
       <p className="mb-1 text-xs font-medium text-gray-500">
         {blocking > 0
           ? `Fix ${blocking === 1 ? 'this' : `these ${blocking}`} to save:`
