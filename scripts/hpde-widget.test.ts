@@ -959,7 +959,15 @@ describe('test-live fixture gating', () => {
     expect((globalThis as any).__scheduled).toBe(0)
   })
 
+  afterEach(() => { vi.useRealTimers() })
+
   it('rewrites the test-live fixture to today when the `test` flag is set', async () => {
+    // Midday, so its 23:59 check-in (and the alert ahead of it) is still to
+    // come: run in the last minutes before midnight, it wasn't.
+    const noon = new Date()
+    noon.setHours(12, 0, 0, 0)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(noon)
     await runWidget('medium', FIXTURE_MANIFEST, 'test')
     expect((globalThis as any).__scheduled).toBe(1)
   })
