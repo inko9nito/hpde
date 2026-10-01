@@ -651,8 +651,14 @@ export default function App() {
           {activeTab === 'schedule' && !hasSchedule && (
             <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
               <CalendarClock size={20} className="mx-auto text-gray-400" aria-hidden="true" />
-              <p className="mt-2 text-sm font-medium text-gray-700">Schedule coming soon</p>
-              <p className="mt-1 text-xs text-gray-400">It’ll be posted here once the organizer announces it.</p>
+              {/* One that's over won't get one now: say so (#373). */}
+              {eventStatus === 'past' ? (<>
+                <p className="mt-2 text-sm font-medium text-gray-700">No schedule</p>
+                <p className="mt-1 text-xs text-gray-400">None was posted for this event.</p>
+              </>) : (<>
+                <p className="mt-2 text-sm font-medium text-gray-700">Schedule coming soon</p>
+                <p className="mt-1 text-xs text-gray-400">It’ll be posted here once the organizer announces it.</p>
+              </>)}
               {user?.roles.includes(ADMIN_ROLE) && isStored(activeEvent.id) && (
                 <a
                   href={editScheduleHash(activeEvent.id)}
