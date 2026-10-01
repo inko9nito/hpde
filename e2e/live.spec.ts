@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { test, expect } from './fixtures'
 
 // Read-only checks against a deployed site — a Netlify deploy preview or
@@ -45,6 +47,14 @@ test('/api/events.json is the widget feed, in the widget’s format', async ({ r
   // Colors resolved to hex, as the widget draws them.
   for (const e of body.events) {
     for (const g of e.runGroups) expect(g.color).toMatch(/^#[0-9a-f]{6}$/i)
+  }
+})
+
+test('the widget script and its loader are served, as in the repo (#351)', async ({ request }) => {
+  for (const f of ['hpde-widget.js', 'hpde-widget-loader.js']) {
+    const res = await request.get(`/${f}`)
+    expect(res.status()).toBe(200)
+    expect(await res.text()).toBe(fs.readFileSync(path.join('scripts', f), 'utf8'))
   }
 })
 

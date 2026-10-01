@@ -387,7 +387,7 @@ Private like your notes: only you and admins see it.
 Add a widget to your Home Screen and see today's schedule without opening
 the app — see [`scripts/`](./scripts/README.md) for setup instructions.
 
-**Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
+**Latest script:** https://myhpde.netlify.app/hpde-widget.js
 — always the current version, the one to share.
 
 **Known issues:** 

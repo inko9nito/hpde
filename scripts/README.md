@@ -6,9 +6,10 @@
 today's HPDE schedule on your iPhone Home Screen, so you can check what's
 next without opening the app.
 
-**Latest script:** https://raw.githubusercontent.com/inko9nito/hpde/main/scripts/hpde-widget.js
-— always points at the current version on `main`, so it's the easiest thing
-to share or open straight from an iPhone.
+**Latest script:** https://myhpde.netlify.app/hpde-widget.js
+(loader: https://myhpde.netlify.app/hpde-widget-loader.js)
+— always the version deployed from `main`, so it's the easiest thing to share
+or open straight from an iPhone.
 
 > **Known issue:** the widget isn't truly live — iOS controls when it
 > actually refreshes, so it can lag a bit behind what's happening on track.
@@ -20,7 +21,7 @@ Two ways to set up the widget — pick one:
 
 **Auto-updating (recommended):** paste
 [`hpde-widget-loader.js`](./hpde-widget-loader.js) instead of the main
-script. It's a tiny stub that fetches the real script from `main` on every
+script. It's a tiny stub that fetches the real script (as deployed from `main`) on every
 run (falling back to its last successful fetch if offline), so future
 updates need no more copy-pasting — see
 [`hpde-widget-loader.js`](./hpde-widget-loader.js) for how it works.
