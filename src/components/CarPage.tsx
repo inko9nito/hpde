@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, Plus, UserPlus } from 'lucide-react'
+import { ChevronRight, Plus, UserPlus, Users } from 'lucide-react'
 import { BackButton } from './EventHeader'
+import { ICON_BUTTON } from './iconButton'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
 import { CarFormPage } from './CarFormPage'
@@ -11,7 +12,7 @@ import { GroupBadge } from './GroupBadge'
 import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, formatDay, isShared, logNewestFirst } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, formatDay, isShared, logNewestFirst, othersText } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import type { EventConfig } from '../types'
@@ -107,8 +108,6 @@ function LogButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-const footButton = 'mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50'
-
 /**
  * Whether the page's title has scrolled up under the top bar — the cue
  * for the bar's own copy of the name, as on iOS.
@@ -127,18 +126,14 @@ function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
   return past
 }
 
-/** Setup (#410): what the car is fitted with now — its lug nut torque and its maintenance, the consumables last changed — and who drives it. */
-function SetupPanel({ car, onOpenEntry, onShare, onLog }: {
+/** Setup (#410): what the car is fitted with now — its lug nut torque and its maintenance, the consumables last changed. */
+function SetupPanel({ car, onOpenEntry, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
-  onShare: () => void
   onLog: () => void
 }) {
   const on = consumablesOn(car)
   const log = logNewestFirst(car)
-  const shared = isShared(car)
-  // You first, then the others in the order they joined.
-  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
   return (
     <div className="space-y-7">
       <section aria-label="Details" className={`${CARD_FRAME} flex min-h-14 items-center justify-between gap-3 px-4 py-3`}>
@@ -176,29 +171,6 @@ function SetupPanel({ car, onOpenEntry, onShare, onLog }: {
             })}
           </ul>
         )}
-      </section>
-
-      <section aria-label="Drivers">
-        <SectionTitle>Drivers</SectionTitle>
-        <div className={`${CARD_FRAME} px-4 py-3`}>
-          {shared ? (
-            <ul className="flex flex-col gap-2 py-1" aria-label="Drivers">
-              {drivers.map(d => (
-                <li key={d.id} className="flex items-center gap-2.5 text-sm text-gray-900">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600" aria-hidden="true">
-                    {d.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 truncate">{d.you ? <><span className="font-semibold">You</span> <span className="text-gray-500">· {d.name}</span></> : d.name}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="py-1 text-sm text-gray-500">Just you. Share it with someone else who drives it, and you both keep it up.</p>
-          )}
-          {drivers.length < MAX_DRIVERS && (
-            <button onClick={onShare} className={footButton}><UserPlus size={16} aria-hidden="true" />Share with another driver</button>
-          )}
-        </div>
       </section>
 
       <LogButton onClick={onLog} />
@@ -334,8 +306,9 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
 
 /**
  * A car's page (#344), pushed over the Garage (#410): its name and photo,
- * Edit at the top, and three tabs — Setup, what's on it now and who drives
- * it (shared with another driver, it's theirs to keep up too, #398);
+ * Share and Edit at the top — shared with another driver, it's theirs to
+ * keep up too (#398), and its page says who — and three tabs: Setup,
+ * what's on it now;
  * History, every change logged to its consumables, each of which opens to
  * change or remove; and Events, the ones it's been to and is going to, as
  * the Events tab shows them (#408), which open on their My notes.
@@ -377,12 +350,20 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           {car ? carHeading(car) : ''}
         </span>
         {car ? (
-          <button
-            onClick={() => setEditing(n => (n ?? 0) + 1)}
-            className="-mr-2 justify-self-end rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700"
-          >
-            Edit
-          </button>
+          <div className="-mr-2 flex items-center justify-self-end">
+            {/* Who drives it is the car's, not its setup's (#398): shared from up here. */}
+            {(car.drivers?.length ?? 1) < MAX_DRIVERS && (
+              <button onClick={() => setSharing(true)} aria-label="Share with another driver" className={ICON_BUTTON}>
+                <UserPlus size={20} strokeWidth={2.25} />
+              </button>
+            )}
+            <button
+              onClick={() => setEditing(n => (n ?? 0) + 1)}
+              className="rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700"
+            >
+              Edit
+            </button>
+          </div>
         ) : <span />}
       </div>
     </div>
@@ -418,6 +399,12 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
       <div className="mx-auto max-w-lg px-3 pb-5 sm:px-4">
         <h1 ref={setTitle} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
         {subtitle && <p className="mt-0.5 px-1 text-[15px] text-gray-500">{subtitle}</p>}
+        {isShared(car) && (
+          <p className="mt-2 flex items-center gap-1.5 px-1 text-sm text-gray-500" data-drivers>
+            <Users size={15} className="shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">Shared with {othersText(car)}</span>
+          </p>
+        )}
         <CarPhoto car={car} />
       </div>
       <div className="sticky z-20 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
@@ -433,7 +420,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
       >
         {tab === 'setup' && (
-          <SetupPanel car={car} onOpenEntry={setEntry} onShare={() => setSharing(true)} onLog={() => setEntry('new')} />
+          <SetupPanel car={car} onOpenEntry={setEntry} onLog={() => setEntry('new')} />
         )}
         {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={() => setEntry('new')} />}
         {tab === 'events' && (

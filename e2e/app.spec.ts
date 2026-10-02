@@ -1218,9 +1218,9 @@ test('a driver shares their car from its page, with a link to send or a code to 
     return route.fulfill({ json: { cars: [{ id: 'car1', year: 2015, make: 'Ford', model: 'Mustang GT', nickname: 'The Mustang' }], events: {} } })
   })
   await page.goto('/#/garage/car1')
-  const drivers = page.getByRole('region', { name: 'Drivers' })
-  await expect(drivers).toContainText('Just you.')
-  await drivers.getByRole('button', { name: 'Share with another driver' }).click()
+  // Not shared yet: nothing says who else drives it. Shared from the top bar, beside Edit.
+  await expect(page.locator('[data-drivers]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Share with another driver' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this car' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`/#/join-car/${token}`)
   await expect(sheet.getByRole('img', { name: 'Code to scan for the link' })).toBeVisible()
@@ -1273,7 +1273,8 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   expect(joined).toBe(true)
 
   const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Mustang' }) })
-  await expect(carPage.getByRole('list', { name: 'Drivers' }).getByRole('listitem')).toHaveText(['RYou · Rick Smith', 'JJason Smith'])
+  // Under its name, who else drives it.
+  await expect(carPage.locator('[data-drivers]')).toHaveText('Shared with Jason')
   // Each event, who drove it there, in their run group if they said.
   await carPage.getByRole('tab', { name: 'Events' }).click()
   const rows = carPage.getByRole('list', { name: 'Past events' }).getByRole('listitem')
