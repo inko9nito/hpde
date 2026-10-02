@@ -837,8 +837,8 @@ export default function App() {
         instant={swiped}
         whiteHeader={overlayWhiteTop}
         from="bottom"
-        // A sheet, but for the iOS widget page, closed with ✕ (#415).
-        sheet={overlayWhiteTop}
+        // A sheet, the iOS widget page too, closed with ✕ (#415).
+        sheet
       >
         {shownOverlay.kind === 'new-event' ? (
           <NewEventPage

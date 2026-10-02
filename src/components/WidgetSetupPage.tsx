@@ -127,17 +127,18 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
   const current = PREVIEWS.find(p => p.id === preview)!
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // As tall as the sheet it's on, at least (#415).
+    <div className="min-h-full bg-gray-50">
       <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-gray-900">iOS widget</h1>
+          {/* A sheet's ✕, as on iOS (#415): a gray circle. */}
           <a
             href={closeHref}
             aria-label="Close"
-            className="flex shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition-colors hover:border-gray-400 hover:text-gray-700"
-            style={{ minWidth: 36, minHeight: 36 }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600 transition-colors hover:bg-gray-200"
           >
-            <X size={18} />
+            <X size={16} strokeWidth={2.5} />
           </a>
         </div>
 

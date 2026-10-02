@@ -317,7 +317,7 @@ describe('a page sheet (#415)', () => {
     expect(pageIn(getByTestId('sheet')).style.transform).toBe('translateY(0)')
   })
 
-  it('leaves a page that slides up without being a sheet as it was (the iOS widget page)', async () => {
+  it('leaves a page that slides up without being a sheet as it was', async () => {
     const { getByTestId } = render(
       <>
         <div data-testid="tabs" style={{}} />

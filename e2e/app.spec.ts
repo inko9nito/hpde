@@ -458,10 +458,13 @@ test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }
   await expectShareSheet(page, sheet)
   await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
-  // The iOS widget, as a page.
+  // The iOS widget, as a page sheet with ✕ (#415).
   await page.getByRole('button', { name: 'Menu' }).click()
   const slide = await trackSlide(page, () => menu.getByRole('link', { name: 'Get iOS widget' }).click(), 'iOS widget')
   expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  const widget = page.getByRole('heading', { level: 1, name: 'iOS widget' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await widget.boundingBox())?.y).toBe(18)
+  await expect(widget).toHaveCSS('border-top-left-radius', '12px')
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
 })

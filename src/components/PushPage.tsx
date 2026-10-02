@@ -256,7 +256,7 @@ interface Props {
   raised?: boolean
   /**
    * With `from="bottom"`: an iOS page sheet (#415), for a page with Cancel
-   * and Save. It stops a little below the status bar, with rounded top
+   * and Save, or the iOS widget page's ✕. It stops a little below the status bar, with rounded top
    * corners, and what's under it shrinks back into a dimmed card on black.
    */
   sheet?: boolean
