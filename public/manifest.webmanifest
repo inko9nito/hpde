@@ -1,0 +1,9 @@
+{
+  "name": "HPDE Events",
+  "short_name": "HPDE",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#f9fafb"
+}
