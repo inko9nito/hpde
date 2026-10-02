@@ -977,7 +977,7 @@ describe('instructor evaluation (#340)', () => {
     expect(within(sheet).queryByText('You drove in')).not.toBeInTheDocument()
     fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'Pat Lee' } })
     fireEvent.change(within(sheet).getByLabelText('Instructor notes'), { target: { value: 'Smooth hands; look further ahead.' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({ instructor: 'Pat Lee', notes: 'Smooth hands; look further ahead.' })
     const card = screen.getByRole('region', { name: 'Instructor evaluation' })
@@ -1003,7 +1003,7 @@ describe('instructor evaluation (#340)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
     await userEvent.click(await screen.findByRole('button', { name: /^Add instructor evaluation/ }))
     fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save evaluation' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('region', { name: 'Instructor evaluation' })).toHaveTextContent('John Harms')
 
@@ -1022,7 +1022,7 @@ describe('instructor evaluation (#340)', () => {
     // Their group is the event's, shown, not picked.
     expect(sheet).toHaveTextContent('You drove inPink')
     expect(within(sheet).queryByRole('combobox')).not.toBeInTheDocument()
-    expect(within(sheet).getByRole('button', { name: 'Save evaluation' })).toBeDisabled()
+    expect(within(sheet).getByRole('button', { name: 'Save' })).toBeDisabled()
 
     fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'John Harms' } })
     fireEvent.change(within(sheet).getByLabelText('Car'), { target: { value: 'Porsche Panamera' } })
@@ -1050,7 +1050,7 @@ describe('instructor evaluation (#340)', () => {
     await userEvent.click(within(within(sheet).getByRole('group', { name: 'Aggressiveness = skill' })).getByRole('button', { name: 'Yes' }))
     fireEvent.change(within(sheet).getByLabelText('Car aids over activated'), { target: { value: '25' } })
     fireEvent.change(within(sheet).getByLabelText('Instructor notes'), { target: { value: 'Very smooth.' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({
@@ -1146,7 +1146,7 @@ describe('instructor evaluation (#340)', () => {
     expect(within(within(sheet).getByRole('group', { name: 'Aggressiveness = skill' })).queryByRole('button', { name: 'Too aggressive' })).not.toBeInTheDocument()
     await userEvent.click(within(cards).getByRole('button', { name: 'Blue' }))
 
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({
       card: 'blue',
@@ -2081,7 +2081,7 @@ describe('Instructor evaluations across events (#345)', () => {
     const form = await screen.findByRole('dialog', { name: 'Instructor evaluation' })
     await userEvent.type(within(form).getByLabelText('Instructor', { exact: true }), 'Sam')
     await userEvent.type(within(form).getByLabelText('Instructor notes'), 'Look further ahead.')
-    await userEvent.click(within(form).getByRole('button', { name: 'Save evaluation' }))
+    await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(notesByEvent[sameLayout.id]?.evaluation).toMatchObject({ instructor: 'Sam', notes: 'Look further ahead.' }))
 
     // Back on the page, it has feedback now.

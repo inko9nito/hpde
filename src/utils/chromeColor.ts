@@ -11,6 +11,9 @@ import { useEffect } from 'react'
 /** White, for pages whose top edge is the white event header. */
 export const HEADER_CHROME_COLOR = '#ffffff'
 
+/** Black, over a sheet: what's under it shrinks back on black (#415). */
+export const SHEET_CHROME_COLOR = '#000000'
+
 function themeColorMeta(): HTMLMetaElement {
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {

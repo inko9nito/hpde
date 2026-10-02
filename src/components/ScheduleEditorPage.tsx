@@ -114,7 +114,7 @@ export function ScheduleEditorPage({ eventId, onClose, onSaved }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-full bg-gray-50">
       <PageHeader {...page} save={{ label: 'Save', disabled: true }} />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6">{content}</div>
     </div>
@@ -244,7 +244,7 @@ function Editor({ event, onSaved, page }: {
     }`
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-full flex-col bg-gray-50">
       <PageHeader
         {...page}
         cancelDisabled={saving}

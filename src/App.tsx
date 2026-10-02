@@ -13,7 +13,7 @@ import { Legend } from './components/Legend'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
-import { PushPage, useUnderPushedPages } from './components/PushPage'
+import { PushPage, useSheetUp, useUnderPushedPages } from './components/PushPage'
 import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
@@ -50,7 +50,7 @@ import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
-import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
+import { useChromeColor, HEADER_CHROME_COLOR, SHEET_CHROME_COLOR } from './utils/chromeColor'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -260,6 +260,12 @@ export default function App() {
   const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
   // A TDE event's report card, open in its sheet (#340).
   const [evaluationOpen, setEvaluationOpen] = useState(false)
+  // A fresh page each time it's opened, even while the last is still sliding away (#415).
+  const [evaluationN, setEvaluationN] = useState(0)
+  function openEvaluation() {
+    setEvaluationN(n => n + 1)
+    setEvaluationOpen(true)
+  }
   // The event's car, open in its sheet (#344).
   const [carSheetOpen, setCarSheetOpen] = useState(false)
   // The event a car is being added from, on its own page over the event (#344).
@@ -427,9 +433,12 @@ export default function App() {
   // it white; the iOS widget page is gray to the top.
   const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget'
   const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
-  useChromeColor(whiteTop ? HEADER_CHROME_COLOR : null)
+  // Black over a sheet, as what's under it shrinks back on black (#415).
+  const sheetUp = useSheetUp()
+  useChromeColor(sheetUp ? SHEET_CHROME_COLOR : whiteTop ? HEADER_CHROME_COLOR : null)
   // The tabs slide a little way left under the first page pushed over them (#367).
   const underPages = useUnderPushedPages(swiped)
+  const underTabBar = useUnderPushedPages(swiped, 'tab bar')
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -564,7 +573,7 @@ export default function App() {
         {homeTab === 'more' && <MoreTab />}
       </div>
     </PullToRefresh>
-    <TabBar active={homeTab} style={underPages} />
+    <TabBar active={homeTab} style={underTabBar} />
     {/* Before the event's page, which goes over it when opened from it. */}
     {shownMorePage && (
       <PushPage
@@ -587,7 +596,7 @@ export default function App() {
             onOpenEvent={event => openEventNotes(event)}
             onAddEvaluation={event => {
               openEventNotes(event)
-              setEvaluationOpen(true)
+              openEvaluation()
             }}
           />
           </PullToRefresh>
@@ -739,7 +748,7 @@ export default function App() {
                 groups: [session.group],
                 view,
               })}
-              onEditEvaluation={() => setEvaluationOpen(true)}
+              onEditEvaluation={openEvaluation}
               garage={garageOn ? {
                 status: garage.status,
                 car: eventCar,
@@ -828,6 +837,8 @@ export default function App() {
         instant={swiped}
         whiteHeader={overlayWhiteTop}
         from="bottom"
+        // A sheet, the iOS widget page too, closed with ✕ (#415).
+        sheet
       >
         {shownOverlay.kind === 'new-event' ? (
           <NewEventPage
@@ -990,7 +1001,7 @@ export default function App() {
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
       <EventEvaluationSheet
-        key={`${activeEvent.id} ${driver?.id ?? ''}`}
+        key={`${activeEvent.id} ${driver?.id ?? ''} ${evaluationN}`}
         event={activeEvent}
         events={ALL_EVENTS}
         existing={notesLog.evaluation}
@@ -998,15 +1009,13 @@ export default function App() {
         lastCard={lastCard}
         onSave={async evaluation => {
           await notesLog.saveEvaluation(evaluation)
-          setEvaluationOpen(false)
           showToast('Evaluation saved')
         }}
         onRemove={async () => {
           await notesLog.removeEvaluation()
-          setEvaluationOpen(false)
           showToast('Evaluation removed')
         }}
-        onClose={() => setEvaluationOpen(false)}
+        onClosed={() => setEvaluationOpen(false)}
       />
     )}
     {/* Clear of the tab bar while a tab is showing. */}

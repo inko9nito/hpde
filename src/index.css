@@ -27,6 +27,20 @@ html.push-page-open body {
   overflow: hidden;
 }
 
+/* Under a page sheet (#415, src/components/PushPage.tsx), what's under it
+   shrinks back into a card on black. The page goes black as the sheet comes
+   up, along iOS's spring (src/utils/iosSpring.ts, as a cubic-bezier); the
+   tabs, and each pushed page, paint their own background meanwhile. */
+html {
+  transition: background-color 500ms cubic-bezier(0.32, 0.6, 0.05, 0.98);
+}
+html.page-sheet-open body {
+  background-color: transparent !important;
+}
+html.page-sheet-up {
+  background-color: #000;
+}
+
 /* Hides the Identity widget's modal while the Google sign-in finishes
    (src/auth/identity.ts). */
 html.finishing-sign-in #netlify-identity-widget {
