@@ -12,6 +12,7 @@ import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { FadedTrack, TrackIcon } from './TrackIcon'
 import { HomeHeader } from './HomeTabs'
+import { HomeScreenBanner } from './HomeScreenBanner'
 import { StatusBadge } from './EventHeader'
 import { GroupBadge } from './GroupBadge'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -307,6 +308,8 @@ export function LandingPage({ onOpenEvent }: Props) {
             {isAdmin && <AddEventLink />}
           </div>
         </HomeHeader>
+
+        <HomeScreenBanner />
 
         {view === 'list' ? (
           <div className="space-y-16">

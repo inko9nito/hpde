@@ -1,3 +1,4 @@
+import { devices } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 import { TEST_EVENTS } from '../src/test/events'
@@ -1576,4 +1577,41 @@ test('a half-folded event header snaps shut or open', async ({ page }) => {
   await scroller.evaluate(el => el.scrollTo(0, 30))
   await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(0)
   await expect(heading).toBeVisible()
+})
+
+// The Add to Home Screen card (#379), in Safari on an iPhone (the Chromium
+// run borrows the iPhone's user agent). The other tests start with it
+// dismissed (e2e/fixtures.ts).
+test.describe('Add to Home Screen banner (#379)', () => {
+  test.use({ homeScreenBanner: true, userAgent: devices['iPhone 13'].userAgent })
+
+  test('sits above the events, shows the steps, and stays away once dismissed', async ({ page }) => {
+    await stubEvents(page)
+    await page.goto('/#/')
+    const banner = page.getByRole('region', { name: 'Add to Home Screen' })
+    await expect(banner).toBeVisible()
+    const firstEvent = page.getByRole('button', { name: /Upcoming Track Day/ })
+    await expect(firstEvent).toBeVisible()
+    expect((await banner.boundingBox())!.y).toBeLessThan((await firstEvent.boundingBox())!.y)
+
+    await banner.getByRole('button', { name: 'Show me how' }).click()
+    const steps = page.getByRole('dialog', { name: 'Add to Home Screen' })
+    await expect(steps.getByText('You may need to scroll down to find it.')).toBeVisible()
+    await steps.getByRole('button', { name: 'Close' }).click()
+    await expect(steps).toBeHidden()
+
+    await banner.getByRole('button', { name: 'Dismiss' }).click()
+    await expect(banner).toBeHidden()
+    await page.reload()
+    await expect(firstEvent).toBeVisible()
+    await expect(banner).toHaveCount(0)
+  })
+
+  test('never shows in the Home Screen app', async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }))
+    await stubEvents(page)
+    await page.goto('/#/')
+    await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Add to Home Screen' })).toHaveCount(0)
+  })
 })
