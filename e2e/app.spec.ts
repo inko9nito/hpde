@@ -1718,3 +1718,38 @@ test.describe('Add to Home Screen banner (#379)', () => {
     await expect(page.getByRole('region', { name: 'Add to Home Screen' })).toHaveCount(0)
   })
 })
+
+test('a car’s page opened from one of its events, after another of its events, slides all the way in (#380)', async ({ page }) => {
+  const [first, second] = TEST_EVENTS
+  await stubEvents(page, [first, second])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const car = { id: 'car1', make: 'Porsche', model: 'Cayman', nickname: 'The Cayman' }
+  await page.route(/\/api\/garage(\?|$)/, route => route.fulfill({
+    json: { cars: [car], events: { [first.id]: { carId: 'car1' }, [second.id]: { carId: 'car1' } } },
+  }))
+  const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Cayman' }) })
+  const openCar = async () => {
+    await page.locator('.fixed.inset-0', { has: page.getByRole('button', { name: 'Your car: The Cayman' }) }).last()
+      .getByRole('button', { name: 'Your car: The Cayman' }).click()
+    await page.getByRole('dialog', { name: 'Your car' }).getByRole('button', { name: 'The Cayman: car details' }).click()
+    await expect(page).toHaveURL(/#\/garage\/car1$/)
+    // In place, not left where it would be under another page.
+    await expect.poll(() => carPage.evaluate(el => el.getBoundingClientRect().left)).toBe(0)
+  }
+
+  // The first event, its car's page, and another of the car's events over it…
+  await page.goto(`/#/event/${first.id}`)
+  await page.getByRole('tab', { name: /My notes/ }).click()
+  await openCar()
+  await carPage.getByRole('list', { name: 'The Cayman’s events' }).getByRole('button', { name: new RegExp(`^${second.name}`) }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${second.id}$`))
+  // …which has the Garage under the car's page now: the car's page still opens over it.
+  await openCar()
+  await expect(carPage.getByRole('button', { name: 'Edit details' })).toBeInViewport({ ratio: 1 })
+  await carPage.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/garage$/)
+  await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()
+})
