@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { createHash } from 'node:crypto'
 import handler from '../functions/notes.mts'
 import { fakeBlobs } from './fakeBlobs'
+import { SAMPLE_REPORT_CARDS } from '../../src/data/fixtures/sampleReportCards'
+import { cleanEventEvaluation } from '../../src/utils/evaluation'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:notes')
@@ -31,6 +34,9 @@ const identity = {
 
 const EVENT = '2026-09-11_msrc-1-7'
 
+// Whose the sample laps are (#310), for these tests: nobody, unless one sets it.
+let sampleDriverSha256 = ''
+
 const call = (
   method: string,
   { token, body, query = `?event=${EVENT}`, context = {} }: { token?: string; body?: unknown; query?: string; context?: unknown } = {},
@@ -42,7 +48,7 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity } as never,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, sampleDriverSha256 } as never,
   )
 
 const session2 = {
@@ -63,7 +69,10 @@ const reportCard = {
 const notesOf = async (token: string, query?: string) => (await (await call('GET', { token, query })).json())
 
 describe('notes function (#340)', () => {
-  beforeEach(() => blobs.clear())
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
 
   it('needs a sign-in for everything', async () => {
     expect((await call('GET')).status).toBe(401)
@@ -105,6 +114,19 @@ describe('notes function (#340)', () => {
     expect(evaluation).toMatchObject(rest)
     expect(evaluation).not.toHaveProperty('car')
     expect(Object.keys(evaluation.skills)).toEqual(['flags', 'passing'])
+  })
+
+  it('saves a Blue run group’s report card with its own skills and fields, and says it’s Blue’s (#350)', async () => {
+    const blue = {
+      card: 'blue', instructor: 'Brett Gabriel', instructed: 'partTime', escTc: 'On',
+      next: { sameTrack: 'Yellow', newTrack: 'Blue' }, nextHow: { newTrack: 'partTime' }, nextOr: { newTrack: 'Yellow' },
+      skills: { flags: 95, exits: 95, offline: 95 }, aggressivenessIsSkill: 'tooAggressive', carAidsPct: 25, soloQualified: true,
+    }
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: blue } })).status).toBe(200)
+    expect((await notesOf('vera-token')).evaluation).toMatchObject(blue)
+    // A card the app doesn't know, or Green's answer it can't give.
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: { ...blue, card: 'orange' } } })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: { ...reportCard, aggressivenessIsSkill: 'tooAggressive' } } })).status).toBe(400)
   })
 
   it('keeps the report card and the sessions’ evaluations side by side', async () => {
@@ -188,5 +210,34 @@ describe('notes function (#340)', () => {
     expect((await notesOf('vera-token')).sessions.map((s: { key: string }) => s.key)).toEqual(['2026-09-12 10:25 pink'])
     const previewNotes = await (await call('GET', { token: 'vera-token', context: preview })).json()
     expect(previewNotes.sessions.map((s: { key: string }) => s.key)).toEqual(['2026-09-12 08:30 pink'])
+  })
+})
+
+describe('the sample laps’ driver’s report cards (#350)', () => {
+  const [nov, dec] = SAMPLE_REPORT_CARDS
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = createHash('sha256').update('jason@example.com').digest('hex')
+  })
+
+  it('are cards the app would save as they are', () => {
+    for (const { eventId, evaluation } of SAMPLE_REPORT_CARDS) expect(cleanEventEvaluation(evaluation), eventId).toEqual({ value: evaluation })
+  })
+
+  it('are filled into their account once — for an admin acting as them too — keeping a card already there', async () => {
+    store.set(`${JASON}/${dec.eventId}`, { eventId: dec.eventId, sessions: {}, evaluation: { instructor: 'Theirs' } })
+    const events = (await (await call('GET', { token: 'admin-token', query: `?driver=${JASON}` })).json()).events
+    const byEvent = Object.fromEntries(events.map((e: { eventId: string; evaluation: unknown }) => [e.eventId, e.evaluation]))
+    expect(byEvent).toEqual({ [nov.eventId]: nov.evaluation, [dec.eventId]: { instructor: 'Theirs' } })
+    expect(blobs.data('site:notes-meta').get(`filled-report-cards:${JASON}`)).toMatchObject({ kept: [dec.eventId] })
+
+    // Once: removed afterwards, it stays removed.
+    await call('DELETE', { token: 'jason-token', query: `?event=${nov.eventId}&evaluation=1` })
+    expect((await (await call('GET', { token: 'jason-token', query: `?event=${nov.eventId}` })).json()).evaluation).toBeUndefined()
+  })
+
+  it('reach no one else', async () => {
+    expect((await (await call('GET', { token: 'vera-token', query: '' })).json()).events).toEqual([])
+    expect(store.size).toBe(0)
   })
 })

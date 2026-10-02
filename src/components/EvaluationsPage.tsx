@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, ClipboardCheck, Plus } from 'lucide-react'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
@@ -9,11 +9,13 @@ import { DateBlock } from './DateBlock'
 import { PrivateTag, sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
+import { ReportCardSwitch } from './ReportCardSwitch'
 import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
 import { useRsvps } from '../data/RsvpsContext'
-import { isTdeEvent } from '../utils/evaluation'
+import { TDE_CARDS, cardOf, isTdeEvent } from '../utils/evaluation'
+import type { CardId, TdeCard } from '../utils/evaluation'
 import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
 import { classifyEvent } from '../utils/eventClass'
@@ -71,6 +73,30 @@ export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
     notes.evaluation && isTdeEvent(event)
       ? [{ key: event.id, date: startDate(event), title: event.name, evaluation: notes.evaluation }]
       : [])
+}
+
+/**
+ * The kinds of report card they have scores on (#350), and the one to show
+ * first: their newest scored card's.
+ */
+export function reportCardKinds(points: ReportCardPoint[]): { kinds: TdeCard[]; newest: TdeCard | undefined } {
+  const kinds = TDE_CARDS.filter(kind => scoredCards(points, kind).cards.length > 0)
+  const scored = kinds.flatMap(kind => scoredCards(points, kind).cards).sort((a, b) => a.date.localeCompare(b.date))
+  return { kinds, newest: scored.length ? cardOf(scored[scored.length - 1].evaluation) : undefined }
+}
+
+/**
+ * The card their newest TDE evaluation was entered on, but this event's
+ * (#350) — the one a new evaluation's form starts on when the event's run
+ * group has no card of its own.
+ */
+export function latestCard(notes: EventNotes[], events: EventConfig[], exceptId: string): CardId | undefined {
+  const byId = new Map(events.map(e => [e.id, e]))
+  const tde = notes.flatMap(n => {
+    const event = byId.get(n.eventId)
+    return n.evaluation && n.eventId !== exceptId && event && isTdeEvent(event) ? [{ date: startDate(event), card: cardOf(n.evaluation).id }] : []
+  })
+  return tde.sort((a, b) => b.date.localeCompare(a.date))[0]?.card
 }
 
 /** One piece of an instructor's feedback: what it's of, who said it, and what they said. */
@@ -234,7 +260,10 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
 
   const evaluated = useMemo(() => evaluatedEvents(notes.events, events), [notes.events, events])
   const cards = useMemo(() => reportCards(evaluated), [evaluated])
-  const scored = scoredCards(cards).cards.length
+  // One run group's cards at a time (#350): the one picked, or the newest's.
+  const { kinds, newest } = useMemo(() => reportCardKinds(cards), [cards])
+  const [kindId, setKindId] = useState<CardId | null>(null)
+  const kind = kinds.find(k => k.id === kindId) ?? newest
   // Every event on the list, newest first: the ones evaluated, and the ones they went to without one yet.
   const entries = useMemo(() => {
     const withLaps = new Set((lapSummary ?? []).map(e => e.eventId))
@@ -277,10 +306,16 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
         <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
           <PrivateTag what="evaluations" />
         </div>
-        {scored > 0 && (
+        {kind && (
           <div className="mb-8 flex flex-col gap-4">
-            <SkillOverview points={cards} />
-            <SkillsWheel points={cards} />
+            {kinds.length > 1 && (
+              <div className="flex items-center justify-between gap-3 px-1">
+                <span className="text-xs text-gray-500">Each run group’s card has its own skills.</span>
+                <ReportCardSwitch cards={kinds} value={kind.id} onChange={setKindId} events={events} />
+              </div>
+            )}
+            <SkillOverview key={`overview ${kind.id}`} points={cards} kind={kind} />
+            <SkillsWheel key={`wheel ${kind.id}`} points={cards} kind={kind} />
           </div>
         )}
         <section aria-labelledby="evaluations-events-heading">

@@ -127,7 +127,7 @@ export function MyLapTimes({
   // The whole event's evaluation — on a TDE event, their report card — or
   // once the event's begun, the way to add one.
   const reportCard = notes.evaluation
-    ? <EventEvaluationCard evaluation={notes.evaluation} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
+    ? <EventEvaluationCard evaluation={notes.evaluation} tde={tde} runGroup={tde ? runGroup : null} events={events} onEdit={onEditEvaluation} />
     : classifyEvent(event) !== 'upcoming' ? <AddEventEvaluation tde={tde} onAdd={onEditEvaluation} /> : null
 
   // Every session with something saved: laps, an evaluation, tire pressures.

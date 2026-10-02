@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useWidth } from './LapTrendChart'
-import { TDE_SKILLS } from '../utils/evaluation'
-import type { EventEvaluation, TdeSkillId } from '../utils/evaluation'
+import { cardOf } from '../utils/evaluation'
+import type { EventEvaluation, TdeCard, TdeSkill } from '../utils/evaluation'
 
 // How the driver's TDE report cards have come along (#345), on the
-// Instructor evaluations page, in two cards:
+// Instructor evaluations page — one run group's card at a time, since each
+// has its own skills (#350) — in two cards:
 //   - an overview: the skills most improved since their first report card,
 //     and the ones that need the most work on their latest;
 //   - the skills wheel: a spoke for each core skill, and each card's scores
@@ -25,21 +26,25 @@ export interface ReportCardPoint {
   evaluation: EventEvaluation
 }
 
-type Skill = typeof TDE_SKILLS[number]
+type Skill = TdeSkill
 
-const scoreOf = (card: ReportCardPoint, id: TdeSkillId) => card.evaluation.skills?.[id]
+const scoreOf = (card: ReportCardPoint, id: string) => card.evaluation.skills?.[id]
 
-/** The cards with a core skill scored, oldest first; and the skills any of them scores. */
-export function scoredCards(points: ReportCardPoint[]): { cards: ReportCardPoint[]; skills: Skill[] } {
+/**
+ * The cards of one kind (`kind`: Green's, Blue's — #350) with a core skill
+ * scored, oldest first; and the skills any of them scores, in the card's
+ * order.
+ */
+export function scoredCards(points: ReportCardPoint[], kind: TdeCard): { cards: ReportCardPoint[]; skills: Skill[] } {
   const cards = points
-    .filter(p => TDE_SKILLS.some(s => scoreOf(p, s.id) !== undefined))
+    .filter(p => cardOf(p.evaluation).id === kind.id && kind.skills.some(s => scoreOf(p, s.id) !== undefined))
     .sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key))
-  const skills = TDE_SKILLS.filter(s => cards.some(c => scoreOf(c, s.id) !== undefined))
+  const skills = kind.skills.filter(s => cards.some(c => scoreOf(c, s.id) !== undefined))
   return { cards, skills }
 }
 
 /** A skill's score on each card that scored it, oldest first, with the change from the one before. */
-export function skillHistory(skill: TdeSkillId, cards: ReportCardPoint[]): { card: ReportCardPoint; score: number; change?: number }[] {
+export function skillHistory(skill: string, cards: ReportCardPoint[]): { card: ReportCardPoint; score: number; change?: number }[] {
   const out: { card: ReportCardPoint; score: number; change?: number }[] = []
   for (const card of cards) {
     const score = scoreOf(card, skill)
@@ -64,8 +69,8 @@ export interface SkillMove {
  * ones that need the most work (the lowest now, the least improved first
  * among equals).
  */
-export function skillMoves(cards: ReportCardPoint[], count = 3): { improved: SkillMove[]; needsWork: SkillMove[] } {
-  const moves = TDE_SKILLS.flatMap((skill): SkillMove[] => {
+export function skillMoves(cards: ReportCardPoint[], kind: TdeCard, count = 3): { improved: SkillMove[]; needsWork: SkillMove[] } {
+  const moves = kind.skills.flatMap((skill): SkillMove[] => {
     const history = skillHistory(skill.id, cards)
     if (!history.length) return []
     const latest = history[history.length - 1].score
@@ -132,22 +137,22 @@ function MoveList({ title, caption, moves, value, empty }: {
   )
 }
 
-/** The overview (#345): the skills most improved since the first report card, and those that need the most work. */
-export function SkillOverview({ points }: { points: ReportCardPoint[] }) {
-  const { cards } = scoredCards(points)
+/** The overview (#345): the skills most improved since the first report card of this kind, and those that need the most work. */
+export function SkillOverview({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
+  const { cards } = scoredCards(points, kind)
   if (!cards.length) return null
-  const { improved, needsWork } = skillMoves(cards)
+  const { improved, needsWork } = skillMoves(cards, kind)
   const [first, latest] = [cards[0], cards[cards.length - 1]]
   return (
     <section aria-label="Report card overview" className={CARD}>
-      <CardHead title="TDE report cards" meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
+      <CardHead title={`${kind.group} report cards`} meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
       <div className="grid grid-cols-2 gap-4">
         <MoveList
           title="Most improved"
           caption={cards.length > 1 ? `Since ${day(first.date)}` : undefined}
           moves={improved}
           value={m => signed(m.gain!)}
-          empty={cards.length > 1 ? 'No gains yet.' : 'Add a report card from another TDE event to see what’s improved.'}
+          empty={cards.length > 1 ? 'No gains yet.' : `Add another ${kind.group} report card to see what’s improved.`}
         />
         <MoveList
           title="Needs work"
@@ -277,19 +282,19 @@ const LABEL_W = 64
 const LABEL_GAP = 12
 
 /**
- * The skills wheel (#345): a spoke for each core skill scored, 0% at the
- * middle and 100% at the rim. Each report card is a shape on it — all of
+ * The skills wheel (#345): a spoke for each core skill scored on one run
+ * group's card (#350), 0% at the middle and 100% at the rim. Each report card is a shape on it — all of
  * them at first. Its chip, in a row that scrolls sideways, newest first,
  * hides or shows it; All, before them, shows every one (or, with every one
  * shown, just the newest). Tap a skill's name for its score at each event,
  * listed under the wheel, newest first.
  */
-export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
+export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
   const [ref, measured] = useWidth()
   const width = measured || 300
-  const { cards, skills } = scoredCards(points)
+  const { cards, skills } = scoredCards(points, kind)
   const n = cards.length
-  const [picked, setPicked] = useState<TdeSkillId | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
   // The cards picked; at first (or once none of them is left), all of them.
   const [picks, setPicks] = useState<ReadonlySet<string> | null>(null)
   if (!n || !skills.length) return null
@@ -442,7 +447,7 @@ export function SkillsWheel({ points }: { points: ReportCardPoint[] }) {
           </section>
         ) : (
           <p className="text-xs text-gray-400">
-            {n > 1 ? 'Tap a skill for its score at each event.' : 'Tap a skill for its score. Add a report card from another TDE event to see how it changes.'}
+            {n > 1 ? 'Tap a skill for its score at each event.' : `Tap a skill for its score. Add another ${kind.group} report card to see how it changes.`}
           </p>
         )}
       </div>

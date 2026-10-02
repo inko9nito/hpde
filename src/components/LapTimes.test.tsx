@@ -1081,6 +1081,107 @@ describe('instructor evaluation (#340)', () => {
     expect(notesCalls('DELETE')[0][0]).toContain('evaluation=1')
     expect(screen.getByRole('button', { name: /^Add instructor evaluation/ })).toBeInTheDocument()
   })
+
+  // Each run group has a report card of its own (#350): Blue's has its own
+  // skills and fields. Two of Jason's events: in Blue, and in Orange, which
+  // has no card of its own.
+  const blueDay: EventConfig = {
+    ...tde,
+    id: '2024-11-02_tde-at-msrc-3-1-ccw',
+    name: 'TDE at MSRC 3.1 CCW',
+    runGroups: [
+      { id: 'blue', label: 'Blue', bgClass: 'bg-runblue-500', textClass: 'text-white' },
+      { id: 'orange', label: 'Orange', bgClass: 'bg-runorange-500', textClass: 'text-white' },
+    ],
+    days: [{ id: 'saturday', label: 'Saturday', date: '2024-11-02', activities: [] }],
+  }
+  const orangeDay: EventConfig = {
+    ...blueDay,
+    id: '2024-12-07_tde-at-msrc-1-7-cw',
+    name: 'TDE at MSRC 1.7 CW',
+    days: [{ id: 'saturday', label: 'Saturday', date: '2024-12-07', activities: [] }],
+  }
+  async function openFormOn(e: EventConfig) {
+    moreEvents = [blueDay, orangeDay]
+    window.location.hash = `#/event/${e.id}`
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Add instructor evaluation/ }))
+    return screen.getByRole('dialog', { name: 'Instructor evaluation' })
+  }
+
+  it('on a Blue run group’s event, fills in Blue’s report card: its skills and its own fields (#350)', async () => {
+    rsvps = { [blueDay.id]: { status: 'going', runGroup: 'blue' } }
+    const sheet = await openFormOn(blueDay)
+    const cards = within(sheet).getByRole('group', { name: 'Report card' })
+    expect(within(cards).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(sheet).queryByLabelText('Looks ahead')).not.toBeInTheDocument()
+
+    fireEvent.change(within(sheet).getByLabelText('Instructor'), { target: { value: 'Tom Albertson' } })
+    await userEvent.click(within(within(sheet).getByRole('group', { name: 'Instructed' })).getByRole('button', { name: 'Full-time' }))
+    fireEvent.change(within(sheet).getByLabelText('ESP / traction control'), { target: { value: 'Comp Mode' } })
+    // A recommended group says how, and can be one of two.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Same track & direction: none' }))
+    await userEvent.click(within(within(sheet).getByRole('listbox', { name: 'Same track & direction' })).getByRole('option', { name: 'Blue' }))
+    await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Same track & direction: how' }), 'Full-time instructor')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'New track: none' }))
+    await userEvent.click(within(within(sheet).getByRole('listbox', { name: 'New track' })).getByRole('option', { name: 'Blue' }))
+    await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'New track: how' }), 'Part-time solo')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'New track, or: none' }))
+    await userEvent.click(within(within(sheet).getByRole('listbox', { name: 'New track, or' })).getByRole('option', { name: 'Yellow' }))
+    fireEvent.change(within(sheet).getByLabelText('Acknowledges all flags early'), { target: { value: '65' } })
+    fireEvent.change(within(sheet).getByLabelText('Able to take a corner offline'), { target: { value: '95' } })
+    await userEvent.click(within(within(sheet).getByRole('group', { name: 'Aggressiveness = skill' })).getByRole('button', { name: 'Too aggressive' }))
+    fireEvent.change(within(sheet).getByLabelText('Relies on car aids'), { target: { value: '0' } })
+    await userEvent.click(within(within(sheet).getByRole('group', { name: 'Blue part-time solo qualified' })).getByRole('button', { name: 'No' }))
+
+    // Green's card instead: a skill both have keeps its score; Blue's own fields go.
+    await userEvent.click(within(cards).getByRole('button', { name: 'Green' }))
+    expect(within(sheet).getByLabelText('Calls out all flags')).toHaveValue('65')
+    expect(within(sheet).queryByRole('group', { name: 'Instructed' })).not.toBeInTheDocument()
+    expect(within(within(sheet).getByRole('group', { name: 'Aggressiveness = skill' })).queryByRole('button', { name: 'Too aggressive' })).not.toBeInTheDocument()
+    await userEvent.click(within(cards).getByRole('button', { name: 'Blue' }))
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save evaluation' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).evaluation).toEqual({
+      card: 'blue',
+      instructor: 'Tom Albertson',
+      instructed: 'fullTime',
+      escTc: 'Comp Mode',
+      next: { sameTrack: 'Blue', newTrack: 'Blue' },
+      nextHow: { sameTrack: 'fullTime', newTrack: 'partTime' },
+      nextOr: { newTrack: 'Yellow' },
+      skills: { flags: 65, offline: 95 },
+      aggressivenessIsSkill: 'tooAggressive',
+      carAidsPct: 0,
+      soloQualified: false,
+    })
+    const card = screen.getByRole('region', { name: 'Instructor evaluation' })
+    expect(card).toHaveTextContent('Report cardBlue')
+    expect(card).toHaveTextContent('InstructedFull-time')
+    expect(card).toHaveTextContent('ESP / traction controlComp Mode')
+    expect(card).toHaveTextContent('Same track & directionBlueFull-time instructor')
+    expect(card).toHaveTextContent('New trackBluePart-time soloorYellow')
+    expect(within(card).getByRole('list', { name: 'Core skills' })).toHaveTextContent('Acknowledges all flags early65%Able to take a corner offline95%')
+    expect(card).toHaveTextContent('Aggressiveness = skillToo aggressive')
+    expect(card).toHaveTextContent('Relies on car aidsNever')
+    expect(card).toHaveTextContent('Blue part-time solo qualifiedNo')
+
+    // Edited, it opens on the card it was saved on.
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit evaluation' }))
+    const again = screen.getByRole('dialog', { name: 'Instructor evaluation' })
+    expect(within(within(again).getByRole('group', { name: 'Report card' })).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('in a run group with no card of its own, starts on the card their latest evaluation was on (#350)', async () => {
+    notesByEvent = { [blueDay.id]: { evaluation: { card: 'blue', instructor: 'Tom Albertson' }, sessions: [] } }
+    rsvps = { [orangeDay.id]: { status: 'going', runGroup: 'orange' } }
+    const sheet = await openFormOn(orangeDay)
+    const cards = within(sheet).getByRole('group', { name: 'Report card' })
+    await waitFor(() => expect(within(cards).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(within(sheet).getByLabelText('Acknowledges all flags early')).toBeInTheDocument()
+  })
 })
 
 describe('LapTimesSheet', () => {
@@ -1916,6 +2017,24 @@ describe('Instructor evaluations across events (#345)', () => {
     // Tapped again, it goes.
     await userEvent.click(within(wheel).getByRole('button', { name: 'Calls out all flags' }))
     expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
+  })
+
+  it('shows one run group’s report cards at a time, each with its own skills: the newest one’s first (#350)', async () => {
+    const tdeDec: EventConfig = { ...tdeOct, id: '2025-12-06_tde', name: 'TDE Blue Day', days: [{ ...event.days[0], date: '2025-12-06' }] }
+    moreEvents = [tdeSep, tdeOct, tdeDec]
+    notesByEvent[tdeDec.id] = { evaluation: { card: 'blue', instructor: 'Brett Gabriel', skills: { flags: 95, offline: 95, exits: 80 } }, sessions: [] }
+    openAt('#/evaluations')
+    const el = await page()
+    const picker = await within(el).findByRole('group', { name: 'Report card' })
+    expect(within(picker).getAllByRole('button').map(b => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Green', 'false'], ['Blue', 'true']])
+    const spokes = () => within(within(el).getByRole('region', { name: 'Skills wheel' })).getAllByRole('button', { pressed: false })
+      .map(b => b.getAttribute('aria-label')).filter(Boolean)
+    // Blue's skills, in Blue's order.
+    expect(spokes()).toEqual(['Acknowledges all flags early', 'Understands and uses exit strategies', 'Able to take a corner offline'])
+    expect(within(el).getByRole('region', { name: 'Report card overview' })).toHaveTextContent('Blue report cards1 event')
+    await userEvent.click(within(picker).getByRole('button', { name: 'Green' }))
+    expect(spokes()).toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
+    expect(within(el).getByRole('region', { name: 'Report card overview' })).toHaveTextContent('Green report cards2 events')
   })
 
   it('lists every event with an evaluation, TDE or not, newest first, with what the instructors said; one opens on My notes and Back returns here', async () => {

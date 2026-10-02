@@ -31,12 +31,13 @@ import { EventCarSheet } from './components/EventCarSheet'
 import { CarFormPage } from './components/CarFormPage'
 import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
-import { EvaluationsPage } from './components/EvaluationsPage'
+import { EvaluationsPage, latestCard } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker, SwitchDriverSheet } from './components/DriverPicker'
 import { ActingBanner } from './components/ActingBanner'
 import { useLapLog, useLapSummary } from './data/lapLog'
-import { useNotesLog } from './data/notesLog'
+import { useAllNotes, useNotesLog } from './data/notesLog'
+import { isTdeEvent } from './utils/evaluation'
 import { driverName } from './data/drivers'
 import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
 import { Toast } from './components/Toast'
@@ -440,6 +441,11 @@ export default function App() {
   const rsvpGroup = myRunGroup(activeEvent, eventRsvps.rsvps[activeEvent.id])
   const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
   const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
+  // …and the card their latest evaluation elsewhere was on (#350): the one
+  // its form starts on when their group has no card of its own. Fetched
+  // while the form is open.
+  const otherNotes = useAllNotes(evaluationOpen && isTdeEvent(activeEvent))
+  const lastCard = latestCard(otherNotes.events, ALL_EVENTS, activeEvent.id)
   // …and what they ran there (#344): the car, its consumables and each
   // session's tire pressures — from their garage.
   const garage = useGarage()
@@ -988,6 +994,7 @@ export default function App() {
         events={ALL_EVENTS}
         existing={notesLog.evaluation}
         runGroup={evaluationGroup}
+        lastCard={lastCard}
         onSave={async evaluation => {
           await notesLog.saveEvaluation(evaluation)
           setEvaluationOpen(false)
