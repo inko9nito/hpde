@@ -7,6 +7,7 @@ import { BackButton } from './EventHeader'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
 import { CarFormPage } from './CarFormPage'
+import { CarOverflowMenu } from './CarOverflowMenu'
 import { ChangeSheet } from './ChangeSheet'
 import { DriveAtSheet } from './DriveAtSheet'
 import { GroupBadge } from './GroupBadge'
@@ -35,13 +36,8 @@ export function carIdFromHash(hash: string): string | null {
 
 type CarTab = 'setup' | 'history' | 'events'
 
-const TABS: readonly { id: CarTab; label: string }[] = [
-  { id: 'setup', label: 'Setup' },
-  { id: 'history', label: 'History' },
-  { id: 'events', label: 'Events' },
-]
 
-/** Height of the top bar (Back · the car's name, once its title scrolls away · Edit). */
+/** Height of the top bar (Back · the car's name, once its title scrolls away · its drivers and "…"). */
 const TOP_BAR_PX = 52
 
 /** A section's heading, over its card. */
@@ -105,7 +101,8 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
 
 /**
  * An archived car (#410): when it was archived, that it's kept for its
- * events, and the way to put it back — or to delete it for good.
+ * events, and the way to put it back — or, if it never went to one, to
+ * delete it for good (#423).
  */
 function RemovedNotice({ car, events, onRestore, onDelete }: {
   car: Car
@@ -134,7 +131,7 @@ function RemovedNotice({ car, events, onRestore, onDelete }: {
       </p>
       {confirming ? (
         <div className="mt-3">
-          <p className="text-sm text-gray-700">Delete it for good? {events > 0 ? 'Your events keep their tire pressures, but not the car.' : ''}</p>
+          <p className="text-sm text-gray-700">Delete it for good?</p>
           <div className="mt-2 flex items-center gap-4 text-sm font-semibold">
             <button onClick={() => run('deleting', onDelete)} disabled={!!busy} className="text-red-600 hover:text-red-700 disabled:opacity-50">
               {busy === 'deleting' ? 'Deleting…' : 'Delete'}
@@ -151,7 +148,10 @@ function RemovedNotice({ car, events, onRestore, onDelete }: {
           >
             {busy === 'restoring' ? 'Putting it back…' : 'Put back in garage'}
           </button>
-          <button onClick={() => setConfirming(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">Delete for good</button>
+          {/* Driven at events, it's only ever archived (#423). */}
+          {events === 0 && (
+            <button onClick={() => setConfirming(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">Delete for good</button>
+          )}
         </div>
       )}
       {failure && <p role="alert" className="mt-2 text-xs text-red-700">{failure}</p>}
@@ -386,7 +386,7 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
 
 /**
  * A car's page (#344), pushed over the Garage (#410): its name and photo,
- * Share and Edit at the top — shared with another driver, it's theirs to
+ * its drivers and a "…" of Edit and Archive or Delete (#423) at the top — shared with another driver, it's theirs to
  * keep up too (#398), and its page says who — and three tabs: Setup,
  * what's on it now;
  * History, every change logged to its consumables, each of which opens to
@@ -422,10 +422,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     : [{ id: '', name: user?.name ?? user?.email ?? 'You', you: true }]
   const faces = drivers.map(d => ({ name: d.name, url: avatarOf(d) }))
 
+  // Theirs: the events in their garage it's the car of.
+  const went = car ? carEvents(car.id, garage, events) : []
+
   const topBar = (
     <div className="sticky top-0 z-30 bg-gray-50" style={{ height: TOP_BAR_PX }}>
       {/* Each side at least as wide as what's in it — the drivers' pictures
-          and Edit — so the name between them truncates rather than running
+          and "…" — so the name between them truncates rather than running
           under them. */}
       <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4">
         <div className="justify-self-start"><BackButton onClick={onBack} /></div>
@@ -454,12 +457,15 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
                 <UserPlus size={18} strokeWidth={2.25} aria-hidden="true" />
               </button>
             ) : <AvatarStack people={faces} size={26} ring="ring-gray-50" />}
-            <button
-              onClick={() => setEditing(n => (n ?? 0) + 1)}
-              className="rounded-lg px-2 py-1.5 text-[17px] font-semibold text-blue-600 hover:text-blue-700"
-            >
-              Edit
-            </button>
+            <CarOverflowMenu
+              car={car}
+              events={went.length}
+              onEdit={() => setEditing(n => (n ?? 0) + 1)}
+              onRemoved={archived => {
+                onToast(archived ? 'Car archived' : 'Car deleted')
+                onBack()
+              }}
+            />
           </div>
         ) : <span />}
       </div>
@@ -484,8 +490,6 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     )
   }
 
-  // Theirs: the events in their garage it's the car of.
-  const went = carEvents(car.id, garage, events)
   // And its other drivers', on a shared car (#398).
   const outings = carOutings(car, garage, events, rsvps)
   const subtitle = carSubtitle(car)
@@ -515,7 +519,14 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
       </div>
       <div className="sticky z-20 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
         <div className="mx-auto max-w-lg">
-          <TabStrip tabs={TABS} active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
+          <TabStrip
+            tabs={[
+              { id: 'setup', label: 'Setup' },
+              { id: 'history', label: 'History' },
+              // How many, as My notes says on an event's page (#422).
+              { id: 'events', label: outings.length ? `Events (${outings.length})` : 'Events' },
+            ]}
+            active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
         </div>
       </div>
       <div
@@ -538,12 +549,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         <CarFormPage
           key={editing}
           car={car}
-          events={went.length}
           onSaved={() => onToast('Car saved')}
-          onRemoved={archived => {
-            onToast(archived ? 'Car archived' : 'Car removed')
-            onBack()
-          }}
           onClosed={() => setEditing(null)}
         />
       )}

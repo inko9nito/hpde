@@ -5,7 +5,7 @@ import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { inputClass } from './SessionEvaluationForm'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
-import { MAX_NAME, MAX_TORQUE, cleanCar, carName, isShared, othersText } from '../utils/garage'
+import { MAX_NAME, MAX_TORQUE, cleanCar, carName, isShared } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { shrinkPhoto } from '../utils/photo'
 
@@ -124,40 +124,17 @@ const card = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm'
 const outlineButton = 'rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-gray-50'
 
 /**
- * What Archive or Remove asks first (#410): an archived car — one that went
- * to events, or is shared — stays on them and can be put back; any other
- * goes.
- */
-function removeText(others: string | null, events: number): string {
-  const went = events === 1 ? 'the event you drove it at' : `the ${events} events you drove it at`
-  if (others) {
-    return events
-      ? `Archive this car? It stays in ${others}’s garage, and ${went} ${events === 1 ? 'keeps' : 'keep'} it as it is now. You can put it back.`
-      : `Archive this car? It stays in ${others}’s garage. You can put it back.`
-  }
-  return events
-    ? `Archive this car? It leaves your garage but stays on ${went}, with its history. You can put it back.`
-    : 'Remove this car and its change log?'
-}
-
-/**
- * Adds a car to the garage, or changes or removes one (#344): a page that
+ * Adds a car to the garage, or changes one (#344): a page that
  * slides up over the one it's opened from (#356), Cancel and Save across its
  * top — its photo, what it is and its lug nut torque. Nothing's saved
  * until Save; a photo picked is made small enough to upload first.
- * A car that went to events, or is shared, is archived — kept for them,
- * photo and change log and all, out of the garage, to be put back (#410);
- * any other is removed.
+ * Archive and Delete are the car page's "…" (#423).
  */
-export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
+export function CarFormPage({ car, onSaved, onClosed }: {
   /** The car to change; none to add one. */
   car?: Car
-  /** How many events it's been to, so Remove can say. */
-  events?: number
   /** Once it's saved, with the car as saved; the page then slides away. Throws with a message to show. */
   onSaved: (car: Car) => void | Promise<void>
-  /** Once it's archived (true) or removed; the page then slides away. */
-  onRemoved?: (archived: boolean) => void
   /** Once it's slid away. */
   onClosed: () => void
 }) {
@@ -167,9 +144,8 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   const [photo, setPhoto] = useState<PhotoChange>(null)
   // Added already, when a first Save got that far: trying again changes it.
   const [added, setAdded] = useState<Car | null>(null)
-  const [busy, setBusy] = useState<'saving' | 'removing' | 'photo' | null>(null)
+  const [busy, setBusy] = useState<'saving' | 'photo' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  const [confirmingRemove, setConfirmingRemove] = useState(false)
   const cleaned = carFromDraft(draft)
   const input = useRef<HTMLInputElement>(null)
   const savedSrc = useCarPhoto(car)
@@ -190,7 +166,7 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  async function run(what: 'saving' | 'removing' | 'photo', action: () => Promise<void>) {
+  async function run(what: 'saving' | 'photo', action: () => Promise<void>) {
     setBusy(what)
     setFailure(null)
     try {
@@ -225,9 +201,6 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   const title = car ? 'Edit car' : 'Add a car'
   // Shared with other drivers (#398): taking it out leaves it with them.
   const shared = !!car && isShared(car)
-  const others = car ? othersText(car) : ''
-  // Kept, as the garage function keeps it: driven at events, or shared (#410).
-  const archives = !!events || shared
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
     <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
@@ -293,34 +266,6 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
           {failure && <p role="alert" className="-mt-2 px-1 text-xs text-red-700">{failure}</p>}
 
           <div className="flex flex-col items-center gap-3">
-            {car && !confirmingRemove && (
-              <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
-                {archives ? 'Archive car' : 'Remove from garage'}
-              </button>
-            )}
-            {car && confirmingRemove && (
-              <div className="flex flex-col items-center gap-1.5 text-sm">
-                <span className="text-center text-gray-700">
-                  {removeText(shared ? others : null, events ?? 0)}
-                </span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => run('removing', async () => {
-                      await garage.removeCar(car.id)
-                      onRemoved?.(archives)
-                      close()
-                    })}
-                    disabled={!!busy}
-                    className="font-semibold text-red-600 hover:text-red-700"
-                  >
-                    {busy === 'removing' ? (archives ? 'Archiving…' : 'Removing…') : archives ? 'Archive' : 'Remove'}
-                  </button>
-                  <button onClick={() => setConfirmingRemove(false)} disabled={!!busy} className="text-gray-500 hover:text-gray-700">
-                    Keep
-                  </button>
-                </div>
-              </div>
-            )}
             <p className="flex items-center gap-1 text-[11px] text-gray-400">
               <Lock size={11} aria-hidden="true" />
               {shared ? 'Only its drivers and admins can see this car.' : 'Only you and admins can see your garage.'}

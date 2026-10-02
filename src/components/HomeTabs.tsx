@@ -101,12 +101,7 @@ export function HomeHeader({ title, children }: { title: string; children?: Reac
  * in a bar that stays there; and under it the page's title, as big and
  * where a tab's is (Tracks), so it reads as a page of its own.
  */
-export function SubPageHeader({ title, onBack, accessory }: {
-  title: string
-  onBack: () => void
-  /** Across from the title, on its line: the Garage's Private (#410). */
-  accessory?: ReactNode
-}) {
+export function SubPageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <>
       <div className="sticky top-0 z-20 bg-gray-50/95 backdrop-blur">
@@ -114,9 +109,8 @@ export function SubPageHeader({ title, onBack, accessory }: {
           <BackButton onClick={onBack} />
         </div>
       </div>
-      <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-3 sm:px-4">
+      <div className="mx-auto max-w-lg px-3 sm:px-4">
         <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">{title}</h1>
-        {accessory}
       </div>
     </>
   )

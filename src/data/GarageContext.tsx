@@ -17,11 +17,11 @@ export interface GarageValue extends Garage {
   /** Adds a car (no id) or changes one; resolves to it as saved. Throws with a message to show. */
   saveCar(car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'> & { id?: string }): Promise<Car>
   /**
-   * Takes a car out of the garage (#410). One that went to events is kept
-   * for them, archived, and can be put back; one that didn't, or one
-   * already archived, goes for good.
+   * Takes a car out of the garage (#410). Archived — `archive`, or one
+   * that went to events or is shared — it's kept, and can be put back
+   * (#423); otherwise, or already archived, it goes for good.
    */
-  removeCar(id: string): Promise<void>
+  removeCar(id: string, opts?: { archive?: boolean }): Promise<void>
   /** Puts an archived car back in the garage. */
   restoreCar(id: string): Promise<void>
   /** Sets a car's photo: the image, already shrunk (shrinkPhoto). */
@@ -141,10 +141,10 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
     return saved
   }, [send, change])
 
-  const removeCar = useCallback(async (id: string) => {
-    const res = await send(`car=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const removeCar = useCallback(async (id: string, opts?: { archive?: boolean }) => {
+    const res = await send(`car=${encodeURIComponent(id)}${opts?.archive ? '&archive=1' : ''}`, { method: 'DELETE' })
     const kept = res.ok ? ((await res.json()).car as Car | undefined) : undefined
-    // Kept for its events, as the function keeps it: without its drivers, if it was shared.
+    // Kept, as the function keeps it: without its drivers, if it was shared.
     if (kept) return change(g => ({ ...g, cars: g.cars.map(c => (c.id === id ? kept : c)) }))
     // Gone: as the function does, its events keep their tire pressures, without it.
     change(g => ({

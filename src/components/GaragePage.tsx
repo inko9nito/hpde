@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Archive, ChevronRight, Lock, Plus } from 'lucide-react'
+import { Archive, ChevronRight, Plus } from 'lucide-react'
 import { AvatarStack, useDriverAvatar } from './Avatar'
 import { CarHero, CarTile } from './CarRow'
 import { CarIcon } from './CarIcons'
@@ -15,9 +15,9 @@ import type { Car } from '../utils/garage'
 import type { EventConfig } from '../types'
 
 /**
- * A car in the Garage (#410): its photo with its name over it, and under
- * it how many events it's been to — after its drivers' pictures, when
- * it's shared (#398). Opens its page.
+ * A car in the Garage (#410): its photo with its name over it, how many
+ * events it's been to across from that, and its drivers' pictures at the
+ * top when it's shared (#398, #424). Opens its page.
  */
 function CarCard({ car, events }: { car: Car; events: number }) {
   const src = useCarPhoto(car)
@@ -31,22 +31,24 @@ function CarCard({ car, events }: { car: Car; events: number }) {
       className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
       data-car-row
     >
-      <CarHero car={car} src={src} />
-      <div className="flex min-h-12 items-center gap-2.5 px-4 py-3">
-        {shared && <AvatarStack people={drivers.map(d => ({ name: d.name, url: avatarOf(d) }))} size={24} />}
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
-          {shared && <span className="sr-only">Shared with {othersText(car)} · </span>}
-          {events === 0 ? 'No events yet' : events === 1 ? '1 event' : `${events} events`}
-        </span>
-        <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
-      </div>
+      <CarHero
+        car={car}
+        src={src}
+        corner={shared && <AvatarStack people={drivers.map(d => ({ name: d.name, url: avatarOf(d) }))} size={28} />}
+        badge={events > 0 && (
+          <span className="block rounded-full bg-white/90 px-2.5 py-1 text-[13px] font-semibold tabular-nums text-gray-900 shadow-sm" data-events-badge>
+            {events === 1 ? '1 event' : `${events} events`}
+          </span>
+        )}
+      />
+      {shared && <span className="sr-only">Shared with {othersText(car)}</span>}
     </a>
   )
 }
 
 /**
  * The Garage (#344), a page over the More tab (#345): the driver's cars,
- * a card each (#410) — its photo, what it's called and how many events
+ * a card each (#410, #424) — its photo, what it's called and how many events
  * it's been to — each opening its page, where its setup, change history
  * and events are.
  */
@@ -68,15 +70,7 @@ export function GaragePage({ events, onBack, onToast }: {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SubPageHeader
-        title="Garage"
-        onBack={onBack}
-        accessory={authStatus === 'signed-in' && garage.status === 'ready' && cars.length > 0 && (
-          <p className="flex shrink-0 items-center gap-1 text-sm text-gray-500" title="Only you and admins can see your garage">
-            <Lock size={14} aria-hidden="true" /> Private
-          </p>
-        )}
-      />
+      <SubPageHeader title="Garage" onBack={onBack} />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
           <SignInPrompt reason="manage your cars" privacyNote={false} />
