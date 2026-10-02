@@ -287,7 +287,7 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
               />
               <ParamOption
                 title="Open the Home Screen app"
-                description="Added HPDE to your Home Screen? Type webapp, and tapping the widget or an alert opens it instead of your browser."
+                description="Added HPDE to your Home Screen from Safari? Type webapp, and tapping the widget or an alert opens it instead of your browser."
                 examples={['webapp', 'blue,15m,webapp']}
               />
             </ul>

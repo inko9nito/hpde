@@ -21,10 +21,11 @@
 //                            out (past the single-day/week:day split);
 //                            `test-upcoming-3` picks a different count.
 //     webapp               — tapping the widget or one of its alerts opens
-//                            HPDE's Home Screen web app (a web clip)
-//                            instead of the browser. Only for a phone
-//                            that has one. Combine with anything else,
-//                            e.g. `orange,webapp`.
+//                            HPDE's Home Screen web app (added from
+//                            Safari; not a profile's web clip) instead of
+//                            the browser. Only for a phone that has one.
+//                            Combine with anything else, e.g.
+//                            `orange,webapp`.
 //   Run-group filtering also drives notifications: sessions in the filtered
 //   groups are alerted N minutes before start; all-drivers events (anything
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.

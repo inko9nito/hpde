@@ -98,10 +98,16 @@ Scriptable braces icon.
 ### Opening the Home Screen web app
 
 Tapping the widget or one of its alerts opens the site in the phone's
-default browser. If you've added HPDE to your Home Screen as a web app
-(a web clip), add `webapp` to the Parameter (e.g. `orange,webapp`) and
-taps open the web app instead (#375). For alerts, one widget with
-`webapp` is enough: every HPDE alert on the phone opens the web app.
+default browser. If you've added HPDE to your Home Screen as a web app,
+add `webapp` to the Parameter (e.g. `orange,webapp`) and taps open the
+web app instead (#375). For alerts, one widget with `webapp` is enough:
+every HPDE alert on the phone opens the web app.
+
+Add the web app from Safari: open the site → Share → **Add to Home
+Screen**. The site asks Safari to open it full screen, so it behaves like
+an app. A web clip installed from a configuration profile doesn't work:
+on iOS 18 the link ends in "Safari cannot open the page because the
+address is invalid".
 
 It's a switch rather than automatic because Scriptable can't see which
 web apps are installed. The widget opens `webapp://myhpde.netlify.app/`,

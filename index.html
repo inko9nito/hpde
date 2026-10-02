@@ -17,6 +17,17 @@
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Add to Home Screen opens the site full screen, as an app (#375).
+         Before iOS 26, Safari only does that for a site that asks: the
+         manifest's display, or the older Apple meta tag for when the
+         manifest isn't loaded in time. Without them it opened in Safari,
+         so the app was installed from a configuration profile instead,
+         and the widget's `webapp://` link doesn't find a web clip
+         installed that way. The manifest lists no icons: iOS takes the
+         Home Screen icon from apple-touch-icon, and Android would use
+         manifest icons instead of an event page's track icon (#233). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
   </head>
   <body>
     <div id="root"></div>
