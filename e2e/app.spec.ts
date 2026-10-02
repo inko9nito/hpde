@@ -1684,6 +1684,29 @@ test('a half-folded event header snaps shut or open', async ({ page }) => {
 // (both runs borrow its user agent: Playwright's iPhone says Safari 26, whose
 // steps go through ⋯). The other tests start with it dismissed
 // (e2e/fixtures.ts).
+test('the checkers pulse while the app loads, and go once it has (#365)', async ({ page }) => {
+  await stubEvents(page)
+  // The app's script held back, as on a slow first open from the Home Screen.
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  await page.route(/\/assets\/index-[^/]*\.js$/, async route => {
+    await held
+    await route.continue()
+  })
+  await page.goto('/#/', { waitUntil: 'commit' })
+  const loader = page.getByRole('progressbar', { name: 'Loading' })
+  await expect(loader).toBeVisible()
+  // Centered, on the page's gray, and pulsing.
+  const box = (await loader.locator('svg').boundingBox())!
+  const viewport = page.viewportSize()!
+  expect(Math.round(box.x + box.width / 2)).toBe(Math.round(viewport.width / 2))
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(249, 250, 251)')
+  expect(await loader.locator('svg').evaluate(el => getComputedStyle(el).animationName)).toBe('boot-pulse')
+  release()
+  await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toBeVisible()
+  await expect(loader).toHaveCount(0)
+})
+
 test.describe('Add to Home Screen banner (#379)', () => {
   test.use({
     homeScreenBanner: true,
