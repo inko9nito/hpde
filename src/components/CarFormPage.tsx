@@ -5,7 +5,7 @@ import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { inputClass } from './SessionEvaluationForm'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
-import { MAX_NAME, MAX_TORQUE, cleanCar, carName } from '../utils/garage'
+import { MAX_NAME, MAX_TORQUE, cleanCar, carName, isShared, othersText } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { shrinkPhoto } from '../utils/photo'
 
@@ -205,6 +205,9 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   }
 
   const title = car ? 'Edit car' : 'Add a car'
+  // Shared with other drivers (#398): taking it out leaves it with them.
+  const shared = !!car && isShared(car)
+  const others = car ? othersText(car) : ''
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
     <PushPage open={open} onExited={onClosed} raised from="bottom">
@@ -272,14 +275,16 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
           <div className="flex flex-col items-center gap-3">
             {car && !confirmingRemove && (
               <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
-                Remove from garage
+                {shared ? 'Remove from your garage' : 'Remove from garage'}
               </button>
             )}
             {car && confirmingRemove && (
               <div className="flex flex-col items-center gap-1.5 text-sm">
                 <span className="text-center text-gray-700">
-                  Remove this car and its change log?
-                  {!!events && ` Its ${events === 1 ? 'event keeps its' : `${events} events keep their`} tire pressures.`}
+                  {shared
+                    ? `Take this car out of your garage? It stays in ${others}’s, with its change log.`
+                    : 'Remove this car and its change log?'}
+                  {!!events && ` Your ${events === 1 ? 'event keeps its' : `${events} events keep their`} tire pressures.`}
                 </span>
                 <div className="flex items-center gap-3">
                   <button
@@ -301,7 +306,7 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
             )}
             <p className="flex items-center gap-1 text-[11px] text-gray-400">
               <Lock size={11} aria-hidden="true" />
-              Only you and admins can see your garage.
+              {shared ? 'Only its drivers and admins can see this car.' : 'Only you and admins can see your garage.'}
             </p>
           </div>
         </div>

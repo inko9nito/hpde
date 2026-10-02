@@ -9,35 +9,60 @@ import { IOS_SPRING_EASING, IOS_SPRING_MS } from '../utils/iosSpring'
 const COVERED_SHIFT = 'translateX(-30%)'
 const COVERED_DIM = 0.1
 
-// Pages pushed from the right that are in place, in the order they got
-// there: each covers the one before it, and the first covers the tabs.
-// Pages that slide up (Share, New event) cover nothing, as on iOS.
-const covering: object[] = []
+// Pages pushed from the right that are in place. Each covers whatever is
+// under it, and the first covers the tabs. Pages that slide up (Share, New
+// event) cover nothing, as on iOS.
+interface Pushed {
+  el: HTMLElement | null
+  raised: boolean
+}
+const covering: Pushed[] = []
 const coveringListeners = new Set<() => void>()
+
+function coveringChanged() {
+  coveringListeners.forEach(listener => listener())
+}
 
 function onCoveringChange(listener: () => void) {
   coveringListeners.add(listener)
   return () => { coveringListeners.delete(listener) }
 }
 
-function useCovering(page: object, on: boolean) {
+/**
+ * Whether `a` is painted over `b`: raised pages over the rest, and
+ * otherwise whichever comes later on the page. Not the order they got
+ * into place: a page can arrive under one already there — the Garage,
+ * under a car's page opened from an event, once another of the car's
+ * events is opened over it (#380).
+ */
+function isOver(a: Pushed, b: Pushed): boolean {
+  if (a.raised !== b.raised) return a.raised
+  if (!a.el || !b.el) return false
+  return !!(b.el.compareDocumentPosition(a.el) & Node.DOCUMENT_POSITION_FOLLOWING)
+}
+
+function useCovering(page: Pushed, on: boolean, raised: boolean) {
+  useLayoutEffect(() => {
+    if (page.raised === raised) return
+    page.raised = raised
+    if (covering.includes(page)) coveringChanged()
+  }, [raised])
   useLayoutEffect(() => {
     if (!on) return
     covering.push(page)
-    coveringListeners.forEach(listener => listener())
+    coveringChanged()
     return () => {
       covering.splice(covering.indexOf(page), 1)
-      coveringListeners.forEach(listener => listener())
+      coveringChanged()
     }
   }, [on])
 }
 
 /** Whether a page is pushed over `page` — or, without one, over the tabs. */
-function useCovered(page?: object): boolean {
+function useCovered(page?: Pushed): boolean {
   return useSyncExternalStore(onCoveringChange, () => {
     if (!page) return covering.length > 0
-    const i = covering.indexOf(page)
-    return i >= 0 && i < covering.length - 1
+    return covering.includes(page) && covering.some(other => other !== page && isOver(other, page))
   })
 }
 
@@ -176,9 +201,9 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   // Pushed from the right, it covers the page before it while in place —
   // from the frame it starts sliding in to the frame it starts sliding out
   // — and is itself covered by the next (#367).
-  const self = useRef({}).current
+  const self = useRef<Pushed>({ el: null, raised }).current
   const pushed = from === 'right'
-  useCovering(self, pushed && inPosition)
+  useCovering(self, pushed && inPosition, raised)
   const covered = useCovered(self) && pushed
 
   useEffect(() => {
@@ -223,7 +248,10 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       />
     )}
     <div
-      ref={scrollRef}
+      ref={el => {
+        self.el = el
+        if (scrollRef) scrollRef.current = el
+      }}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         // Below the banner while an admin acts as another driver (#396).

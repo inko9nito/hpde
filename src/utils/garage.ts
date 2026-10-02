@@ -72,6 +72,40 @@ export interface Car {
   /** Its consumables' changes, in the order they were logged. */
   log?: LogEntry[]
   updatedAt?: string
+  /**
+   * A shared car's drivers (#398), each of whom has it in their garage —
+   * its details, photo and log are theirs together. Only on a shared car,
+   * as the garage function sends it.
+   */
+  drivers?: CarDriver[]
+  /** The events its other drivers drove it at, as the garage function sends it. */
+  drives?: CarDrive[]
+}
+
+/** One of a shared car's drivers (#398): who, by their name (or email, without one). */
+export interface CarDriver {
+  id: string
+  name: string
+  /** The driver whose garage this is. */
+  you?: boolean
+}
+
+/** An event another of a shared car's drivers drove it at, in their run group there, if they've said. */
+export interface CarDrive {
+  eventId: string
+  driverId: string
+  runGroup?: string
+}
+
+/** An invite to share a car (#398), as the one it's sent to sees it before joining. */
+export interface CarInvite {
+  car: Pick<Car, 'year' | 'make' | 'model' | 'nickname'>
+  /** Who sent it. */
+  from: string
+  /** "YYYY-MM-DDTHH:mm:ss.sssZ": when it stops working. */
+  expires: string
+  /** Their own car's id, when it's already in their garage. */
+  carId?: string
 }
 
 export const CORNERS = [
@@ -115,6 +149,10 @@ export interface Garage {
 }
 
 export const MAX_CARS = 20
+/** Drivers sharing one car (#398). */
+export const MAX_DRIVERS = 6
+/** How long an invite to share a car works for, once, in days. */
+export const INVITE_DAYS = 14
 // Far more events than anyone drives; keeps a runaway client in check.
 export const MAX_EVENTS = 1000
 export const MAX_SESSIONS = 100
@@ -286,6 +324,54 @@ export function carEvents(carId: string, garage: Garage, events: EventConfig[]):
   return events
     .filter(e => garage.events[e.id]?.carId === carId)
     .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
+}
+
+/** Whether a car is shared with another driver (#398). */
+export function isShared(car: Car): boolean {
+  return (car.drivers?.length ?? 0) > 1
+}
+
+/** What to call one of a car's drivers in a line: "You", or their first name. */
+export function driverLabel(driver: CarDriver): string {
+  if (driver.you) return 'You'
+  return driver.name.includes('@') ? driver.name : driver.name.split(/\s+/)[0]
+}
+
+/** "Rick", "Rick and Jason", "Rick, Jason and Amy": a car's other drivers, in a line. */
+export function othersText(car: Car): string {
+  const names = (car.drivers ?? []).filter(d => !d.you).map(driverLabel)
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/** One of the events a car went to, and who drove it there, in which run group, if they've said. */
+export interface CarOuting {
+  event: EventConfig
+  drivers: { driver: CarDriver; runGroup?: string }[]
+}
+
+/**
+ * The events a car went to, newest first, with who drove it at each
+ * (#398): this driver — the events in their garage it's the car of, in
+ * the run group they answered with (#235) — and a shared car's other
+ * drivers. Events no longer listed are left out.
+ */
+export function carOutings(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): CarOuting[] {
+  const you = car.drivers?.find(d => d.you) ?? { id: '', name: 'You', you: true }
+  const byEvent = new Map<string, CarOuting['drivers']>()
+  const add = (eventId: string, driver: CarDriver, runGroup?: string) => {
+    byEvent.set(eventId, [...(byEvent.get(eventId) ?? []), runGroup ? { driver, runGroup } : { driver }])
+  }
+  for (const [eventId, setup] of Object.entries(garage.events)) {
+    if (setup.carId === car.id) add(eventId, you, rsvps[eventId]?.runGroup)
+  }
+  for (const drive of car.drives ?? []) {
+    const driver = car.drivers?.find(d => d.id === drive.driverId)
+    if (driver && !driver.you) add(drive.eventId, driver, drive.runGroup)
+  }
+  return events
+    .filter(e => byEvent.has(e.id))
+    .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
+    .map(event => ({ event, drivers: byEvent.get(event.id)! }))
 }
 
 /**
