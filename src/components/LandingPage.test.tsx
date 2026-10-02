@@ -146,8 +146,9 @@ describe('landing menu and footer (#273)', () => {
     await userEvent.click(within(sheet).getByRole('link', { name: 'Share' }))
     await waitFor(() => expect(window.location.hash).toBe('#/share'))
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
-    expect(await screen.findByText('https://myhpde.netlify.app/')).toBeInTheDocument()
-    // Slid in over the landing page, which stays put underneath.
+    const share = await screen.findByRole('dialog', { name: 'Share this app' })
+    expect(within(share).getByRole('button', { name: 'Copy link' })).toHaveTextContent('https://myhpde.netlify.app/')
+    // A sheet over the landing page, which stays put underneath (#411).
     expect(screen.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
 
     window.location.hash = '#/'

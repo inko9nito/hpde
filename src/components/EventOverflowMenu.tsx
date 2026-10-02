@@ -6,7 +6,7 @@ import { useEvents, EVENTS_URL } from '../data/EventsContext'
 import { ADMIN_ROLE } from './NewEventPage'
 import { editScheduleHash } from './ScheduleEditorPage'
 import { editEventHash } from './EditEventPage'
-import { eventShareHash } from './SharePage'
+import { eventShareHash } from './ShareSheet'
 import { ICON_BUTTON } from './iconButton'
 import type { EventConfig } from '../types'
 

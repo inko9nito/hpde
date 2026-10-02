@@ -6,7 +6,7 @@ import { ICON_BUTTON } from './iconButton'
 import { SwitchDriverSheet } from './SwitchDriverSheet'
 import { driverName } from '../data/drivers'
 import { ADMIN_ROLE } from './NewEventPage'
-import { SHARE_HASH } from './SharePage'
+import { SHARE_HASH } from './ShareSheet'
 
 const ITEMS = [
   { href: SHARE_HASH, label: 'Share', Icon: Share },
@@ -17,8 +17,8 @@ const ITEM = 'flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left te
 
 /**
  * The landing page's menu button (#273). Opens a sheet from the bottom
- * with the app-wide pages — Share and the iOS widget — which then slide
- * up from the bottom too (#278). Admins also get Switch driver (#396):
+ * with the app-wide pages — Share, a sheet of its own (#411), and the iOS
+ * widget, which slides up from the bottom too (#278). Admins also get Switch driver (#396):
  * who to act as everywhere — themselves, the test account (#309), or
  * another driver.
  */

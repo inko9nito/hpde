@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy, Share } from 'lucide-react'
-import QRCode from 'qrcode'
 import { Sheet } from './Sheet'
+import { ShareLink } from './ShareLink'
 import { carName, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 
@@ -38,8 +37,6 @@ export function ShareCarSheet({ car, invite, onClose }: {
 }) {
   const [link, setLink] = useState<{ url: string; expires: string } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
-  const [qr, setQr] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -51,20 +48,6 @@ export function ShareCarSheet({ car, invite, onClose }: {
     )
     return () => { cancelled = true }
   }, [car.id, attempt])
-
-  useEffect(() => {
-    if (!link) return
-    QRCode.toDataURL(link.url, { margin: 1, width: 240 }).then(setQr, () => setQr(null))
-  }, [link])
-
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
-
-  async function copy() {
-    if (!link) return
-    await navigator.clipboard.writeText(link.url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <Sheet
@@ -89,35 +72,13 @@ export function ShareCarSheet({ car, invite, onClose }: {
         </div>
       ) : !link ? (
         <div className="mt-4 h-[300px] animate-pulse rounded-xl bg-gray-100" aria-busy="true" aria-label="Making the link" />
-      ) : (<>
-        <div className="mt-4 flex justify-center">
-          {qr
-            ? <img src={qr} alt="Code to scan for the link" width={180} height={180} className="rounded-lg border border-gray-200" />
-            : <div className="h-[180px] w-[180px] rounded-lg bg-gray-100" aria-hidden="true" />}
-        </div>
-        <button
-          onClick={copy}
-          aria-label="Copy link"
-          className="mt-4 flex w-full items-center justify-between gap-2 rounded-xl border border-gray-200 px-3 py-2.5 text-left transition-colors hover:border-gray-400"
-        >
-          <span className="truncate text-sm text-gray-800" data-invite-link>{link.url}</span>
-          {copied
-            ? <Check size={16} className="shrink-0 text-green-600" aria-hidden="true" />
-            : <Copy size={16} className="shrink-0 text-gray-400" aria-hidden="true" />}
-        </button>
-        {canShare && (
-          <button
-            onClick={() => navigator.share({ title: `Join ${carName(car)}`, url: link.url }).catch(() => {})}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-700"
-          >
-            <Share size={16} aria-hidden="true" />
-            Send the link
-          </button>
-        )}
-        <p className="mt-3 text-center text-xs text-gray-500">
-          {copied ? 'Copied.' : `Works once, until ${formatDay(link.expires.slice(0, 10))}.`}
-        </p>
-      </>)}
+      ) : (
+        <ShareLink
+          url={link.url}
+          shareTitle={`Join ${carName(car)}`}
+          note={`Works once, until ${formatDay(link.expires.slice(0, 10))}.`}
+        />
+      )}
     </Sheet>
   )
 }
