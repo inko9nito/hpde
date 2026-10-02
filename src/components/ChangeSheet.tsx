@@ -61,7 +61,7 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
     }
   }
 
-  const title = entry ? 'Edit entry' : 'Log a change'
+  const title = entry ? 'Edit entry' : 'Add entry'
   return (
     <Sheet
       label={title}
@@ -162,7 +162,7 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
           disabled={!('value' in cleaned) || !!busy}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
         >
-          {busy === 'saving' ? 'Saving…' : entry ? 'Save entry' : picked.length > 1 ? `Log ${picked.length} changes` : 'Log change'}
+          {busy === 'saving' ? 'Saving…' : entry ? 'Save entry' : 'Add entry'}
         </button>
         {entry && onRemove && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">

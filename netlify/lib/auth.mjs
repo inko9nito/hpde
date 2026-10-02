@@ -35,7 +35,7 @@ export async function userFromRequest(req, fetchImpl = fetch) {
     })
     if (!res.ok) return null
     const user = await res.json()
-    return { id: user.id, email: user.email, name: user.user_metadata?.full_name ?? null, roles: user.app_metadata?.roles ?? [] }
+    return { id: user.id, email: user.email, name: user.user_metadata?.full_name ?? null, avatar: user.user_metadata?.avatar_url ?? null, roles: user.app_metadata?.roles ?? [] }
   } catch {
     return null
   }

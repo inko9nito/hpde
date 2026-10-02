@@ -1,35 +1,53 @@
 import { useState } from 'react'
-import { Car as CarIcon, Lock, Plus } from 'lucide-react'
+import { Archive, CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
+import { AvatarStack, useDriverAvatar } from './Avatar'
+import { CarHero, CarTile } from './CarRow'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
-import { CarRow } from './CarRow'
-import { carHash } from './CarPage'
+import { ARCHIVED_HASH, carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
-import { useGarage } from '../data/GarageContext'
+import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_CARS, carName, carOutings, formatDay, eventStart, isShared, othersText } from '../utils/garage'
-import type { Car, Garage } from '../utils/garage'
-import type { Rsvps } from '../utils/rsvp'
+import { MAX_CARS, activeCars, carName, carOutings, formatDay, isShared, othersText } from '../utils/garage'
+import type { Car } from '../utils/garage'
 import type { EventConfig } from '../types'
 
 /**
- * "Last at Alpha Track Day · Mar 7, 2026": the car's latest event, by
- * whoever drove it, under its name — and who else drives it, when it's
- * shared (#398).
+ * A car in the Garage (#410): its photo with its name over it, and under
+ * it how many events it's been to — after its drivers' pictures, when
+ * it's shared (#398). Opens its page.
  */
-function lastSeen(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): string {
-  const [last] = carOutings(car, garage, events, rsvps)
-  const seen = last ? `Last at ${last.event.name} · ${formatDay(eventStart(last.event))}` : 'No events yet'
-  if (!isShared(car)) return seen
-  return `With ${othersText(car)} · ${seen}`
+function CarCard({ car, events }: { car: Car; events: number }) {
+  const src = useCarPhoto(car)
+  const avatarOf = useDriverAvatar()
+  const shared = isShared(car)
+  // You first, then the others in the order they joined.
+  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
+  return (
+    <a
+      href={carHash(car.id)}
+      className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
+      data-car-row
+    >
+      <CarHero car={car} src={src} />
+      <div className="flex min-h-12 items-center gap-2.5 px-4 py-3">
+        {shared && <AvatarStack people={drivers.map(d => ({ name: d.name, url: avatarOf(d) }))} size={24} />}
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
+          {shared && <span className="sr-only">Shared with {othersText(car)} · </span>}
+          {events === 0 ? 'No events yet' : events === 1 ? '1 event' : `${events} events`}
+        </span>
+        <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+      </div>
+    </a>
+  )
 }
 
 /**
  * The Garage (#344), a page over the More tab (#345): the driver's cars,
- * one line each — what it's called and the last event it went to — each
- * opening its page, where its details, consumables and their change log
- * are.
+ * a card each (#410) — its photo, what it's called and how many events
+ * it's been to — each opening its page, where its setup, change history
+ * and events are.
  */
 export function GaragePage({ events, onBack, onToast }: {
   /** Every event, to find a car's last. */
@@ -43,16 +61,27 @@ export function GaragePage({ events, onBack, onToast }: {
   // Add a car's page, while it's open: a new one each time (see CarPage).
   const [adding, setAdding] = useState<number | null>(null)
   const add = () => setAdding(n => (n ?? 0) + 1)
+  const cars = activeCars(garage.cars)
+  // Taken out of the garage, kept for the events they went to (#410).
+  const archived = garage.cars.filter(c => c.archived)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SubPageHeader title="Garage" onBack={onBack} />
+      <SubPageHeader
+        title="Garage"
+        onBack={onBack}
+        accessory={authStatus === 'signed-in' && garage.status === 'ready' && cars.length > 0 && (
+          <p className="flex shrink-0 items-center gap-1 text-sm text-gray-500" title="Only you and admins can see your garage">
+            <Lock size={14} aria-hidden="true" /> Private
+          </p>
+        )}
+      />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
           <SignInPrompt reason="manage your cars" privacyNote={false} />
         ) : garage.status === 'loading' || garage.status === 'off' ? (
           <div className="fade-in flex flex-col gap-3" aria-busy="true" aria-label="Loading your garage">
-            <div className="h-[74px] animate-pulse rounded-2xl border border-gray-200 bg-white" />
+            <div className="aspect-[16/11] animate-pulse rounded-2xl border border-gray-200 bg-white" />
           </div>
         ) : garage.status === 'error' ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
@@ -65,9 +94,9 @@ export function GaragePage({ events, onBack, onToast }: {
               Try again
             </button>
           </div>
-        ) : garage.cars.length === 0 ? (
+        ) : cars.length === 0 ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-            <CarIcon size={22} className="mx-auto text-gray-400" aria-hidden="true" />
+            <CarFront size={22} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
             <button
               onClick={add}
@@ -77,21 +106,18 @@ export function GaragePage({ events, onBack, onToast }: {
             </button>
           </div>
         ) : (
-          <div className="fade-in flex flex-col gap-3">
-            <p className="-mb-1 flex items-center justify-end gap-1 px-1 text-xs text-gray-500" title="Only you and admins can see your garage">
-              <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
-            </p>
-            <ul className="flex flex-col gap-3" aria-label="Cars">
-              {garage.cars.map(car => (
+          <div className="fade-in flex flex-col gap-4">
+            <ul className="flex flex-col gap-4" aria-label="Cars">
+              {cars.map(car => (
                 <li key={car.id}>
-                  <CarRow car={car} title={carName(car)} subtitle={lastSeen(car, garage, events, rsvps)} href={carHash(car.id)} />
+                  <CarCard car={car} events={carOutings(car, garage, events, rsvps).length} />
                 </li>
               ))}
             </ul>
-            {garage.cars.length < MAX_CARS && (
+            {cars.length < MAX_CARS && (
               <button
                 onClick={add}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
+                className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white px-4 py-3 text-[15px] font-semibold text-gray-900 transition-colors hover:bg-gray-50"
               >
                 <Plus size={16} aria-hidden="true" />
                 Add a car
@@ -99,10 +125,70 @@ export function GaragePage({ events, onBack, onToast }: {
             )}
           </div>
         )}
+        {authStatus === 'signed-in' && garage.status === 'ready' && archived.length > 0 && (
+          <a
+            href={ARCHIVED_HASH}
+            className="fade-in mt-6 flex min-h-12 items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] text-gray-900 transition-colors hover:bg-gray-50"
+          >
+            <Archive size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
+            <span className="flex-1">Archived</span>
+            <span className="text-sm tabular-nums text-gray-500">{archived.length}</span>
+            <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </a>
+        )}
       </div>
       {adding !== null && (
         <CarFormPage key={adding} onSaved={() => onToast('Car added')} onClosed={() => setAdding(null)} />
       )}
+    </div>
+  )
+}
+
+/**
+ * The Garage's archived cars (#410), a page over it: those taken out of
+ * it that went to events, or were shared — each kept for them, with how
+ * many, opening its page, where it can be put back.
+ */
+export function ArchivedCarsPage({ events, onBack, onOpenCar }: {
+  events: EventConfig[]
+  onBack: () => void
+  onOpenCar: (carId: string) => void
+}) {
+  const garage = useGarage()
+  const { rsvps } = useRsvps()
+  const archived = garage.cars.filter(c => c.archived)
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <SubPageHeader title="Archived" onBack={onBack} />
+      <div className="mx-auto max-w-lg px-3 pt-2 sm:px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <p className="mb-4 px-1 text-sm text-gray-500">Cars out of your garage, kept for the events they went to. Open one to put it back.</p>
+        {archived.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">No archived cars.</p>
+        ) : (
+          <ul className="flex flex-col gap-2" aria-label="Archived cars">
+            {archived.map(car => {
+              const n = carOutings(car, garage, events, rsvps).length
+              return (
+                <li key={car.id}>
+                  <button
+                    onClick={() => onOpenCar(car.id)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+                  >
+                    <CarTile car={car} size={48} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-gray-900">{carName(car)}</span>
+                      <span className="mt-0.5 block truncate text-[13px] text-gray-500">
+                        {n === 1 ? '1 event' : `${n} events`} · archived {formatDay(car.archived!.slice(0, 10))}
+                      </span>
+                    </span>
+                    <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

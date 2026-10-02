@@ -3,7 +3,7 @@ import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
 import type { DriverStores, StoreDeps } from '../lib/driverStore.mts'
 import { ensureRsvpsCopied, openRsvpStores } from '../lib/rsvpStore.mts'
 import type { DriverRsvps } from '../lib/rsvpStore.mts'
-import { INVITE_DAYS, MAX_CARS, MAX_DRIVERS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_LIMIT, PHOTO_TYPES, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
+import { INVITE_DAYS, MAX_CARS, MAX_DRIVERS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_LIMIT, PHOTO_TYPES, activeCars, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
 import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry } from '../../src/utils/garage.ts'
 
 // A signed-in driver's garage (#344), private to them, as their laps and
@@ -13,8 +13,14 @@ import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry 
 //   GET                          their cars, and each event's setup: { cars, events }
 //   PUT    {car}                 adds a car (no id) or changes one (its id);
 //                                its photo and log are kept as they are
-//   DELETE ?car=<id>             removes a car, its photo and its log; events
-//                                it went to keep their tire pressures
+//   DELETE ?car=<id>             takes a car out of the garage (#410): one
+//                                that went to events, or is shared, is kept
+//                                — photo, log and all — marked `archived`,
+//                                and can be put back; one that did neither,
+//                                or one already archived, goes, with its
+//                                photo and log (its events keep their tire
+//                                pressures)
+//   PUT    ?car=<id>&restore=1   puts an archived car back in the garage
 //   GET    ?car=<id>&photo=1     the car's photo
 //   PUT    ?car=<id>&photo=1     sets it: the image itself as the body
 //   DELETE ?car=<id>&photo=1     removes it
@@ -36,11 +42,15 @@ import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry 
 //                                expires } }, for a link. Works once, for
 //                                INVITE_DAYS days.
 //   GET    ?invite=<token>       what the invite is for: { invite } (CarInvite)
+//   GET    ?invite=<token>&photo=1  the car's photo, to show with it
 //   PUT    ?invite=<token>       takes it: the car's in their garage too
 //   DELETE ?car=<id>             on a shared car, takes it out of their
-//                                garage only; it goes with its last driver
-// A shared car comes with its drivers (`drivers`, each by name) and the
-// events the others drove it at, in their run group there (`drives`).
+//                                garage only — kept as it is then, archived,
+//                                for the events they drove it at — and it
+//                                goes with its last driver
+// A shared car comes with its drivers (`drivers`, each by name and, from
+// their sign-in, their picture) and the events the others drove it at, in
+// their run group there (`drives`).
 //
 // Kept in Netlify Blobs, one record per driver, keyed `<user id>/garage`;
 // photos in a store of their own, keyed `<user id>/<car id>`. A shared car
@@ -103,6 +113,17 @@ async function readShared(stores: DriverStores, key: string): Promise<SharedCar 
   return (await stores.records.get(key, { type: 'json' })) as SharedCar | null
 }
 
+/** A photo as it's sent: the image, cached for good (its URL names it). */
+function photoResponse(found: { data: unknown; metadata?: Record<string, unknown> }) {
+  return new Response(found.data as ArrayBuffer, {
+    headers: {
+      'Content-Type': String(found.metadata?.contentType ?? 'image/jpeg'),
+      // The URL names the photo (v=), so a new one is a new URL.
+      'Cache-Control': 'private, max-age=31536000, immutable',
+    },
+  })
+}
+
 /** A photo, from the deploy's own store or, on a preview, the live one. */
 async function readPhoto(photos: DriverStores, key: string) {
   return (await photos.records.getWithMetadata(key, { type: 'arrayBuffer' }))
@@ -120,7 +141,9 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const whose = await whoseRecords(user, params.get('driver'), 'a garage', deps.identity)
   if (whose instanceof Response) return whose
   const { driverId } = whose
-  const me: CarDriver = { id: driverId, name: whose.driverName ?? 'A driver' }
+  // Their picture, from their own sign-in: not an admin's, acting for them.
+  const avatar = driverId === user.id ? (user as { avatar?: string | null }).avatar : null
+  const me: CarDriver = { id: driverId, name: whose.driverName ?? 'A driver', ...(avatar ? { avatar } : {}) }
 
   const stores = openStores(context, deps, GARAGE_STORE, GARAGE_META_STORE)
   const sharedStores = openStores(context, deps, SHARED_STORE, SHARED_META_STORE)
@@ -163,15 +186,22 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     if (!invite || invite.expires < updatedAt) return json(404, { error: 'That invite has expired, or was already used.' })
     const shared = invite.owner ? null : await readShared(sharedStores, `car/${invite.carId}`)
     const owner = invite.owner ? await recordOf(invite.owner) : null
-    const car = shared?.car ?? owner?.cars.find(c => c.id === invite.carId)
+    const car = shared?.car ?? owner?.cars.find(c => c.id === invite.carId && !c.archived)
     if (!car) return json(404, { error: 'That car isn’t in their garage any more.' })
     const mine = invite.owner === driverId || shared?.drivers.some(d => d.id === driverId)
 
+    if (req.method === 'GET' && params.get('photo')) {
+      const found = car.photo ? await readPhoto(photos(), invite.owner ? `${invite.owner}/${car.id}` : `shared/${car.id}`) : null
+      if (!found) return json(404, { error: 'That car has no photo.' })
+      return photoResponse(found)
+    }
     if (req.method === 'GET') {
       const { year, make, model, nickname } = car
       const shown: CarInvite = {
         car: { ...(year !== undefined ? { year } : {}), make, model, ...(nickname ? { nickname } : {}) },
         from: invite.from.name,
+        ...(invite.from.avatar ? { fromAvatar: invite.from.avatar } : {}),
+        ...(car.photo ? { photo: car.photo } : {}),
         expires: invite.expires,
         ...(mine ? { carId: car.id } : {}),
       }
@@ -179,7 +209,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     }
     if (req.method !== 'PUT') return json(405, { error: 'Method not allowed.' })
     if (mine) return json(200, { car: { id: car.id } })
-    if (garage.cars.length >= MAX_CARS) return json(400, { error: `Your garage is full (at most ${MAX_CARS} cars).` })
+    if (activeCars(garage.cars).length >= MAX_CARS) return json(400, { error: `Your garage is full (at most ${MAX_CARS} cars).` })
     if ((shared?.drivers.length ?? 1) >= MAX_DRIVERS) return json(400, { error: `That car has as many drivers as it can (${MAX_DRIVERS}).` })
 
     let id = car.id
@@ -198,7 +228,13 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       const events = id === car.id ? owner.events : Object.fromEntries(Object.entries(owner.events).map(([e, setup]) => [e, setup.carId === car.id ? { ...setup, carId: id } : setup]))
       await putRecord(invite.owner!, { cars: owner.cars.filter(c => c.id !== car.id), events, shared: [...(owner.shared ?? []), id] })
     } else {
-      if (garage.cars.some(c => c.id === id)) return json(409, { error: 'A car of yours has the same id as that one. Remove it, or ask for another invite.' })
+      const same = garage.cars.find(c => c.id === id)
+      if (same && !same.archived) return json(409, { error: 'A car of yours has the same id as that one. Remove it, or ask for another invite.' })
+      // Back to a car they left: what was kept of it gives way to the car itself.
+      if (same) {
+        record.cars = record.cars.filter(c => c.id !== id)
+        if (same.photo) await photos().records.delete(`${driverId}/${id}`)
+      }
       await sharedStores.records.setJSON(`car/${id}`, { ...shared!, drivers: [...shared!.drivers, me] })
     }
     await putRecord(driverId, { ...record, shared: [...(record.shared ?? []).filter(s => s !== id), id] })
@@ -217,8 +253,19 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     : put({ ...garage, cars: garage.cars.map(c => (c.id === next.id ? next : c)) })
   const photoKey = car ? (sharedCar ? `shared/${car.id}` : `${driverId}/${car.id}`) : ''
 
+  if (car && params.get('restore') === '1') {
+    if (req.method !== 'PUT') return json(405, { error: 'Method not allowed.' })
+    if (!car.archived) return json(400, { error: 'That car is in the garage already.' })
+    if (activeCars(garage.cars).length >= MAX_CARS) return json(400, { error: `Your garage is full (at most ${MAX_CARS} cars).` })
+    const { archived: _was, ...back } = car
+    const restored: Car = { ...back, updatedAt }
+    await put({ ...garage, cars: garage.cars.map(c => (c.id === car.id ? restored : c)) })
+    return json(200, { car: restored })
+  }
+
   if (car && params.get('invite') === '1') {
     if (req.method !== 'PUT') return json(405, { error: 'Method not allowed.' })
+    if (car.archived) return json(400, { error: 'Put the car back in your garage first.' })
     if ((sharedCar?.drivers.length ?? 1) >= MAX_DRIVERS) return json(400, { error: `That car has as many drivers as it can (${MAX_DRIVERS}).` })
     const invite: Invite = {
       carId: car.id,
@@ -236,13 +283,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       if (!car.photo) return json(404, { error: 'That car has no photo.' })
       const found = await readPhoto(photos(), photoKey)
       if (!found) return json(404, { error: 'That car has no photo.' })
-      return new Response(found.data as ArrayBuffer, {
-        headers: {
-          'Content-Type': String(found.metadata?.contentType ?? 'image/jpeg'),
-          // The URL names the photo (v=), so a new one is a new URL.
-          'Cache-Control': 'private, max-age=31536000, immutable',
-        },
-      })
+      return photoResponse(found)
     }
     if (req.method === 'DELETE') {
       await photos().records.delete(photoKey)
@@ -262,6 +303,15 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   }
 
   if (req.method === 'GET') {
+    // Their name and picture as they are now, on the shared cars they drive.
+    if (driverId === user.id) {
+      for (const s of sharedCars) {
+        const was = s.drivers.find(d => d.id === driverId)!
+        if (was.name === me.name && was.avatar === me.avatar) continue
+        s.drivers = s.drivers.map(d => (d.id === driverId ? me : d))
+        await sharedStores.records.setJSON(`car/${s.car.id}`, s)
+      }
+    }
     // A shared car's drivers, and the events the others drove it at, in
     // their run group there.
     const rsvpStores = openRsvpStores(context, deps)
@@ -295,15 +345,34 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       await replaceCar({ ...rest, ...(log.length ? { log } : {}), updatedAt })
       return json(200, { deleted: entryId })
     }
-    if (car) {
+    if (car && !car.archived) {
       // A shared car stays with its other drivers; with none, it goes.
-      const drivers = sharedCar?.drivers.filter(d => d.id !== driverId) ?? []
-      if (drivers.length) await sharedStores.records.setJSON(`car/${car.id}`, { ...sharedCar!, drivers })
-      else {
-        if (car.photo) await photos().records.delete(photoKey)
-        if (sharedCar) await sharedStores.records.delete(`car/${car.id}`)
+      const others = sharedCar?.drivers.filter(d => d.id !== driverId) ?? []
+      if (others.length) await sharedStores.records.setJSON(`car/${car.id}`, { ...sharedCar!, drivers: others })
+      else if (sharedCar) await sharedStores.records.delete(`car/${car.id}`)
+      // Driven at events, or shared: kept, as it is now (#410), its photo
+      // where their own cars' are. Neither: it goes.
+      const went = Object.values(garage.events).some(setup => setup.carId === car.id) || others.length > 0
+      const ownKey = `${driverId}/${car.id}`
+      if (car.photo && sharedCar && went) {
+        const found = await readPhoto(photos(), photoKey)
+        if (found) await photos().records.set(ownKey, found.data as ArrayBuffer, { metadata: found.metadata })
       }
-      // Its events keep their tire pressures, without the car.
+      if (car.photo && (sharedCar ? !others.length : !went)) await photos().records.delete(photoKey)
+      const { drivers: _drivers, drives: _drives, ...details } = car
+      const kept: Car = { ...details, archived: updatedAt }
+      const own = record.cars.filter(c => c.id !== car.id)
+      await putRecord(driverId, {
+        cars: !went ? own : sharedCar ? [...own, kept] : record.cars.map(c => (c.id === car.id ? kept : c)),
+        events: garage.events,
+        shared: (record.shared ?? []).filter(id => id !== car.id),
+      })
+      return json(200, went ? { car: kept } : { deleted: car.id })
+    }
+    if (car) {
+      // Already out of the garage: gone for good. Its events keep their
+      // tire pressures, without it.
+      if (car.photo) await photos().records.delete(`${driverId}/${car.id}`)
       const events = Object.fromEntries(Object.entries(garage.events).flatMap(([id, setup]): [string, EventSetup][] => {
         if (setup.carId !== carId) return [[id, setup]]
         const { carId: _gone, ...rest } = setup
@@ -313,7 +382,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       await putRecord(driverId, {
         cars: record.cars.filter(c => c.id !== carId),
         events,
-        shared: (record.shared ?? []).filter(id => id !== carId),
+        ...(record.shared ? { shared: record.shared } : {}),
       })
       return json(200, { deleted: carId })
     }
@@ -377,14 +446,18 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   if (id !== undefined && id !== null) {
     const old = garage.cars.find(c => c.id === id)
     if (!old) return json(404, { error: 'That car isn’t in the garage.' })
-    const changed: Car = { id, ...cleaned.value, ...(old.photo ? { photo: old.photo } : {}), ...(old.log ? { log: old.log } : {}), updatedAt }
+    const changed: Car = {
+      id, ...cleaned.value,
+      ...(old.photo ? { photo: old.photo } : {}), ...(old.log ? { log: old.log } : {}), ...(old.archived ? { archived: old.archived } : {}),
+      updatedAt,
+    }
     if (sharedCars.some(s => s.car.id === id)) {
       const s = sharedCars.find(s => s.car.id === id)!
       await sharedStores.records.setJSON(`car/${id}`, { ...s, car: changed })
     } else await put({ ...garage, cars: garage.cars.map(c => (c.id === id ? changed : c)) })
     return json(200, { car: changed })
   }
-  if (garage.cars.length >= MAX_CARS) return json(400, { error: `That’s too many cars (at most ${MAX_CARS}).` })
+  if (activeCars(garage.cars).length >= MAX_CARS) return json(400, { error: `That’s too many cars (at most ${MAX_CARS}).` })
   let fresh = newId()
   while (garage.cars.some(c => c.id === fresh)) fresh = randomId()
   const added: Car = { id: fresh, ...cleaned.value, updatedAt }

@@ -75,8 +75,8 @@ export function MyLapTimes({
   const carRow = garage?.status === 'ready' && (
     <div className="mb-5">
       {garage.car
-        ? <CarRow compact car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
-        : <CarRow compact title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
+        ? <CarRow car={garage.car} title={carName(garage.car)} subtitle={garage.car.nickname ? carTitle(garage.car) : undefined} onClick={garage.onOpenCar} label={`Your car: ${carName(garage.car)}`} />
+        : <CarRow title="Add your car" subtitle="from your garage" onClick={garage.onOpenCar} dashed />}
     </div>
   )
 

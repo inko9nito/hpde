@@ -87,7 +87,8 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
 
       {picking && (
         <div className="mt-4 flex flex-col gap-2" role="group" aria-label="Cars">
-          {garage.cars.map(c => (
+          {/* Those in the garage — and the one already here, if it's been taken out since (#410). */}
+          {garage.cars.filter(c => !c.archived || c.id === car?.id).map(c => (
             <button
               key={c.id}
               onClick={() => run(c.id, () => onPick(c.id))}

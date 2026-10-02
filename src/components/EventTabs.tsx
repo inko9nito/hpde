@@ -34,25 +34,47 @@ interface Props {
  */
 export function EventTabs({ active, onChange, notesCount }: Props) {
   return (
-    <div role="tablist" aria-label="Event section" className="flex pl-2 pr-0.5 pt-4">
-      {TABS.map(tab => {
+    <TabStrip
+      tabs={TABS.map(tab => (tab.id === 'notes' && notesCount ? { ...tab, label: `${tab.label} (${notesCount})` } : tab))}
+      active={active}
+      onChange={onChange}
+      label="Event section"
+      idPrefix="event"
+      className="pl-2 pr-0.5 pt-4"
+    />
+  )
+}
+
+/**
+ * A page's tabs, in equal columns, the active one marked by a heavier
+ * label and a dark bar under it: the event page's, and a car's (#410).
+ * Each controls the panel `${idPrefix}-tabpanel-${id}`.
+ */
+export function TabStrip<T extends string>({ tabs, active, onChange, label, idPrefix, className = '' }: {
+  tabs: readonly { id: T; label: string }[]
+  active: T
+  onChange: (id: T) => void
+  label: string
+  idPrefix: string
+  className?: string
+}) {
+  return (
+    <div role="tablist" aria-label={label} className={`flex ${className}`}>
+      {tabs.map(tab => {
         const isActive = tab.id === active
         return (
           <button
             key={tab.id}
             role="tab"
             aria-selected={isActive}
-            aria-controls={`event-tabpanel-${tab.id}`}
-            id={`event-tab-${tab.id}`}
+            aria-controls={`${idPrefix}-tabpanel-${tab.id}`}
+            id={`${idPrefix}-tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
             className={`flex h-7 min-w-0 flex-1 flex-col items-center justify-between font-rubik text-sm text-gray-900 ${
               isActive ? 'font-medium' : 'font-normal hover:text-gray-600'
             }`}
           >
-            <span className="truncate px-4 leading-none">
-              {tab.label}
-              {tab.id === 'notes' && !!notesCount && ` (${notesCount})`}
-            </span>
+            <span className="truncate px-4 leading-none">{tab.label}</span>
             <span
               aria-hidden="true"
               className={`h-1 w-full rounded-t-sm ${isActive ? 'bg-gray-900' : ''}`}

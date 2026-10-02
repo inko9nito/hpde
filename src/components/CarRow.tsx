@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react'
 import { CarFront, ChevronRight } from 'lucide-react'
-import { consumableLabel, consumablesOn, formatDay } from '../utils/garage'
+import { carHeading, carSubtitle, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { useCarPhoto } from '../data/GarageContext'
 
 // The pieces a car is shown with (#344): its tile, the one-line row that
-// opens it — in the Garage and at the top of an event's My notes — and
-// its details' rows.
+// opens it at the top of an event's My notes, and its details' rows.
 
 /** The car's photo, square — or with none (yet), a car on gray. */
 export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car; size?: number; rounded?: string }) {
@@ -26,59 +25,70 @@ export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car;
 }
 
 /**
- * A car in a line: its tile, what it's called and a line under it, and the
- * chevron that opens it. A link with `href`, a button with `onClick`.
- * `compact`: one slim line — a small car, the name and the line beside it —
- * for My notes, where it's seldom changed and shouldn't take the room.
+ * A car in one slim line — a small car, the name and a line beside it, and
+ * the chevron that opens it — at the top of an event's My notes, where it's
+ * seldom changed and shouldn't take the room.
  */
-export function CarRow({ car, title, subtitle, href, onClick, label, dashed = false, compact = false }: {
+export function CarRow({ car, title, subtitle, onClick, label, dashed = false }: {
   /** Its photo shows, if it has one. */
   car?: Car
   title: string
   subtitle?: string
-  href?: string
   onClick?: () => void
   /** Names it, when the title alone doesn't. */
   label?: string
   /** No car yet: the way to add one. */
   dashed?: boolean
-  compact?: boolean
 }) {
-  if (compact) {
-    return (
-      <button
-        onClick={onClick}
-        aria-label={label}
-        className={`flex min-h-10 w-full items-center gap-2 rounded-xl border bg-white px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
-          dashed ? 'border-dashed border-gray-300' : 'border-gray-200'
-        }`}
-        data-car-row
-      >
-        {car?.photo
-          ? <CarTile car={car} size={24} rounded="rounded-md" />
-          : <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />}
-        <span className="min-w-0 flex-1 truncate">
-          <span className="font-semibold text-gray-900">{title}</span>
-          {subtitle && <span className="text-gray-500"> · {subtitle}</span>}
-        </span>
-        <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
-      </button>
-    )
-  }
-  const className = `flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition-colors hover:bg-gray-50 ${
-    dashed ? 'border-dashed border-gray-300' : 'border-gray-200 shadow-sm'
-  }`
-  const body = (<>
-    <CarTile car={car} />
-    <span className="min-w-0 flex-1">
-      <span className="block truncate text-base font-semibold text-gray-900">{title}</span>
-      {subtitle && <span className="mt-0.5 block truncate text-xs text-gray-500">{subtitle}</span>}
-    </span>
-    <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
-  </>)
-  return href
-    ? <a href={href} aria-label={label} className={className} data-car-row>{body}</a>
-    : <button onClick={onClick} aria-label={label} className={className} data-car-row>{body}</button>
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={`flex min-h-10 w-full items-center gap-2 rounded-xl border bg-white px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${
+        dashed ? 'border-dashed border-gray-300' : 'border-gray-200'
+      }`}
+      data-car-row
+    >
+      {car?.photo
+        ? <CarTile car={car} size={24} rounded="rounded-md" />
+        : <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />}
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-semibold text-gray-900">{title}</span>
+        {subtitle && <span className="text-gray-500"> · {subtitle}</span>}
+      </span>
+      <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+    </button>
+  )
+}
+
+/**
+ * A car as the Garage shows it (#410): its photo, landscape, with its name
+ * and year over the foot of it — or, with none (yet), a car on dark gray.
+ * The invite to share a car shows it the same way.
+ */
+export function CarHero({ car, src }: {
+  car: Pick<Car, 'year' | 'make' | 'model' | 'nickname' | 'photo'>
+  /** Its photo, once it's in. */
+  src: string | null
+}) {
+  const subtitle = carSubtitle(car)
+  return (
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800">
+      {src ? (
+        <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" data-car-photo />
+      ) : car.photo ? (
+        <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
+      ) : (
+        <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
+      )}
+      {/* Dark enough at the foot for the name to read over any photo. */}
+      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
+      <div className="absolute inset-x-0 bottom-0 px-4 pb-3.5">
+        <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
+        {subtitle && <p className="mt-0.5 truncate text-sm text-white/85">{subtitle}</p>}
+      </div>
+    </div>
+  )
 }
 
 /** A label and its value, a line to itself — as on the report card. */

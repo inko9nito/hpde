@@ -124,12 +124,30 @@ const card = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm'
 const outlineButton = 'rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-gray-50'
 
 /**
+ * What Archive or Remove asks first (#410): an archived car — one that went
+ * to events, or is shared — stays on them and can be put back; any other
+ * goes.
+ */
+function removeText(others: string | null, events: number): string {
+  const went = events === 1 ? 'the event you drove it at' : `the ${events} events you drove it at`
+  if (others) {
+    return events
+      ? `Archive this car? It stays in ${others}’s garage, and ${went} ${events === 1 ? 'keeps' : 'keep'} it as it is now. You can put it back.`
+      : `Archive this car? It stays in ${others}’s garage. You can put it back.`
+  }
+  return events
+    ? `Archive this car? It leaves your garage but stays on ${went}, with its history. You can put it back.`
+    : 'Remove this car and its change log?'
+}
+
+/**
  * Adds a car to the garage, or changes or removes one (#344): a page that
  * slides up over the one it's opened from (#356), Cancel and Save across its
  * top — its photo, what it is and its lug nut torque. Nothing's saved
  * until Save; a photo picked is made small enough to upload first.
- * Removing a car takes its change log with it; the events it went to keep
- * their sessions' tire pressures.
+ * A car that went to events, or is shared, is archived — kept for them,
+ * photo and change log and all, out of the garage, to be put back (#410);
+ * any other is removed.
  */
 export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   /** The car to change; none to add one. */
@@ -138,8 +156,8 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   events?: number
   /** Once it's saved, with the car as saved; the page then slides away. Throws with a message to show. */
   onSaved: (car: Car) => void | Promise<void>
-  /** Once it's removed; the page then slides away. */
-  onRemoved?: () => void
+  /** Once it's archived (true) or removed; the page then slides away. */
+  onRemoved?: (archived: boolean) => void
   /** Once it's slid away. */
   onClosed: () => void
 }) {
@@ -208,6 +226,8 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   // Shared with other drivers (#398): taking it out leaves it with them.
   const shared = !!car && isShared(car)
   const others = car ? othersText(car) : ''
+  // Kept, as the garage function keeps it: driven at events, or shared (#410).
+  const archives = !!events || shared
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
     <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
@@ -275,28 +295,25 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
           <div className="flex flex-col items-center gap-3">
             {car && !confirmingRemove && (
               <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
-                {shared ? 'Remove from your garage' : 'Remove from garage'}
+                {archives ? 'Archive car' : 'Remove from garage'}
               </button>
             )}
             {car && confirmingRemove && (
               <div className="flex flex-col items-center gap-1.5 text-sm">
                 <span className="text-center text-gray-700">
-                  {shared
-                    ? `Take this car out of your garage? It stays in ${others}’s, with its change log.`
-                    : 'Remove this car and its change log?'}
-                  {!!events && ` Your ${events === 1 ? 'event keeps its' : `${events} events keep their`} tire pressures.`}
+                  {removeText(shared ? others : null, events ?? 0)}
                 </span>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => run('removing', async () => {
                       await garage.removeCar(car.id)
-                      onRemoved?.()
+                      onRemoved?.(archives)
                       close()
                     })}
                     disabled={!!busy}
                     className="font-semibold text-red-600 hover:text-red-700"
                   >
-                    {busy === 'removing' ? 'Removing…' : 'Remove'}
+                    {busy === 'removing' ? (archives ? 'Archiving…' : 'Removing…') : archives ? 'Archive' : 'Remove'}
                   </button>
                   <button onClick={() => setConfirmingRemove(false)} disabled={!!busy} className="text-gray-500 hover:text-gray-700">
                     Keep

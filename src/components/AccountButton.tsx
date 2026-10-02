@@ -1,6 +1,7 @@
 import { FlaskConical, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { driverName } from '../data/drivers'
+import { Avatar } from './Avatar'
 
 /**
  * Header account control. Signed out → "Sign in" (Google). Signed in → the
@@ -16,25 +17,13 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
     'inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors'
 
   if (status === 'signed-in' && user) {
-    const initial = (user.name ?? user.email).trim().charAt(0).toUpperCase()
     return (
       <button
         onClick={openAccount}
         aria-label={testAccount ? `Account: ${user.email}, on the test account` : actingAs ? `Account: ${user.email}, acting as ${driverName(actingAs)}` : `Account: ${user.email}`}
         className={`${base} relative hover:bg-gray-100`}
       >
-        {user.avatarUrl ? (
-          <img
-            src={user.avatarUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="h-7 w-7 rounded-full"
-          />
-        ) : (
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-gray-900 text-xs font-semibold text-white">
-            {initial}
-          </span>
-        )}
+        <Avatar name={user.name ?? user.email} url={user.avatarUrl} size={28} />
         {/* Acting as the test account (#309) or another driver (#396): theirs is what's showing. */}
         {actingAs && (
           <span

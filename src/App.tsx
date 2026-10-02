@@ -26,10 +26,10 @@ import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
 import { HOME_TAB_HASH, MORE_PAGE_HASH, MoreTab, TAB_BAR_PX, TabBar, homeTabFromHash, morePageFromHash } from './components/HomeTabs'
-import { GaragePage } from './components/GaragePage'
+import { ArchivedCarsPage, GaragePage } from './components/GaragePage'
 import { EventCarSheet } from './components/EventCarSheet'
 import { CarFormPage } from './components/CarFormPage'
-import { CarPage, carHash, carIdFromHash } from './components/CarPage'
+import { ARCHIVED_HASH, CarPage, carHash, carIdFromHash } from './components/CarPage'
 import { JoinCarPage } from './components/JoinCarPage'
 import { inviteFromHash } from './components/ShareCarSheet'
 import type { HomeTab } from './components/HomeTabs'
@@ -306,6 +306,17 @@ export default function App() {
   const carRouteId = carIdFromHash(hash)
   const [carUnderEvent, setCarUnderEvent] = useState<string | null>(null)
   if (carUnderEvent !== null && !isOnEventRoute && carRouteId !== carUnderEvent) setCarUnderEvent(null)
+  // The Garage's archived cars (#410), a page over it; a car's page opened
+  // from them has them under it, and Back returns there.
+  const archivedRoute = hash === ARCHIVED_HASH
+  const [carFromArchived, setCarFromArchived] = useState<string | null>(null)
+  if (carFromArchived !== null && carRouteId !== carFromArchived && !archivedRoute && !(isOnEventRoute && carUnderEvent === carFromArchived)) {
+    setCarFromArchived(null)
+  }
+  const archivedOpen = archivedRoute || carFromArchived !== null
+  // It stays mounted through its slide-out.
+  const [archivedMounted, setArchivedMounted] = useState(archivedOpen)
+  if (archivedOpen && !archivedMounted) setArchivedMounted(true)
   // The event a car's page was opened over, until the car's page closes:
   // `arrived` once it's open, so leaving it (Back to the event, or
   // anywhere) ends it.
@@ -335,7 +346,7 @@ export default function App() {
   const moreUnderEvent = isOnEventRoute || trackOverEventId !== null ? stack.moreUnderEvent : null
   // A car's page opened from the Garage (#344) has the Garage under it —
   // and so does an event's page opened from that car's.
-  const carFromGarage = (carRouteId !== null && eventUnderCar === null) || (isOnEventRoute && carUnderEvent !== null)
+  const carFromGarage = (carRouteId !== null && eventUnderCar === null) || (isOnEventRoute && carUnderEvent !== null) || archivedRoute
   const morePageShowing = morePage
     ?? (moreUnderEvent !== null ? morePageFromHash(moreUnderEvent) : null)
     ?? (carFromGarage ? 'garage' : null)
@@ -345,7 +356,7 @@ export default function App() {
   // it was, and go back to it.
   const hashTab = homeTabFromHash(hash)
     ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
-    ?? (morePage !== null || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
+    ?? (morePage !== null || archivedRoute || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // Another tab starts at its top; pages opened over a tab, and closed
@@ -605,6 +616,25 @@ export default function App() {
         )}
       </PushPage>
     )}
+    {archivedMounted && (
+      <PushPage
+        key="archived"
+        open={archivedOpen}
+        onExited={() => setArchivedMounted(false)}
+        skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
+        whiteHeader={false}
+      >
+        <ArchivedCarsPage
+          events={ALL_EVENTS}
+          onBack={() => setHash(MORE_PAGE_HASH.garage)}
+          onOpenCar={id => {
+            setCarFromArchived(id)
+            setHash(carHash(id))
+          }}
+        />
+      </PushPage>
+    )}
     {pushMounted && (
     <PushPage
       // A fresh page when it goes over the track or a car's page, so it slides in.
@@ -781,8 +811,8 @@ export default function App() {
         <CarPage
           carId={shownCarId}
           events={ALL_EVENTS}
-          // Back to the event it was opened from, or the Garage.
-          onBack={() => setHash(eventUnderCar !== null ? eventHash(eventUnderCar) : MORE_PAGE_HASH.garage)}
+          // Back to the event it was opened from, the archived cars, or the Garage.
+          onBack={() => setHash(eventUnderCar !== null ? eventHash(eventUnderCar) : carFromArchived === shownCarId ? ARCHIVED_HASH : MORE_PAGE_HASH.garage)}
           // One of its events opens over it, on My notes, where its car is —
           // or, the one it was opened from, back to it.
           onOpenEvent={event => {
