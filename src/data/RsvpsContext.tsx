@@ -18,6 +18,8 @@ export interface RsvpsValue {
   rsvps: Rsvps
   /** Answers for one event, replacing any answer. Throws with a message to show. */
   answer(eventId: string, rsvp: Omit<Rsvp, 'updatedAt'>): Promise<void>
+  /** An answer the server gave for them: "I drove", when they saved laps (#377). */
+  remember(eventId: string, rsvp: Rsvp): void
 }
 
 async function errorFrom(res: Response): Promise<Error> {
@@ -90,7 +92,12 @@ function useRsvpsStore(driverId: string | null | undefined): RsvpsValue {
     setLoaded(prev => ({ userId, rsvps: { ...(prev?.userId === userId ? prev.rsvps : {}), [eventId]: saved } }))
   }, [authedFetch, signedIn, userId, url])
 
-  return useMemo(() => ({ status, rsvps, answer }), [status, rsvps, answer])
+  const remember = useCallback((eventId: string, rsvp: Rsvp) => {
+    if (!userId) return
+    setLoaded(prev => (prev?.userId === userId ? { userId, rsvps: { ...prev.rsvps, [eventId]: rsvp } } : prev))
+  }, [userId])
+
+  return useMemo(() => ({ status, rsvps, answer, remember }), [status, rsvps, answer, remember])
 }
 
 export function RsvpsProvider({ children }: { children: ReactNode }) {
@@ -112,6 +119,7 @@ const OFF: RsvpsValue = {
   status: 'off',
   rsvps: {},
   answer: () => Promise.reject(new Error('Please sign in to continue.')),
+  remember: () => {},
 }
 
 // Rendered without a provider (isolated tests) → as if signed out.

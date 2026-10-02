@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { createHash } from 'node:crypto'
 import handler from '../functions/rsvps.mts'
 import { fakeBlobs } from './fakeBlobs'
+import { TEST_DRIVER_ID } from '../../src/data/testAccount'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:rsvps')
@@ -31,6 +33,10 @@ const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) =>
 const EVENT = '2026-10-18_msr-scca'
 const OTHER = '2026-11-08_ecr-hpde'
 
+// Whose the sample laps are (Jason's, #310), for these tests: nobody, unless one sets it.
+let sampleDriverSha256 = ''
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
+
 const call = (
   method: string,
   { token, body, query = `?event=${EVENT}`, context = {} }: { token?: string; body?: unknown; query?: string; context?: unknown } = {},
@@ -42,14 +48,17 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity } as never,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, sampleDriverSha256 } as never,
   )
 
 const rsvpsOf = async (token: string, context?: unknown) =>
   (await (await call('GET', { token, query: '', context })).json()).rsvps
 
 describe('rsvps function (#235)', () => {
-  beforeEach(() => blobs.clear())
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
 
   it('keeps each driver’s answers to themselves; an admin can read and answer for one (#362)', async () => {
     expect((await call('PUT', { token: 'vera-token', body: { status: 'going' } })).status).toBe(200)
@@ -154,5 +163,82 @@ describe('rsvps function (#235)', () => {
     expect(await rsvpsOf('vera-token', preview)).toEqual({})
     // …and live, it's as it was.
     expect((await rsvpsOf('vera-token'))[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
+  })
+})
+
+describe('laps answer for them (#377)', () => {
+  const laps = blobs.data('site:laps')
+  const meta = blobs.data('site:rsvps-meta')
+  const THIRD = '2025-10-04_tde-at-ecr-2-7-ccw'
+  const lapsAt = (driver: string, eventId: string, ...sessions: { date: string; time: string; group: string }[]) =>
+    laps.set(`${driver}/${eventId}`, {
+      eventId,
+      sessions: Object.fromEntries(sessions.map(s => {
+        const key = `${s.date} ${s.time} ${s.group}`
+        return [key, { key, ...s, laps: [{ ms: 100_000 }] }]
+      })),
+    })
+  const groups = (rsvps: Record<string, { status: string; runGroup?: string }>) =>
+    Object.fromEntries(Object.entries(rsvps).map(([id, r]) => [id, `${r.status} ${r.runGroup ?? '-'}`]))
+
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
+
+  it('once: every event they’ve laps at is "I drove", in their last session’s group, putting a wrong answer right', async () => {
+    store.set(JASON, { events: { [EVENT]: { status: 'going', runGroup: 'green' }, [OTHER]: { status: 'not-going' }, kept: { status: 'maybe' } } })
+    lapsAt(JASON, EVENT,
+      { date: '2026-10-18', time: '09:00', group: 'blue' },
+      { date: '2026-10-18', time: '14:00', group: 'yellow' },
+      { date: '2026-10-18', time: '11:00', group: 'blue' })
+    lapsAt(JASON, OTHER, { date: '2026-11-08', time: '10:00', group: 'red' })
+    lapsAt(JASON, THIRD, { date: '2025-10-04', time: '10:10', group: 'blue' })
+    lapsAt('vera', '2026-09-13_msr-scca', { date: '2026-09-13', time: '09:00', group: 'orange' })
+
+    // An admin who picked Jason (#362) sees the same as Jason does.
+    const asAdmin = (await (await call('GET', { token: 'admin-token', query: `?driver=${JASON}` })).json()).rsvps
+    expect(groups(asAdmin)).toEqual({
+      [EVENT]: 'going yellow', [OTHER]: 'going red', [THIRD]: 'going blue', kept: 'maybe -',
+    })
+    expect(asAdmin[EVENT].updatedAt).toEqual(expect.any(String))
+    expect(groups(await rsvpsOf('jason-token'))).toEqual(groups(asAdmin))
+    expect(meta.get(`drove:${JASON}`)).toMatchObject({ drove: [EVENT, OTHER, THIRD] })
+    // Only Jason's own laps answer for Jason.
+    expect(store.has('amy')).toBe(false)
+
+    // Once: an answer given afterwards stands.
+    await call('PUT', { token: 'jason-token', body: { status: 'going', runGroup: 'blue' } })
+    expect((await rsvpsOf('jason-token'))[EVENT]).toMatchObject({ status: 'going', runGroup: 'blue' })
+  })
+
+  it('for Jason, the events in Jason’s track history from before the laps too (#373), in the last of each one’s groups', async () => {
+    sampleDriverSha256 = sha256('jason@example.com')
+    expect(groups(await rsvpsOf('jason-token'))).toEqual({
+      '2020-01-18_drive-xotics-at-msrc-1-3-ccw': 'going -',
+      '2020-12-05_scca-at-msrc-1-3-ccw': 'going -',
+      '2021-02-06_tde-at-msrc-1-7-cw': 'going green',
+      '2021-11-08_edge-addicts-at-msrc-3-1-ccw': 'going blue',
+      '2023-09-23_tde-at-msrc-1-7-ccw': 'going orange',
+      '2024-11-02_tde-at-msrc-3-1-ccw': 'going blue',
+      '2024-12-07_tde-at-msrc-1-7-cw': 'going orange',
+    })
+    // Nobody else's.
+    expect(await rsvpsOf('vera-token')).toEqual({})
+  })
+
+  it('the test account’s, from its sample laps (#309)', async () => {
+    const rsvps = (await (await call('GET', { token: 'admin-token', query: `?driver=${TEST_DRIVER_ID}` })).json()).rsvps
+    expect(groups(rsvps)).toMatchObject({ '2025-07-19_tde-at-ecr-2-7-cw': 'going orange', [THIRD]: 'going blue' })
+  })
+
+  it('on a preview, from its own copy of their laps, keeping their live answers — and never changing the live ones', async () => {
+    const preview = { deploy: { context: 'deploy-preview' } }
+    store.set(JASON, { events: { [OTHER]: { status: 'going', runGroup: 'blue' } } })
+    lapsAt(JASON, EVENT, { date: '2026-10-18', time: '09:00', group: 'yellow' })
+    expect(groups(await rsvpsOf('jason-token', preview))).toEqual({ [OTHER]: 'going blue', [EVENT]: 'going yellow' })
+    expect(blobs.data('deploy:laps').has(`${JASON}/${EVENT}`)).toBe(true)
+    expect(store.get(JASON)).toEqual({ events: { [OTHER]: { status: 'going', runGroup: 'blue' } } })
+    expect(meta.size).toBe(0)
   })
 })

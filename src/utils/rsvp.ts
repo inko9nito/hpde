@@ -80,6 +80,16 @@ export function goingIds(events: EventConfig[], rsvps: Rsvps, today: string = to
   return new Set(events.filter(e => answerFor(e, rsvps, today) === 'going').map(e => e.id))
 }
 
+/**
+ * The run group laps say they drove in at an event (#377): their last
+ * session's there — where they ended up, if they moved up during it.
+ */
+export function droveIn(sessions: Iterable<{ date: string; time: string; group: string }>): string | undefined {
+  let last: { date: string; time: string; group: string } | undefined
+  for (const s of sessions) if (!last || `${s.date} ${s.time}` > `${last.date} ${last.time}`) last = s
+  return last?.group
+}
+
 /** Their run group at this event, if they've said and it's still one of its groups. */
 export function myRunGroup(event: EventConfig, rsvp: Rsvp | undefined): string | null {
   const id = rsvp && rsvp.status !== 'not-going' ? rsvp.runGroup : undefined

@@ -1,11 +1,13 @@
-import { createHash } from 'node:crypto'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
-import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
+import { LAPS_META_STORE, LAPS_STORE, ensureCopied, isSampleDriver, openStores, whoseRecords } from '../lib/driverStore.mts'
 import type { Store, StoreDeps } from '../lib/driverStore.mts'
+import { markDrove, openRsvpStores } from '../lib/rsvpStore.mts'
 import { cleanSessionLaps, lapStats, sessionKey } from '../../src/utils/lapTimes.ts'
 import type { Lap, SessionLaps } from '../../src/utils/lapTimes.ts'
+import { droveIn } from '../../src/utils/rsvp.ts'
+import type { Rsvp } from '../../src/utils/rsvp.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
-import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
+import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
 
 // A signed-in driver's own lap times (#210), private to them: every request
 // needs their sign-in, and only ever reaches their own laps — the key is
@@ -26,7 +28,11 @@ import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } f
 //   GET    ?events=<id>,<id>     their laps for each of those events that
 //                                has any — a track page (#274), every event
 //                                on one layout in one request
-//   PUT    ?event=  {session}    saves one session's laps (replacing any)
+//   PUT    ?event=  {session}    saves one session's laps (replacing any) —
+//                                and with laps, they drove it: their answer
+//                                to "Did you drive?" becomes "I drove", in
+//                                their last session's group (#377), sent
+//                                back as `rsvp`
 //   DELETE ?event=&session=<key> removes one session's laps
 //
 // Kept in Netlify Blobs, one record per driver per event, keyed
@@ -40,10 +46,7 @@ import { SAMPLE_DRIVER_EMAIL_SHA256, TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } f
 // it with esbuild (see netlify/lib/functionsLoad.test.ts).
 export const config = { path: '/api/laps' }
 
-export const LAPS_STORE = 'laps'
-// On a preview: which drivers' live laps have been copied in, keyed by user
-// id. Anywhere: which version of the test account's laps it has.
-export const LAPS_META_STORE = 'laps-meta'
+export { LAPS_STORE, LAPS_META_STORE, isSampleDriver }
 export const TEST_SEED_KEY = `seeded:${TEST_DRIVER_ID}`
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
@@ -78,12 +81,6 @@ async function ensureSeeded({ records: laps, meta }: { records: Store; meta: Sto
   const { blobs } = await laps.list({ prefix: `${TEST_DRIVER_ID}/` })
   for (const { key } of blobs) if (!keys.has(key)) await laps.delete(key)
   await meta.setJSON(TEST_SEED_KEY, { version: TEST_ACCOUNT_VERSION, at: new Date().toISOString() })
-}
-
-/** Whose the sample laps are: a SHA-256 of their sign-in email, lowercased. */
-export function isSampleDriver(email: string | undefined | null, sha256 = SAMPLE_DRIVER_EMAIL_SHA256): boolean {
-  if (!email) return false
-  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex') === sha256
 }
 
 /**
@@ -344,5 +341,14 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   }
   const next: EventLaps = { eventId, sessions: { ...record?.sessions, [session.key]: session } }
   await store.setJSON(key, next)
-  return json(200, { session })
+  // With laps, they drove it (#377). The laps are saved either way: a
+  // failure here only leaves their answer as it was.
+  let rsvp: Rsvp | undefined
+  try {
+    const drove = { eventId, runGroup: droveIn(Object.values(next.sessions)) }
+    rsvp = (await markDrove(openRsvpStores(context, deps), driverId, [drove]))[eventId]
+  } catch (err) {
+    console.error('laps: answering "I drove" failed:', err)
+  }
+  return json(200, { session, ...(rsvp ? { rsvp } : {}) })
 }

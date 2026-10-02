@@ -1,7 +1,8 @@
-import { getStore, getDeployStore } from '@netlify/blobs'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { whoseRecords } from '../lib/driverStore.mts'
 import type { StoreDeps } from '../lib/driverStore.mts'
+import { RSVPS_META_STORE, RSVPS_STORE, ensureDrove, ensureRsvpsCopied, openRsvpStores } from '../lib/rsvpStore.mts'
+import type { DriverRsvps, RsvpDeps } from '../lib/rsvpStore.mts'
 import { cleanRsvp } from '../../src/utils/rsvp.ts'
 import type { Rsvp, Rsvps } from '../../src/utils/rsvp.ts'
 
@@ -16,6 +17,11 @@ import type { Rsvp, Rsvps } from '../../src/utils/rsvp.ts'
 //                                any): going, maybe or not-going
 //   DELETE ?event=              takes the answer back: not answered again
 //
+// Laps answer for them too (#377): with laps at an event, they drove it,
+// in their last session's run group — saving laps answers so, and laps
+// saved before that are answered for once, here (see rsvpStore.mts). So
+// are the events in Jason's track history from before those laps (#373).
+//
 // Kept in Netlify Blobs, one record per driver, keyed by user id. A deploy
 // preview gets a store of its own, which starts as a copy of the driver's
 // live answers the first time they're used there (as their laps do) — so a
@@ -26,46 +32,17 @@ import type { Rsvp, Rsvps } from '../../src/utils/rsvp.ts'
 // with esbuild (see netlify/lib/functionsLoad.test.ts).
 export const config = { path: '/api/rsvps' }
 
-export const RSVPS_STORE = 'rsvps'
-// On a preview: which drivers' live answers have been copied in.
-export const RSVPS_META_STORE = 'rsvps-meta'
+export { RSVPS_STORE, RSVPS_META_STORE }
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
 // Far more events than anyone answers for; keeps a runaway client in check.
 const MAX_ANSWERS = 1000
 
-type Deps = {
-  getStore?: typeof getStore
-  getDeployStore?: typeof getDeployStore
+type Deps = RsvpDeps & {
   fetch?: typeof fetch
   identity?: StoreDeps['identity']
-}
-
-type Store = ReturnType<typeof getStore>
-
-interface DriverRsvps {
-  events: Rsvps
-}
-
-function openStores(context: unknown, deps: Deps): { rsvps: Store; meta: Store; live?: Store } {
-  const deployContext = (context as { deploy?: { context?: string } } | undefined)?.deploy?.context
-  const site = (name: string) => (deps.getStore ?? getStore)({ name, consistency: 'strong' })
-  const deploy = (name: string) => (deps.getDeployStore ?? getDeployStore)({ name, consistency: 'strong' })
-  if (!deployContext || deployContext === 'production') return { rsvps: site(RSVPS_STORE), meta: site(RSVPS_META_STORE) }
-  return { rsvps: deploy(RSVPS_STORE), meta: deploy(RSVPS_META_STORE), live: site(RSVPS_STORE) }
-}
-
-/**
- * On a preview, copies the driver's live answers into the deploy's own
- * store the first time they're used there, once, so an answer taken back
- * on the preview doesn't come back.
- */
-async function ensureCopied({ rsvps, meta, live }: { rsvps: Store; meta: Store; live?: Store }, driverId: string) {
-  if (!live) return
-  if (await meta.get(driverId, { type: 'json' })) return
-  const record = await live.get(driverId, { type: 'json' })
-  if (record) await rsvps.setJSON(driverId, record, { onlyIfNew: true })
-  await meta.setJSON(driverId, { at: new Date().toISOString() })
+  /** Stands in for SAMPLE_DRIVER_EMAIL_SHA256 in tests. */
+  sampleDriverSha256?: string
 }
 
 export default async function handler(req: Request, context: unknown, deps: Deps = {}) {
@@ -77,10 +54,16 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const params = new URL(req.url).searchParams
   const whose = await whoseRecords(user, params.get('driver'), 'answers', deps.identity)
   if (whose instanceof Response) return whose
-  const { driverId } = whose
+  const { driverId, driverEmail } = whose
 
-  const stores = openStores(context, deps)
-  await ensureCopied(stores, driverId)
+  const stores = openRsvpStores(context, deps)
+  await ensureRsvpsCopied(stores, driverId)
+  try {
+    await ensureDrove(context, deps, stores, driverId, driverEmail, deps.sampleDriverSha256)
+  } catch (err) {
+    // Not fatal: their answers as they are, and the next request tries again.
+    console.error('rsvps: answering for their laps failed:', err)
+  }
   const store = stores.rsvps
   const record = (await store.get(driverId, { type: 'json' })) as DriverRsvps | null
   const events: Rsvps = record?.events ?? {}

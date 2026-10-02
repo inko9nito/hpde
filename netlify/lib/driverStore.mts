@@ -1,14 +1,32 @@
+import { createHash } from 'node:crypto'
 import { getStore, getDeployStore } from '@netlify/blobs'
 import { jsonResponse as json } from './auth.mjs'
 import { isAdmin } from './newEvent.mjs'
 import { findDriver } from './drivers.mjs'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
+import { SAMPLE_DRIVER_EMAIL_SHA256 } from '../../src/data/fixtures/testAccountLaps.ts'
 
 // What a driver keeps for themselves, one record per event — their laps
 // (#210), their notes (#340) — shared by the functions that keep them:
 // whose records a request reaches, and which store they're in.
 
 export type Store = ReturnType<typeof getStore>
+
+// The laps function's stores (#210) — here, since the rsvps function reads
+// a driver's laps too (#377). On a preview: which drivers' live laps have
+// been copied in, keyed by user id. Anywhere: which version of the test
+// account's laps it has.
+export const LAPS_STORE = 'laps'
+export const LAPS_META_STORE = 'laps-meta'
+
+/**
+ * Whose the sample laps are (#310) — Jason's: a SHA-256 of their sign-in
+ * email, lowercased, so the address isn't written here.
+ */
+export function isSampleDriver(email: string | undefined | null, sha256 = SAMPLE_DRIVER_EMAIL_SHA256): boolean {
+  if (!email) return false
+  return createHash('sha256').update(email.trim().toLowerCase()).digest('hex') === sha256
+}
 
 export interface StoreDeps {
   getStore?: typeof getStore
