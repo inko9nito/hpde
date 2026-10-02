@@ -455,6 +455,43 @@ describe('laps function (#210)', () => {
   })
 })
 
+describe('saving laps answers "I drove" for them (#377)', () => {
+  const rsvps = blobs.data('site:rsvps')
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
+
+  it('in their last session’s group there, replacing what they’d answered, and sends it back', async () => {
+    rsvps.set(JASON, { events: { [EVENT]: { status: 'not-going' }, other: { status: 'maybe' } } })
+    const res = await (await call('PUT', { token: 'jason-token', body: { session: session1 } })).json()
+    expect(res.rsvp).toEqual({ status: 'going', runGroup: 'blue', updatedAt: expect.any(String) })
+    expect(rsvps.get(JASON)).toEqual({ events: { [EVENT]: res.rsvp, other: { status: 'maybe' } } })
+
+    // A later session in another group: they ended up there.
+    const later = { ...session2, time: '14:10', group: 'yellow', sessionNumber: 3 }
+    expect((await (await call('PUT', { token: 'jason-token', body: { session: later } })).json()).rsvp).toMatchObject({ runGroup: 'yellow' })
+    // An earlier one doesn't change that.
+    expect((await (await call('PUT', { token: 'jason-token', body: { session: session2 } })).json()).rsvp).toMatchObject({ runGroup: 'yellow' })
+  })
+
+  it('for the driver an admin logs them for (#288), not the admin', async () => {
+    const res = await (await call('PUT', { token: 'admin-token', query: `?event=${EVENT}&driver=${JASON}`, body: { session: session1 } })).json()
+    expect(res.rsvp).toMatchObject({ status: 'going', runGroup: 'blue' })
+    expect([...rsvps.keys()]).toEqual([JASON])
+  })
+
+  it('on a preview, in its own store, after their live answers', async () => {
+    const preview = { deploy: { context: 'deploy-preview' } }
+    rsvps.set(JASON, { events: { other: { status: 'maybe' } } })
+    await call('PUT', { token: 'jason-token', body: { session: session1 }, context: preview })
+    expect(blobs.data('deploy:rsvps').get(JASON)).toEqual({
+      events: { other: { status: 'maybe' }, [EVENT]: { status: 'going', runGroup: 'blue', updatedAt: expect.any(String) } },
+    })
+    expect(rsvps.get(JASON)).toEqual({ events: { other: { status: 'maybe' } } })
+  })
+})
+
 describe('laps moved onto a schedule found later (#339)', () => {
   const [{ eventId: OCT, moves }] = MOVED_SESSIONS
   const logged = (date: string, time: string, sessionNumber: number, group = 'blue') =>

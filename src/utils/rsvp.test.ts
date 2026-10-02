@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { answerFor, cleanRsvp, goingIds, myEvents, myRunGroup, needsAnswer } from './rsvp'
+import { answerFor, cleanRsvp, droveIn, goingIds, myEvents, myRunGroup, needsAnswer } from './rsvp'
 import type { EventConfig } from '../types'
 
 const event = (id: string, date: string): EventConfig => ({
@@ -67,5 +67,20 @@ describe('My events (#235)', () => {
     expect(myRunGroup(soon, { status: 'going', runGroup: 'red' })).toBeNull()
     expect(myRunGroup(soon, { status: 'going' })).toBeNull()
     expect(myRunGroup(soon, undefined)).toBeNull()
+  })
+})
+
+describe('droveIn (#377)', () => {
+  it('is the group of their last session at the event, by day and time', () => {
+    expect(droveIn([
+      { date: '2023-09-23', time: '13:00', group: 'orange' },
+      { date: '2023-09-23', time: '09:00', group: 'purple' },
+      { date: '2023-09-23', time: '10:30', group: 'purple' },
+    ])).toBe('orange')
+    expect(droveIn([
+      { date: '2025-10-05', time: '08:55', group: 'yellow' },
+      { date: '2025-10-04', time: '16:40', group: 'blue' },
+    ])).toBe('yellow')
+    expect(droveIn([])).toBeUndefined()
   })
 })

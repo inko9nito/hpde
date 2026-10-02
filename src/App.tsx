@@ -911,7 +911,9 @@ export default function App() {
         driverPicker={driverPicker}
         loading={lapLog.status === 'loading' || notesLog.status === 'loading'}
         onSave={async session => {
-          await lapLog.save(session)
+          // With laps, they drove it: "Drove", in this group or a later one's (#377).
+          const rsvp = await lapLog.save(session)
+          if (rsvp) eventRsvps.remember(activeEvent.id, rsvp)
           setLapSlot(null)
           showToast('Lap times saved')
         }}

@@ -721,6 +721,41 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+// With laps, they drove it (#377): saving them answers "Did you drive?",
+// in the session's group, and the header says so straight away.
+test('saving lap times at a past event answers "I drove", in the session’s group (#377)', async ({ page }) => {
+  const past: EventConfig = {
+    id: '2025-10-04_past-track-day',
+    name: 'Past Track Day',
+    track: 'Charlie Raceway',
+    runGroups: [{ id: 'blue', label: 'Blue', bgClass: 'bg-runblue-500', textClass: 'text-white' }],
+    days: [{ id: 'saturday', label: 'Saturday', date: '2025-10-04', activities: [{ time: '08:30', type: 'session', sessionNumber: 1, onTrack: ['blue'] }] }],
+  }
+  await stubEvents(page, [past, ...TEST_EVENTS])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const req = route.request()
+    if (!new URL(req.url()).searchParams.has('event')) return route.fulfill({ json: { events: [] } })
+    if (req.method() === 'PUT') {
+      const { session } = req.postDataJSON()
+      const saved = { ...session, key: `${session.date} ${session.time} ${session.group}` }
+      return route.fulfill({ json: { session: saved, rsvp: { status: 'going', runGroup: session.group, updatedAt: '2026-10-02T00:00:00.000Z' } } })
+    }
+    return route.fulfill({ json: { sessions: [] } })
+  })
+
+  await page.goto(`/#/event/${past.id}`)
+  await expect(page.getByRole('button', { name: 'Did you drive?' })).toBeVisible()
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: /8:30 AM · Blue/ })
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  await sheet.getByLabel('Lap times or timestamps').fill(['1:52', '1:46'].join('\n'))
+  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+  await expect(page.getByRole('status')).toHaveText('Lap times saved')
+  await expect(page.getByRole('button', { name: 'Did you drive?' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Drove Blue' })).toBeVisible()
+})
+
 test('a finger scrolling the page over the lap chart leaves its readout shut; a tap or a sideways scrub opens it (#332)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
