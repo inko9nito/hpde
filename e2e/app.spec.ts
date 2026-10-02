@@ -376,6 +376,44 @@ test('the page under a pushed page doesn’t scroll while it’s open (#321)', a
   await expect.poll(documentScrolls).toBe(true)
 })
 
+test('back from an event’s page, the list is still scrolled where it was (#389)', async ({ page }) => {
+  // More events than fit on a phone, the last far down the list.
+  const many: EventConfig[] = Array.from({ length: 20 }, (_, i) => ({
+    ...upcoming,
+    id: `${isoInDays(10 + i * 7)}_day-${i}`,
+    name: `Track Day ${i}`,
+    days: [{ ...upcoming.days[0], date: isoInDays(10 + i * 7) }],
+  }))
+  await stubEvents(page, many)
+  await page.goto('/#/')
+  const last = page.getByRole('button', { name: /Track Day 19/ })
+  await last.scrollIntoViewIfNeeded()
+  const scrolled = await page.evaluate(() => window.scrollY)
+  expect(scrolled).toBeGreaterThan(0)
+  const scrollY = () => page.evaluate(() => window.scrollY)
+
+  // The Back button…
+  await last.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toHaveCount(0)
+  expect(await scrollY()).toBe(scrolled)
+  await expect(last).toBeInViewport()
+
+  // …and the browser's back (a swipe back on iPhone).
+  await last.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toBeInViewport()
+  await page.goBack()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toHaveCount(0)
+  expect(await scrollY()).toBe(scrolled)
+  await expect(last).toBeInViewport()
+
+  // Another tab starts at its top.
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Tracks' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
+  expect(await scrollY()).toBe(0)
+})
+
 test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/')
