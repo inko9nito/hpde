@@ -1,26 +1,27 @@
 import type { SVGProps } from 'react'
 
-// The car and Garage icons (#417), from sets with more car to them than
-// Lucide's: each takes Lucide's `size`, filled with the text color. Their
-// paths are copied as published; credit for the race car is in the footer.
+// The car and the Garage (#417), from sets with more car to them than
+// Lucide's, both MIT. Each takes Lucide's `size`; their paths are copied
+// as published.
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, 'children'> & { size?: number }
 
-/** A car with no photo: Game Icons' "Race car" by Skoll (CC BY 3.0),
- *  framed to its width so it fills `size` across as Lucide's car did. */
-export function RaceCarIcon({ size = 24, ...props }: IconProps) {
+/** A car, wherever the app shows one: Ionicons' "car-sport", filled with
+ *  the text color and framed to its width, so it fills `size` across. */
+export function CarIcon({ size = 24, ...props }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="21 21 470 470" fill="currentColor" {...props}>
-      <path d="M408.29 262.879a35.125 35.125 0 1 0 35.125 35.125a35.17 35.17 0 0 0-35.125-35.125m0 62.873a27.736 27.736 0 1 1 27.736-27.737a27.736 27.736 0 0 1-27.736 27.748zm8.876-27.737a8.876 8.876 0 1 1-8.876-8.875a8.876 8.876 0 0 1 8.876 8.875m-265.538 0a35.125 35.125 0 1 0-35.126 35.126a35.17 35.17 0 0 0 35.126-35.126m-35.126 27.737a27.736 27.736 0 1 1 27.737-27.737a27.736 27.736 0 0 1-27.737 27.748zm345.452-21.823a53.997 53.997 0 1 0-107.617-5.925a53.7 53.7 0 0 0 5.447 23.61H165.008a53.986 53.986 0 1 0-101.849-15.211C37.542 295.64 21 278.033 21 250.186c0-28.846 86.87-69.418 142.122-71.327v34.094a24.83 24.83 0 0 0 24.83 24.83h47.517a24.774 24.774 0 0 0 24.409-20.758s-1.62-21.668-6.813-25.518l3.407-2.54l24.474 28.08h94.104c63.994-.022 115.95 23.42 115.95 52.266c0 13.314-10.973 25.396-29.046 34.616m-336.576-5.925a8.876 8.876 0 1 1-8.876-8.876a8.876 8.876 0 0 1 8.876 8.887z" />
+    <svg width={size} height={size} viewBox="16 16 480 480" fill="currentColor" {...props}>
+      <path d="M494.26 276.22c-3.6-40.41-9.53-48.28-11.77-51.24c-5.15-6.84-13.39-11.31-22.11-16a3.6 3.6 0 0 1-.91-5.68a15.93 15.93 0 0 0 4.53-12.53A16.27 16.27 0 0 0 447.65 176h-15.6a17 17 0 0 0-2 .13a8.5 8.5 0 0 0-1.41-.47c-9.24-19.53-21.89-46.27-48.11-59.32C341.64 97 270 96 256 96s-85.64 1-124.48 20.31c-26.22 13.05-38.87 39.79-48.11 59.32l-.08.16a6.5 6.5 0 0 0-1.35.34a17 17 0 0 0-2-.13H64.35A16.27 16.27 0 0 0 48 190.77a15.93 15.93 0 0 0 4.59 12.47a3.6 3.6 0 0 1-.91 5.68c-8.72 4.72-17 9.19-22.11 16c-2.24 3-8.16 10.83-11.77 51.24c-2 22.74-2.3 46.28-.73 61.44c3.29 31.5 9.46 50.54 9.72 51.33a16 16 0 0 0 13.2 10.87v.2a16 16 0 0 0 16 16h56a16 16 0 0 0 16-16c8.61 0 14.6-1.54 20.95-3.18a159 159 0 0 1 28-4.91C207.45 389 237.79 388 256 388c17.84 0 49.52 1 80.08 3.91a159 159 0 0 1 28.11 4.93c6.08 1.56 11.85 3 19.84 3.15a16 16 0 0 0 16 16h56a16 16 0 0 0 16-16v-.12A16 16 0 0 0 485.27 389c.26-.79 6.43-19.83 9.72-51.33c1.57-15.17 1.29-38.67-.73-61.45m-381.93-86.91c8-17 17.15-36.24 33.44-44.35c23.54-11.72 72.33-17 110.23-17s86.69 5.24 110.23 17c16.29 8.11 25.4 27.36 33.44 44.35l1 2.17a8 8 0 0 1-7.44 11.42C360 202 290 199.12 256 199.12s-104 2.95-137.28 3.85a8 8 0 0 1-7.44-11.42c.35-.74.72-1.49 1.05-2.24m11.93 79.63A427 427 0 0 1 72.42 272c-10.6 0-21.53-3-23.56-12.44c-1.39-6.35-1.24-9.92-.49-13.51C49 243 50 240.78 55 240c13-2 20.27.51 41.55 6.78c14.11 4.15 24.29 9.68 30.09 14.06c2.91 2.16 1.36 7.8-2.38 8.1m221.38 82c-13.16 1.5-39.48.95-89.34.95s-76.17.55-89.33-.95c-13.58-1.51-30.89-14.35-19.07-25.79c7.87-7.54 26.23-13.18 50.68-16.35s34.8-4.8 57.62-4.8s32.12 1 57.62 4.81s44.77 9.52 50.68 16.35c10.78 12.24-5.29 24.19-18.86 25.84Zm117.5-91.39c-2 9.48-13 12.44-23.56 12.44a456 456 0 0 1-52.84-3.06c-3.06-.29-4.48-5.66-1.38-8.1c5.71-4.49 16-9.91 30.09-14.06c21.28-6.27 33.55-8.78 44.09-6.69c2.57.51 3.93 3.27 4.09 5a40.6 40.6 0 0 1-.49 14.48Z" />
     </svg>
   )
 }
 
-/** The Garage: Material Design Icons' "car-wrench" (Apache 2.0). */
-export function GarageIcon({ size = 24, ...props }: IconProps) {
+/** The Garage: Iconoir's "garage", drawn in the text color at Lucide's
+ *  `strokeWidth` when given, so it sits with the icons beside it. */
+export function GarageIcon({ size = 24, strokeWidth = 1.5, ...props }: IconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M20.96 16.45c.01-.15.04-.3.04-.45v.5zM11 16c0 .71.15 1.39.42 2H6v1c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1v-8l2.08-6c.2-.58.76-1 1.42-1h11c.66 0 1.22.42 1.42 1L21 11v5c0-2.76-2.24-5-5-5s-5 2.24-5 5m-3-2.5c0-.83-.67-1.5-1.5-1.5S5 12.67 5 13.5S5.67 15 6.5 15S8 14.33 8 13.5M19 10l-1.5-4.5h-11L5 10zm3.87 11.19l-4.11-4.11c.41-1.04.18-2.26-.68-3.11c-.9-.91-2.25-1.09-3.34-.59l1.94 1.94l-1.35 1.36l-1.99-1.95c-.54 1.09-.29 2.44.59 3.35a2.91 2.91 0 0 0 3.12.68l4.11 4.1c.18.19.45.19.63 0l1.04-1.03c.22-.18.22-.5.04-.64" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={strokeWidth} d="M6 20H3V6l9-2l9 2v14h-3M6 20h12M6 20v-4m12 4v-4M6 12V8h12v4M6 12h12M6 12v4m12-4v4M6 16h12" />
     </svg>
   )
 }

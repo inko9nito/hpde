@@ -174,11 +174,9 @@ describe('landing menu and footer (#273)', () => {
     expect(screen.getByRole('heading', { name: 'Past' })).toBeInTheDocument()
   })
 
-  it('shows the footer — the build date, and the race car icon\'s credit (#417) — on the landing page only', async () => {
+  it('shows the footer — just the build date — on the landing page only', async () => {
     render(<EventsProvider><App /></EventsProvider>)
     expect(screen.getByText(/^build /)).toBeInTheDocument()
-    expect(screen.getByText(/^Race car icon by Skoll/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'CC BY 3.0' })).toHaveAttribute('href', 'https://creativecommons.org/licenses/by/3.0/')
     expect(screen.queryByRole('link', { name: 'Share' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'iOS widget' })).not.toBeInTheDocument()
 

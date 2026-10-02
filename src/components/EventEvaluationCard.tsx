@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
-import { CarFront, ChevronRight, ClipboardCheck, Flag, UserRound } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import type { ComponentType, ReactNode } from 'react'
+import { ChevronRight, ClipboardCheck, Flag, UserRound } from 'lucide-react'
+import { CarIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { INSTRUCTED, NEXT_GROUPS, NEXT_HOW, TDE_GROUP_NAMES, aggressivenessText, carAidsText, cardOf } from '../utils/evaluation'
 import type { EventEvaluation } from '../utils/evaluation'
@@ -38,7 +38,12 @@ export function recommendableGroups(event: EventConfig, events: EventConfig[]): 
 }
 
 /** A label and its value, a line to itself — as on the Details tab. */
-function Row({ icon: Icon, label, children }: { icon?: LucideIcon; label: string; children: ReactNode }) {
+function Row({ icon: Icon, label, children }: {
+  /** A Lucide icon, or the app's car (#417). */
+  icon?: ComponentType<{ size?: number; className?: string; 'aria-hidden'?: 'true' }>
+  label: string
+  children: ReactNode
+}) {
   return (
     <div className="flex min-h-11 items-center justify-between gap-3 border-b border-gray-100 py-2 last:border-b-0">
       <dt className="flex items-center gap-2.5 text-[13px] font-medium text-gray-500">
@@ -85,7 +90,7 @@ export function EventEvaluationCard({ evaluation, tde = false, runGroup, events,
           {tde && <Row icon={ClipboardCheck} label="Report card"><GroupBadge group={groupNamed(card.group, events)} size="sm" /></Row>}
           {instructor && <Row icon={UserRound} label="Instructor">{instructor}</Row>}
           {instructed && <Row label="Instructed">{INSTRUCTED.find(i => i.id === instructed)?.label}</Row>}
-          {car && <Row icon={CarFront} label="Car">{car}</Row>}
+          {car && <Row icon={CarIcon} label="Car">{car}</Row>}
           {escTc && <Row label="ESP / traction control">{escTc}</Row>}
           {runGroup && <Row icon={Flag} label="Run group"><GroupBadge group={runGroup} size="sm" /></Row>}
         </dl>
