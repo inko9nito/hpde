@@ -1777,6 +1777,46 @@ test('a half-folded event header snaps shut or open', async ({ page }) => {
 // (both runs borrow its user agent: Playwright's iPhone says Safari 26, whose
 // steps go through ⋯). The other tests start with it dismissed
 // (e2e/fixtures.ts).
+test('the checkers pulse while the app loads, and go once it has (#365)', async ({ page }) => {
+  await stubEvents(page)
+  // The app's script held back, as on a slow first open from the Home Screen.
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  await page.route(/\/assets\/index-[^/]*\.js$/, async route => {
+    await held
+    await route.continue()
+  })
+  await page.goto('/#/', { waitUntil: 'commit' })
+  const loader = page.getByRole('progressbar', { name: 'Loading' })
+  await expect(loader).toBeVisible()
+  // Centered, on the page's gray, and pulsing.
+  const box = (await loader.locator('svg').boundingBox())!
+  const viewport = page.viewportSize()!
+  expect(Math.round(box.x + box.width / 2)).toBe(Math.round(viewport.width / 2))
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(249, 250, 251)')
+  expect(await loader.locator('svg').evaluate(el => getComputedStyle(el).animationName)).toBe('boot-pulse')
+  release()
+  await expect(page.getByRole('button', { name: /Upcoming Track Day/ })).toBeVisible()
+  await expect(loader).toHaveCount(0)
+})
+
+test('in the Home Screen app, the loader’s checkers sit at the middle of the screen, where the launch image has them (#365)', async ({ page }) => {
+  // The app starts below the status bar: the screen is 47pt taller than the page.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'standalone', { get: () => true })
+    Object.defineProperty(Screen.prototype, 'height', { get: () => window.innerHeight + 47 })
+  })
+  await stubEvents(page)
+  await page.route(/\/assets\/index-[^/]*\.js$/, () => {})
+  await page.goto('/#/', { waitUntil: 'commit' })
+  const checkers = page.getByRole('progressbar', { name: 'Loading' }).locator('svg')
+  await expect(checkers).toBeVisible()
+  // Half the status bar higher than the page's middle: the screen's middle.
+  const box = (await checkers.boundingBox())!
+  const innerHeight = await page.evaluate(() => window.innerHeight)
+  expect(Math.round(box.y + box.height / 2)).toBe(Math.round((innerHeight - 47) / 2))
+})
+
 test.describe('Add to Home Screen banner (#379)', () => {
   test.use({
     homeScreenBanner: true,
@@ -1841,7 +1881,9 @@ test('a car’s page opened from one of its events, after another of its events,
   await expect(page).toHaveURL(new RegExp(`#/event/${second.id}$`))
   // …which has the Garage under the car's page now: the car's page still opens over it.
   await openCar()
-  await expect(carPage.getByRole('button', { name: 'Edit details' })).toBeInViewport({ ratio: 1 })
+  // All of it, across: its header (which stays at the top, wherever the
+  // page was left scrolled) is wholly on screen.
+  await expect(carPage.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport({ ratio: 1 })
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
   await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()

@@ -27,9 +27,70 @@
          of an event page's track icon (#233). -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- The loader below, styled here: the app's stylesheet comes with its
+         script, after the wait this covers. -->
+    <style>
+      :root { --boot-still: 0.14; }
+      html, body { margin: 0; background: #f9fafb; }
+      .boot-loader {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #111827;
+        /* Safari 26 tints the status bar from a fixed element at the top
+           edge (src/utils/chromeColor.ts): the page's gray from the first
+           frame, rather than whatever it makes of a see-through one. */
+        background: #f9fafb;
+      }
+      .boot-loader svg {
+        width: 56px;
+        opacity: var(--boot-still);
+        transform: translateY(var(--boot-shift, 0px));
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+      /* From the launch images' opacity, so it takes over from them unchanged. */
+      @keyframes boot-pulse {
+        0%, 100% { opacity: var(--boot-still); }
+        25% { opacity: 0.2; }
+        75% { opacity: 0.08; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loader svg { animation: none; }
+      }
+    </style>
+    <!-- In the Home Screen app, the checkers sit at the middle of the
+         screen, where the launch image has them, even when the page starts
+         under the status bar rather than behind it. -->
+    <script>
+      if (navigator.standalone && innerHeight > innerWidth) {
+        document.documentElement.style.setProperty('--boot-shift', (innerHeight - screen.height) / 2 + 'px')
+      }
+    </script>
+    <!-- What iOS shows while the Home Screen app opens, before the page has
+         loaded (#365): the loader below, on each iPhone's screen. Rendered
+         from it by `npm run launch-screens:generate`, one per screen in
+         scripts/launch-screens/devices.mjs. -->
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/440x956@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/430x932@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/428x926@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/420x912@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/414x896@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/launch/414x896@2x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/414x736@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/402x874@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/393x852@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/390x844@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/launch/375x812@3x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/launch/375x667@2x.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/launch/320x568@2x.png" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Until the app's first render replaces it (#365): opened from the
+         Home Screen, the screen was blank while the app loaded. The
+         checkers of src/assets/checkered-flag.svg — the placeholder for an
+         event with no track icon — pulse faintly, as a skeleton does. -->
+    <div id="root"><div class="boot-loader" role="progressbar" aria-label="Loading"><svg viewBox="0 0 430 373" aria-hidden="true"><g fill="currentColor"><path d="M108 43 208 42 C216 42 220 46 217 53 L192 118 C185 134 172 139 153 140 L65 144 C55 145 52 141 55 135 L87 57 C92 47 99 43 108 43 Z"/><path d="M216 122 316 119 C326 118 328 121 325 130 L302 190 C296 207 283 213 262 214 L167 217 C157 218 155 215 159 207 L185 138 C190 127 200 123 216 122 Z"/><path d="M62 218 150 216 C157 215 159 219 156 225 L128 294 C124 304 114 309 105 309 L22 309 C16 309 14 306 17 298 L45 230 C48 222 53 218 62 218 Z"/><path d="M319 200 412 197 C421 197 425 200 422 210 L391 292 C386 305 377 309 367 309 L268 309 C259 309 256 306 259 299 L290 218 C295 206 304 201 319 200 Z"/></g></svg></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
