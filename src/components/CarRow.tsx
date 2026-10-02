@@ -66,14 +66,18 @@ export function CarRow({ car, title, subtitle, onClick, label, dashed = false }:
  * and year over the foot of it — or, with none (yet), a car on dark gray.
  * The invite to share a car shows it the same way.
  */
-export function CarHero({ car, src }: {
+export function CarHero({ car, src, corner, badge }: {
   car: Pick<Car, 'year' | 'make' | 'model' | 'nickname' | 'photo'>
   /** Its photo, once it's in. */
   src: string | null
+  /** At the top right: in the Garage, its drivers when it's shared (#424). */
+  corner?: ReactNode
+  /** At the foot, across from its name: in the Garage, how many events (#424). */
+  badge?: ReactNode
 }) {
   const subtitle = carSubtitle(car)
   return (
-    <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800">
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800" data-car-hero>
       {src ? (
         <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" data-car-photo />
       ) : car.photo ? (
@@ -83,9 +87,13 @@ export function CarHero({ car, src }: {
       )}
       {/* Dark enough at the foot for the name to read over any photo. */}
       <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
-      <div className="absolute inset-x-0 bottom-0 px-4 pb-3.5">
-        <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
-        {subtitle && <p className="mt-0.5 truncate text-sm text-white/85">{subtitle}</p>}
+      {corner && <div className="absolute right-3 top-3">{corner}</div>}
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-3.5">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
+          {subtitle && <p className="mt-0.5 truncate text-sm text-white/85">{subtitle}</p>}
+        </div>
+        {badge && <div className="shrink-0">{badge}</div>}
       </div>
     </div>
   )

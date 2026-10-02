@@ -1201,7 +1201,9 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
 
   // A card for the car, its photo across it (#410), which opens its page.
   const row = page.getByRole('list', { name: 'Cars' }).getByRole('link')
-  await expect(row).toContainText('The Cayman2019 · Porsche 718 Cayman GTSNo events yet')
+  await expect(row).toHaveText('The Cayman2019 · Porsche 718 Cayman GTS')
+  // No count on it till it's been to an event (#424); nothing under the photo.
+  await expect(row.locator('[data-events-badge]')).toHaveCount(0)
   await expect(row.locator('img[data-car-photo]')).toBeVisible()
   await noSideScroll()
   await row.click()
@@ -1395,6 +1397,8 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   await carPage.getByRole('tab', { name: 'Events' }).click()
   const rows = carPage.getByRole('list', { name: 'Past events' }).getByRole('listitem')
   await expect(rows).toHaveCount(2)
+  // How many, as My notes says on an event's page (#422).
+  await expect(carPage.getByRole('tab', { name: 'Events (2)', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(rows.nth(0)).toContainText(alpha.name)
   // Each by their picture — here, their initial — with their name for screen readers (#410).
   await expect(rows.nth(0).locator('[data-who-drove] [data-avatar]')).toHaveText(['R', 'J'])
@@ -1405,19 +1409,41 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   await expect(rows.nth(1).locator('[data-who-drove] .sr-only')).toHaveText(['Jason'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // Taking it out of their garage leaves it in Jason's.
-  await carPage.getByRole('button', { name: 'Edit', exact: true }).click()
+  // Taking it out of their garage leaves it in Jason's: Archive, from its "…" (#423).
+  await carPage.getByRole('button', { name: 'More actions' }).click()
+  await expect(carPage.getByRole('menuitem')).toHaveText(['Edit', 'Archive'])
+  await carPage.getByRole('menuitem', { name: 'Archive' }).click()
+  const ask = page.getByRole('alertdialog', { name: 'Archive “The Mustang”?' })
+  await expect(ask).toContainText('It stays in Jason’s garage, and the event you drove it at keeps it as it is now. You can put it back.')
+  await expect(ask).toBeInViewport({ ratio: 1 })
+  await ask.getByRole('button', { name: 'Cancel' }).click()
+  await expect(ask).toBeHidden()
+  await carPage.getByRole('button', { name: 'More actions' }).click()
+  await carPage.getByRole('menuitem', { name: 'Edit' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit car' })
-  await edit.getByRole('button', { name: 'Archive car' }).click()
-  await expect(edit).toContainText('Archive this car? It stays in Jason’s garage, and the event you drove it at keeps it as it is now. You can put it back.')
   await expect(edit).toContainText('Only its drivers and admins can see this car.')
   await edit.getByRole('button', { name: 'Cancel' }).click()
+  await expect(edit).toBeHidden()
 
-  // In the Garage: who else drives it, and how many events it's been to.
+  // In the Garage: who else drives it, at the top of its photo, and how
+  // many events it's been to, at the foot (#424). No Private by the title.
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
-  await expect(page.getByRole('list', { name: 'Cars' })).toContainText('Shared with Jason · 2 events')
-  await expect(page.getByRole('list', { name: 'Cars' }).locator('[data-avatar]')).toHaveText(['R', 'J'])
+  const card = page.getByRole('list', { name: 'Cars' }).getByRole('link')
+  await expect(card).toContainText('Shared with Jason')
+  await expect(card.locator('[data-events-badge]')).toHaveText('2 events')
+  await expect(card.locator('[data-avatar]')).toHaveText(['R', 'J'])
+  const [photoBox, badgeBox, facesBox] = await Promise.all([
+    card.locator('[data-car-hero]').boundingBox(),
+    card.locator('[data-events-badge]').boundingBox(),
+    card.locator('[data-avatar]').last().boundingBox(),
+  ])
+  // Bottom right and top right, on the photo.
+  expect(badgeBox!.x + badgeBox!.width).toBeGreaterThan(photoBox!.x + photoBox!.width - 24)
+  expect(badgeBox!.y + badgeBox!.height).toBeGreaterThan(photoBox!.y + photoBox!.height - 24)
+  expect(facesBox!.x + facesBox!.width).toBeGreaterThan(photoBox!.x + photoBox!.width - 24)
+  expect(facesBox!.y).toBeLessThan(photoBox!.y + 24)
+  await expect(page.getByText('Private', { exact: true })).toHaveCount(0)
 })
 
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {
@@ -2014,9 +2040,9 @@ test('a car’s page opened from one of its events, after another of its events,
   // …which has the Garage under the car's page now: the car's page still opens over it.
   await openCar()
   // All of it, across: its top bar (which stays at the top, wherever the
-  // page was left scrolled) is wholly on screen, Back to Edit.
+  // page was left scrolled) is wholly on screen, Back to its "…".
   await expect(carPage.getByRole('button', { name: 'Back' })).toBeInViewport({ ratio: 1 })
-  await expect(carPage.getByRole('button', { name: 'Edit', exact: true })).toBeInViewport({ ratio: 1 })
+  await expect(carPage.getByRole('button', { name: 'More actions' })).toBeInViewport({ ratio: 1 })
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
   await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()

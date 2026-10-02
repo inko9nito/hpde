@@ -7,6 +7,7 @@ import { BackButton } from './EventHeader'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
 import { CarFormPage } from './CarFormPage'
+import { CarOverflowMenu } from './CarOverflowMenu'
 import { ChangeSheet } from './ChangeSheet'
 import { DriveAtSheet } from './DriveAtSheet'
 import { GroupBadge } from './GroupBadge'
@@ -35,13 +36,8 @@ export function carIdFromHash(hash: string): string | null {
 
 type CarTab = 'setup' | 'history' | 'events'
 
-const TABS: readonly { id: CarTab; label: string }[] = [
-  { id: 'setup', label: 'Setup' },
-  { id: 'history', label: 'History' },
-  { id: 'events', label: 'Events' },
-]
 
-/** Height of the top bar (Back · the car's name, once its title scrolls away · Edit). */
+/** Height of the top bar (Back · the car's name, once its title scrolls away · its drivers and "…"). */
 const TOP_BAR_PX = 52
 
 /** A section's heading, over its card. */
@@ -386,7 +382,7 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
 
 /**
  * A car's page (#344), pushed over the Garage (#410): its name and photo,
- * Share and Edit at the top — shared with another driver, it's theirs to
+ * its drivers and a "…" of Edit and Archive or Delete (#423) at the top — shared with another driver, it's theirs to
  * keep up too (#398), and its page says who — and three tabs: Setup,
  * what's on it now;
  * History, every change logged to its consumables, each of which opens to
@@ -422,10 +418,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     : [{ id: '', name: user?.name ?? user?.email ?? 'You', you: true }]
   const faces = drivers.map(d => ({ name: d.name, url: avatarOf(d) }))
 
+  // Theirs: the events in their garage it's the car of.
+  const went = car ? carEvents(car.id, garage, events) : []
+
   const topBar = (
     <div className="sticky top-0 z-30 bg-gray-50" style={{ height: TOP_BAR_PX }}>
       {/* Each side at least as wide as what's in it — the drivers' pictures
-          and Edit — so the name between them truncates rather than running
+          and "…" — so the name between them truncates rather than running
           under them. */}
       <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4">
         <div className="justify-self-start"><BackButton onClick={onBack} /></div>
@@ -454,12 +453,15 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
                 <UserPlus size={18} strokeWidth={2.25} aria-hidden="true" />
               </button>
             ) : <AvatarStack people={faces} size={26} ring="ring-gray-50" />}
-            <button
-              onClick={() => setEditing(n => (n ?? 0) + 1)}
-              className="rounded-lg px-2 py-1.5 text-[17px] font-semibold text-blue-600 hover:text-blue-700"
-            >
-              Edit
-            </button>
+            <CarOverflowMenu
+              car={car}
+              events={went.length}
+              onEdit={() => setEditing(n => (n ?? 0) + 1)}
+              onRemoved={archived => {
+                onToast(archived ? 'Car archived' : 'Car deleted')
+                onBack()
+              }}
+            />
           </div>
         ) : <span />}
       </div>
@@ -484,8 +486,6 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     )
   }
 
-  // Theirs: the events in their garage it's the car of.
-  const went = carEvents(car.id, garage, events)
   // And its other drivers', on a shared car (#398).
   const outings = carOutings(car, garage, events, rsvps)
   const subtitle = carSubtitle(car)
@@ -515,7 +515,14 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
       </div>
       <div className="sticky z-20 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
         <div className="mx-auto max-w-lg">
-          <TabStrip tabs={TABS} active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
+          <TabStrip
+            tabs={[
+              { id: 'setup', label: 'Setup' },
+              { id: 'history', label: 'History' },
+              // How many, as My notes says on an event's page (#422).
+              { id: 'events', label: outings.length ? `Events (${outings.length})` : 'Events' },
+            ]}
+            active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
         </div>
       </div>
       <div
@@ -538,12 +545,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         <CarFormPage
           key={editing}
           car={car}
-          events={went.length}
           onSaved={() => onToast('Car saved')}
-          onRemoved={archived => {
-            onToast(archived ? 'Car archived' : 'Car removed')
-            onBack()
-          }}
           onClosed={() => setEditing(null)}
         />
       )}
