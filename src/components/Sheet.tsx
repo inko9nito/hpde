@@ -8,10 +8,12 @@ import { X } from 'lucide-react'
  * with a close button, over whatever goes in it. Escape or a tap outside
  * closes it — neither while `busy`, saving or removing.
  */
-export function Sheet({ label, heading, busy = false, onClose, children, ...data }: {
+export function Sheet({ label, heading, centerHeading = false, busy = false, onClose, children, ...data }: {
   /** Names the dialog. */
   label: string
   heading: ReactNode
+  /** Across the middle, over a sheet laid out down its middle (#411). */
+  centerHeading?: boolean
   busy?: boolean
   onClose: () => void
   children: ReactNode
@@ -43,8 +45,13 @@ export function Sheet({ label, heading, busy = false, onClose, children, ...data
         className="sheet-up relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-t-2xl bg-white px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
       >
         <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-gray-300" aria-hidden="true" />
-        <div className="flex items-start justify-between gap-3 pt-3">
-          <div className="min-w-0">{heading}</div>
+        <div className={centerHeading
+          ? 'grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-3 pt-3'
+          : 'flex items-start justify-between gap-3 pt-3'}
+        >
+          {/* As wide as ✕, so the heading is in the middle of the sheet. */}
+          {centerHeading && <span aria-hidden="true" />}
+          <div className={centerHeading ? 'min-w-0 text-center' : 'min-w-0'}>{heading}</div>
           <button
             ref={closeRef}
             onClick={onClose}

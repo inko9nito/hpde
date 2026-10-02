@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { AuthProvider } from '../auth/AuthContext'
@@ -103,11 +103,15 @@ describe('deleting an event from the header menu (#229, #216, #232)', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }))
 
     expect(window.location.hash).toBe(`#/event/${created.id}/share`)
-    expect(await screen.findByRole('heading', { level: 1, name: 'Share' })).toBeInTheDocument()
-    expect(screen.getByText(`https://myhpde.netlify.app/#/event/${created.id}`)).toBeInTheDocument()
+    // The same sheet a car is shared in (#411).
+    const sheet = await screen.findByRole('dialog', { name: 'Share this event' })
+    expect(within(sheet).getByRole('heading', { level: 2, name: 'Share this event' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Copy link' })).toHaveTextContent(`https://myhpde.netlify.app/#/event/${created.id}`)
     // The event page stays open underneath, and ✕ goes back to it.
     expect(screen.getByRole('heading', { level: 1, name: created.name })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Close' })).toHaveAttribute('href', `#/event/${created.id}`)
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${created.id}`))
+    expect(screen.queryByRole('dialog', { name: 'Share this event' })).not.toBeInTheDocument()
   })
 
   it('opens an event’s share page from its link, without leaving it (#273)', async () => {

@@ -11,7 +11,7 @@ import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
-import { SharePage, SHARE_HASH, isEventShareHash, eventShareUrl } from './components/SharePage'
+import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
 import { PushPage, useUnderPushedPages } from './components/PushPage'
 import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
@@ -131,12 +131,11 @@ function eventIdFromHash(hash: string): string | null {
 }
 
 /** A page that slides up from the bottom over the landing or event page
- *  (#273, #278): New event, Share (the site, or one event), the iOS
- *  widget setup, or an event's Edit details or Edit schedule (#368). */
+ *  (#273, #278): New event, the iOS widget setup, or an event's Edit
+ *  details or Edit schedule (#368). */
 type Overlay =
   | { kind: 'new-event' }
   | { kind: 'widget' }
-  | { kind: 'share'; eventId?: string }
   // An invite to share a car (#398).
   | { kind: 'join-car'; token: string }
   | { kind: 'edit-event' | 'edit-schedule'; eventId: string }
@@ -154,14 +153,20 @@ function overlayFromHash(hash: string): Overlay | null {
   // '#/widget-script' is the old name for the widget page (pre-#213) —
   // keep it working in case anyone bookmarked or shared it.
   if (hash === '#/widget-setup' || hash === '#/widget-script') return { kind: 'widget' }
-  if (hash === SHARE_HASH) return { kind: 'share' }
-  if (isEventShareHash(hash)) return { kind: 'share', eventId: eventIdFromHash(hash)! }
   const editEventId = eventIdFromEditEventHash(hash)
   if (editEventId !== null) return { kind: 'edit-event', eventId: editEventId }
   const editScheduleId = eventIdFromEditScheduleHash(hash)
   if (editScheduleId !== null) return { kind: 'edit-schedule', eventId: editScheduleId }
   const invite = inviteFromHash(hash)
   if (invite !== null) return { kind: 'join-car', token: invite }
+  return null
+}
+
+/** Share, the site's or one event's (#273): a sheet over the page it's
+ *  shared from (#411), not a page of its own. */
+function shareFromHash(hash: string): { eventId?: string } | null {
+  if (hash === SHARE_HASH) return {}
+  if (isEventShareHash(hash)) return { eventId: eventIdFromHash(hash)! }
   return null
 }
 
@@ -381,7 +386,7 @@ export default function App() {
   }, [morePageShowing])
   const shownMorePage = morePageShowing ?? lastMorePage
 
-  // Same for New event / Share / iOS widget: the last one opened stays
+  // Same for New event / iOS widget: the last one opened stays
   // mounted through its slide-out.
   const overlay = overlayFromHash(hash)
   const [lastOverlay, setLastOverlay] = useState(overlay)
@@ -389,6 +394,7 @@ export default function App() {
     if (overlay) setLastOverlay(overlay)
   }, [hash])
   const shownOverlay = overlay ?? lastOverlay
+  const share = shareFromHash(hash)
   const [overlayEntered, setOverlayEntered] = useState(false)
   // Opened by loading its URL, not by tapping through to it: show it in
   // place instead of sliding it in (as with the event page, below).
@@ -415,12 +421,11 @@ export default function App() {
   useTrackFavicon(routeEvent?.trackId ?? trackTitle?.trackId)
   useDocumentTitle(routeEvent?.name ?? trackTitle?.name)
   // …and the status bar above it matches its white header (#245) — once
-  // the page has slid in, not while it's still on its way — until a
-  // gray Share page has slid in over it.
+  // the page has slid in, not while it's still on its way.
   const [pushEntered, setPushEntered] = useState(false)
   // Pages that slide up with a white toolbar across their top (#368) keep
-  // it white; Share and the iOS widget page are gray to the top.
-  const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'share' && shownOverlay.kind !== 'widget'
+  // it white; the iOS widget page is gray to the top.
+  const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget'
   const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
   useChromeColor(whiteTop ? HEADER_CHROME_COLOR : null)
   // The tabs slide a little way left under the first page pushed over them (#367).
@@ -865,18 +870,19 @@ export default function App() {
               setHash(carHash(carId))
             }}
           />
-        ) : shownOverlay.kind === 'widget' ? (
-          <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} />
-        ) : shownOverlay.eventId !== undefined ? (
-          <SharePage
-            url={eventShareUrl(shownOverlay.eventId)}
-            description="Share this link so others can view this event’s schedule."
-            closeHref={eventHash(shownOverlay.eventId)}
-          />
         ) : (
-          <SharePage closeHref={HOME_TAB_HASH[homeTab]} />
+          <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} />
         )}
       </PushPage>
+    )}
+    {share && (
+      <ShareSheet
+        event={share.eventId === undefined ? undefined : {
+          id: share.eventId,
+          name: ALL_EVENTS.find(e => e.id === share.eventId)?.name,
+        }}
+        onClose={() => setHash(share.eventId === undefined ? HOME_TAB_HASH[homeTab] : eventHash(share.eventId))}
+      />
     )}
     {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
       <LapTimesSheet

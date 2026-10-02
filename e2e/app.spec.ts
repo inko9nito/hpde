@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 import { TEST_EVENTS } from '../src/test/events'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../src/theme/runGroupColors'
@@ -242,13 +242,41 @@ test('widget setup page offers the loader script', async ({ page }) => {
   await expect(page.getByText(/myhpde\.netlify\.app\/hpde-widget\.js/)).toBeVisible()
 })
 
-test('share page shares the live address with a QR code', async ({ page }) => {
+// Every share screen is the sheet a car is shared in (#411): up from the
+// bottom of the screen, its title centered, the code to scan under it and
+// the link under that.
+async function expectShareSheet(page: Page, sheet: Locator) {
+  const qr = sheet.getByRole('img', { name: 'Code to scan for the link' })
+  const link = sheet.getByRole('button', { name: 'Copy link' })
+  await expect(qr).toBeVisible()
+  await expect(link).toBeVisible()
+  // Settled where it slides up to.
+  await expect.poll(async () => {
+    const box = (await sheet.boundingBox())!
+    return Math.round(box.y + box.height)
+  }).toBe(page.viewportSize()!.height)
+  const qrBox = (await qr.boundingBox())!
+  const linkBox = (await link.boundingBox())!
+  expect(qrBox.y + qrBox.height).toBeLessThan(linkBox.y)
+  // The title is across the middle, over the code (#411).
+  const titleBox = (await sheet.getByRole('heading', { level: 2 }).boundingBox())!
+  const title = await sheet.getByRole('heading', { level: 2 }).evaluate(h => {
+    const range = document.createRange()
+    range.selectNodeContents(h)
+    const { left, width } = range.getBoundingClientRect()
+    return { center: left + width / 2 }
+  })
+  expect(titleBox.width).toBeGreaterThan(0)
+  expect(Math.abs(title.center - (qrBox.x + qrBox.width / 2))).toBeLessThan(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+}
+
+test('Share shares the live address with a QR code, in a sheet (#411)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/share')
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toBeVisible()
-  await expect(page.getByText('https://myhpde.netlify.app/')).toBeVisible()
-  const qr = page.locator('img[src^="data:image/png"]')
-  await expect(qr).toBeVisible()
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
+  await expectShareSheet(page, sheet)
 })
 
 test('the landing menu slides up, and Share slides up over the list (#273, #278)', async ({ page }) => {
@@ -256,10 +284,12 @@ test('the landing menu slides up, and Share slides up over the list (#273, #278)
   await page.goto('/#/')
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: 'Share' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toBeInViewport()
-  await expect(page.getByText('https://myhpde.netlify.app/')).toBeVisible()
-  await page.getByRole('link', { name: 'Close' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/$/)
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
   // Switching driver, the test account too, is for admins (#309, #396).
   await page.getByRole('button', { name: 'Menu' }).click()
@@ -273,9 +303,10 @@ test('anyone can share an event’s own link from its menu (#273)', async ({ pag
   await page.getByRole('button', { name: 'More actions' }).click()
   await page.getByRole('menuitem', { name: 'Share' }).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}/share$`))
-  await expect(page.getByText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)).toBeVisible()
-  await expect(page.locator('img[src^="data:image/png"]')).toBeVisible()
-  await page.getByRole('link', { name: 'Close' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Share this event' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
   await expect(page.getByText('Schedule coming soon')).toBeInViewport()
 })
@@ -418,14 +449,19 @@ test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }
   await stubEvents(page)
   await page.goto('/#/')
   const menu = page.getByRole('dialog', { name: 'Menu' })
-  for (const [item, heading] of [['Share', 'Share'], ['Get iOS widget', 'iOS widget']]) {
-    await page.getByRole('button', { name: 'Menu' }).click()
-    const link = menu.getByRole('link', { name: item })
-    const slide = await trackSlide(page, () => link.click(), heading)
-    expect(slide).toEqual({ fromBelow: true, fromSide: false })
-    await page.getByRole('link', { name: 'Close' }).click()
-    await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
-  }
+  // Share, as a sheet (#411).
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await menu.getByRole('link', { name: 'Share' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  // The iOS widget, as a page.
+  await page.getByRole('button', { name: 'Menu' }).click()
+  const slide = await trackSlide(page, () => menu.getByRole('link', { name: 'Get iOS widget' }).click(), 'iOS widget')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  await page.getByRole('link', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
 })
 
 // Safari's word for a history move it has slid across the screen itself:
@@ -1215,9 +1251,8 @@ test('a driver shares their car from its page, with a link to send or a code to 
   await drivers.getByRole('button', { name: 'Share with another driver' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this car' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`/#/join-car/${token}`)
-  await expect(sheet.getByRole('img', { name: 'Code to scan for the link' })).toBeVisible()
+  await expectShareSheet(page, sheet)
   await expect(sheet).toContainText('Works once, until Oct 16, 2026.')
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   expect(invited).toBe(1)
 })
 
