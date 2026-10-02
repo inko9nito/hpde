@@ -1297,16 +1297,22 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(session.getByRole('table', { name: 'Tire pressures' })).toContainText('After36.536.536.536.5')
   await noSideScroll()
 
-  // The car's page lists the event; it opens over the car's page, and Back returns there.
+  // The car's page lists the event; it opens over the car's page, and Back
+  // returns there — scrolled where it was left, on the event (#389), however
+  // far reaching the event scrolled it (on a short screen, the car's name).
   await page.goto('/#/garage/car1')
   await page.getByRole('tab', { name: 'Events' }).click()
-  await page.getByRole('list', { name: 'Past events' }).getByRole('button', { name: new RegExp(alpha.name) }).click()
+  const wentTo = page.getByRole('list', { name: 'Past events' }).getByRole('button', { name: new RegExp(alpha.name) })
+  const carScrolled = () => wentTo.evaluate(el => el.closest('.overflow-y-auto')!.scrollTop)
+  await wentTo.click()
   await expect(page.getByRole('tab', { name: 'My notes (2)' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', { name: 'Your car: The Cayman' })).toBeInViewport()
+  const scrolled = await carScrolled()
   const eventPage = page.locator('.fixed.inset-0', { has: page.getByRole('button', { name: 'Your car: The Cayman' }) })
   await eventPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage\/car1$/)
-  await expect(page.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport()
+  await expect(wentTo).toBeInViewport()
+  expect(await carScrolled()).toBe(scrolled)
 
   // Back from the car's page is the Garage, under More (#345); Back from there, More.
   const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Cayman' }) })
