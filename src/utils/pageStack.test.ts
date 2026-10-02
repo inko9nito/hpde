@@ -9,30 +9,29 @@ const read = {
 }
 
 // Follows the hashes from the first, as the app sees them change.
-function walk(hashes: string[], driver: string | null = null): PageStack<string> {
-  return hashes.slice(1).reduce((stack, hash) => nextPageStack(stack, hash, driver, read), emptyPageStack<string>(hashes[0]))
+function walk(hashes: string[]): PageStack {
+  return hashes.slice(1).reduce((stack, hash) => nextPageStack(stack, hash, read), emptyPageStack(hashes[0]))
 }
 
 describe('page stack (#274)', () => {
   it('puts a track page opened from an event over it, and goes back to it', () => {
-    expect(walk(['#/event/a', '#/track/t'], 'jason')).toEqual({
-      hash: '#/track/t', eventUnderTrack: 'a', trackUnderEvent: null, trackDriver: 'jason', moreUnderEvent: null,
+    expect(walk(['#/event/a', '#/track/t'])).toEqual({
+      hash: '#/track/t', eventUnderTrack: 'a', trackUnderEvent: null, moreUnderEvent: null,
     })
     expect(walk(['#/event/a', '#/track/t', '#/event/a'])).toEqual(emptyPageStack('#/event/a'))
   })
 
   it('puts an event opened from a track page over it, and goes back to it', () => {
     const over = walk(['#/tracks', '#/track/t', '#/event/b'])
-    expect(over).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', trackDriver: null, moreUnderEvent: null })
+    expect(over).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null })
     expect(walk(['#/tracks', '#/track/t', '#/event/b', '#/track/t'])).toEqual(emptyPageStack('#/track/t'))
   })
 
   it('from a track page over one event, opens another over it, and back leaves the first behind', () => {
-    const stack = walk(['#/event/a', '#/track/t', '#/event/b'], 'jason')
-    expect(stack).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', trackDriver: 'jason', moreUnderEvent: null })
-    // Back on the track page, it keeps the driver it showed.
-    expect(walk(['#/event/a', '#/track/t', '#/event/b', '#/track/t'], 'jason')).toEqual({
-      hash: '#/track/t', eventUnderTrack: null, trackUnderEvent: null, trackDriver: 'jason', moreUnderEvent: null,
+    const stack = walk(['#/event/a', '#/track/t', '#/event/b'])
+    expect(stack).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null })
+    expect(walk(['#/event/a', '#/track/t', '#/event/b', '#/track/t'])).toEqual({
+      hash: '#/track/t', eventUnderTrack: null, trackUnderEvent: null, moreUnderEvent: null,
     })
   })
 
