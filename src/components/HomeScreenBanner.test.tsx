@@ -28,7 +28,7 @@ describe('Add to Home Screen banner (#379)', () => {
     onDevice(IPHONE_SAFARI)
     render(<HomeScreenBanner />)
     const banner = screen.getByRole('region', { name: 'Add to Home Screen' })
-    expect(banner).toHaveTextContent('Get the HPDE app')
+    expect(banner).toHaveTextContent('Add HPDE to your Home Screen')
     expect(banner).toHaveTextContent('Tap then “Add to Home Screen”')
     expect(screen.getByLabelText('Share')).toBeInTheDocument()
   })

@@ -50,14 +50,13 @@ function wasDismissed(): boolean {
   }
 }
 
-// In iOS's blue, as Safari draws the Share button: the glyph to look for in
-// the toolbar.
+// Safari's Share glyph, in white like the words to look for.
 function ShareGlyph({ named }: { named: boolean }) {
   return (
     <Share
       size={15}
       strokeWidth={2.25}
-      className="inline align-[-2px] text-[#0A84FF]"
+      className="inline align-[-2px] text-white"
       {...(named ? { 'aria-label': 'Share' } : { 'aria-hidden': true })}
     />
   )
@@ -77,12 +76,14 @@ export function HomeScreenBanner() {
   }
 
   return (
-    <section aria-label="Add to Home Screen" className="bg-gray-900 pt-[env(safe-area-inset-top)] text-white">
+    // Neutral, not the app's gray: Tailwind's gray-900 is blue-black, and
+    // the icon's black isn't.
+    <section aria-label="Add to Home Screen" className="bg-neutral-900 pt-[env(safe-area-inset-top)] text-white">
       <div className="mx-auto flex max-w-lg items-center gap-2.5 py-3 pl-1 pr-3 sm:pr-4">
         <button
           onClick={dismiss}
           aria-label="Dismiss"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:text-gray-300"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-500 transition-colors hover:text-neutral-300"
         >
           <X size={18} />
         </button>
@@ -93,9 +94,9 @@ export function HomeScreenBanner() {
           height={56}
           className="h-14 w-14 shrink-0 rounded-[13px] ring-1 ring-white/15"
         />
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold leading-tight">Get the HPDE app</p>
-          <p className="mt-1 text-[13px] leading-snug text-gray-400">
+        <div className="ml-1.5 min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-tight">Add HPDE to your Home Screen</p>
+          <p className="mt-1 text-[13px] leading-snug text-neutral-400">
             {shareIsUnderMore() ? (
               <>
                 Tap <Ellipsis size={15} strokeWidth={2.25} className="inline align-[-3px] text-white" aria-label="More" />,
