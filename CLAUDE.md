@@ -15,7 +15,10 @@ PR; the session title isn't, so keep it accurate.
 A page closed with Cancel (or ✕) is a modal: it slides up from the bottom
 and back down when dismissed, as on iOS — `PushPage` with `from="bottom"`.
 Only pages closed with Back slide in from the right. Its toolbar is
-`PageHeader` (#368): Cancel, the page's name, and Save.
+`PageHeader` (#368): Cancel, the page's name, and Save, in iOS's 17 pt.
+Every such page is an iOS page sheet too (`sheet`, #415), the iOS widget
+page with its ✕ included: it stops just below the status bar with rounded
+top corners, and the page under it shrinks back into a dimmed card on black.
 
 ## Keeping GitHub issues up to date
 
@@ -108,6 +111,17 @@ HTTPS. `E2E_SANDBOX_PROXY=1 E2E_BASE_URL=https://myhpde.netlify.app` runs
 the live checks from here, but page loads through the proxy are flaky
 (`ERR_TOO_MANY_RETRIES`) — treat CI's run as the verdict, not the
 sandbox's.
+
+## Screenshots render in Inter, not San Francisco (#386)
+
+The iPhone's font (SF Pro) can't be redistributed or downloaded here, so
+the cloud session's SessionStart hook (`.claude/hooks/session-start.sh`)
+installs Inter, the closest free match, and points fontconfig's
+`system-ui` and `sans-serif` at it. The app's text then renders in Inter
+in the sandbox's Chromium. Inter is a touch wider than SF, so text that
+fits in a screenshot fits on the phone; text that wraps in a screenshot
+may still fit on the phone. Sandbox only: CI and the live site are
+unchanged, and the widget simulator keeps its Nunito stand-in.
 
 ## Handing the widget script back to the user
 

@@ -104,7 +104,7 @@ export function JoinCarPage({ token, onClose, onJoined }: {
   }
 
   return (
-    <div role="dialog" aria-label="Shared car">
+    <div role="dialog" aria-label="Shared car" className="min-h-full">
       <FormPage {...page}>
         {content}
       </FormPage>

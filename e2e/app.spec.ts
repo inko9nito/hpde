@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { test, expect } from './fixtures'
 import { TEST_EVENTS } from '../src/test/events'
 import { RUN_GROUP_BG_CLASSES, RUN_GROUP_TEXT_CLASSES } from '../src/theme/runGroupColors'
@@ -242,13 +242,41 @@ test('widget setup page offers the loader script', async ({ page }) => {
   await expect(page.getByText(/myhpde\.netlify\.app\/hpde-widget\.js/)).toBeVisible()
 })
 
-test('share page shares the live address with a QR code', async ({ page }) => {
+// Every share screen is the sheet a car is shared in (#411): up from the
+// bottom of the screen, its title centered, the code to scan under it and
+// the link under that.
+async function expectShareSheet(page: Page, sheet: Locator) {
+  const qr = sheet.getByRole('img', { name: 'Code to scan for the link' })
+  const link = sheet.getByRole('button', { name: 'Copy link' })
+  await expect(qr).toBeVisible()
+  await expect(link).toBeVisible()
+  // Settled where it slides up to.
+  await expect.poll(async () => {
+    const box = (await sheet.boundingBox())!
+    return Math.round(box.y + box.height)
+  }).toBe(page.viewportSize()!.height)
+  const qrBox = (await qr.boundingBox())!
+  const linkBox = (await link.boundingBox())!
+  expect(qrBox.y + qrBox.height).toBeLessThan(linkBox.y)
+  // The title is across the middle, over the code (#411).
+  const titleBox = (await sheet.getByRole('heading', { level: 2 }).boundingBox())!
+  const title = await sheet.getByRole('heading', { level: 2 }).evaluate(h => {
+    const range = document.createRange()
+    range.selectNodeContents(h)
+    const { left, width } = range.getBoundingClientRect()
+    return { center: left + width / 2 }
+  })
+  expect(titleBox.width).toBeGreaterThan(0)
+  expect(Math.abs(title.center - (qrBox.x + qrBox.width / 2))).toBeLessThan(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+}
+
+test('Share shares the live address with a QR code, in a sheet (#411)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/share')
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toBeVisible()
-  await expect(page.getByText('https://myhpde.netlify.app/')).toBeVisible()
-  const qr = page.locator('img[src^="data:image/png"]')
-  await expect(qr).toBeVisible()
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
+  await expectShareSheet(page, sheet)
 })
 
 test('the landing menu slides up, and Share slides up over the list (#273, #278)', async ({ page }) => {
@@ -256,10 +284,12 @@ test('the landing menu slides up, and Share slides up over the list (#273, #278)
   await page.goto('/#/')
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: 'Share' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toBeInViewport()
-  await expect(page.getByText('https://myhpde.netlify.app/')).toBeVisible()
-  await page.getByRole('link', { name: 'Close' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/$/)
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
   // Switching driver, the test account too, is for admins (#309, #396).
   await page.getByRole('button', { name: 'Menu' }).click()
@@ -273,9 +303,10 @@ test('anyone can share an event’s own link from its menu (#273)', async ({ pag
   await page.getByRole('button', { name: 'More actions' }).click()
   await page.getByRole('menuitem', { name: 'Share' }).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}/share$`))
-  await expect(page.getByText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)).toBeVisible()
-  await expect(page.locator('img[src^="data:image/png"]')).toBeVisible()
-  await page.getByRole('link', { name: 'Close' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Share this event' })
+  await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}$`))
   await expect(page.getByText('Schedule coming soon')).toBeInViewport()
 })
@@ -299,7 +330,8 @@ async function signInAsAdmin(page: Page) {
 }
 
 // Follows the page that `open()` brings in, frame by frame, until it
-// settles: which way it moved, and where it ended up.
+// settles where it rests — the top of the screen, or a sheet's a little
+// below it (#415): which way it moved.
 async function trackSlide(page: Page, open: () => Promise<void>, heading: string) {
   const track = page.evaluate(heading => new Promise<{ fromBelow: boolean; fromSide: boolean }>(resolve => {
     let fromBelow = false
@@ -311,12 +343,13 @@ async function trackSlide(page: Page, open: () => Promise<void>, heading: string
       const page = h?.closest<HTMLElement>('.fixed')
       if (page) {
         const { top, left } = page.getBoundingClientRect()
-        if (top > 1) fromBelow = true
+        const rest = parseFloat(getComputedStyle(page).top)
+        if (top > rest + 1) fromBelow = true
         if (left > 1) fromSide = true
         const at = `${top},${left}`
         still = at === last ? still + 1 : 0
         last = at
-        if (still > 10 && top === 0 && left === 0) return resolve({ fromBelow, fromSide })
+        if (still > 10 && top === rest && left === 0) return resolve({ fromBelow, fromSide })
       }
       requestAnimationFrame(step)
     }
@@ -418,14 +451,22 @@ test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }
   await stubEvents(page)
   await page.goto('/#/')
   const menu = page.getByRole('dialog', { name: 'Menu' })
-  for (const [item, heading] of [['Share', 'Share'], ['Get iOS widget', 'iOS widget']]) {
-    await page.getByRole('button', { name: 'Menu' }).click()
-    const link = menu.getByRole('link', { name: item })
-    const slide = await trackSlide(page, () => link.click(), heading)
-    expect(slide).toEqual({ fromBelow: true, fromSide: false })
-    await page.getByRole('link', { name: 'Close' }).click()
-    await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
-  }
+  // Share, as a sheet (#411).
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await menu.getByRole('link', { name: 'Share' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Share this app' })
+  await expectShareSheet(page, sheet)
+  await sheet.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  // The iOS widget, as a page sheet with ✕ (#415).
+  await page.getByRole('button', { name: 'Menu' }).click()
+  const slide = await trackSlide(page, () => menu.getByRole('link', { name: 'Get iOS widget' }).click(), 'iOS widget')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  const widget = page.getByRole('heading', { level: 1, name: 'iOS widget' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await widget.boundingBox())?.y).toBe(18)
+  await expect(widget).toHaveCSS('border-top-left-radius', '12px')
+  await page.getByRole('link', { name: 'Close' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
 })
 
 // Safari's word for a history move it has slid across the screen itself:
@@ -501,9 +542,9 @@ test('a page iOS has swiped away, or back, doesn’t slide across again after it
 
 // The page with this heading, caught as its slide starts and held — with
 // everything that started moving with it — `at` each of these many ms into
-// it: where it is, and the tab bar under it, as a share of the screen; how
-// dark it makes what's under it; and whether that's still kept from
-// scrolling.
+// it: how far it has still to go, as a share of the screen it crosses; where
+// the tab bar under it is, as a share of the screen; how dark it makes
+// what's under it; and whether that's still kept from scrolling.
 async function slideAt(page: Page, move: () => Promise<unknown>, heading: string, at: number[]) {
   const caught = page.evaluate(({ heading, at }) => new Promise<{ x: number; y: number; tabs: number; dim: number | null; locked: boolean }[]>(resolve => {
     addEventListener('transitionrun', function onRun(e) {
@@ -514,13 +555,15 @@ async function slideAt(page: Page, move: () => Promise<unknown>, heading: string
       const moving = document.getAnimations()
       moving.forEach(a => a.pause())
       const tabBar = document.querySelector('nav[aria-label="Sections"]')!
-      const dim = el.previousElementSibling?.matches('[data-covering-dim]') ? el.previousElementSibling : null
+      const dim = el.previousElementSibling?.matches('[data-covering-dim], [data-sheet-dim]') ? el.previousElementSibling : null
+      // A sheet rests a little below the top of the screen (#415).
+      const rest = parseFloat(getComputedStyle(el).top)
       const seen = at.map(ms => {
         moving.forEach(a => { a.currentTime = ms })
         const { left, top } = el.getBoundingClientRect()
         return {
           x: left / innerWidth,
-          y: top / innerHeight,
+          y: (top - rest) / (innerHeight - rest),
           tabs: tabBar.getBoundingClientRect().left / innerWidth,
           dim: dim && Number(getComputedStyle(dim).opacity),
           locked: document.documentElement.classList.contains('push-page-open'),
@@ -559,11 +602,79 @@ test('pages slide in and out, and up, with iOS’s own spring, the tabs a third 
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('push-page-open'))).toBe(false)
   await expect.poll(async () => (await page.getByRole('navigation', { name: 'Sections' }).boundingBox())?.x).toBe(0)
 
-  // A page with Cancel: up from the bottom, on the same spring, over the
-  // tabs as they are.
+  // A page with Cancel: a sheet, up from the bottom on the same spring, as
+  // the tabs shrink back to 92% under it, darkening (#415).
   const up = await slideAt(page, () => page.getByRole('link', { name: 'Add event' }).click(), 'New event', [100])
   expect(up.map(p => p.y)).toEqual([expect.closeTo(1 - along(100), 2)])
-  expect(up.map(p => [p.tabs, p.dim])).toEqual([[0, null]])
+  expect(up.map(p => [p.tabs, p.dim])).toEqual([[expect.closeTo(0.04 * along(100), 2), expect.closeTo(0.12 * along(100), 2)]])
+})
+
+// What the page it's on, and its own page sheet, look like once a sheet
+// has come up (#415), as on iOS: what's under it shrunk back into a dimmed
+// card on black, its top edge showing above the sheet; the sheet with round
+// top corners, and iOS's 17 pt Cancel, title and Save.
+test('a page with Cancel and Save is a sheet over a card of the page it covers (#415)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto(`/#/event/${upcoming.id}`)
+  const eventPage = page.getByRole('heading', { level: 1, name: upcoming.name }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  const tabs = page.locator('.tab-fade').first()
+  const html = page.locator('html')
+  await page.getByRole('link', { name: 'Add schedule' }).click()
+  const sheet = page.getByRole('heading', { level: 1, name: 'Edit schedule' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+
+  // 18 px from the top, the card 8 px, 92% as wide and centered.
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  const width = page.viewportSize()!.width
+  await expect.poll(async () => {
+    const box = (await eventPage.boundingBox())!
+    return [box.y, box.x, box.width].map(n => Math.round(n * 10) / 10)
+  }).toEqual([8, Math.round(width * 0.04 * 10) / 10, Math.round(width * 0.92 * 10) / 10])
+  await expect(sheet).toHaveCSS('border-top-left-radius', '12px')
+  await expect(eventPage).not.toHaveCSS('border-top-left-radius', '0px')
+  await expect(page.locator('[data-sheet-dim]')).toHaveCSS('opacity', '0.12')
+  await expect(html).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+  // The tabs, out of sight under the event's page, stay out of sight at
+  // its card's corners.
+  await expect(tabs).toHaveCSS('visibility', 'hidden')
+  for (const name of ['Cancel', 'Save']) {
+    await expect(sheet.getByRole('button', { name })).toHaveCSS('font-size', '17px')
+  }
+  await expect(sheet.getByRole('heading', { level: 1 })).toHaveCSS('font-size', '17px')
+
+  // Taps above the sheet don't reach the page under it.
+  await page.mouse.click(width / 2, 12)
+  await expect(sheet).toBeInViewport()
+
+  // Cancel: down it goes, and the event's page is itself again.
+  await sheet.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit schedule' })).toHaveCount(0)
+  await expect.poll(async () => await eventPage.boundingBox()).toEqual({ x: 0, y: 0, width, height: page.viewportSize()!.height })
+  await expect(eventPage).toHaveCSS('border-top-left-radius', '0px')
+  await expect(tabs).toHaveCSS('visibility', 'visible')
+  await expect(html).not.toHaveClass(/page-sheet/)
+})
+
+// An event's page opened from a track (or car) page goes over it, above
+// the other pages (#274); its Edit details went under it, out of sight.
+test('Edit details comes up over an event’s page opened from a track page (#415)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/track/msrc-2-0-cw')
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toBeVisible()
+  await page.evaluate(id => { location.hash = `#/event/${id}` }, alpha.id)
+  await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit details' }).click()
+  const sheet = page.getByRole('heading', { level: 1, name: 'Edit details' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  // On top, where a tap lands.
+  const cancel = sheet.getByRole('button', { name: 'Cancel' })
+  const box = (await cancel.boundingBox())!
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.textContent, [box.x + box.width / 2, box.y + box.height / 2])).toBe('Cancel')
+  await cancel.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit details' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
 })
 
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
@@ -968,7 +1079,9 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await card.getByLabel('Acknowledges all flags early').fill('65')
   await card.getByLabel('Instructor notes').fill('Very smooth; got faster as the day went on.')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await card.getByRole('button', { name: 'Save evaluation' }).click()
+  // A page sheet: Cancel and Save across its top (#415).
+  await expect(card.getByRole('button', { name: 'Cancel' })).toBeVisible()
+  await card.getByRole('button', { name: 'Save' }).click()
   await expect(card).toBeHidden()
 
   const report = page.getByRole('region', { name: 'Instructor evaluation' })
@@ -1223,9 +1336,8 @@ test('a driver shares their car from its page, with a link to send or a code to 
   await page.getByRole('button', { name: 'Share with another driver' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this car' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`/#/join-car/${token}`)
-  await expect(sheet.getByRole('img', { name: 'Code to scan for the link' })).toBeVisible()
+  await expectShareSheet(page, sheet)
   await expect(sheet).toContainText('Works once, until Oct 16, 2026.')
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   expect(invited).toBe(1)
 })
 
