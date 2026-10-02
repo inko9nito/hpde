@@ -261,10 +261,10 @@ test('the landing menu slides up, and Share slides up over the list (#273, #278)
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
-  // The test account is for admins (#309).
+  // Switching driver, the test account too, is for admins (#309, #396).
   await page.getByRole('button', { name: 'Menu' }).click()
   await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Switch to test account' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Switch driver/ })).toHaveCount(0)
 })
 
 test('anyone can share an event’s own link from its menu (#273)', async ({ page }) => {
@@ -866,7 +866,8 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   const picker = sheet.getByLabel('Driver')
-  await expect(picker.getByRole('option')).toHaveText(['Me', email])
+  // The admin is "Me"; then the test account, and everyone else (#396).
+  await expect(picker.getByRole('option')).toHaveText(['Me', 'Test account', email])
   await picker.selectOption({ label: email })
   // Worded as he'd see it (#364): only the picker says it's his.
   await expect(sheet).toContainText('Only you and admins can see your lap times.')
@@ -1278,10 +1279,16 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(alphaTrack).toContainText('No events yet')
 
   await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch to test account' }).click()
-  await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0)
-  // The account button says so, and the test account's laps show.
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: /^Switch driver/ }).click()
+  await page.getByRole('dialog', { name: 'Switch driver' }).getByRole('radio', { name: 'Test account' }).click()
+  await expect(page.getByRole('dialog', { name: 'Switch driver' })).toHaveCount(0)
+  // The account button and a banner over every page say so (#396), and the test account's laps show.
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
+  const banner = page.getByRole('region', { name: 'Acting as' })
+  await expect(banner).toHaveText(/On the test account/)
+  // The page starts below it, not under it.
+  const bannerBottom = (await banner.boundingBox())!.y + (await banner.boundingBox())!.height
+  expect((await page.getByRole('heading', { level: 1, name: 'Tracks' }).boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
   await expect(alphaTrack).toContainText('1 event')
   expect(asked).toContain('test-account')
 
@@ -1302,10 +1309,14 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(table.getByRole('row', { name: /^2 / })).toHaveText(/1:24\.072\s*106\.3\s*69\.5/)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // Back the same way.
+  // An event's page, pushed over the tab, starts below the banner too.
+  const eventBack = page.getByRole('button', { name: /^Back/ }).first()
+  expect((await eventBack.boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
+
+  // Back with the banner's Switch back.
   await page.goto('/#/tracks')
-  await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch back to my account' }).click()
+  await banner.getByRole('button', { name: 'Switch back' }).click()
+  await expect(banner).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
   await expect(alphaTrack).toContainText('No events yet')
 })

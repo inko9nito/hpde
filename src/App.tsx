@@ -34,19 +34,17 @@ import type { HomeTab } from './components/HomeTabs'
 import { EvaluationsPage } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
 import { DriverPicker, SwitchDriverSheet } from './components/DriverPicker'
+import { ActingBanner } from './components/ActingBanner'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useNotesLog } from './data/notesLog'
-import { useDrivers, driverName } from './data/drivers'
-import type { Driver } from './data/drivers'
+import { driverName } from './data/drivers'
 import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
 import { useEvents } from './data/EventsContext'
-import { RsvpsScope, useDriverRsvps, useRsvps } from './data/RsvpsContext'
-import type { RsvpsValue } from './data/RsvpsContext'
-import { GarageScope, useDriverGarage, useGarage } from './data/GarageContext'
-import type { GarageValue } from './data/GarageContext'
+import { useRsvps } from './data/RsvpsContext'
+import { useGarage } from './data/GarageContext'
 import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
@@ -228,18 +226,9 @@ function isEmptyHash(hash: string): boolean {
   return hash === '' || hash === '#'
 }
 
-/**
- * What an event's page, its sheets and the pages opened over it see (#362):
- * the garage and answers of the driver an admin picked, or their own —
- * the rest of the app (the Events list, the Garage) is always their own.
- */
-function DriverScope({ garage, rsvps, children }: { garage: GarageValue; rsvps: RsvpsValue; children: ReactNode }) {
-  return <GarageScope value={garage}><RsvpsScope value={rsvps}>{children}</RsvpsScope></GarageScope>
-}
-
 export default function App() {
   const [hash, setHash, swiped] = useHashRoute()
-  const { status: authStatus, user } = useAuth()
+  const { status: authStatus, user, actingAs, testAccount } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
   const ownRsvps = useRsvps()
   const { rsvps } = ownRsvps
@@ -266,14 +255,14 @@ export default function App() {
   // The event a car is being added from, on its own page over the event (#344).
   // A new page each time (see CarPage).
   const [addingCarFor, setAddingCarFor] = useState<{ eventId: string; n: number } | null>(null)
-  // An admin can log another driver's lap times (#288): whose the sheet,
-  // My notes and the schedule's saved marks are showing. Null for their
-  // own; back to that on another event.
-  const [lapDriver, setLapDriver] = useState<Driver | null>(null)
   // Switch driver's sheet, from the event's "…" menu (#362).
   const [driverSheetOpen, setDriverSheetOpen] = useState(false)
   const isAdminUser = authStatus === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
-  const driver = isAdminUser ? lapDriver : null
+  // Another driver an admin is acting as (#396), everywhere: the lap
+  // times, notes, answers and garage every page shows are theirs (the data
+  // hooks follow them on their own), and the schedule says whose laps it
+  // marks. Not the test account, which needs no saying.
+  const driver = actingAs && !testAccount ? actingAs : null
   const [toast, setToast] = useState<ToastMessage | null>(null)
   function showToast(text: string) {
     setToast({ id: Date.now(), text })
@@ -294,8 +283,8 @@ export default function App() {
   // over the other: each opens from the other, sliding in over it, and
   // Back returns to the one underneath (see pageStack).
   const trackSlug = trackSlugFromHash(hash)
-  const [stack, setStack] = useState(() => emptyPageStack<Driver>(hash))
-  if (stack.hash !== hash) setStack(nextPageStack(stack, hash, driver, PAGE_HASHES))
+  const [stack, setStack] = useState(() => emptyPageStack(hash))
+  if (stack.hash !== hash) setStack(nextPageStack(stack, hash, PAGE_HASHES))
   const trackOverEventId = trackSlug !== null ? stack.eventUnderTrack : null
   const trackUnderEvent = isOnEventRoute ? stack.trackUnderEvent : null
   // A car's page (#344) and an event's page, each opened from the other —
@@ -444,21 +433,16 @@ export default function App() {
   // …and their instructor's evaluations of it (#340).
   const notesLog = useNotesLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
   const evaluatedKeys = new Set(notesLog.byKey.keys())
-  // Whose answers to "Did you drive?" the event's page shows: the picked
-  // driver's (#362), or the admin's own.
-  const driverRsvps = useDriverRsvps(driver?.id ?? null)
-  const eventRsvps = driver ? driverRsvps : ownRsvps
+  // Their answers to "Did you drive?" (#235): whoever an admin is acting as's.
+  const eventRsvps = ownRsvps
   // The group they drove in, for a TDE report card (#340): their answer to
   // "Did you drive?" — or with none, their laps'.
   const rsvpGroup = myRunGroup(activeEvent, eventRsvps.rsvps[activeEvent.id])
   const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
   const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
   // …and what they ran there (#344): the car, its consumables and each
-  // session's tire pressures — from their garage: the picked driver's
-  // (#362), or the admin's own.
-  const ownGarage = useGarage()
-  const driverGarage = useDriverGarage(driver?.id ?? null)
-  const garage = driver ? driverGarage : ownGarage
+  // session's tire pressures — from their garage.
+  const garage = useGarage()
   const garageOn = garage.status !== 'off'
   const eventSetup = garageOn ? garage.events[activeEvent.id] : undefined
   const eventCar = eventSetup?.carId ? garage.cars.find(c => c.id === eventSetup.carId) : undefined
@@ -477,11 +461,8 @@ export default function App() {
   const activeLayoutSlug = layoutSlug(activeEvent)
   const trackLink = activeLayout && activeLayoutSlug ? { name: activeLayout, href: trackHash(activeLayoutSlug) } : undefined
 
-  // Who else an admin can pick, fetched once they open the laps.
-  const drivers = useDrivers(isAdminUser && isOnEventRoute && (lapSlot !== null || activeTab === 'notes' || driverSheetOpen))
-  const driverPicker = isAdminUser && user
-    ? <DriverPicker driver={driver} onChange={setLapDriver} drivers={drivers} selfId={user.id} />
-    : undefined
+  // Who an admin is acting as (#396), to switch from the laps and My notes.
+  const driverPicker = isAdminUser ? <DriverPicker /> : undefined
 
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -505,7 +486,6 @@ export default function App() {
     setEvaluationOpen(false)
     setCarSheetOpen(false)
     setDriverSheetOpen(false)
-    setLapDriver(null)
   }
 
   function switchEvent(event: EventConfig) {
@@ -523,14 +503,12 @@ export default function App() {
   }
 
   // From a track page, one of its events, for its sessions: My notes (or,
-  // with no laps there yet, the Schedule to add them), with whoever's laps
-  // the track page showed. It slides in over the track page
+  // with no laps there yet, the Schedule to add them). It slides in over the track page
   // — except the event the track page was opened from, already in place
   // under it, which the track page slides away to reveal.
   function openEventNotes(event: EventConfig, tab: EventTabId = 'notes') {
     // The event it was opened from keeps its day and filters.
     if (event.id !== activeEvent.id) selectEvent(event)
-    setLapDriver(stack.trackDriver)
     setActiveTab(tab)
     skipPushEnterAnimationRef.current = event.id === trackOverEventId
     setHash(eventHash(event.id))
@@ -568,6 +546,8 @@ export default function App() {
 
   return (
     <>
+    {/* Who an admin is acting as, over every page (#396). */}
+    <ActingBanner />
     <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownMorePage || !!shownOverlay || !!shownCarId}>
       {/* Room at the bottom for the tab bar. */}
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
@@ -608,7 +588,6 @@ export default function App() {
         )}
       </PushPage>
     )}
-    <DriverScope garage={garage} rsvps={eventRsvps}>
     {pushMounted && (
     <PushPage
       // A fresh page when it goes over the track or a car's page, so it slides in.
@@ -643,7 +622,7 @@ export default function App() {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
           }}
-          switchDriver={isAdminUser ? { driver: driver ? driverName(driver) : null, onOpen: () => setDriverSheetOpen(true) } : undefined}
+          switchDriver={isAdminUser ? { driver: actingAs ? driverName(actingAs) : null, onOpen: () => setDriverSheetOpen(true) } : undefined}
           scrollRef={pushScrollRef}
         />
 
@@ -779,10 +758,8 @@ export default function App() {
     </PullToRefresh>
     </PushPage>
     )}
-    </DriverScope>
     {shownCarId && (
       // Opened from an event's page, the car is in that page's garage: the picked driver's (#362).
-      <DriverScope garage={eventUnderCar !== null ? garage : ownGarage} rsvps={eventUnderCar !== null ? eventRsvps : ownRsvps}>
       <PushPage
         key={`car ${shownCarId}`}
         raised={carRaised}
@@ -808,14 +785,11 @@ export default function App() {
             setUnderCar(null)
             setCarUnderEvent(shownCarId)
             switchEvent(event)
-            // Another driver's car's event is theirs too (#362).
-            if (eventUnderCar !== null) setLapDriver(driver)
             setActiveTab('notes')
           }}
           onToast={showToast}
         />
       </PushPage>
-      </DriverScope>
     )}
     {shownTrackSlug && (
       <PushPage
@@ -832,8 +806,7 @@ export default function App() {
           slug={shownTrackSlug}
           events={ALL_EVENTS}
           eventsLoaded={eventsLoaded}
-          // Another driver's laps only when opened from their laps on an event.
-          driver={stack.trackDriver}
+          driver={driver}
           active={trackSlug !== null}
           onBack={() => {
             if (trackOverEventId !== null) backToEvent(trackOverEventId)
@@ -900,7 +873,6 @@ export default function App() {
         )}
       </PushPage>
     )}
-    <DriverScope garage={garage} rsvps={eventRsvps}>
     {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
       <LapTimesSheet
         // A fresh sheet for each session, so nothing typed carries over.
@@ -961,13 +933,7 @@ export default function App() {
       />
     )}
     {driverSheetOpen && isAdminUser && user && isOnEventRoute && !routeMissing && (
-      <SwitchDriverSheet
-        driver={driver}
-        onChange={setLapDriver}
-        drivers={drivers}
-        selfId={user.id}
-        onClose={() => setDriverSheetOpen(false)}
-      />
+      <SwitchDriverSheet onClose={() => setDriverSheetOpen(false)} />
     )}
     {carSheetOpen && garageOn && isOnEventRoute && !routeMissing && (
       <EventCarSheet
@@ -1035,7 +1001,6 @@ export default function App() {
         onClose={() => setEvaluationOpen(false)}
       />
     )}
-    </DriverScope>
     {/* Clear of the tab bar while a tab is showing. */}
     <Toast toast={toast} onDone={() => setToast(null)} bottomInset={eventPageOpen || trackPageSlug !== null || morePageShowing !== null || carPageId !== null || overlay !== null ? 0 : TAB_BAR_PX} />
     </>

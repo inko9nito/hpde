@@ -2,15 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import type { Car, EventSetup, Garage, LogEntry } from '../utils/garage'
-import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's garage (#344), from the garage function: their
 // cars, and what each event ran on. Shared by the Garage tab and the event
-// page, so a car added in one is there in the other. While an admin has
-// the test account on (#309), it's the test account's. Nothing is fetched
-// for anyone who isn't signed in. An admin who has switched to another
-// driver on an event's page (#362) sees that driver's garage there
-// instead: useDriverGarage, handed to what's on it with GarageScope.
+// page, so a car added in one is there in the other. While an admin is
+// acting as another driver or the test account (#396), it's theirs.
+// Nothing is fetched for anyone who isn't signed in.
 export const GARAGE_URL = `${import.meta.env.BASE_URL}api/garage`
 
 export type GarageStatus = 'off' | 'loading' | 'ready' | 'error'
@@ -51,14 +48,14 @@ const EMPTY: Garage = { cars: [], events: {} }
 const GarageContext = createContext<GarageValue | null>(null)
 
 /**
- * The garage of the signed-in driver (`driverId` undefined) — or the test
- * account's, while it's on — of another driver an admin picked (their user
- * id, #362), or of nobody (null: off).
+ * The garage of the signed-in driver (`driverId` undefined) — or of
+ * whoever an admin is acting as (#396) — of another driver (their user
+ * id), or of nobody (null: off).
  */
 function useGarageStore(driverId: string | null | undefined): GarageValue {
-  const { status: authStatus, user, authedFetch, testAccount } = useAuth()
+  const { status: authStatus, user, authedFetch, actingAs } = useAuth()
   const signedIn = authStatus === 'signed-in' && !!user && driverId !== null
-  const whose = driverId ?? (testAccount ? TEST_DRIVER_ID : null)
+  const whose = driverId ?? actingAs?.id ?? null
   // Whose garage this is, so another sign-in on this device never sees it.
   const who = signedIn ? (whose ? `${user!.id} as ${whose}` : user!.id) : null
   const url = `${GARAGE_URL}${whose ? `?driver=${encodeURIComponent(whose)}` : ''}`
@@ -211,16 +208,6 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
 
 export function GarageProvider({ children }: { children: ReactNode }) {
   const value = useGarageStore(undefined)
-  return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
-}
-
-/** Another driver's garage, for an admin who switched to them (#362); off for null. */
-export function useDriverGarage(driverId: string | null): GarageValue {
-  return useGarageStore(driverId)
-}
-
-/** Whose garage what's inside sees: `value`, from useGarage or useDriverGarage. */
-export function GarageScope({ value, children }: { value: GarageValue; children: ReactNode }) {
   return <GarageContext.Provider value={value}>{children}</GarageContext.Provider>
 }
 

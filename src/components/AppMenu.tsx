@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, FlaskConical, Menu, Share, Smartphone, UserRound } from 'lucide-react'
+import { ChevronRight, Menu, Share, Smartphone, UserRoundCog } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { ICON_BUTTON } from './iconButton'
+import { SwitchDriverSheet } from './DriverPicker'
+import { driverName } from '../data/drivers'
 import { ADMIN_ROLE } from './NewEventPage'
 import { SHARE_HASH } from './SharePage'
 
@@ -16,12 +18,14 @@ const ITEM = 'flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left te
 /**
  * The landing page's menu button (#273). Opens a sheet from the bottom
  * with the app-wide pages — Share and the iOS widget — which then slide
- * up from the bottom too (#278). Admins also get the switch to the test
- * account and back (#309).
+ * up from the bottom too (#278). Admins also get Switch driver (#396):
+ * who to act as everywhere — themselves, the test account (#309), or
+ * another driver.
  */
 export function AppMenu() {
   const [open, setOpen] = useState(false)
-  const { status, user, testAccount, setTestAccount } = useAuth()
+  const [switching, setSwitching] = useState(false)
+  const { status, user, actingAs } = useAuth()
   const isAdmin = status === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
 
   useEffect(() => {
@@ -70,15 +74,14 @@ export function AppMenu() {
                 <button
                   type="button"
                   onClick={() => {
-                    setTestAccount(!testAccount)
                     setOpen(false)
+                    setSwitching(true)
                   }}
                   className={ITEM}
                 >
-                  {testAccount
-                    ? <UserRound size={20} aria-hidden="true" className="shrink-0 text-gray-500" />
-                    : <FlaskConical size={20} aria-hidden="true" className="shrink-0 text-gray-500" />}
-                  <span className="flex-1">{testAccount ? 'Switch back to my account' : 'Switch to test account'}</span>
+                  <UserRoundCog size={20} aria-hidden="true" className="shrink-0 text-gray-500" />
+                  <span className="flex-1">Switch driver</span>
+                  <span className="max-w-[45%] truncate text-sm font-normal text-gray-500">{actingAs ? driverName(actingAs) : 'Me'}</span>
                 </button>
               )}
             </nav>
@@ -86,6 +89,7 @@ export function AppMenu() {
         </div>,
         document.body,
       )}
+      {switching && createPortal(<SwitchDriverSheet onClose={() => setSwitching(false)} />, document.body)}
     </>
   )
 }

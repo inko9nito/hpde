@@ -3,7 +3,6 @@ import { useAuth } from '../auth/AuthContext'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { Rsvp } from '../utils/rsvp'
 import type { EventBest } from '../utils/trackStats'
-import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's own lap times for one event (#210), from the laps
 // function — or, for an admin, another driver's (#288). Nothing is fetched
@@ -16,12 +15,13 @@ function driverQuery(driverId: string | null, first: '?' | '&'): string {
 }
 
 /**
- * Whose laps to ask for: the driver picked, or with none, the test
- * account's while an admin has switched to it (#309) — else your own.
+ * Whose laps to ask for: the driver given, or with none, whoever an admin
+ * is acting as (#396) — another driver, or the test account (#309) — else
+ * your own.
  */
 function useDriverId(driverId: string | null): string | null {
-  const { testAccount } = useAuth()
-  return driverId ?? (testAccount ? TEST_DRIVER_ID : null)
+  const { actingAs } = useAuth()
+  return driverId ?? actingAs?.id ?? null
 }
 
 export type LapLogStatus = 'off' | 'loading' | 'ready' | 'error'
@@ -34,8 +34,8 @@ export interface LapLog {
   /**
    * Saves one session's laps, replacing any it had. Throws with a message
    * to show. With laps, they drove the event: resolves to their answer to
-   * "Did you drive?" as that made it (#377) — none for the test account's
-   * laps (#309), whose answers aren't the ones the app shows.
+   * "Did you drive?" as that made it (#377): the answers the app shows
+   * are theirs too, since they follow whoever an admin is acting as.
    */
   save(session: Omit<SessionLaps, 'key' | 'updatedAt'>): Promise<Rsvp | undefined>
   remove(key: string): Promise<void>
@@ -120,8 +120,8 @@ export function useLapLog(eventId: string | null, driverId: string | null = null
       const others = (prev?.url === url ? prev.sessions : []).filter(s => s.key !== saved.key)
       return { url, eventId, sessions: [...others, saved].sort((a, b) => a.key.localeCompare(b.key)) }
     })
-    return who === driverId ? (body.rsvp as Rsvp | undefined) : undefined
-  }, [authedFetch, url, eventId, who, driverId])
+    return body.rsvp as Rsvp | undefined
+  }, [authedFetch, url, eventId])
 
   const remove = useCallback(async (key: string) => {
     if (eventId === null) throw new Error('No event open.')

@@ -10,6 +10,8 @@ import {
   adoptSavedToken,
 } from './identity'
 import type { IdentityUser, IdentityWidget } from './identity'
+import { TEST_DRIVER_ID } from '../data/testAccount'
+import type { Driver } from '../data/drivers'
 
 // 'unavailable' = this copy of the site has no Identity service (GitHub
 // Pages, local dev). Everything public still works; sign-in is hidden.
@@ -35,30 +37,51 @@ interface AuthValue {
   // fetch() with the signed-in user's token attached, for calls to the
   // personal-data functions (notes, garage).
   authedFetch(input: RequestInfo, init?: RequestInit): Promise<Response>
-  // An admin has switched to the test account (#309): their own laps
-  // everywhere are its sample laps instead, until they switch back.
+  // Who an admin is acting as (#396), from the menu: another driver, or
+  // the test account (#309) — everywhere, until they switch back; null for
+  // themselves. Every page shows that driver's data, and saves as them.
+  actingAs: Driver | null
+  setActingAs(driver: Driver | null): void
+  // Acting as the test account.
   testAccount: boolean
-  setTestAccount(on: boolean): void
 }
+
+/** The test account (#309), as a driver an admin can act as. */
+export const TEST_DRIVER: Driver = { id: TEST_DRIVER_ID, email: '', name: 'Test account' }
 
 const AuthContext = createContext<AuthValue | null>(null)
 
-// Who switched to the test account (#309), by user id, so it's only ever
-// theirs: someone else signing in on this device starts on their own.
+// Who an admin is acting as (#396), and who that admin is, by user id, so
+// it's only ever theirs: someone else signing in on this device starts as
+// themselves. Before #396 only the test account could be switched to,
+// kept as the admin's id under the old key; it's read as that.
+const ACTING_AS_KEY = 'hpde:actingAs'
 const TEST_ACCOUNT_KEY = 'hpde:testAccount'
 
-function readTestAccount(): string | null {
+interface ActingAsRecord {
+  by: string
+  driver: Driver
+}
+
+function readActingAs(): ActingAsRecord | null {
   try {
-    return localStorage.getItem(TEST_ACCOUNT_KEY)
+    const raw = localStorage.getItem(ACTING_AS_KEY)
+    if (raw) {
+      const r = JSON.parse(raw) as Partial<ActingAsRecord> | null
+      return r && typeof r.by === 'string' && typeof r.driver?.id === 'string' ? (r as ActingAsRecord) : null
+    }
+    const testOf = localStorage.getItem(TEST_ACCOUNT_KEY)
+    return testOf ? { by: testOf, driver: TEST_DRIVER } : null
   } catch {
     return null
   }
 }
 
-function writeTestAccount(userId: string | null) {
+function writeActingAs(record: ActingAsRecord | null) {
   try {
-    if (userId) localStorage.setItem(TEST_ACCOUNT_KEY, userId)
-    else localStorage.removeItem(TEST_ACCOUNT_KEY)
+    localStorage.removeItem(TEST_ACCOUNT_KEY)
+    if (record) localStorage.setItem(ACTING_AS_KEY, JSON.stringify(record))
+    else localStorage.removeItem(ACTING_AS_KEY)
   } catch {
     // Private browsing: it lasts until the page is closed.
   }
@@ -92,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [identityUser, setIdentityUser] = useState<IdentityUser | null>(null)
   const [widget, setWidget] = useState<IdentityWidget | null>(null)
-  const [testAccountOf, setTestAccountOf] = useState<string | null>(readTestAccount)
+  const [acting, setActing] = useState<ActingAsRecord | null>(readActingAs)
 
   useEffect(() => {
     let cancelled = false
@@ -205,27 +228,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [identityUser, renew],
   )
 
-  // Signed out: back on their own account next time.
+  // Signed out: themselves again next time.
   useEffect(() => {
-    if (status !== 'signed-out' || testAccountOf === null) return
-    setTestAccountOf(null)
-    writeTestAccount(null)
-  }, [status, testAccountOf])
+    if (status !== 'signed-out' || acting === null) return
+    setActing(null)
+    writeActingAs(null)
+  }, [status, acting])
 
   const user = useMemo(() => (identityUser ? toAuthUser(identityUser) : null), [identityUser])
-  // The admin role (ADMIN_ROLE); the laps function checks it too.
+  // The admin role (ADMIN_ROLE); the functions check it too.
   const isAdmin = status === 'signed-in' && !!user?.roles.includes('admin')
-  const testAccount = isAdmin && testAccountOf === user?.id
   const userId = user?.id ?? null
-  const setTestAccount = useCallback((on: boolean) => {
-    const next = on && isAdmin ? userId : null
-    setTestAccountOf(next)
-    writeTestAccount(next)
+  // Only the admin who chose it, and never themselves.
+  const actingAs = isAdmin && acting?.by === userId && acting.driver.id !== userId ? acting.driver : null
+  const testAccount = actingAs?.id === TEST_DRIVER_ID
+  const setActingAs = useCallback((driver: Driver | null) => {
+    const next = driver && isAdmin && userId && driver.id !== userId ? { by: userId, driver } : null
+    setActing(next)
+    writeActingAs(next)
   }, [isAdmin, userId])
 
   const value = useMemo<AuthValue>(
-    () => ({ status, user, signIn, openAccount, signOut, authedFetch, testAccount, setTestAccount }),
-    [status, user, signIn, openAccount, signOut, authedFetch, testAccount, setTestAccount],
+    () => ({ status, user, signIn, openAccount, signOut, authedFetch, actingAs, setActingAs, testAccount }),
+    [status, user, signIn, openAccount, signOut, authedFetch, actingAs, setActingAs, testAccount],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -238,8 +263,9 @@ const SIGNED_OUT_FALLBACK: AuthValue = {
   openAccount: () => {},
   signOut: () => {},
   authedFetch: () => Promise.reject(new SignedOutError()),
+  actingAs: null,
+  setActingAs: () => {},
   testAccount: false,
-  setTestAccount: () => {},
 }
 
 // Components rendered without a provider (isolated tests) behave as if

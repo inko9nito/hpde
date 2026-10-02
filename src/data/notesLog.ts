@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import type { EventEvaluation, SessionNotes } from '../utils/evaluation'
-import { TEST_DRIVER_ID } from './testAccount'
 
 // The signed-in driver's notes for one event (#340), from the notes
 // function: each session's instructor feedback, and a TDE event's report
@@ -46,8 +45,8 @@ const inOrder = (sessions: SessionNotes[]) => [...sessions].sort((a, b) => a.key
 
 /** `eventId` null: no event's page is open. `driverId` as for useLapLog. */
 export function useNotesLog(eventId: string | null, driverId: string | null = null): NotesLog {
-  const { status: authStatus, authedFetch, testAccount } = useAuth()
-  const who = driverId ?? (testAccount ? TEST_DRIVER_ID : null)
+  const { status: authStatus, authedFetch, actingAs } = useAuth()
+  const who = driverId ?? actingAs?.id ?? null
   const signedIn = authStatus === 'signed-in'
   const active = signedIn && eventId !== null
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -155,17 +154,17 @@ export interface AllNotes {
 
 /**
  * Every event's notes (#345), for the Instructor evaluations page: the
- * signed-in driver's own, or the test account's while an admin has
- * switched to it (#309). Fetched while `active`.
+ * signed-in driver's own, or whoever an admin is acting as (#396).
+ * Fetched while `active`.
  */
 export function useAllNotes(active: boolean): AllNotes {
-  const { status: authStatus, authedFetch, testAccount } = useAuth()
+  const { status: authStatus, authedFetch, actingAs } = useAuth()
   const signedIn = authStatus === 'signed-in'
   const on = signedIn && active
   const [loaded, setLoaded] = useState<{ url: string; events: EventNotes[] } | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const url = `${NOTES_URL}${testAccount ? `?driver=${encodeURIComponent(TEST_DRIVER_ID)}` : ''}`
+  const url = `${NOTES_URL}${actingAs ? `?driver=${encodeURIComponent(actingAs.id)}` : ''}`
 
   useEffect(() => {
     if (!signedIn) {

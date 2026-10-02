@@ -1,5 +1,6 @@
 import { FlaskConical, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { driverName } from '../data/drivers'
 
 /**
  * Header account control. Signed out → "Sign in" (Google). Signed in → the
@@ -10,7 +11,7 @@ import { useAuth } from '../auth/AuthContext'
  * picker) don't shift — or nothing, when `reserveSpace` is false.
  */
 export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean }) {
-  const { status, user, signIn, openAccount, testAccount } = useAuth()
+  const { status, user, signIn, openAccount, actingAs, testAccount } = useAuth()
   const base =
     'inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors'
 
@@ -19,7 +20,7 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
     return (
       <button
         onClick={openAccount}
-        aria-label={testAccount ? `Account: ${user.email}, on the test account` : `Account: ${user.email}`}
+        aria-label={testAccount ? `Account: ${user.email}, on the test account` : actingAs ? `Account: ${user.email}, acting as ${driverName(actingAs)}` : `Account: ${user.email}`}
         className={`${base} relative hover:bg-gray-100`}
       >
         {user.avatarUrl ? (
@@ -34,14 +35,16 @@ export function AccountButton({ reserveSpace = true }: { reserveSpace?: boolean 
             {initial}
           </span>
         )}
-        {/* On the test account (#309): its laps are showing, not theirs. */}
-        {testAccount && (
+        {/* Acting as the test account (#309) or another driver (#396): theirs is what's showing. */}
+        {actingAs && (
           <span
             className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-amber-400 text-gray-900 ring-2 ring-white"
-            data-test-account
-            title="Test account"
+            data-test-account={testAccount || undefined}
+            title={driverName(actingAs)}
           >
-            <FlaskConical size={10} strokeWidth={2.5} aria-hidden="true" />
+            {testAccount
+              ? <FlaskConical size={10} strokeWidth={2.5} aria-hidden="true" />
+              : <UserRound size={10} strokeWidth={2.5} aria-hidden="true" />}
           </span>
         )}
       </button>
