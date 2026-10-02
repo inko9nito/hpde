@@ -314,6 +314,19 @@ export function carName(car: Car): string {
   return car.nickname ?? carTitle(car)
 }
 
+/**
+ * A car's name over its photo (#410): its nickname, or its make and model —
+ * with carSubtitle under it.
+ */
+export function carHeading(car: Car): string {
+  return car.nickname ?? `${car.make} ${car.model}`
+}
+
+/** Under carHeading: the year, and the make and model when it has a nickname. "2018 · Porsche Panamera 4S". */
+export function carSubtitle(car: Car): string {
+  return [car.year, car.nickname ? `${car.make} ${car.model}` : undefined].filter(Boolean).join(' · ')
+}
+
 /** An event's first day. */
 export function eventStart(event: EventConfig): string {
   return [...event.days].sort((a, b) => a.date.localeCompare(b.date))[0]?.date ?? event.id.slice(0, 10)

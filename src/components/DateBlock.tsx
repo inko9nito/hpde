@@ -23,10 +23,30 @@ export function DateBlock({ event, muted, dark = false, size = 'md' }: {
   dark?: boolean
   size?: 'md' | 'lg'
 }) {
-  const sizes = DATE_BLOCK_SIZES[size]
   const parts = firstDayParts(event)
-  if (!parts) return <div className={`${sizes.box} shrink-0`} />
-  const { month, day, year } = parts
+  if (!parts) return <div className={`${DATE_BLOCK_SIZES[size].box} shrink-0`} />
+  return <DateParts {...parts} muted={muted} dark={dark} size={size} />
+}
+
+/** The same tile for a day that isn't an event's: a car's change (#410). */
+export function DayBlock({ date, muted }: {
+  /** "YYYY-MM-DD". */
+  date: string
+  muted: boolean
+}) {
+  const [year, m, day] = date.split('-').map(Number)
+  return <DateParts month={MONTHS[m - 1]} day={day} year={year} muted={muted} dark={false} size="md" />
+}
+
+function DateParts({ month, day, year, muted, dark, size }: {
+  month: string
+  day: number
+  year: number
+  muted: boolean
+  dark: boolean
+  size: 'md' | 'lg'
+}) {
+  const sizes = DATE_BLOCK_SIZES[size]
   const thisYear = Number(todayLocalISO().slice(0, 4))
   const monthColor = muted ? 'text-gray-500' : dark ? 'text-red-400' : 'text-red-600'
   return (

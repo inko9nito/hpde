@@ -1,35 +1,68 @@
 import { useState } from 'react'
-import { Car as CarIcon, Lock, Plus } from 'lucide-react'
+import { CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
-import { CarRow } from './CarRow'
 import { carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
-import { useGarage } from '../data/GarageContext'
+import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_CARS, carName, carOutings, formatDay, eventStart, isShared, othersText } from '../utils/garage'
+import { MAX_CARS, carHeading, carOutings, carSubtitle, isShared, othersText } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
 import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 
 /**
- * "Last at Alpha Track Day · Mar 7, 2026": the car's latest event, by
- * whoever drove it, under its name — and who else drives it, when it's
- * shared (#398).
+ * "6 events": how many the car went to, by whoever drove it — and who
+ * else drives it, when it's shared (#398).
  */
-function lastSeen(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): string {
-  const [last] = carOutings(car, garage, events, rsvps)
-  const seen = last ? `Last at ${last.event.name} · ${formatDay(eventStart(last.event))}` : 'No events yet'
-  if (!isShared(car)) return seen
-  return `With ${othersText(car)} · ${seen}`
+function eventsLine(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): string {
+  const n = carOutings(car, garage, events, rsvps).length
+  const went = n === 0 ? 'No events yet' : n === 1 ? '1 event' : `${n} events`
+  return isShared(car) ? `With ${othersText(car)} · ${went}` : went
+}
+
+/**
+ * A car in the Garage (#410): its photo, landscape, with its name and
+ * year over the foot of it — or, with none (yet), a car on dark gray — and
+ * under it how many events it's been to. Opens its page.
+ */
+function CarCard({ car, line }: { car: Car; line: string }) {
+  const src = useCarPhoto(car)
+  return (
+    <a
+      href={carHash(car.id)}
+      className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
+      data-car-row
+    >
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800">
+        {src ? (
+          <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" data-car-photo />
+        ) : car.photo ? (
+          <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
+        ) : (
+          <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
+        )}
+        {/* Dark enough at the foot for the name to read over any photo. */}
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-0 px-4 pb-3.5">
+          <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
+          {carSubtitle(car) && <p className="mt-0.5 truncate text-sm text-white/85">{carSubtitle(car)}</p>}
+        </div>
+      </div>
+      <div className="flex min-h-12 items-center gap-3 px-4 py-3">
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-500">{line}</span>
+        <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+      </div>
+    </a>
+  )
 }
 
 /**
  * The Garage (#344), a page over the More tab (#345): the driver's cars,
- * one line each — what it's called and the last event it went to — each
- * opening its page, where its details, consumables and their change log
- * are.
+ * a card each (#410) — its photo, what it's called and how many events
+ * it's been to — each opening its page, where its setup, change history
+ * and events are.
  */
 export function GaragePage({ events, onBack, onToast }: {
   /** Every event, to find a car's last. */
@@ -46,13 +79,21 @@ export function GaragePage({ events, onBack, onToast }: {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SubPageHeader title="Garage" onBack={onBack} />
+      <SubPageHeader
+        title="Garage"
+        onBack={onBack}
+        accessory={authStatus === 'signed-in' && garage.status === 'ready' && garage.cars.length > 0 && (
+          <p className="flex shrink-0 items-center gap-1 text-sm text-gray-500" title="Only you and admins can see your garage">
+            <Lock size={14} aria-hidden="true" /> Private
+          </p>
+        )}
+      />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
           <SignInPrompt reason="manage your cars" privacyNote={false} />
         ) : garage.status === 'loading' || garage.status === 'off' ? (
           <div className="fade-in flex flex-col gap-3" aria-busy="true" aria-label="Loading your garage">
-            <div className="h-[74px] animate-pulse rounded-2xl border border-gray-200 bg-white" />
+            <div className="aspect-[16/11] animate-pulse rounded-2xl border border-gray-200 bg-white" />
           </div>
         ) : garage.status === 'error' ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
@@ -67,7 +108,7 @@ export function GaragePage({ events, onBack, onToast }: {
           </div>
         ) : garage.cars.length === 0 ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-            <CarIcon size={22} className="mx-auto text-gray-400" aria-hidden="true" />
+            <CarFront size={22} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
             <button
               onClick={add}
@@ -77,21 +118,18 @@ export function GaragePage({ events, onBack, onToast }: {
             </button>
           </div>
         ) : (
-          <div className="fade-in flex flex-col gap-3">
-            <p className="-mb-1 flex items-center justify-end gap-1 px-1 text-xs text-gray-500" title="Only you and admins can see your garage">
-              <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
-            </p>
-            <ul className="flex flex-col gap-3" aria-label="Cars">
+          <div className="fade-in flex flex-col gap-4">
+            <ul className="flex flex-col gap-4" aria-label="Cars">
               {garage.cars.map(car => (
                 <li key={car.id}>
-                  <CarRow car={car} title={carName(car)} subtitle={lastSeen(car, garage, events, rsvps)} href={carHash(car.id)} />
+                  <CarCard car={car} line={eventsLine(car, garage, events, rsvps)} />
                 </li>
               ))}
             </ul>
             {garage.cars.length < MAX_CARS && (
               <button
                 onClick={add}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
+                className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white px-4 py-3 text-[15px] font-semibold text-gray-900 transition-colors hover:bg-gray-50"
               >
                 <Plus size={16} aria-hidden="true" />
                 Add a car

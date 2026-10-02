@@ -1,19 +1,20 @@
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { ChevronRight, Plus, UserPlus } from 'lucide-react'
 import { BackButton } from './EventHeader'
-import { CarTile, ConsumablesList, DetailRow } from './CarRow'
+import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
+import { TabStrip } from './EventTabs'
+import { DayBlock } from './DateBlock'
 import { CarFormPage } from './CarFormPage'
 import { ChangeSheet } from './ChangeSheet'
 import { DriveAtSheet } from './DriveAtSheet'
 import { GroupBadge } from './GroupBadge'
 import { ShareCarSheet } from './ShareCarSheet'
-import { TrackIcon } from './TrackIcon'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carName, carOutings, carTitle, consumableLabel, driverLabel, formatDay, isShared, logNewestFirst } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, formatDay, isShared, logNewestFirst } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
-import { formatDateRange } from '../utils/time'
+import { classifyEvent } from '../utils/eventClass'
 import type { EventConfig } from '../types'
 
 const CAR_HASH_PREFIX = '#/garage/'
@@ -28,25 +29,45 @@ export function carIdFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(CAR_HASH_PREFIX.length).split('/')[0]) || null
 }
 
-/** A card with a heading, and a button at its foot. */
-function Card({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+type CarTab = 'setup' | 'history' | 'events'
+
+const TABS: readonly { id: CarTab; label: string }[] = [
+  { id: 'setup', label: 'Setup' },
+  { id: 'history', label: 'History' },
+  { id: 'events', label: 'Events' },
+]
+
+/** Height of the top bar (Back · the car's name, once its title scrolls away · Edit). */
+const TOP_BAR_PX = 52
+
+/** A section's heading, over its card. */
+function SectionTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
-    <section aria-label={title} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-bold text-gray-900">{title}</h2>
-      <div className="mt-1">{children}</div>
-      {action}
-    </section>
+    <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+      <h2 className="font-rubik text-lg font-bold text-gray-900">{children}</h2>
+      {aside}
+    </div>
   )
 }
 
-/** The car's photo, at the top of its details: changed from Edit. */
+/** A heading over a run of cards — a month, past or upcoming — as the Events tab's Past is. */
+function ListTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-3">
+      <h3 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">{children}</h3>
+      {aside}
+    </div>
+  )
+}
+
+/** The car's photo, under its name: changed from Edit. */
 function CarPhoto({ car }: { car: Car }) {
   const src = useCarPhoto(car)
   if (!car.photo) return null
   return (
-    <div className="mb-3 mt-2 overflow-hidden rounded-xl bg-gray-100">
+    <div className="mt-4 overflow-hidden rounded-2xl bg-gray-100">
       {src
-        ? <img src={src} alt={carName(car)} className="aspect-[16/10] w-full object-cover" data-car-photo />
+        ? <img src={src} alt={carHeading(car)} className="aspect-[16/10] w-full object-cover" data-car-photo />
         : <div className="aspect-[16/10] w-full animate-pulse" aria-busy="true" />}
     </div>
   )
@@ -60,7 +81,7 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
   const shown = outing.drivers.filter(d => shared || d.runGroup)
   if (shown.length === 0) return null
   return (
-    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-700" data-who-drove>
+    <span className="flex shrink-0 items-center gap-2.5 text-xs text-gray-700" data-who-drove>
       {shown.map(({ driver, runGroup }) => {
         const group = outing.event.runGroups.find(g => g.id === runGroup)
         return (
@@ -74,15 +95,242 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
   )
 }
 
-const footButton = 'mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50'
+/** Log a change: at the foot of Setup and History. */
+function LogButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-gray-700"
+    >
+      <Plus size={18} aria-hidden="true" />
+      Log a change
+    </button>
+  )
+}
+
+const footButton = 'mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50'
 
 /**
- * A car's details (#344), pushed over the Garage: what it is and its lug
- * nut torque (Edit to change them), who drives it — shared with another
- * driver, it's theirs to keep up too (#398) — what's on it now, the log of
- * every change to its consumables — each opens to change or remove — and
- * the events it went to, with who drove it there, in which run group,
- * which open on their My notes.
+ * Whether the page's title has scrolled up under the top bar — the cue
+ * for the bar's own copy of the name, as on iOS.
+ */
+function useScrolledPast(ref: RefObject<HTMLElement | null>, offset: number): boolean {
+  const [past, setPast] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      ([entry]) => setPast(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? offset)),
+      { rootMargin: `-${offset}px 0px 0px 0px` },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref, offset])
+  return past
+}
+
+/** Setup (#410): what the car is fitted with now — its lug nut torque and consumables — and who drives it. */
+function SetupPanel({ car, onOpenEntry, onShare, onLog }: {
+  car: Car
+  onOpenEntry: (entry: LogEntry) => void
+  onShare: () => void
+  onLog: () => void
+}) {
+  const on = consumablesOn(car)
+  const log = logNewestFirst(car)
+  const shared = isShared(car)
+  // You first, then the others in the order they joined.
+  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
+  return (
+    <div className="space-y-7">
+      <section aria-label="Details" className={`${CARD_FRAME} flex min-h-14 items-center justify-between gap-3 px-4 py-3`}>
+        <span className="text-[15px] text-gray-700">Lug nut torque</span>
+        {car.lugNutTorque !== undefined
+          ? <span className="rounded-lg bg-gray-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-gray-900">{car.lugNutTorque} ft·lb</span>
+          : <span className="text-sm text-gray-400">Not set</span>}
+      </section>
+
+      <section aria-label="Consumables">
+        <SectionTitle>Consumables</SectionTitle>
+        {on.length === 0 ? (
+          <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Log a change to keep track of what’s on the car.</p>
+        ) : (
+          <ul className={`${CARD_FRAME} overflow-hidden`}>
+            {on.map(c => {
+              // The change that put it on.
+              const entry = log.find(e => e.date === c.date && e.parts.some(p => p.part === c.part))
+              return (
+                <li key={c.part} className="border-b border-gray-100 last:border-b-0">
+                  <button
+                    onClick={() => entry && onOpenEntry(entry)}
+                    className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-gray-50"
+                  >
+                    <span className="w-[6.5rem] shrink-0 text-sm text-gray-500">{consumableLabel(c.part)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] text-gray-900">{c.what ?? 'Changed'}</span>
+                      <span className="block text-[13px] text-gray-500">Since {formatDay(c.date)}</span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section aria-label="Drivers">
+        <SectionTitle>Drivers</SectionTitle>
+        <div className={`${CARD_FRAME} px-4 py-3`}>
+          {shared ? (
+            <ul className="flex flex-col gap-2 py-1" aria-label="Drivers">
+              {drivers.map(d => (
+                <li key={d.id} className="flex items-center gap-2.5 text-sm text-gray-900">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600" aria-hidden="true">
+                    {d.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 truncate">{d.you ? <><span className="font-semibold">You</span> <span className="text-gray-500">· {d.name}</span></> : d.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-1 text-sm text-gray-500">Just you. Share it with someone else who drives it, and you both keep it up.</p>
+          )}
+          {drivers.length < MAX_DRIVERS && (
+            <button onClick={onShare} className={footButton}><UserPlus size={16} aria-hidden="true" />Share with another driver</button>
+          )}
+        </div>
+      </section>
+
+      <LogButton onClick={onLog} />
+    </div>
+  )
+}
+
+/** "September 2026": a month's heading in the change history. */
+function monthTitle(date: string): string {
+  const [y, m] = date.split('-').map(Number)
+  return `${new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' })} ${y}`
+}
+
+/** History (#410): every change logged, newest first, by month — each opens to change or remove. */
+function HistoryPanel({ car, onOpenEntry, onLog }: {
+  car: Car
+  onOpenEntry: (entry: LogEntry) => void
+  onLog: () => void
+}) {
+  const log = logNewestFirst(car)
+  const months: { month: string; entries: LogEntry[] }[] = []
+  for (const e of log) {
+    const month = e.date.slice(0, 7)
+    if (months[months.length - 1]?.month !== month) months.push({ month, entries: [] })
+    months[months.length - 1].entries.push(e)
+  }
+  return (
+    <>
+      {log.length === 0 ? (
+        <EmptyRow>Nothing logged yet.</EmptyRow>
+      ) : (
+        <div aria-label="Change log" role="group" className="space-y-8">
+          {months.map(({ month, entries }) => (
+            <section key={month} aria-label={monthTitle(`${month}-01`)}>
+              <ListTitle>{monthTitle(`${month}-01`)}</ListTitle>
+              <ul className="space-y-3">
+                {entries.map(e => (
+                  <li key={e.id}>
+                    <button
+                      onClick={() => onOpenEntry(e)}
+                      className={`${CARD_FRAME} flex items-center gap-4 p-4 text-left transition-colors hover:border-gray-300`}
+                    >
+                      <DayBlock date={e.date} muted />
+                      <span className="min-w-0 flex-1">
+                        {e.parts.map(p => (
+                          <span key={p.part} className="block text-[15px] leading-snug">
+                            <span className="font-semibold text-gray-900">{consumableLabel(p.part)}</span>
+                            {p.what && <span className="text-gray-600"> · {p.what}</span>}
+                          </span>
+                        ))}
+                        {e.shop && <span className="mt-1 block text-[13px] text-gray-500">at {e.shop}</span>}
+                        {e.note && <span className="mt-1 block whitespace-pre-line text-[13px] text-gray-500">{e.note}</span>}
+                      </span>
+                      <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+      <LogButton onClick={onLog} />
+    </>
+  )
+}
+
+/**
+ * Events (#408, #410): the ones it's going to, soonest first, then the ones
+ * it went to — each the Events tab's own card, with who drove it there in
+ * which run group — which open on their My notes.
+ */
+function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
+  car: Car
+  outings: CarOuting[]
+  onOpenEvent: (event: EventConfig) => void
+  onAdd: () => void
+}) {
+  const shared = isShared(car)
+  const status = (o: CarOuting) => classifyEvent(o.event)
+  const upcoming = outings.filter(o => status(o) !== 'past').reverse()
+  const past = outings.filter(o => status(o) === 'past')
+  const add = (
+    <button
+      onClick={onAdd}
+      className="-mr-2 inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+    >
+      <Plus size={16} aria-hidden="true" />
+      Add to events
+    </button>
+  )
+  const cards = (rows: CarOuting[], label: string) => (
+    <ul className="space-y-4" aria-label={label}>
+      {rows.map(o => (
+        <li key={o.event.id}>
+          <EventCard
+            event={o.event}
+            muted={status(o) === 'past'}
+            live={status(o) === 'live'}
+            before={<WhoDrove outing={o} shared={shared} />}
+            onClick={() => onOpenEvent(o.event)}
+          />
+        </li>
+      ))}
+    </ul>
+  )
+  return (
+    <div className="space-y-8">
+      {upcoming.length > 0 && (
+        <section aria-label="Upcoming">
+          <ListTitle aside={add}>Upcoming</ListTitle>
+          {cards(upcoming, 'Upcoming events')}
+        </section>
+      )}
+      <section aria-label="Past">
+        <ListTitle aside={upcoming.length > 0 ? undefined : add}>Past</ListTitle>
+        {past.length === 0
+          ? <EmptyRow>{upcoming.length ? 'None yet.' : 'No events yet.'}</EmptyRow>
+          : cards(past, 'Past events')}
+      </section>
+    </div>
+  )
+}
+
+/**
+ * A car's page (#344), pushed over the Garage (#410): its name and photo,
+ * Edit at the top, and three tabs — Setup, what's on it now and who drives
+ * it (shared with another driver, it's theirs to keep up too, #398);
+ * History, every change logged to its consumables, each of which opens to
+ * change or remove; and Events, the ones it's been to and is going to, as
+ * the Events tab shows them (#408), which open on their My notes.
  */
 export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   carId: string
@@ -94,6 +342,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const garage = useGarage()
   const { rsvps } = useRsvps()
   const car = garage.cars.find(c => c.id === carId)
+  const [tab, setTab] = useState<CarTab>('setup')
   // Edit's page, while it's open: a new one each time, so one opened while
   // the last is still sliding away starts afresh.
   const [editing, setEditing] = useState<number | null>(null)
@@ -101,20 +350,31 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const [sharing, setSharing] = useState(false)
   // The log entry open in its sheet: one to change, or a new one.
   const [entry, setEntry] = useState<LogEntry | 'new' | null>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const collapsed = useScrolledPast(titleRef, TOP_BAR_PX)
 
-  const header = (
-    <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
-      <div className="mx-auto flex min-h-[64px] max-w-lg items-center gap-2 px-4 py-2">
-        <BackButton onClick={onBack} />
-        {car && (
-          <div className="flex min-w-0 items-center gap-3">
-            <CarTile car={car} size={44} />
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="truncate font-rubik text-lg font-bold leading-tight text-gray-900">{carName(car)}</h1>
-              {car.nickname && <p className="truncate text-[13px] leading-tight text-gray-500">{carTitle(car)}</p>}
-            </div>
-          </div>
-        )}
+  const topBar = (
+    <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur" style={{ height: TOP_BAR_PX }}>
+      <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(4rem,1fr)_minmax(0,max-content)_minmax(4rem,1fr)] items-center gap-2 px-4">
+        <div className="justify-self-start"><BackButton onClick={onBack} /></div>
+        {/* The title's echo, once it's scrolled away — hidden from
+            assistive tech so the name isn't announced twice. */}
+        <span
+          aria-hidden="true"
+          className={`truncate text-center font-rubik text-[15px] font-semibold text-gray-900 ${
+            car && collapsed ? 'opacity-100 transition-opacity duration-200' : 'opacity-0'
+          }`}
+        >
+          {car ? carHeading(car) : ''}
+        </span>
+        {car ? (
+          <button
+            onClick={() => setEditing(n => (n ?? 0) + 1)}
+            className="-mr-2 justify-self-end rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700"
+          >
+            Edit
+          </button>
+        ) : <span />}
       </div>
     </div>
   )
@@ -122,7 +382,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   if (!car) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {header}
+        {topBar}
         <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
           {garage.status === 'loading' ? (
             <div className="h-44 animate-pulse rounded-2xl border border-gray-200 bg-white" aria-busy="true" aria-label="Loading your car" />
@@ -141,115 +401,35 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const went = carEvents(car.id, garage, events)
   // And its other drivers', on a shared car (#398).
   const outings = carOutings(car, garage, events, rsvps)
-  const shared = isShared(car)
-  // You first, then the others in the order they joined.
-  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
-  const log = logNewestFirst(car)
+  const subtitle = carSubtitle(car)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {header}
-      <div className="mx-auto flex max-w-lg flex-col gap-5 px-3 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-4 sm:pt-6">
-        <Card
-          title="Details"
-          action={<button onClick={() => setEditing(n => (n ?? 0) + 1)} className={footButton}>Edit details</button>}
-        >
-          <CarPhoto car={car} />
-          <dl>
-            {car.year !== undefined && <DetailRow label="Year">{car.year}</DetailRow>}
-            <DetailRow label="Make">{car.make}</DetailRow>
-            <DetailRow label="Model">{car.model}</DetailRow>
-            {car.nickname && <DetailRow label="Nickname">{car.nickname}</DetailRow>}
-            <DetailRow label="Lug nut torque">{car.lugNutTorque !== undefined ? `${car.lugNutTorque} ft·lb` : '—'}</DetailRow>
-          </dl>
-        </Card>
-
-        <Card
-          title="Drivers"
-          action={drivers.length < MAX_DRIVERS && (
-            <button onClick={() => setSharing(true)} className={footButton}><UserPlus size={16} aria-hidden="true" />Share with another driver</button>
-          )}
-        >
-          {shared ? (
-            <ul className="mt-2 flex flex-col gap-2" aria-label="Drivers">
-              {drivers.map(d => (
-                <li key={d.id} className="flex items-center gap-2.5 text-sm text-gray-900">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600" aria-hidden="true">
-                    {d.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 truncate">{d.you ? <><span className="font-semibold">You</span> <span className="text-gray-500">· {d.name}</span></> : d.name}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-1 text-xs text-gray-500">Just you. Share it with someone else who drives it, and you both keep it up.</p>
-          )}
-        </Card>
-
-        <Card
-          title="Consumables"
-          action={<button onClick={() => setEntry('new')} className={footButton}><Plus size={16} aria-hidden="true" />Log a change</button>}
-        >
-          <ConsumablesList car={car} />
-        </Card>
-
-        <Card title="Change log">
-          {log.length === 0 ? (
-            <p className="mt-1 text-xs text-gray-500">Nothing logged yet.</p>
-          ) : (
-            <ul className="mt-1" aria-label="Change log">
-              {log.map(e => (
-                <li key={e.id} className="border-b border-gray-100 last:border-b-0">
-                  <button
-                    onClick={() => setEntry(e)}
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-start gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-gray-50"
-                  >
-                    <span className="w-[5.5rem] shrink-0 pt-px text-xs tabular-nums text-gray-500">{formatDay(e.date)}</span>
-                    <span className="min-w-0 flex-1">
-                      {e.parts.map(p => (
-                        <span key={p.part} className="block text-sm">
-                          <span className="font-semibold text-gray-900">{consumableLabel(p.part)}</span>
-                          {p.what && <span className="text-gray-700"> · {p.what}</span>}
-                        </span>
-                      ))}
-                      {e.shop && <span className="mt-0.5 block text-xs text-gray-500">at {e.shop}</span>}
-                      {e.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
-                    </span>
-                    <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card
-          title="Events"
-          action={<button onClick={() => setAddingEvents(true)} className={footButton}><Plus size={16} aria-hidden="true" />Add to events</button>}
-        >
-          {outings.length === 0 ? (
-            <p className="mt-1 text-xs text-gray-500">None yet.</p>
-          ) : (
-            <ul className="mt-2 flex flex-col gap-1" aria-label={`${carName(car)}’s events`}>
-              {outings.map(outing => (
-                <li key={outing.event.id}>
-                  <button
-                    onClick={() => onOpenEvent(outing.event)}
-                    className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-gray-50"
-                  >
-                    <TrackIcon trackId={outing.event.trackId} tone="dark" size={32} padding={0} radius="rounded-lg" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-gray-900">{outing.event.name}</span>
-                      <span className="block text-xs text-gray-500">{formatDateRange(outing.event.days)}</span>
-                      <WhoDrove outing={outing} shared={shared} />
-                    </span>
-                    <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      {topBar}
+      <div className="mx-auto max-w-lg px-3 pb-5 sm:px-4">
+        <h1 ref={titleRef} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
+        {subtitle && <p className="mt-0.5 px-1 text-[15px] text-gray-500">{subtitle}</p>}
+        <CarPhoto car={car} />
+      </div>
+      <div className="sticky z-20 border-b border-gray-200 bg-gray-50/95 backdrop-blur" style={{ top: TOP_BAR_PX }}>
+        <div className="mx-auto max-w-lg">
+          <TabStrip tabs={TABS} active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
+        </div>
+      </div>
+      <div
+        role="tabpanel"
+        id={`car-tabpanel-${tab}`}
+        aria-labelledby={`car-tab-${tab}`}
+        // At least a screen tall, so a shorter tab doesn't pull the page back up.
+        className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
+      >
+        {tab === 'setup' && (
+          <SetupPanel car={car} onOpenEntry={setEntry} onShare={() => setSharing(true)} onLog={() => setEntry('new')} />
+        )}
+        {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={() => setEntry('new')} />}
+        {tab === 'events' && (
+          <EventsPanel car={car} outings={outings} onOpenEvent={onOpenEvent} onAdd={() => setAddingEvents(true)} />
+        )}
       </div>
 
       {editing !== null && (
