@@ -53,8 +53,9 @@ export function ShareCarSheet({ car, invite, onClose }: {
     <Sheet
       label="Share this car"
       onClose={onClose}
+      centerHeading
       data-share-car-sheet
-      heading={<h2 className="mt-0.5 text-lg font-bold text-gray-900">Share this car</h2>}
+      heading={<h2 className="text-lg font-bold text-gray-900">Share this car</h2>}
     >
       {failure ? (
         <div className="mt-4 rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center">

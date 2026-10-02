@@ -37,8 +37,9 @@ export function ShareSheet({ event, onClose }: {
     <Sheet
       label={title}
       onClose={onClose}
+      centerHeading
       data-share-sheet
-      heading={<h2 className="mt-0.5 text-lg font-bold text-gray-900">{title}</h2>}
+      heading={<h2 className="text-lg font-bold text-gray-900">{title}</h2>}
     >
       <ShareLink
         url={event ? eventShareUrl(event.id) : SITE_URL}

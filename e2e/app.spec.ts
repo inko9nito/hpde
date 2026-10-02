@@ -243,7 +243,8 @@ test('widget setup page offers the loader script', async ({ page }) => {
 })
 
 // Every share screen is the sheet a car is shared in (#411): up from the
-// bottom of the screen, the code to scan on top and the link under it.
+// bottom of the screen, its title centered, the code to scan under it and
+// the link under that.
 async function expectShareSheet(page: Page, sheet: Locator) {
   const qr = sheet.getByRole('img', { name: 'Code to scan for the link' })
   const link = sheet.getByRole('button', { name: 'Copy link' })
@@ -257,6 +258,16 @@ async function expectShareSheet(page: Page, sheet: Locator) {
   const qrBox = (await qr.boundingBox())!
   const linkBox = (await link.boundingBox())!
   expect(qrBox.y + qrBox.height).toBeLessThan(linkBox.y)
+  // The title is across the middle, over the code (#411).
+  const titleBox = (await sheet.getByRole('heading', { level: 2 }).boundingBox())!
+  const title = await sheet.getByRole('heading', { level: 2 }).evaluate(h => {
+    const range = document.createRange()
+    range.selectNodeContents(h)
+    const { left, width } = range.getBoundingClientRect()
+    return { center: left + width / 2 }
+  })
+  expect(titleBox.width).toBeGreaterThan(0)
+  expect(Math.abs(title.center - (qrBox.x + qrBox.width / 2))).toBeLessThan(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
