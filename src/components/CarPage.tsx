@@ -101,7 +101,8 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
 
 /**
  * An archived car (#410): when it was archived, that it's kept for its
- * events, and the way to put it back — or to delete it for good.
+ * events, and the way to put it back — or, if it never went to one, to
+ * delete it for good (#423).
  */
 function RemovedNotice({ car, events, onRestore, onDelete }: {
   car: Car
@@ -130,7 +131,7 @@ function RemovedNotice({ car, events, onRestore, onDelete }: {
       </p>
       {confirming ? (
         <div className="mt-3">
-          <p className="text-sm text-gray-700">Delete it for good? {events > 0 ? 'Your events keep their tire pressures, but not the car.' : ''}</p>
+          <p className="text-sm text-gray-700">Delete it for good?</p>
           <div className="mt-2 flex items-center gap-4 text-sm font-semibold">
             <button onClick={() => run('deleting', onDelete)} disabled={!!busy} className="text-red-600 hover:text-red-700 disabled:opacity-50">
               {busy === 'deleting' ? 'Deleting…' : 'Delete'}
@@ -147,7 +148,10 @@ function RemovedNotice({ car, events, onRestore, onDelete }: {
           >
             {busy === 'restoring' ? 'Putting it back…' : 'Put back in garage'}
           </button>
-          <button onClick={() => setConfirming(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">Delete for good</button>
+          {/* Driven at events, it's only ever archived (#423). */}
+          {events === 0 && (
+            <button onClick={() => setConfirming(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">Delete for good</button>
+          )}
         </div>
       )}
       {failure && <p role="alert" className="mt-2 text-xs text-red-700">{failure}</p>}

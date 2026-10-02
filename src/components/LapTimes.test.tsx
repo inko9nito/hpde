@@ -204,9 +204,9 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
         withCar(c => ({ ...c, log: (c.log ?? []).filter(e => e.id !== entryId) }))
         return json({ deleted: entryId })
       }
-      // As the function does (#410): one that went to events, or is shared, is kept.
+      // As the function does (#410): one that went to events, or is shared, is kept — any, when asked (#423).
       const car = garageData.cars.find(c => c.id === carId)
-      if (car && !car.archived && (Object.values(garageData.events).some(e => e.carId === carId) || (car.drivers?.length ?? 0) > 1)) {
+      if (car && !car.archived && (params.get('archive') === '1' || Object.values(garageData.events).some(e => e.carId === carId) || (car.drivers?.length ?? 0) > 1)) {
         return json({ car: withCar(c => ({ ...c, archived: '2026-10-02T12:00:00.000Z' })) })
       }
       if (carId) {
@@ -1762,9 +1762,9 @@ describe('the garage (#344)', () => {
     garageData = { cars: [cayman], events: {} }
     openWithGarage('#/garage/cayman')
     const page = await carPage('The Cayman')
-    // Edit, then Delete: it went to no events and isn't shared, so there's nothing to archive.
+    // It went to no events and isn't shared: Delete, as well as Archive.
     await userEvent.click(within(page).getByRole('button', { name: 'More actions' }))
-    expect(within(page).getAllByRole('menuitem').map(m => m.textContent)).toEqual(['Edit', 'Delete'])
+    expect(within(page).getAllByRole('menuitem').map(m => m.textContent)).toEqual(['Edit', 'Archive', 'Delete'])
     await userEvent.click(within(page).getByRole('menuitem', { name: 'Edit' }))
     const edit = screen.getByRole('dialog', { name: 'Edit car' })
     const torque = within(edit).getByRole('textbox', { name: /^Lug nut torque/ })
@@ -1803,7 +1803,7 @@ describe('the garage (#344)', () => {
     garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
     openWithGarage('#/garage/cayman')
     const page = await carPage('The Cayman')
-    // Archive, not Delete, from its "…" (#423).
+    // Archive, never Delete, once it's been to an event (#423).
     await userEvent.click(within(page).getByRole('button', { name: 'More actions' }))
     expect(within(page).getAllByRole('menuitem').map(m => m.textContent)).toEqual(['Edit', 'Archive'])
     await userEvent.click(within(page).getByRole('menuitem', { name: 'Archive' }))
@@ -1817,6 +1817,31 @@ describe('the garage (#344)', () => {
     expect(screen.getByRole('link', { name: /^Archived/ })).toHaveTextContent('Archived1')
     expect(screen.getByRole('link', { name: /^Archived/ })).toHaveAttribute('href', '#/garage/archived')
     expect(garageData.events[event.id].carId).toBe('cayman')
+    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&archive=1')
+  })
+
+  it('archives a car that went nowhere too, and only that one can be deleted for good once archived (#423)', async () => {
+    garageData = { cars: [cayman], events: {} }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    await carAction(page, 'Archive')
+    const ask = screen.getByRole('alertdialog', { name: 'Archive “The Cayman”?' })
+    expect(ask).toHaveTextContent('It leaves your garage, with its history. You can put it back.')
+    await userEvent.click(within(ask).getByRole('button', { name: 'Archive' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/garage'))
+    expect(screen.getByRole('status')).toHaveTextContent('Car archived')
+    expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&archive=1')
+    expect(garageData.cars).toEqual([expect.objectContaining({ id: 'cayman', archived: expect.any(String) })])
+    expect(screen.getByRole('link', { name: /^Archived/ })).toHaveTextContent('Archived1')
+
+    // Archived, it went to no events: it can go for good.
+    window.location.hash = '#/garage/cayman'
+    const archived = within(await carPage('The Cayman')).getByRole('region', { name: 'Archived' })
+    await userEvent.click(within(archived).getByRole('button', { name: 'Delete for good' }))
+    await userEvent.click(within(archived).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/garage'))
+    expect(screen.getByRole('status')).toHaveTextContent('Car deleted')
+    expect(garageData.cars).toEqual([])
   })
 
   it('lists the archived cars on a page of their own; one opens over it, and Back returns there (#410)', async () => {
@@ -1838,6 +1863,8 @@ describe('the garage (#344)', () => {
     expect(within(page).getByRole('region', { name: 'Archived' })).toHaveTextContent('Archived on Oct 2, 2026. It’s kept for the event you drove it at.')
     // Nothing to change on it till it's back.
     for (const name of ['More actions', /Share with another driver/, 'Add entry']) expect(within(page).queryByRole('button', { name })).not.toBeInTheDocument()
+    // It went to an event: never deleted, only archived (#423).
+    expect(within(page).queryByRole('button', { name: 'Delete for good' })).not.toBeInTheDocument()
     await userEvent.click(within(page).getByRole('button', { name: 'Put back in garage' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Back in your garage')
     expect(garageCalls('PUT')[0][0]).toContain('car=cayman&restore=1')

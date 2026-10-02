@@ -17,7 +17,9 @@ function archiveText(others: string | null, events: number): string {
       ? `It stays in ${others}’s garage, and ${went} ${events === 1 ? 'keeps' : 'keep'} it as it is now. You can put it back.`
       : `It stays in ${others}’s garage. You can put it back.`
   }
-  return `It leaves your garage but stays on ${went}, with its history. You can put it back.`
+  return events
+    ? `It leaves your garage but stays on ${went}, with its history. You can put it back.`
+    : 'It leaves your garage, with its history. You can put it back.'
 }
 
 /** What Delete asks first: what goes with it, of what it has. */
@@ -31,8 +33,9 @@ const ITEM = 'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left 
 
 /**
  * The "…" at the top right of a car's page (#423), as on an event's: Edit,
- * then Archive — for a car that went to events, or is shared, kept for them
- * out of the garage (#410) — or, for any other, Delete. Each asks first.
+ * Archive — any car, kept out of the garage, to be put back (#410) — and,
+ * for one that never went to an event and isn't shared, Delete. Each asks
+ * first.
  */
 export function CarOverflowMenu({ car, events, onEdit, onRemoved }: {
   car: Car
@@ -43,10 +46,10 @@ export function CarOverflowMenu({ car, events, onEdit, onRemoved }: {
   onRemoved: (archived: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  // Kept, as the garage function keeps it: driven at events, or shared.
+  const [confirming, setConfirming] = useState<'archive' | 'delete' | null>(null)
+  // Driven at events, or shared: only archived, never deleted.
   const shared = isShared(car)
-  const archives = events > 0 || shared
+  const deletable = !events && !shared
 
   useEffect(() => {
     if (!open) return
@@ -80,13 +83,12 @@ export function CarOverflowMenu({ car, events, onEdit, onRemoved }: {
               Edit
             </button>
             <div role="separator" className="mx-3 my-1 h-px bg-gray-100" />
-            {archives ? (
-              <button role="menuitem" onClick={() => { setOpen(false); setConfirming(true) }} className={`${ITEM} text-gray-900`}>
-                <Archive size={16} aria-hidden="true" className="shrink-0" />
-                Archive
-              </button>
-            ) : (
-              <button role="menuitem" onClick={() => { setOpen(false); setConfirming(true) }} className={`${ITEM} text-red-600 hover:bg-red-50`}>
+            <button role="menuitem" onClick={() => { setOpen(false); setConfirming('archive') }} className={`${ITEM} text-gray-900`}>
+              <Archive size={16} aria-hidden="true" className="shrink-0" />
+              Archive
+            </button>
+            {deletable && (
+              <button role="menuitem" onClick={() => { setOpen(false); setConfirming('delete') }} className={`${ITEM} text-red-600 hover:bg-red-50`}>
                 <Trash2 size={16} aria-hidden="true" className="shrink-0" />
                 Delete
               </button>
@@ -98,12 +100,12 @@ export function CarOverflowMenu({ car, events, onEdit, onRemoved }: {
       {confirming && (
         <RemoveCarDialog
           car={car}
-          archives={archives}
-          text={archives ? archiveText(shared ? othersText(car) : null, events) : deleteText(car)}
-          onCancel={() => setConfirming(false)}
+          archives={confirming === 'archive'}
+          text={confirming === 'archive' ? archiveText(shared ? othersText(car) : null, events) : deleteText(car)}
+          onCancel={() => setConfirming(null)}
           onRemoved={() => {
-            setConfirming(false)
-            onRemoved(archives)
+            setConfirming(null)
+            onRemoved(confirming === 'archive')
           }}
         />
       )}
@@ -126,7 +128,7 @@ function RemoveCarDialog({ car, archives, text, onCancel, onRemoved }: {
     setError(null)
     setBusy(true)
     try {
-      await garage.removeCar(car.id)
+      await garage.removeCar(car.id, { archive: archives })
       onRemoved()
     } catch (err) {
       setError((err as Error).message)
