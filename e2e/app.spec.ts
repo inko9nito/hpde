@@ -899,6 +899,8 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await page.getByRole('button', { name: /^Add instructor evaluation/ }).click()
   const card = page.getByRole('dialog', { name: 'Instructor evaluation' })
   await expect(card).toContainText('You drove inBlue')
+  // They drove in Blue: Blue's report card, with its own skills (#350).
+  await expect(card.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
   await card.getByLabel('Instructor', { exact: true }).fill('John Harms')
   // Picked from a menu of run group badges, which stays on screen.
   await card.getByRole('button', { name: 'Same track & direction: none' }).click()
@@ -908,7 +910,9 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(page.viewportSize()!.width)
   await menu.getByRole('option', { name: 'Green' }).click()
   await expect(card.getByRole('button', { name: 'Same track & direction: Green' })).toBeVisible()
-  await card.getByLabel('Calls out all flags').fill('65')
+  // Blue's card says how they'd run in it, and can name a second group.
+  await card.getByRole('combobox', { name: 'Same track & direction: how' }).selectOption('Part-time solo')
+  await card.getByLabel('Acknowledges all flags early').fill('65')
   await card.getByLabel('Instructor notes').fill('Very smooth; got faster as the day went on.')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await card.getByRole('button', { name: 'Save evaluation' }).click()
@@ -916,8 +920,8 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
 
   const report = page.getByRole('region', { name: 'Instructor evaluation' })
   await expect(report).toContainText('John Harms')
-  await expect(report).toContainText('Same track & directionGreen')
-  await expect(report.getByRole('listitem', { name: 'Calls out all flags: 65%' })).toBeVisible()
+  await expect(report).toContainText('Same track & directionGreenPart-time solo')
+  await expect(report.getByRole('listitem', { name: 'Acknowledges all flags early: 65%' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'My notes (2)' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })

@@ -156,16 +156,18 @@ export interface AllNotes {
 /**
  * Every event's notes (#345), for the Instructor evaluations page: the
  * signed-in driver's own, or the test account's while an admin has
- * switched to it (#309). Fetched while `active`.
+ * switched to it (#309) — or the driver an admin picked on an event's page
+ * (`driverId`, #350). Fetched while `active`.
  */
-export function useAllNotes(active: boolean): AllNotes {
+export function useAllNotes(active: boolean, driverId: string | null = null): AllNotes {
   const { status: authStatus, authedFetch, testAccount } = useAuth()
   const signedIn = authStatus === 'signed-in'
   const on = signedIn && active
   const [loaded, setLoaded] = useState<{ url: string; events: EventNotes[] } | null>(null)
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const url = `${NOTES_URL}${testAccount ? `?driver=${encodeURIComponent(TEST_DRIVER_ID)}` : ''}`
+  const who = driverId ?? (testAccount ? TEST_DRIVER_ID : null)
+  const url = `${NOTES_URL}${who ? `?driver=${encodeURIComponent(who)}` : ''}`
 
   useEffect(() => {
     if (!signedIn) {

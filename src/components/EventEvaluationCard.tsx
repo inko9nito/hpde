@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { CarFront, ChevronRight, ClipboardCheck, Flag, UserRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { NEXT_GROUPS, TDE_GROUP_NAMES, TDE_SKILLS } from '../utils/evaluation'
+import { INSTRUCTED, NEXT_GROUPS, NEXT_HOW, TDE_GROUP_NAMES, aggressivenessText, carAidsText, cardOf } from '../utils/evaluation'
 import type { EventEvaluation } from '../utils/evaluation'
 import { suggestColor } from '../utils/scheduleEditor'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -53,21 +53,25 @@ function Row({ icon: Icon, label, children }: { icon?: LucideIcon; label: string
 /**
  * The instructor's evaluation of the whole event (#340), on My notes: who
  * they were and their notes. On a TDE event it's The Drivers Edge's report
- * card, which also has the car, the run group they drove in and the ones
+ * card — the run group's card it was entered on (#350), in that card's
+ * words — which also has the car, the run group they drove in and the ones
  * the instructor recommends next, and a score for each core skill — in
  * black, not TDE's red, which reads as bad marks. Only what's filled in
  * shows.
  */
-export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
+export function EventEvaluationCard({ evaluation, tde = false, runGroup, events, onEdit }: {
   evaluation: EventEvaluation
+  /** A TDE event's: which run group's report card it's on. */
+  tde?: boolean
   /** The group they drove in at this event, if the app knows it. */
   runGroup?: RunGroupConfig | null
   /** Every event, to color the recommended groups as the app does. */
   events: EventConfig[]
   onEdit?: () => void
 }) {
-  const { instructor, car, next, skills, aggressivenessIsSkill, carAidsPct, notes } = evaluation
-  const scored = TDE_SKILLS.filter(s => skills?.[s.id] !== undefined)
+  const { instructor, instructed, car, escTc, next, nextHow, nextOr, skills, aggressivenessIsSkill, carAidsPct, soloQualified, notes } = evaluation
+  const card = cardOf(evaluation)
+  const scored = card.skills.filter(s => skills?.[s.id] !== undefined)
   const recommended = NEXT_GROUPS.filter(g => next?.[g.id])
   return (
     <section aria-label="Instructor evaluation" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm" data-event-evaluation>
@@ -76,10 +80,13 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
         <ClipboardCheck size={18} className="mt-1 shrink-0 text-gray-900" aria-hidden="true" />
       </div>
 
-      {(instructor || car || runGroup) && (
+      {(tde || instructor || car || runGroup) && (
         <dl className="mt-2">
+          {tde && <Row icon={ClipboardCheck} label="Report card"><GroupBadge group={groupNamed(card.group, events)} size="sm" /></Row>}
           {instructor && <Row icon={UserRound} label="Instructor">{instructor}</Row>}
+          {instructed && <Row label="Instructed">{INSTRUCTED.find(i => i.id === instructed)?.label}</Row>}
           {car && <Row icon={CarFront} label="Car">{car}</Row>}
+          {escTc && <Row label="ESP / traction control">{escTc}</Row>}
           {runGroup && <Row icon={Flag} label="Run group"><GroupBadge group={runGroup} size="sm" /></Row>}
         </dl>
       )}
@@ -88,11 +95,23 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
         <div className="mt-4">
           <h4 className="text-sm font-semibold text-gray-900">Recommended run group</h4>
           <dl className="mt-1">
-            {recommended.map(g => (
-              <Row key={g.id} label={g.label}>
-                <GroupBadge group={groupNamed(next![g.id]!, events)} size="sm" />
-              </Row>
-            ))}
+            {recommended.map(g => {
+              const how = NEXT_HOW.find(h => h.id === nextHow?.[g.id])
+              const or = nextOr?.[g.id]
+              return (
+                <Row key={g.id} label={g.label}>
+                  {/* "Blue · Part-time solo, or Yellow" (#350). */}
+                  <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1">
+                    <GroupBadge group={groupNamed(next![g.id]!, events)} size="sm" />
+                    {how && <span className="text-sm text-gray-900">{how.label}</span>}
+                    {or && (<>
+                      <span className="text-xs text-gray-500">or</span>
+                      <GroupBadge group={groupNamed(or, events)} size="sm" />
+                    </>)}
+                  </span>
+                </Row>
+              )
+            })}
           </dl>
         </div>
       )}
@@ -120,13 +139,16 @@ export function EventEvaluationCard({ evaluation, runGroup, events, onEdit }: {
         </div>
       )}
 
-      {(aggressivenessIsSkill !== undefined || carAidsPct !== undefined) && (
+      {(aggressivenessIsSkill !== undefined || carAidsPct !== undefined || soloQualified !== undefined) && (
         <dl className="mt-3">
           {aggressivenessIsSkill !== undefined && (
-            <Row label="Aggressiveness = skill">{aggressivenessIsSkill ? 'Yes' : 'No'}</Row>
+            <Row label="Aggressiveness = skill">{aggressivenessText(aggressivenessIsSkill)}</Row>
           )}
           {carAidsPct !== undefined && (
-            <Row label="Car aids over activated"><span className="tabular-nums">{carAidsPct}%</span></Row>
+            <Row label={card.carAidsLabel}><span className="tabular-nums">{carAidsText(carAidsPct, card)}</span></Row>
+          )}
+          {soloQualified !== undefined && (
+            <Row label={`${card.group} part-time solo qualified`}>{soloQualified ? 'Yes' : 'No'}</Row>
           )}
         </dl>
       )}

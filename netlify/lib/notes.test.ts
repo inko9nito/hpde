@@ -107,6 +107,19 @@ describe('notes function (#340)', () => {
     expect(Object.keys(evaluation.skills)).toEqual(['flags', 'passing'])
   })
 
+  it('saves a Blue run group’s report card with its own skills and fields, and says it’s Blue’s (#350)', async () => {
+    const blue = {
+      card: 'blue', instructor: 'Brett Gabriel', instructed: 'partTime', escTc: 'On',
+      next: { sameTrack: 'Yellow', newTrack: 'Blue' }, nextHow: { newTrack: 'partTime' }, nextOr: { newTrack: 'Yellow' },
+      skills: { flags: 95, exits: 95, offline: 95 }, aggressivenessIsSkill: 'tooAggressive', carAidsPct: 25, soloQualified: true,
+    }
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: blue } })).status).toBe(200)
+    expect((await notesOf('vera-token')).evaluation).toMatchObject(blue)
+    // A card the app doesn't know, or Green's answer it can't give.
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: { ...blue, card: 'orange' } } })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', body: { evaluation: { ...reportCard, aggressivenessIsSkill: 'tooAggressive' } } })).status).toBe(400)
+  })
+
   it('keeps the report card and the sessions’ evaluations side by side', async () => {
     await call('PUT', { token: 'vera-token', body: { evaluation: reportCard } })
     await call('PUT', { token: 'vera-token', body: { session: session2 } })
