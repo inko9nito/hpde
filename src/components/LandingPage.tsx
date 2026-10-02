@@ -12,6 +12,7 @@ import { EventCalendar } from './EventCalendar'
 import { Footer } from './Footer'
 import { FadedTrack, TrackIcon } from './TrackIcon'
 import { HomeHeader } from './HomeTabs'
+import { HomeScreenBanner } from './HomeScreenBanner'
 import { StatusBadge } from './EventHeader'
 import { GroupBadge } from './GroupBadge'
 import type { EventConfig, RunGroupConfig } from '../types'
@@ -274,6 +275,9 @@ export function LandingPage({ onOpenEvent }: Props) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Across the top, above the title, as the App Store's banner sits
+          on a site (#379). */}
+      <HomeScreenBanner />
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="HPDE Events">
           {/* List / calendar, under the title (#273), then All / My
