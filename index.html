@@ -38,6 +38,10 @@
         display: grid;
         place-items: center;
         color: #111827;
+        /* Safari 26 tints the status bar from a fixed element at the top
+           edge (src/utils/chromeColor.ts): the page's gray from the first
+           frame, rather than whatever it makes of a see-through one. */
+        background: #f9fafb;
       }
       .boot-loader svg {
         width: 56px;
