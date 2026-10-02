@@ -15,3 +15,10 @@
   status = 200
 
 # /api/events and /api/events.json are routed by their functions' own `config.path`.
+
+# Netlify doesn't know the .webmanifest extension and serves it as
+# application/octet-stream. Label it as the web app manifest it is (#375).
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"

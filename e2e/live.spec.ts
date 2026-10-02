@@ -58,6 +58,13 @@ test('the widget script and its loader are served, as in the repo (#351)', async
   }
 })
 
+test('the web app manifest is served as one, as in the repo (#375)', async ({ request }) => {
+  const res = await request.get('/manifest.webmanifest')
+  expect(res.status()).toBe(200)
+  expect(res.headers()['content-type']).toContain('application/manifest+json')
+  expect(await res.json()).toEqual(JSON.parse(fs.readFileSync(path.join('public', 'manifest.webmanifest'), 'utf8')))
+})
+
 test('/api/events refuses to save a schedule without sign-in', async ({ request }) => {
   // Refused at the sign-in check, so this changes nothing.
   const res = await request.put('/api/events?id=test-live', { data: { schedule: '## groups\n' } })
