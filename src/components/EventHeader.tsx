@@ -72,8 +72,6 @@ interface Props {
   onRunGroup?: (id: string) => void
   onBack: () => void
   onDeleted: () => void
-  /** Admins only: Switch driver, in the "…" menu (#362). */
-  switchDriver?: { driver: string | null; onOpen: () => void }
   /** The page's scroll container — drives the collapse. */
   scrollRef: RefObject<HTMLElement | null>
 }
@@ -99,7 +97,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, switchDriver, scrollRef }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -134,7 +132,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
               compact title stays centred and the "…" lines up with the
               content's right edge. */}
           <div className="-mr-3 flex h-9 w-9 shrink-0 justify-end">
-            <EventOverflowMenu event={event} onDeleted={onDeleted} switchDriver={switchDriver} />
+            <EventOverflowMenu event={event} onDeleted={onDeleted} />
           </div>
         </div>
       </div>

@@ -33,12 +33,10 @@ import { CarPage, carHash, carIdFromHash } from './components/CarPage'
 import type { HomeTab } from './components/HomeTabs'
 import { EvaluationsPage, latestCard } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
-import { DriverPicker, SwitchDriverSheet } from './components/DriverPicker'
 import { ActingBanner } from './components/ActingBanner'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useAllNotes, useNotesLog } from './data/notesLog'
 import { isTdeEvent } from './utils/evaluation'
-import { driverName } from './data/drivers'
 import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
@@ -256,13 +254,10 @@ export default function App() {
   // The event a car is being added from, on its own page over the event (#344).
   // A new page each time (see CarPage).
   const [addingCarFor, setAddingCarFor] = useState<{ eventId: string; n: number } | null>(null)
-  // Switch driver's sheet, from the event's "…" menu (#362).
-  const [driverSheetOpen, setDriverSheetOpen] = useState(false)
-  const isAdminUser = authStatus === 'signed-in' && !!user?.roles.includes(ADMIN_ROLE)
   // Another driver an admin is acting as (#396), everywhere: the lap
   // times, notes, answers and garage every page shows are theirs (the data
-  // hooks follow them on their own), and the schedule says whose laps it
-  // marks. Not the test account, which needs no saying.
+  // hooks follow them on their own); the banner says who, and the menu
+  // switches (#399). Not the test account, which needs no saying.
   const driver = actingAs && !testAccount ? actingAs : null
   const [toast, setToast] = useState<ToastMessage | null>(null)
   function showToast(text: string) {
@@ -467,9 +462,6 @@ export default function App() {
   const activeLayoutSlug = layoutSlug(activeEvent)
   const trackLink = activeLayout && activeLayoutSlug ? { name: activeLayout, href: trackHash(activeLayoutSlug) } : undefined
 
-  // Who an admin is acting as (#396), to switch from the laps and My notes.
-  const driverPicker = isAdminUser ? <DriverPicker /> : undefined
-
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!isToday) return
@@ -491,7 +483,6 @@ export default function App() {
     setLapSlot(null)
     setEvaluationOpen(false)
     setCarSheetOpen(false)
-    setDriverSheetOpen(false)
   }
 
   function switchEvent(event: EventConfig) {
@@ -628,7 +619,6 @@ export default function App() {
             showToast(`“${activeEvent.name}” deleted`)
             goHome()
           }}
-          switchDriver={isAdminUser ? { driver: actingAs ? driverName(actingAs) : null, onOpen: () => setDriverSheetOpen(true) } : undefined}
           scrollRef={pushScrollRef}
         />
 
@@ -675,11 +665,6 @@ export default function App() {
                   onSelect={setActiveDayId}
                   todayDayId={todayDay?.id}
                 />
-              )}
-
-              {/* Someone else's laps on show (#288): say whose, and let the admin switch back. */}
-              {driver && driverPicker && (
-                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>
               )}
 
               {/* Filters */}
@@ -734,8 +719,6 @@ export default function App() {
               layoutBest={layoutBest}
               allTimeBest={allTimeBest}
               track={trackLink}
-              // Picked from the "…" menu (#362); here only while it's someone else's, to say whose and switch back.
-              driverPicker={driver ? driverPicker : undefined}
               runGroup={evaluationGroup}
               events={ALL_EVENTS}
               onEdit={(session, view) => setLapSlot({
@@ -896,7 +879,6 @@ export default function App() {
           if (trackLink) setHash(trackLink.href)
         }}
         driver={driver}
-        driverPicker={driverPicker}
         loading={lapLog.status === 'loading' || notesLog.status === 'loading'}
         onSave={async session => {
           // With laps, they drove it: "Drove", in this group or a later one's (#377).
@@ -937,9 +919,6 @@ export default function App() {
         } : undefined}
         onClose={() => setLapSlot(null)}
       />
-    )}
-    {driverSheetOpen && isAdminUser && user && isOnEventRoute && !routeMissing && (
-      <SwitchDriverSheet onClose={() => setDriverSheetOpen(false)} />
     )}
     {carSheetOpen && garageOn && isOnEventRoute && !routeMissing && (
       <EventCarSheet

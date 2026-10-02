@@ -724,13 +724,23 @@ describe('lap times (#210)', () => {
 })
 
 
-// Switch driver, in the event's "…" menu (#362): whose notes are showing.
+// Switch driver (#396): from the menu, the one place to pick it (#399),
+// then back to the page it was picked from; back to "Me" is the banner's
+// Switch back, on every page.
 async function switchDriver(name: string) {
-  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
-  await userEvent.click(screen.getByRole('menuitem', { name: /^Switch driver/ }))
+  if (name === 'Me') {
+    await userEvent.click(within(screen.getByRole('region', { name: 'Acting as' })).getByRole('button', { name: 'Switch back' }))
+    expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
+    return
+  }
+  const back = window.location.hash
+  window.location.hash = '#/'
+  await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
   const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
   await userEvent.click(await within(sheet).findByRole('radio', { name }))
   expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+  window.location.hash = back
 }
 
 describe('an admin logging another driver’s lap times (#288)', () => {
@@ -739,18 +749,27 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   })
   beforeEach(() => { roles = ['admin'] })
 
-  it('picks the driver in the sheet, and saves the laps as theirs', async () => {
+  it('switches driver only from the menu: no picker on the event, its "…" menu, the schedule or the sheet (#399)', async () => {
     openEvent()
+    await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
+    expect(screen.queryByRole('menuitem', { name: /^Switch driver/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+
+    await switchDriver('Jason')
+    await tapSession('Lap times: 11:45 AM, Blue')
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('tab', { name: /^My notes/ }))
+    expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+  })
+
+  it('saves the laps as the driver switched to', async () => {
+    openEvent()
+    await switchDriver('Jason')
     await tapSession('Lap times: 11:45 AM, Blue')
     const sheet = screen.getByRole('dialog')
-    const picker = within(sheet).getByLabelText('Driver')
-    expect(picker).toHaveValue('')
-    // The admin is "Me"; then the test account, and everyone else by name (#396).
-    await waitFor(() => expect(within(picker).getAllByRole('option').map(o => o.textContent)).toEqual(['Me', 'Test account', 'Jason']))
-    expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
-
-    await userEvent.selectOptions(picker, 'Jason')
-    // Worded as he'd see it (#364): only the picker says it's his.
+    // Worded as he'd see it (#364): only the banner says it's his.
     expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
     const box = await within(sheet).findByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
@@ -763,64 +782,50 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     expect(jasonSaved.map(s => s.key)).toEqual(['2026-03-07 11:45 blue'])
     expect(saved).toEqual([])
 
-    // The schedule says whose laps it's marking, and switches back.
+    // The schedule marks his laps, and the admin's own again on switching back.
     expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
-    const banner = screen.getByLabelText('Driver')
-    expect(banner).toHaveValue(JASON)
-    await userEvent.selectOptions(banner, 'Me')
-    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Me')
     expect(await screen.findByRole('button', { name: 'Lap times: 11:45 AM, Blue' })).toBeInTheDocument()
   })
 
-  it('keeps what’s been pasted when the driver is picked after', async () => {
-    openEvent()
-    await tapSession('Lap times: 11:45 AM, Blue')
-    const sheet = screen.getByRole('dialog')
-    fireEvent.change(within(sheet).getByLabelText('Lap times or timestamps'), { target: { value: '1:24.5' } })
-    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
-    expect(within(sheet).getByLabelText('Lap times or timestamps')).toHaveValue('1:24.5')
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
-    await waitFor(() => expect(jasonSaved).toHaveLength(1))
-    expect(saved).toEqual([])
-  })
-
-  it('shows the picked driver’s saved laps, and yours again on switching back', async () => {
+  it('shows the switched-to driver’s saved laps, and yours again on switching back', async () => {
     saved = [blue2(99_420)]
     jasonSaved = [blue2(84_420)]
     openEvent()
+    const savedLaps = () => rows(within(screen.getByRole('dialog')).getByRole('region', { name: 'Saved laps' }))[1]
     await tapSession('Lap times: 11:45 AM, Blue (saved)')
-    const sheet = screen.getByRole('dialog')
-    const savedLaps = () => rows(within(sheet).getByRole('region', { name: 'Saved laps' }))[1]
     expect(savedLaps()).toEqual(['1', '1:39.42'])
+    await userEvent.keyboard('{Escape}')
 
-    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
+    await switchDriver('Jason')
+    await userEvent.click(await screen.findByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' }))
+    await openInSheet('Lap times')
     await waitFor(() => expect(savedLaps()).toEqual(['1', '1:24.42']))
-    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), 'Me')
+    await userEvent.keyboard('{Escape}')
+
+    await switchDriver('Me')
+    await userEvent.click(await screen.findByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' }))
+    await openInSheet('Lap times')
     await waitFor(() => expect(savedLaps()).toEqual(['1', '1:39.42']))
   })
 
-  it('lists the picked driver’s laps on My notes', async () => {
+  it('lists the switched-to driver’s laps on My notes', async () => {
     saved = [blue2(99_000)]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
-    // Their own notes: no picker over them; it's in the "…" menu (#362).
-    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
     await switchDriver('Jason')
+    await userEvent.click(await screen.findByRole('tab', { name: /^My notes/ }))
     expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
-    // Someone else's: it says whose, and switches back.
-    expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
-    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
-    expect(screen.getByRole('menuitem', { name: /^Switch driver/ })).toHaveTextContent('Showing Jason')
-    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
-    // Otherwise worded as he'd see it (#364).
+    // Worded as he'd see it (#364): only the banner says whose.
+    expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('Acting as Jason')
     expect(screen.getByText('On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.')).toBeInTheDocument()
     expect(screen.getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     // Picked again, they're fetched afresh.
     jasonSaved = [blue2(84_000)]
-    await userEvent.selectOptions(screen.getByLabelText('Driver'), 'Me')
-    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await switchDriver('Me')
     await switchDriver('Jason')
+    await userEvent.click(await screen.findByRole('tab', { name: /^My notes/ }))
     expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
     expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:24')
 
@@ -835,7 +840,6 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     // Its Switch back is back to the admin's own, everywhere.
     await userEvent.click(within(banner).getByRole('button', { name: 'Switch back' }))
     expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
     await waitFor(() => expect(earlier()).toHaveLength(2))
     expect(String(earlier()[1][0])).not.toContain('driver=')
   })
@@ -1428,8 +1432,8 @@ describe('a track page: the events on one layout (#274)', () => {
     roles = ['admin']
     jasonSaved = [at('2026-03-07', '11:45', 2, [84_420])]
     openEvent()
-    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     await switchDriver('Jason')
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     await userEvent.click(await screen.findByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
 
     const page = await trackPage()
@@ -1443,7 +1447,8 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
 
     await userEvent.click(await card('Lap Day'))
-    expect(screen.getByLabelText('Driver')).toHaveValue(JASON)
+    expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('Acting as Jason')
+    expect(String(lapCalls('GET').at(-1)![0])).toContain(`driver=${JASON}`)
   })
 })
 
@@ -1899,13 +1904,10 @@ describe('the garage (#344)', () => {
   it('offers another driver’s tire pressures, from their garage (#362)', async () => {
     roles = ['admin']
     openWithGarage(`#/event/${event.id}`)
-    await tapSession('Lap times: 11:45 AM, Blue', null)
-    const sheet = screen.getByRole('dialog')
-    const nav0 = within(sheet).getByRole('navigation', { name: 'Session info' })
-    expect(within(nav0).getByRole('button', { name: /^Tire pressures/ })).toBeInTheDocument()
-    await userEvent.selectOptions(within(sheet).getByLabelText('Driver'), await within(sheet).findByRole('option', { name: 'Jason' }))
+    await switchDriver('Jason')
     await waitFor(() => expect(garageCalls('GET').some(([url]) => String(url).includes(`driver=${JASON}`))).toBe(true))
-    const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
+    await tapSession('Lap times: 11:45 AM, Blue', null)
+    const nav = within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })
     expect(within(nav).getByRole('button', { name: /^Tire pressures/ })).toBeInTheDocument()
   })
 
