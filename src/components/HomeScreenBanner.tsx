@@ -1,17 +1,18 @@
 import { useState } from 'react'
-import type { ReactNode } from 'react'
-import { Ellipsis, Share, SquarePlus, X } from 'lucide-react'
-import { Sheet } from './Sheet'
+import { Ellipsis, Share, X } from 'lucide-react'
 
 // The Add to Home Screen banner (#379). iOS has no native one for a site
 // (Chrome's install prompt is Android and desktop only), and no way for a
-// page to add itself, so this card points the way: Share, then Add to Home
+// page to add itself, so this strip points the way: Share, then Add to Home
 // Screen. Since #378 that gives an app that opens full screen.
 //
-// Inside the Home Screen app the card never shows. In Safari it can't tell
+// It looks like the App Store's banner at the top of a site (✕, icon, name),
+// with the steps in place of the store's button: there's no button that
+// could add the app, only Safari's Share menu.
+//
+// Inside the Home Screen app the strip never shows. In Safari it can't tell
 // whether the app is already on the Home Screen (the two keep separate
-// storage, and iOS doesn't say), so it says what to do if it is, and ✕
-// puts it away for good in that browser.
+// storage, and iOS doesn't say), so ✕ puts it away for good in that browser.
 
 export const DISMISSED_KEY = 'hpde:homeScreenBannerDismissed'
 
@@ -30,6 +31,17 @@ export function isIos(userAgent = navigator.userAgent, maxTouchPoints = navigato
   return /Macintosh/.test(userAgent) && maxTouchPoints > 1
 }
 
+/**
+ * Safari on an iPhone running iOS 26 or later, whose toolbar keeps Share
+ * under ⋯. Its user agent still says iOS 18, so go by Safari's version.
+ * Chrome and the other iOS browsers name themselves and keep Share in view.
+ */
+export function shareIsUnderMore(userAgent = navigator.userAgent): boolean {
+  if (!/iPhone/.test(userAgent) || /CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent)) return false
+  const version = /Version\/(\d+)/.exec(userAgent)
+  return version !== null && Number(version[1]) >= 26
+}
+
 function wasDismissed(): boolean {
   try {
     return localStorage.getItem(DISMISSED_KEY) !== null
@@ -38,9 +50,21 @@ function wasDismissed(): boolean {
   }
 }
 
+// In iOS's blue, as Safari draws the Share button: the glyph to look for in
+// the toolbar.
+function ShareGlyph({ named }: { named: boolean }) {
+  return (
+    <Share
+      size={15}
+      strokeWidth={2.25}
+      className="inline align-[-2px] text-[#0A84FF]"
+      {...(named ? { 'aria-label': 'Share' } : { 'aria-hidden': true })}
+    />
+  )
+}
+
 export function HomeScreenBanner() {
   const [shown, setShown] = useState(() => isIos() && !isHomeScreenApp() && !wasDismissed())
-  const [howOpen, setHowOpen] = useState(false)
   if (!shown) return null
 
   function dismiss() {
@@ -53,60 +77,39 @@ export function HomeScreenBanner() {
   }
 
   return (
-    <section aria-label="Add to Home Screen" className="mb-8 flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-[0_1px_2px_rgba(17,24,39,0.04),0_4px_12px_rgba(17,24,39,0.05)]">
-      <img src="/apple-touch-icon.png" alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-[11px]" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900">Add HPDE to your Home Screen</p>
-        <p className="mt-0.5 text-xs text-gray-500">
-          It opens full screen, like an app. Already added it? Open it from your Home Screen.
-        </p>
+    <section aria-label="Add to Home Screen" className="bg-gray-900 pt-[env(safe-area-inset-top)] text-white">
+      <div className="mx-auto flex max-w-lg items-center gap-2.5 py-3 pl-1 pr-3 sm:pr-4">
         <button
-          onClick={() => setHowOpen(true)}
-          className="mt-2 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-700"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-500 transition-colors hover:text-gray-300"
         >
-          Show me how
+          <X size={18} />
         </button>
+        <img
+          src="/apple-touch-icon.png"
+          alt=""
+          width={56}
+          height={56}
+          className="h-14 w-14 shrink-0 rounded-[13px] ring-1 ring-white/15"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-tight">Get the HPDE app</p>
+          <p className="mt-1 text-[13px] leading-snug text-gray-400">
+            {shareIsUnderMore() ? (
+              <>
+                Tap <Ellipsis size={15} strokeWidth={2.25} className="inline align-[-3px] text-white" aria-label="More" />,
+                then <ShareGlyph named={false} /> <span className="text-white">Share</span>,
+                then <span className="text-white">“Add to Home Screen”</span>
+              </>
+            ) : (
+              <>
+                Tap <ShareGlyph named /> then <span className="text-white">“Add to Home Screen”</span>
+              </>
+            )}
+          </p>
+        </div>
       </div>
-      <button
-        onClick={dismiss}
-        aria-label="Dismiss"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-      >
-        <X size={16} strokeWidth={2.5} />
-      </button>
-      {howOpen && (
-        <Sheet
-          label="Add to Home Screen"
-          onClose={() => setHowOpen(false)}
-          heading={<h2 className="text-lg font-bold text-gray-900">Add to Home Screen</h2>}
-        >
-          <ol className="mt-4 space-y-4 pb-2">
-            <HowStep n={1} icon={<Share size={18} />}>
-              Tap <strong>Share</strong>. In Safari on iOS 26, tap <Ellipsis size={14} className="inline align-[-2px]" aria-label="More" /> first.
-            </HowStep>
-            <HowStep n={2} icon={<SquarePlus size={18} />}>
-              Tap <strong>Add to Home Screen</strong>. You may need to scroll down to find it.
-            </HowStep>
-            <HowStep n={3} icon={<img src="/apple-touch-icon.png" alt="" className="h-[18px] w-[18px] rounded-[4px]" />}>
-              Tap <strong>Add</strong>, then open HPDE from your Home Screen.
-            </HowStep>
-          </ol>
-        </Sheet>
-      )}
     </section>
-  )
-}
-
-function HowStep({ n, icon, children }: { n: number; icon: ReactNode; children: ReactNode }) {
-  return (
-    <li className="flex items-center gap-3">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-100 text-gray-700" aria-hidden="true">
-        {icon}
-      </span>
-      <p className="text-sm text-gray-700">
-        <span className="sr-only">Step {n}: </span>
-        {children}
-      </p>
-    </li>
   )
 }

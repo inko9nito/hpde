@@ -12,7 +12,7 @@ export const test = base.extend<{ pageErrors: string[]; homeScreenBanner: boolea
     },
     { auto: true },
   ],
-  // The Add to Home Screen card (#379) sits over the events on an iPhone
+  // The Add to Home Screen strip (#379) runs across the top on an iPhone
   // until it's dismissed. Tests start with it dismissed, so the iPhone and
   // Chromium runs see the same page; its own tests turn this on.
   homeScreenBanner: [false, { option: true }],
