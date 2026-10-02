@@ -109,6 +109,17 @@ the live checks from here, but page loads through the proxy are flaky
 (`ERR_TOO_MANY_RETRIES`) — treat CI's run as the verdict, not the
 sandbox's.
 
+## Screenshots render in Inter, not San Francisco (#386)
+
+The iPhone's font (SF Pro) can't be redistributed or downloaded here, so
+the cloud session's SessionStart hook (`.claude/hooks/session-start.sh`)
+installs Inter, the closest free match, and points fontconfig's
+`system-ui` and `sans-serif` at it. The app's text then renders in Inter
+in the sandbox's Chromium. Inter is a touch wider than SF, so text that
+fits in a screenshot fits on the phone; text that wraps in a screenshot
+may still fit on the phone. Sandbox only: CI and the live site are
+unchanged, and the widget simulator keeps its Nunito stand-in.
+
 ## Handing the widget script back to the user
 
 The user runs a small paste-once loader (`scripts/hpde-widget-loader.js`)
