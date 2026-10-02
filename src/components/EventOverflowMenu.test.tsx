@@ -103,10 +103,9 @@ describe('deleting an event from the header menu (#229, #216, #232)', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }))
 
     expect(window.location.hash).toBe(`#/event/${created.id}/share`)
-    // The same sheet a car is shared in (#411): the event's name over its title.
+    // The same sheet a car is shared in (#411).
     const sheet = await screen.findByRole('dialog', { name: 'Share this event' })
     expect(within(sheet).getByRole('heading', { level: 2, name: 'Share this event' })).toBeInTheDocument()
-    expect(sheet).toHaveTextContent(created.name)
     expect(within(sheet).getByRole('button', { name: 'Copy link' })).toHaveTextContent(`https://myhpde.netlify.app/#/event/${created.id}`)
     // The event page stays open underneath, and ✕ goes back to it.
     expect(screen.getByRole('heading', { level: 1, name: created.name })).toBeInTheDocument()

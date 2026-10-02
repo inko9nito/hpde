@@ -33,25 +33,16 @@ export function ShareSheet({ event, onClose }: {
   onClose: () => void
 }) {
   const title = event ? 'Share this event' : 'Share this app'
-  const name = event ? event.name : 'HPDE Events'
   return (
     <Sheet
       label={title}
       onClose={onClose}
       data-share-sheet
-      heading={<>
-        {name && <p className="text-xs text-gray-500">{name}</p>}
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">{title}</h2>
-      </>}
+      heading={<h2 className="mt-0.5 text-lg font-bold text-gray-900">{title}</h2>}
     >
-      <p className="mt-2 text-sm text-gray-600">
-        {event
-          ? 'Send this link so others can see this event’s schedule.'
-          : 'Send this link so others can see the schedules.'}
-      </p>
       <ShareLink
         url={event ? eventShareUrl(event.id) : SITE_URL}
-        shareTitle={name ?? 'HPDE Events'}
+        shareTitle={event?.name ?? 'HPDE Events'}
       />
     </Sheet>
   )

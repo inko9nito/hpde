@@ -54,15 +54,8 @@ export function ShareCarSheet({ car, invite, onClose }: {
       label="Share this car"
       onClose={onClose}
       data-share-car-sheet
-      heading={<>
-        <p className="text-xs text-gray-500">{carName(car)}</p>
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">Share this car</h2>
-      </>}
+      heading={<h2 className="mt-0.5 text-lg font-bold text-gray-900">Share this car</h2>}
     >
-      <p className="mt-2 text-sm text-gray-600">
-        Send this link to someone else who drives it. Once they open it and join, you both keep up its details, photo and change log, and each of you adds it to your own events.
-      </p>
-
       {failure ? (
         <div className="mt-4 rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center">
           <p role="alert" className="text-sm text-red-700">{failure}</p>

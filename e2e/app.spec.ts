@@ -293,7 +293,6 @@ test('anyone can share an event’s own link from its menu (#273)', async ({ pag
   await page.getByRole('menuitem', { name: 'Share' }).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${upcoming.id}/share$`))
   const sheet = page.getByRole('dialog', { name: 'Share this event' })
-  await expect(sheet).toContainText(upcoming.name)
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`https://myhpde.netlify.app/#/event/${upcoming.id}`)
   await expectShareSheet(page, sheet)
   await sheet.getByRole('button', { name: 'Close' }).click()
