@@ -34,6 +34,17 @@ work merged, blocked). Keep comments short (a few lines +
 links, not a wall of text); a design or preview goes in as a
 link, not inlined.
 
+## Name issues and PRs; ask before opening or closing one
+
+A bare number doesn't tell me what something is. Whenever you
+mention an issue or PR, give its title with it (e.g. "#378, Let Add
+to Home Screen open the site as an app"), and say plainly whenever
+you open, close or merge one.
+
+Ask me before opening a new issue or PR, or closing any. The one
+exception is the PR for the issue you're working on (next section):
+open that without asking, and tell me its number and title.
+
 ## Open a PR for every issue
 
 GitHub only links a branch in an issue's Development panel if it
