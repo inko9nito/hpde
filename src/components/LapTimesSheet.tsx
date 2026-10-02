@@ -1,5 +1,4 @@
 import { useId, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Lock, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
@@ -50,8 +49,6 @@ interface Props {
   onOpenTrack?: () => void
   /** Whose laps: another driver's, for an admin logging them (#288); null for your own. */
   driver?: Driver | null
-  /** Admins only: the Driver picker, under the heading (#288). */
-  driverPicker?: ReactNode
   /** The driver's saved laps (or notes) are still on their way. */
   loading?: boolean
   onSave: (session: Omit<SessionLaps, 'key' | 'updatedAt'>) => Promise<void>
@@ -87,7 +84,7 @@ export function shortDate(iso: string): string {
  * sheet.
  */
 export function LapTimesSheet({
-  slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null, driverPicker,
+  slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
   loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, pressures, onClose,
 }: Props) {
   const [view, setView] = useState<SessionView>(startView)
@@ -216,8 +213,6 @@ export function LapTimesSheet({
         </h2>
       </>}
     >
-      {driverPicker && <div className="mt-4">{driverPicker}</div>}
-
       {waiting && (
         <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>
       )}

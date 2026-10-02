@@ -1,5 +1,4 @@
-import { useId } from 'react'
-import { Check, ChevronDown, FlaskConical, UserRound } from 'lucide-react'
+import { Check, FlaskConical, UserRound } from 'lucide-react'
 import { TEST_DRIVER, useAuth } from '../auth/AuthContext'
 import { Sheet } from './Sheet'
 import { driverName, useDrivers } from '../data/drivers'
@@ -8,8 +7,8 @@ import type { Driver } from '../data/drivers'
 /**
  * Who an admin can act as (#396): themselves ("Me"), the test account
  * (#309), and everyone else who has signed in — including whoever they're
- * acting as, even while the list loads (or if it can't), so a picker never
- * shows someone other than who's picked.
+ * acting as, even while the list loads (or if it can't), so the sheet never
+ * leaves who's picked off its list.
  */
 function useChoices(active: boolean): { choices: { driver: Driver | null; label: string }[]; status: ReturnType<typeof useDrivers>['status'] } {
   const { user, actingAs } = useAuth()
@@ -27,42 +26,8 @@ function useChoices(active: boolean): { choices: { driver: Driver | null; label:
 }
 
 /**
- * Admins only (#288): whose lap times the sheet and My notes are showing,
- * as a select — the same choice as Switch driver (#396), so picking one
- * here acts as them everywhere.
- */
-export function DriverPicker({ className = '' }: { className?: string }) {
-  const id = useId()
-  const { actingAs, setActingAs } = useAuth()
-  const { choices, status } = useChoices(true)
-
-  return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <label htmlFor={id} className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-gray-500">
-        <UserRound size={13} aria-hidden="true" /> Driver
-      </label>
-      <div className="relative min-w-0">
-        <select
-          id={id}
-          value={actingAs?.id ?? ''}
-          onChange={e => setActingAs(choices.find(c => (c.driver?.id ?? '') === e.target.value)?.driver ?? null)}
-          className="block h-8 w-full min-w-0 max-w-64 appearance-none truncate rounded-lg border border-gray-200 bg-white pl-2.5 pr-7 text-base text-gray-900 shadow-sm focus:border-gray-400 focus:outline-none sm:text-sm"
-        >
-          {choices.map(c => (
-            <option key={c.driver?.id ?? 'me'} value={c.driver?.id ?? ''}>{c.label}</option>
-          ))}
-          {status === 'loading' && <option disabled>Loading drivers…</option>}
-          {status === 'error' && <option disabled>Couldn’t load drivers</option>}
-        </select>
-        <ChevronDown size={14} aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
-      </div>
-    </div>
-  )
-}
-
-/**
- * Admins only: Switch driver (#362, #396), from the menu or an event's "…"
- * menu — who to act as, everywhere, until they switch back: themselves
+ * Admins only: Switch driver (#396), from the menu — the one place to
+ * pick it (#399) — who to act as, everywhere, until they switch back: themselves
  * ("Me"), the test account, or another driver, to see their laps, notes,
  * answers and garage and to log them for them. Picking one closes it.
  */

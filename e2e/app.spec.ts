@@ -837,7 +837,7 @@ test('a finger scrolling the page over the lap chart leaves its readout shut; a 
   await expect(readout).toContainText('8:00 AM · Red')
 })
 
-test('an admin logs another driver’s lap times, picked in the sheet (#288)', async ({ page }) => {
+test('an admin logs another driver’s lap times, switched to from the menu (#288, #399)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
   const jason = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
@@ -861,15 +861,29 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
     return route.fulfill({ json: { sessions: laps[driver] ?? [] } })
   })
 
+  // Switch driver is the menu's alone (#399).
+  await page.goto('/#/')
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: /^Switch driver/ }).click()
+  const switcher = page.getByRole('dialog', { name: 'Switch driver' })
+  // The admin is "Me"; then the test account, and everyone else (#396).
+  await expect(switcher.getByRole('radio')).toHaveText(['Me', 'Test account', email])
+  await switcher.getByRole('radio', { name: email }).click()
+  await expect(switcher).toHaveCount(0)
+  const banner = page.getByRole('region', { name: 'Acting as' })
+  await expect(banner).toContainText(email)
+
   await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await expect(page.getByRole('menuitem', { name: 'Share' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: /^Switch driver/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
-  const picker = sheet.getByLabel('Driver')
-  // The admin is "Me"; then the test account, and everyone else (#396).
-  await expect(picker.getByRole('option')).toHaveText(['Me', 'Test account', email])
-  await picker.selectOption({ label: email })
-  // Worded as he'd see it (#364): only the picker says it's his.
+  await expect(page.getByLabel('Driver')).toHaveCount(0)
+  // Worded as he'd see it (#364): only the banner says it's his.
   await expect(sheet).toContainText('Only you and admins can see your lap times.')
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -883,18 +897,18 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   expect(pill.x).toBeGreaterThanOrEqual(0)
   expect(pill.x + pill.width).toBeLessThanOrEqual(page.viewportSize()!.width)
   expect(Object.keys(laps)).toEqual([jason])
-  // The schedule marks Jason's laps, and says so above them.
+  // The schedule marks Jason's laps; the banner says whose.
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (saved)' })).toBeVisible()
-  await expect(page.getByLabel('Driver')).toHaveValue(jason)
-  await expect(page.getByLabel('Driver')).toBeInViewport()
+  await expect(banner).toBeInViewport()
+  await expect(page.getByLabel('Driver')).toHaveCount(0)
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
-  await expect(page.getByLabel('Driver')).toHaveValue(jason)
+  await expect(page.getByLabel('Driver')).toHaveCount(0)
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Back to the admin's own: none yet.
-  await page.getByLabel('Driver').selectOption({ label: 'Me' })
+  await banner.getByRole('button', { name: 'Switch back' }).click()
   await expect(page.getByText('No session notes yet')).toBeVisible()
 })
 

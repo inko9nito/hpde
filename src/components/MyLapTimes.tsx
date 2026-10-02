@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { NotebookPen } from 'lucide-react'
 import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
@@ -32,8 +31,6 @@ interface Props {
   allTimeBest?: number
   /** The layout's track page (#274), which the All time best card opens. */
   track?: { name: string; href: string }
-  /** Admins only, on another driver's notes: the Driver picker, above them, to say whose and switch back (#288, #362). */
-  driverPicker?: ReactNode
   /** The group they drove in, and every event (to color groups), for the report card. */
   runGroup?: RunGroupConfig | null
   events: EventConfig[]
@@ -64,7 +61,7 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, driverPicker, runGroup, events, onEdit, onEditEvaluation, garage,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
@@ -93,7 +90,6 @@ export function MyLapTimes({
     />
   )
   const top = (<>
-    {driverPicker && <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">{driverPicker}</div>}
     {carRow}
   </>)
   const header = <>{top}{toolbar}</>

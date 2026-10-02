@@ -118,12 +118,12 @@ describe('deleting an event from the header menu (#229, #216, #232)', () => {
     expect(window.location.hash).toBe(`#/event/${created.id}/share`)
   })
 
-  it('lists Share first, then the admin items: Switch driver (#362) first (#273)', async () => {
+  it('lists Share first, then the admin items (#273); Switch driver is the app menu’s (#399)', async () => {
     signInAs(['admin'])
     openEvent(created.id)
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     expect(screen.getAllByRole('menuitem').map(i => i.textContent)).toEqual(
-      ['Share', 'Switch driver', 'Edit details', 'Edit schedule', 'Delete event'],
+      ['Share', 'Edit details', 'Edit schedule', 'Delete event'],
     )
   })
 
