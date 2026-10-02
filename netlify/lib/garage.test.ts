@@ -210,6 +210,10 @@ describe('garage function (#344)', () => {
     // One that went nowhere just goes.
     const miata = await addCar('vera-token', { make: 'Mazda', model: 'Miata' })
     expect(await (await call('DELETE', { token: 'vera-token', query: `?car=${miata.id}` })).json()).toEqual({ deleted: miata.id })
+    // Unless it's asked to be archived (#423): then it's kept, like any other.
+    const bmw = await addCar('vera-token', { make: 'BMW', model: 'M2' })
+    expect((await (await call('DELETE', { token: 'vera-token', query: `?car=${bmw.id}&archive=1` })).json()).car).toMatchObject({ id: bmw.id, archived: expect.any(String) })
+    expect(await (await call('DELETE', { token: 'vera-token', query: `?car=${bmw.id}` })).json()).toEqual({ deleted: bmw.id })
 
     now = new Date('2026-10-02T12:00:00.000Z')
     const out = await call('DELETE', { token: 'vera-token', query: '?car=car1' })

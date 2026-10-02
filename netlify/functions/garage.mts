@@ -20,6 +20,7 @@ import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry 
 //                                or one already archived, goes, with its
 //                                photo and log (its events keep their tire
 //                                pressures)
+//   DELETE ?car=<id>&archive=1   archives a car, whatever it's been to (#423)
 //   PUT    ?car=<id>&restore=1   puts an archived car back in the garage
 //   GET    ?car=<id>&photo=1     the car's photo
 //   PUT    ?car=<id>&photo=1     sets it: the image itself as the body
@@ -353,21 +354,23 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       // Driven at events, or shared: kept, as it is now (#410), its photo
       // where their own cars' are. Neither: it goes.
       const went = Object.values(garage.events).some(setup => setup.carId === car.id) || others.length > 0
+      // Or archived when asked, whatever it's been to (#423).
+      const keep = went || params.get('archive') === '1'
       const ownKey = `${driverId}/${car.id}`
-      if (car.photo && sharedCar && went) {
+      if (car.photo && sharedCar && keep) {
         const found = await readPhoto(photos(), photoKey)
         if (found) await photos().records.set(ownKey, found.data as ArrayBuffer, { metadata: found.metadata })
       }
-      if (car.photo && (sharedCar ? !others.length : !went)) await photos().records.delete(photoKey)
+      if (car.photo && (sharedCar ? !others.length : !keep)) await photos().records.delete(photoKey)
       const { drivers: _drivers, drives: _drives, ...details } = car
       const kept: Car = { ...details, archived: updatedAt }
       const own = record.cars.filter(c => c.id !== car.id)
       await putRecord(driverId, {
-        cars: !went ? own : sharedCar ? [...own, kept] : record.cars.map(c => (c.id === car.id ? kept : c)),
+        cars: !keep ? own : sharedCar ? [...own, kept] : record.cars.map(c => (c.id === car.id ? kept : c)),
         events: garage.events,
         shared: (record.shared ?? []).filter(id => id !== car.id),
       })
-      return json(200, went ? { car: kept } : { deleted: car.id })
+      return json(200, keep ? { car: kept } : { deleted: car.id })
     }
     if (car) {
       // Already out of the garage: gone for good. Its events keep their
