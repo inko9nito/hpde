@@ -1632,7 +1632,7 @@ describe('the garage (#344)', () => {
     expect(within(page).getByText('2019 · Porsche 718 Cayman GTS')).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Setup' })).toHaveAttribute('aria-selected', 'true')
     expect(within(page).getByRole('region', { name: 'Details' })).toHaveTextContent('Lug nut torque118 ft·lb')
-    const on = within(page).getByRole('region', { name: 'Consumables' })
+    const on = within(page).getByRole('region', { name: 'Maintenance' })
     expect(on).toHaveTextContent('TiresYokohama A052Since Apr 15, 2026Front padsHawk DTC-60Since Feb 20, 2026')
     // Each opens the change that put it on.
     await userEvent.click(within(on).getByRole('button', { name: /^Front pads/ }))
@@ -1649,10 +1649,8 @@ describe('the garage (#344)', () => {
     const log = () => within(within(page).getByRole('group', { name: 'Change log' })).getAllByRole('button')
     const months = async () => within(await history()).getAllByRole('heading').map(h => h.textContent)
     expect(await months()).toEqual(['April 2026', 'February 2026'])
-    // The year shows under the day once it isn't this year's (#266).
     expect(log().map(b => b.textContent)).toEqual([
-      expect.stringMatching(/^Apr15(2026)?Tires · Yokohama A052$/),
-      expect.stringMatching(/^Feb20(2026)?Tires · Hoosier R7Front pads · Hawk DTC-60at Speed Shop$/),
+      'Apr 15Tires · Yokohama A052', 'Feb 20Tires · Hoosier R7Front pads · Hawk DTC-60at Speed Shop',
     ])
 
     // A brake job: several consumables on one day at one shop, each asking what went on.
@@ -1680,9 +1678,9 @@ describe('the garage (#344)', () => {
       date: '2026-05-01', shop: 'Speed Shop', note: 'Full flush.',
       parts: [{ part: 'rearPads', what: 'Hawk DTC-30' }, { part: 'brakeFluid', what: 'Motul RBF 660' }],
     })
-    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('Rear padsHawk DTC-30Since May 1, 2026')
+    expect(within(page).getByRole('region', { name: 'Maintenance' })).toHaveTextContent('Rear padsHawk DTC-30Since May 1, 2026')
     expect(await months()).toEqual(['May 2026', 'April 2026', 'February 2026'])
-    expect(log()[0]).toHaveTextContent(/^May1(2026)?Rear pads · Hawk DTC-30Brake fluid · Motul RBF 660at Speed ShopFull flush\.$/)
+    expect(log()[0]).toHaveTextContent('May 1Rear pads · Hawk DTC-30Brake fluid · Motul RBF 660at Speed ShopFull flush.')
 
     // An entry opens to change it, or take it out.
     await userEvent.click(log()[1])
@@ -1694,7 +1692,7 @@ describe('the garage (#344)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(garageCalls('DELETE')[0][0]).toContain('car=cayman&entry=l3')
     await userEvent.click(within(page).getByRole('tab', { name: 'Setup' }))
-    expect(within(page).getByRole('region', { name: 'Consumables' })).toHaveTextContent('TiresHoosier R7Since Feb 20, 2026')
+    expect(within(page).getByRole('region', { name: 'Maintenance' })).toHaveTextContent('TiresHoosier R7Since Feb 20, 2026')
   })
 
   it('adds a photo with a new car, and changes or removes it from Edit, each saved with Save', async () => {

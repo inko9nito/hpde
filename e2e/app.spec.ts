@@ -1117,11 +1117,11 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await noSideScroll()
   await change.getByRole('button', { name: 'Log 2 changes' }).click()
   await expect(change).toBeHidden()
-  await expect(page.getByRole('region', { name: 'Consumables' })).toContainText('Front padsHawk DTC-60Since Mar 1, 2026')
+  await expect(page.getByRole('region', { name: 'Maintenance' })).toContainText('Front padsHawk DTC-60Since Mar 1, 2026')
   await noSideScroll()
   // History: the job, under its month.
   await page.getByRole('tab', { name: 'History' }).click()
-  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText(/Mar1(2026)?Front pads · Hawk DTC-60Front rotorsat Speed Shop/)
+  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 1Front pads · Hawk DTC-60Front rotorsat Speed Shop')
   await noSideScroll()
 
   // Added to an event from its page: any the driver didn't say they're not going to.

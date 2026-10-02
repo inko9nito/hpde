@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronRight, Plus, UserPlus } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
-import { DayBlock } from './DateBlock'
 import { CarFormPage } from './CarFormPage'
 import { ChangeSheet } from './ChangeSheet'
 import { DriveAtSheet } from './DriveAtSheet'
@@ -114,10 +113,9 @@ const footButton = 'mt-3 flex w-full items-center justify-center gap-1.5 rounded
  * Whether the page's title has scrolled up under the top bar — the cue
  * for the bar's own copy of the name, as on iOS.
  */
-function useScrolledPast(ref: RefObject<HTMLElement | null>, offset: number): boolean {
+function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
   const [past, setPast] = useState(false)
   useEffect(() => {
-    const el = ref.current
     if (!el || typeof IntersectionObserver === 'undefined') return
     const observer = new IntersectionObserver(
       ([entry]) => setPast(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? offset)),
@@ -125,11 +123,11 @@ function useScrolledPast(ref: RefObject<HTMLElement | null>, offset: number): bo
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [ref, offset])
+  }, [el, offset])
   return past
 }
 
-/** Setup (#410): what the car is fitted with now — its lug nut torque and consumables — and who drives it. */
+/** Setup (#410): what the car is fitted with now — its lug nut torque and its maintenance, the consumables last changed — and who drives it. */
 function SetupPanel({ car, onOpenEntry, onShare, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
@@ -150,8 +148,9 @@ function SetupPanel({ car, onOpenEntry, onShare, onLog }: {
           : <span className="text-sm text-gray-400">Not set</span>}
       </section>
 
-      <section aria-label="Consumables">
-        <SectionTitle>Consumables</SectionTitle>
+      {/* Maintenance, as it's to sit beside Modifications (#390). */}
+      <section aria-label="Maintenance">
+        <SectionTitle>Maintenance</SectionTitle>
         {on.length === 0 ? (
           <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Log a change to keep track of what’s on the car.</p>
         ) : (
@@ -213,7 +212,16 @@ function monthTitle(date: string): string {
   return `${new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' })} ${y}`
 }
 
-/** History (#410): every change logged, newest first, by month — each opens to change or remove. */
+/** "Sep 9": a change's day, under its month's heading. */
+function dayTitle(date: string): string {
+  return formatDay(date).replace(/, \d+$/, '')
+}
+
+/**
+ * History (#410): every change logged, newest first, a list for each
+ * month — the day in a column of its own, not the events' stacked date —
+ * each opening to change or remove.
+ */
 function HistoryPanel({ car, onOpenEntry, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
@@ -231,29 +239,29 @@ function HistoryPanel({ car, onOpenEntry, onLog }: {
       {log.length === 0 ? (
         <EmptyRow>Nothing logged yet.</EmptyRow>
       ) : (
-        <div aria-label="Change log" role="group" className="space-y-8">
+        <div aria-label="Change log" role="group" className="space-y-7">
           {months.map(({ month, entries }) => (
             <section key={month} aria-label={monthTitle(`${month}-01`)}>
               <ListTitle>{monthTitle(`${month}-01`)}</ListTitle>
-              <ul className="space-y-3">
+              <ul className={`${CARD_FRAME} overflow-hidden`}>
                 {entries.map(e => (
-                  <li key={e.id}>
+                  <li key={e.id} className="border-b border-gray-100 last:border-b-0">
                     <button
                       onClick={() => onOpenEntry(e)}
-                      className={`${CARD_FRAME} flex items-center gap-4 p-4 text-left transition-colors hover:border-gray-300`}
+                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
                     >
-                      <DayBlock date={e.date} muted />
+                      <span className="w-14 shrink-0 pt-px text-[13px] tabular-nums text-gray-500">{dayTitle(e.date)}</span>
                       <span className="min-w-0 flex-1">
                         {e.parts.map(p => (
-                          <span key={p.part} className="block text-[15px] leading-snug">
+                          <span key={p.part} className="block text-sm leading-snug">
                             <span className="font-semibold text-gray-900">{consumableLabel(p.part)}</span>
                             {p.what && <span className="text-gray-600"> · {p.what}</span>}
                           </span>
                         ))}
-                        {e.shop && <span className="mt-1 block text-[13px] text-gray-500">at {e.shop}</span>}
-                        {e.note && <span className="mt-1 block whitespace-pre-line text-[13px] text-gray-500">{e.note}</span>}
+                        {e.shop && <span className="mt-0.5 block text-xs text-gray-500">at {e.shop}</span>}
+                        {e.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
                       </span>
-                      <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                      <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
                     </button>
                   </li>
                 ))}
@@ -350,11 +358,12 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const [sharing, setSharing] = useState(false)
   // The log entry open in its sheet: one to change, or a new one.
   const [entry, setEntry] = useState<LogEntry | 'new' | null>(null)
-  const titleRef = useRef<HTMLHeadingElement>(null)
-  const collapsed = useScrolledPast(titleRef, TOP_BAR_PX)
+  // A ref that re-renders: the title is only there once the car's loaded.
+  const [title, setTitle] = useState<HTMLHeadingElement | null>(null)
+  const collapsed = useScrolledPast(title, TOP_BAR_PX)
 
   const topBar = (
-    <div className="sticky top-0 z-30 bg-gray-50/95 backdrop-blur" style={{ height: TOP_BAR_PX }}>
+    <div className="sticky top-0 z-30 bg-gray-50" style={{ height: TOP_BAR_PX }}>
       <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(4rem,1fr)_minmax(0,max-content)_minmax(4rem,1fr)] items-center gap-2 px-4">
         <div className="justify-self-start"><BackButton onClick={onBack} /></div>
         {/* The title's echo, once it's scrolled away — hidden from
@@ -407,11 +416,11 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     <div className="min-h-screen bg-gray-50">
       {topBar}
       <div className="mx-auto max-w-lg px-3 pb-5 sm:px-4">
-        <h1 ref={titleRef} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
+        <h1 ref={setTitle} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
         {subtitle && <p className="mt-0.5 px-1 text-[15px] text-gray-500">{subtitle}</p>}
         <CarPhoto car={car} />
       </div>
-      <div className="sticky z-20 border-b border-gray-200 bg-gray-50/95 backdrop-blur" style={{ top: TOP_BAR_PX }}>
+      <div className="sticky z-20 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
         <div className="mx-auto max-w-lg">
           <TabStrip tabs={TABS} active={tab} onChange={setTab} label="Car section" idPrefix="car" className="px-1 pt-2" />
         </div>
