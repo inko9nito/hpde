@@ -1218,8 +1218,8 @@ test('a driver shares their car from its page, with a link to send or a code to 
     return route.fulfill({ json: { cars: [{ id: 'car1', year: 2015, make: 'Ford', model: 'Mustang GT', nickname: 'The Mustang' }], events: {} } })
   })
   await page.goto('/#/garage/car1')
-  // Not shared yet: nothing says who else drives it. Shared from the top bar, beside Edit.
-  await expect(page.locator('[data-drivers]')).toHaveCount(0)
+  // Not shared yet: just their own picture, beside Edit, with the person-plus.
+  await expect(page.getByRole('button', { name: 'Share with another driver' }).locator('[data-avatar]')).toHaveCount(1)
   await page.getByRole('button', { name: 'Share with another driver' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this car' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`/#/join-car/${token}`)
@@ -1277,9 +1277,8 @@ test('a driver joins a shared car from its link, and its page says who drove it 
 
   const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Mustang' }) })
   // Under its name, who else drives it.
-  await expect(carPage.locator('[data-drivers]')).toContainText('Shared with Jason')
-  // By their picture, or without one, their initial (#410).
-  await expect(carPage.locator('[data-drivers] [data-avatar]')).toHaveText(['J'])
+  // Its drivers up top, by their picture or, without one, their initial (#410).
+  await expect(carPage.getByRole('button', { name: 'Shared with Jason. Share with another driver' }).locator('[data-avatar]')).toHaveText(['R', 'J'])
   // Each event, who drove it there, in their run group if they said.
   await carPage.getByRole('tab', { name: 'Events' }).click()
   const rows = carPage.getByRole('list', { name: 'Past events' }).getByRole('listitem')
@@ -1297,8 +1296,8 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   // Taking it out of their garage leaves it in Jason's.
   await carPage.getByRole('button', { name: 'Edit', exact: true }).click()
   const edit = page.getByRole('dialog', { name: 'Edit car' })
-  await edit.getByRole('button', { name: 'Remove from your garage' }).click()
-  await expect(edit).toContainText('Take this car out of your garage? It stays in Jason’s, and the event you drove it at keeps it as it is now. You can put it back.')
+  await edit.getByRole('button', { name: 'Archive car' }).click()
+  await expect(edit).toContainText('Archive this car? It stays in Jason’s garage, and the event you drove it at keeps it as it is now. You can put it back.')
   await expect(edit).toContainText('Only its drivers and admins can see this car.')
   await edit.getByRole('button', { name: 'Cancel' }).click()
 

@@ -14,12 +14,12 @@ import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry 
 //   PUT    {car}                 adds a car (no id) or changes one (its id);
 //                                its photo and log are kept as they are
 //   DELETE ?car=<id>             takes a car out of the garage (#410): one
-//                                that went to events is kept for them —
-//                                photo, log and all — marked `archived`,
-//                                and can be put back; one that went to
-//                                none, or one already archived, goes, with
-//                                its photo and log (its events keep their
-//                                tire pressures)
+//                                that went to events, or is shared, is kept
+//                                — photo, log and all — marked `archived`,
+//                                and can be put back; one that did neither,
+//                                or one already archived, goes, with its
+//                                photo and log (its events keep their tire
+//                                pressures)
 //   PUT    ?car=<id>&restore=1   puts an archived car back in the garage
 //   GET    ?car=<id>&photo=1     the car's photo
 //   PUT    ?car=<id>&photo=1     sets it: the image itself as the body
@@ -350,9 +350,9 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       const others = sharedCar?.drivers.filter(d => d.id !== driverId) ?? []
       if (others.length) await sharedStores.records.setJSON(`car/${car.id}`, { ...sharedCar!, drivers: others })
       else if (sharedCar) await sharedStores.records.delete(`car/${car.id}`)
-      // Driven at events: kept for them, as it is now (#410), its photo
-      // where their own cars' are. Driven at none: it goes.
-      const went = Object.values(garage.events).some(setup => setup.carId === car.id)
+      // Driven at events, or shared: kept, as it is now (#410), its photo
+      // where their own cars' are. Neither: it goes.
+      const went = Object.values(garage.events).some(setup => setup.carId === car.id) || others.length > 0
       const ownKey = `${driverId}/${car.id}`
       if (car.photo && sharedCar && went) {
         const found = await readPhoto(photos(), photoKey)

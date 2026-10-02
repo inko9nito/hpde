@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import { CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
+import { Archive, CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
 import { AvatarStack, useDriverAvatar } from './Avatar'
 import { CarHero, CarRow } from './CarRow'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
-import { carHash } from './CarPage'
+import { ARCHIVED_HASH, carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_CARS, activeCars, carName, carOutings, isShared, othersText } from '../utils/garage'
+import { MAX_CARS, activeCars, carName, carOutings, formatDay, isShared, othersText } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import type { EventConfig } from '../types'
 
@@ -63,7 +63,7 @@ export function GaragePage({ events, onBack, onToast }: {
   const add = () => setAdding(n => (n ?? 0) + 1)
   const cars = activeCars(garage.cars)
   // Taken out of the garage, kept for the events they went to (#410).
-  const removed = garage.cars.filter(c => c.archived)
+  const archived = garage.cars.filter(c => c.archived)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -125,28 +125,63 @@ export function GaragePage({ events, onBack, onToast }: {
             )}
           </div>
         )}
-        {authStatus === 'signed-in' && garage.status === 'ready' && removed.length > 0 && (
-          <section aria-label="Removed cars" className="fade-in mt-8">
-            <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
-              <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">Removed</h2>
-              <span className="text-xs text-gray-500">Kept for the events they went to</span>
-            </div>
-            <ul className="flex flex-col gap-2">
-              {removed.map(car => {
-                const n = carOutings(car, garage, events, rsvps).length
-                return (
-                  <li key={car.id}>
-                    <CarRow car={car} title={carName(car)} subtitle={n === 1 ? '1 event' : `${n} events`} onClick={() => { window.location.hash = carHash(car.id) }} />
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
+        {authStatus === 'signed-in' && garage.status === 'ready' && archived.length > 0 && (
+          <a
+            href={ARCHIVED_HASH}
+            className="fade-in mt-6 flex min-h-12 items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[15px] text-gray-900 transition-colors hover:bg-gray-50"
+          >
+            <Archive size={18} className="shrink-0 text-gray-500" aria-hidden="true" />
+            <span className="flex-1">Archived</span>
+            <span className="text-sm tabular-nums text-gray-500">{archived.length}</span>
+            <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </a>
         )}
       </div>
       {adding !== null && (
         <CarFormPage key={adding} onSaved={() => onToast('Car added')} onClosed={() => setAdding(null)} />
       )}
+    </div>
+  )
+}
+
+/**
+ * The Garage's archived cars (#410), a page over it: those taken out of
+ * it that went to events, or were shared — each kept for them, with how
+ * many, opening its page, where it can be put back.
+ */
+export function ArchivedCarsPage({ events, onBack, onOpenCar }: {
+  events: EventConfig[]
+  onBack: () => void
+  onOpenCar: (carId: string) => void
+}) {
+  const garage = useGarage()
+  const { rsvps } = useRsvps()
+  const archived = garage.cars.filter(c => c.archived)
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <SubPageHeader title="Archived" onBack={onBack} />
+      <div className="mx-auto max-w-lg px-3 pt-2 sm:px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <p className="mb-4 px-1 text-sm text-gray-500">Cars out of your garage, kept for the events they went to. Open one to put it back.</p>
+        {archived.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">No archived cars.</p>
+        ) : (
+          <ul className="flex flex-col gap-2" aria-label="Archived cars">
+            {archived.map(car => {
+              const n = carOutings(car, garage, events, rsvps).length
+              return (
+                <li key={car.id}>
+                  <CarRow
+                    car={car}
+                    title={carName(car)}
+                    subtitle={`${n === 1 ? '1 event' : `${n} events`} · archived ${formatDay(car.archived!.slice(0, 10))}`}
+                    onClick={() => onOpenCar(car.id)}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

@@ -25,8 +25,11 @@ export function carHash(carId: string): string {
   return `${CAR_HASH_PREFIX}${encodeURIComponent(carId)}`
 }
 
+/** The Garage's archived cars (#410), a page of their own over it. */
+export const ARCHIVED_HASH = `${CAR_HASH_PREFIX}archived`
+
 export function carIdFromHash(hash: string): string | null {
-  if (!hash.startsWith(CAR_HASH_PREFIX)) return null
+  if (!hash.startsWith(CAR_HASH_PREFIX) || hash === ARCHIVED_HASH) return null
   return decodeURIComponent(hash.slice(CAR_HASH_PREFIX.length).split('/')[0]) || null
 }
 
@@ -83,14 +86,16 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
   const shown = outing.drivers.filter(d => shared || d.runGroup)
   if (shown.length === 0) return null
   return (
-    <span className="flex shrink-0 items-center gap-2.5 text-xs text-gray-700" data-who-drove>
+    <span className="flex shrink-0 items-center gap-2 text-xs text-gray-700" data-who-drove>
       {shown.map(({ driver, runGroup }) => {
         const group = outing.event.runGroups.find(g => g.id === runGroup)
         return (
-          <span key={driver.id || 'you'} className="inline-flex items-center gap-1" title={shared ? driverLabel(driver) : undefined}>
-            {/* Their picture, on a shared car (#410); their name for screen readers. */}
-            {shared && <><Avatar name={driver.name} url={avatarOf(driver)} size={20} /><span className="sr-only">{driverLabel(driver)}</span></>}
-            {group && <GroupBadge group={group} size="sm" />}
+          <span key={driver.id || 'you'} className="inline-flex items-center" title={shared ? driverLabel(driver) : undefined}>
+            {/* Their picture, on a shared car (#410), a little over their
+                run group's badge, as the drivers' pictures overlap up top;
+                their name for screen readers. */}
+            {shared && <><Avatar name={driver.name} url={avatarOf(driver)} size={20} className="relative z-[1] ring-2 ring-white" /><span className="sr-only">{driverLabel(driver)}</span></>}
+            {group && <GroupBadge group={group} size="sm" className={shared ? '-ml-1.5 pl-3' : ''} />}
           </span>
         )
       })}
@@ -99,7 +104,7 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
 }
 
 /**
- * A car taken out of the garage (#410): when, that it's kept for its
+ * An archived car (#410): when it was archived, that it's kept for its
  * events, and the way to put it back — or to delete it for good.
  */
 function RemovedNotice({ car, events, onRestore, onDelete }: {
@@ -122,9 +127,9 @@ function RemovedNotice({ car, events, onRestore, onDelete }: {
     }
   }
   return (
-    <section aria-label="Removed" className={`${CARD_FRAME} mt-4 px-4 py-3.5`}>
+    <section aria-label="Archived" className={`${CARD_FRAME} mt-4 px-4 py-3.5`}>
       <p className="text-sm text-gray-700">
-        Removed from your garage on {formatDay(car.archived!.slice(0, 10))}.
+        Archived on {formatDay(car.archived!.slice(0, 10))}.
         {events > 0 && ` It’s kept for the ${events === 1 ? 'event' : `${events} events`} you drove it at.`}
       </p>
       {confirming ? (
@@ -432,13 +437,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           {car ? carHeading(car) : ''}
         </span>
         {car && !car.archived ? (
-          <div className="-mr-2 flex items-center gap-1 justify-self-end">
+          <div className="-mr-2 flex items-center gap-3 justify-self-end">
             {/* Who drives it is the car's, not its setup's (#398): their
                 pictures up here (#410), and another added from them. */}
             {drivers.length < MAX_DRIVERS ? (
               <button
                 onClick={() => setSharing(true)}
-                aria-label="Share with another driver"
+                aria-label={isShared(car) ? `Shared with ${othersText(car)}. Share with another driver` : 'Share with another driver'}
                 className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full pl-1 pr-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
                 data-share-car
               >
@@ -448,7 +453,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
             ) : <AvatarStack people={faces} size={26} ring="ring-gray-50" />}
             <button
               onClick={() => setEditing(n => (n ?? 0) + 1)}
-              className="rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700"
+              className="rounded-lg px-2 py-1.5 text-[17px] font-semibold text-blue-600 hover:text-blue-700"
             >
               Edit
             </button>
@@ -488,12 +493,6 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
       <div className="mx-auto max-w-lg px-3 pb-5 sm:px-4">
         <h1 ref={setTitle} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
         {subtitle && <p className="mt-0.5 px-1 text-[15px] text-gray-500">{subtitle}</p>}
-        {isShared(car) && (
-          <p className="mt-2 flex items-center gap-2 px-1 text-sm text-gray-500" data-drivers>
-            <AvatarStack people={drivers.filter(d => !d.you).map(d => ({ name: d.name, url: avatarOf(d) }))} size={22} ring="ring-gray-50" />
-            <span className="min-w-0 truncate">Shared with {othersText(car)}</span>
-          </p>
-        )}
         {car.archived && (
           <RemovedNotice
             car={car}
@@ -538,8 +537,8 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           car={car}
           events={went.length}
           onSaved={() => onToast('Car saved')}
-          onRemoved={() => {
-            onToast(went.length ? 'Removed from your garage' : 'Car removed')
+          onRemoved={archived => {
+            onToast(archived ? 'Car archived' : 'Car removed')
             onBack()
           }}
           onClosed={() => setEditing(null)}

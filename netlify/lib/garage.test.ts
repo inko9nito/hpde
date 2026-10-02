@@ -413,6 +413,14 @@ describe('garage function (#344)', () => {
       expect(store.has('vera/garage')).toBe(false)
     })
 
+    it('keeps a shared car for a driver who leaves it, though they never drove it at an event', async () => {
+      await addCar()
+      await join('jason-token', await invite())
+      expect((await call('DELETE', { token: 'jason-token', query: '?car=car1' })).status).toBe(200)
+      expect((await garageOf('jason-token')).cars).toEqual([expect.objectContaining({ id: 'car1', archived: expect.any(String) })])
+      expect((await garageOf('vera-token')).cars[0]).not.toHaveProperty('archived')
+    })
+
     it('takes back a driver who left it: the car itself in place of what was kept of it', async () => {
       await addCar()
       await join('jason-token', await invite())
