@@ -1870,8 +1870,9 @@ describe('the garage (#344)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     const row = await screen.findByRole('button', { name: 'Your car: The Cayman' })
     expect(row).toHaveTextContent('The Cayman · 2019 Porsche 718 Cayman GTS')
-    // One slim line: it's seldom changed.
-    expect(row.querySelector('svg')).toHaveAttribute('width', '16')
+    // One slim line: it's seldom changed. The race car (#417) is wide and
+    // low, so 24 across is still well under the line's height.
+    expect(row.querySelector('svg')).toHaveAttribute('width', '24')
     await userEvent.click(row)
     const sheet = screen.getByRole('dialog', { name: 'Your car' })
     expect(sheet).toHaveTextContent('Lug nut torque118 ft·lb')

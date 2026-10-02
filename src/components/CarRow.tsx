@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { CarFront, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { RaceCarIcon } from './CarIcons'
 import { carHeading, carSubtitle, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { useCarPhoto } from '../data/GarageContext'
@@ -7,7 +8,7 @@ import { useCarPhoto } from '../data/GarageContext'
 // The pieces a car is shown with (#344): its tile, the one-line row that
 // opens it at the top of an event's My notes, and its details' rows.
 
-/** The car's photo, square — or with none (yet), a car on gray. */
+/** The car's photo, square — or with none (yet), a race car on gray. */
 export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car; size?: number; rounded?: string }) {
   const src = useCarPhoto(car)
   if (src) {
@@ -19,7 +20,7 @@ export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car;
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      <CarFront size={Math.round(size * 0.46)} />
+      <RaceCarIcon size={Math.round(size * 0.66)} />
     </span>
   )
 }
@@ -51,7 +52,7 @@ export function CarRow({ car, title, subtitle, onClick, label, dashed = false }:
     >
       {car?.photo
         ? <CarTile car={car} size={24} rounded="rounded-md" />
-        : <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />}
+        : <RaceCarIcon size={24} className="shrink-0 text-gray-500" aria-hidden="true" />}
       <span className="min-w-0 flex-1 truncate">
         <span className="font-semibold text-gray-900">{title}</span>
         {subtitle && <span className="text-gray-500"> · {subtitle}</span>}
@@ -63,7 +64,7 @@ export function CarRow({ car, title, subtitle, onClick, label, dashed = false }:
 
 /**
  * A car as the Garage shows it (#410): its photo, landscape, with its name
- * and year over the foot of it — or, with none (yet), a car on dark gray.
+ * and year over the foot of it — or, with none (yet), a race car on dark gray.
  * The invite to share a car shows it the same way.
  */
 export function CarHero({ car, src }: {
@@ -79,7 +80,7 @@ export function CarHero({ car, src }: {
       ) : car.photo ? (
         <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
       ) : (
-        <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
+        <RaceCarIcon size={112} className="absolute right-6 top-2 text-gray-600" aria-hidden="true" />
       )}
       {/* Dark enough at the foot for the name to read over any photo. */}
       <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
