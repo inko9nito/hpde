@@ -95,7 +95,7 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
   )
 }
 
-/** Log a change: at the foot of Setup and History. */
+/** Add entry: at the foot of Setup and History. */
 function LogButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -103,7 +103,7 @@ function LogButton({ onClick }: { onClick: () => void }) {
       className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-gray-700"
     >
       <Plus size={18} aria-hidden="true" />
-      Log a change
+      Add entry
     </button>
   )
 }
@@ -147,7 +147,7 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
       <section aria-label="Maintenance">
         <SectionTitle>Maintenance</SectionTitle>
         {on.length === 0 ? (
-          <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Log a change to keep track of what’s on the car.</p>
+          <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Add an entry to keep track of what’s on the car.</p>
         ) : (
           <ul className={`${CARD_FRAME} overflow-hidden`}>
             {on.map(c => {
@@ -463,7 +463,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           onSave={async next => {
             await garage.saveEntry(car.id, next)
             setEntry(null)
-            onToast(entry === 'new' ? 'Logged' : 'Entry saved')
+            onToast(entry === 'new' ? 'Entry added' : 'Entry saved')
           }}
           onRemove={entry === 'new' ? undefined : async () => {
             await garage.removeEntry(car.id, entry.id)

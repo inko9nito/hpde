@@ -1655,8 +1655,8 @@ describe('the garage (#344)', () => {
 
     // A brake job: several consumables on one day at one shop, each asking what went on.
     await userEvent.click(within(page).getByRole('tab', { name: 'Setup' }))
-    await userEvent.click(within(page).getByRole('button', { name: 'Log a change' }))
-    const sheet = screen.getByRole('dialog', { name: 'Log a change' })
+    await userEvent.click(within(page).getByRole('button', { name: 'Add entry' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add entry' })
     expect(within(sheet).queryByLabelText('Brake fluid')).not.toBeInTheDocument()
     await userEvent.click(within(sheet).getByRole('button', { name: 'Brake fluid' }))
     await userEvent.click(within(sheet).getByRole('button', { name: 'Rear pads' }))
@@ -1670,9 +1670,9 @@ describe('the garage (#344)', () => {
     fireEvent.change(within(sheet).getByLabelText('Date'), { target: { value: '2026-05-01' } })
     fireEvent.change(within(sheet).getByLabelText(/^Shop/), { target: { value: 'Speed Shop' } })
     fireEvent.change(within(sheet).getByRole('textbox', { name: /^Note/ }), { target: { value: 'Full flush.' } })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Log 2 changes' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add entry' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Logged')
+    expect(screen.getByRole('status')).toHaveTextContent('Entry added')
     expect(garageCalls('PUT')[0][0]).toContain('car=cayman')
     expect(body(garageCalls('PUT')[0]).entry).toEqual({
       date: '2026-05-01', shop: 'Speed Shop', note: 'Full flush.',

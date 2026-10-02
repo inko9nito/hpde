@@ -1103,8 +1103,8 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(page.getByRole('button', { name: 'Change photo' })).toHaveCount(0)
 
   // A brake job: pads and rotors on one day at one shop.
-  await page.getByRole('button', { name: 'Log a change' }).click()
-  const change = page.getByRole('dialog', { name: 'Log a change' })
+  await page.getByRole('button', { name: 'Add entry' }).click()
+  const change = page.getByRole('dialog', { name: 'Add entry' })
   await change.getByRole('button', { name: 'Front pads' }).click()
   await change.getByRole('button', { name: 'Front rotors' }).click()
   await change.getByLabel('Front pads', { exact: true }).and(page.getByRole('combobox')).fill('Hawk DTC-60')
@@ -1115,7 +1115,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   const shop = (await change.getByLabel(/^Shop/).boundingBox())!
   expect(Math.round(date.x + date.width)).toBe(Math.round(shop.x + shop.width))
   await noSideScroll()
-  await change.getByRole('button', { name: 'Log 2 changes' }).click()
+  await change.getByRole('button', { name: 'Add entry' }).click()
   await expect(change).toBeHidden()
   await expect(page.getByRole('region', { name: 'Maintenance' })).toContainText('Front padsHawk DTC-60Since Mar 1, 2026')
   await noSideScroll()
