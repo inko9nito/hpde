@@ -1,15 +1,18 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
-import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
-import type { StoreDeps } from '../lib/driverStore.mts'
+import { ensureCopied, isSampleDriver, openStores, whoseRecords } from '../lib/driverStore.mts'
+import type { DriverStores, StoreDeps } from '../lib/driverStore.mts'
 import { cleanEventEvaluation, cleanSessionEvaluation } from '../../src/utils/evaluation.ts'
 import type { EventEvaluation, SessionNotes } from '../../src/utils/evaluation.ts'
 import { DATE, GROUP, TIME, sessionKey } from '../../src/utils/lapTimes.ts'
+import { SAMPLE_REPORT_CARDS } from '../../src/data/fixtures/sampleReportCards.ts'
 
 // A signed-in driver's notes on an event (#340), private to them, as their
 // laps are (laps.mts): every request needs their sign-in and only reaches
 // their own — or, for an admin, the driver named by `driver=<user id>`
 // (#288). For now the notes are their instructor's evaluations: each
 // session's feedback, and a TDE event's report card for the whole event.
+// The sample laps' driver (#310) gets their two report cards from the same
+// sheet, once (#350; see ensureOwnReportCards).
 //   GET                               every event's notes: { events: [{ eventId,
 //                                     evaluation?, sessions }] } — for the
 //                                     Instructor evaluations page (#345)
@@ -42,7 +45,35 @@ interface EventNotes {
   sessions: Record<string, SessionNotes>
 }
 
-type Deps = StoreDeps & { fetch?: typeof fetch }
+type Deps = StoreDeps & {
+  fetch?: typeof fetch
+  /** Stands in for SAMPLE_DRIVER_EMAIL_SHA256 in tests. */
+  sampleDriverSha256?: string
+}
+
+/**
+ * The sample laps' driver's report cards (#350): the first time their notes
+ * are used — by them, or an admin acting as them — filled into their own
+ * account, once, in this store (production's, or a preview's own). An
+ * event that already has a report card keeps it; the record of the fill
+ * lists those. Removed afterwards, a card stays removed.
+ */
+async function ensureOwnReportCards({ records: notes, meta }: DriverStores, driverId: string, email: string | undefined, sha256?: string) {
+  if (!isSampleDriver(email, sha256)) return
+  const doneKey = `filled-report-cards:${driverId}`
+  if (await meta.get(doneKey, { type: 'json' })) return
+  const kept: string[] = []
+  for (const { eventId, evaluation } of SAMPLE_REPORT_CARDS) {
+    const key = `${driverId}/${eventId}`
+    const existing = (await notes.get(key, { type: 'json' })) as EventNotes | null
+    if (existing?.evaluation) {
+      kept.push(eventId)
+      continue
+    }
+    await notes.setJSON(key, { eventId, sessions: {}, ...existing, evaluation })
+  }
+  await meta.setJSON(doneKey, { at: new Date().toISOString(), kept })
+}
 
 function inOrder(record: EventNotes | null): SessionNotes[] {
   return Object.values(record?.sessions ?? {}).sort((a, b) => a.key.localeCompare(b.key))
@@ -77,13 +108,14 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const params = new URL(req.url).searchParams
   const whose = await whoseRecords(user, params.get('driver'), 'notes', deps.identity)
   if (whose instanceof Response) return whose
-  const { driverId } = whose
+  const { driverId, driverEmail } = whose
 
   const stores = openStores(context, deps, NOTES_STORE, NOTES_META_STORE)
   const store = stores.records
 
   if (req.method === 'GET' && !params.has('event')) {
     await ensureCopied(stores, driverId)
+    await ensureOwnReportCards(stores, driverId, driverEmail, deps.sampleDriverSha256)
     const { blobs } = await store.list({ prefix: `${driverId}/` })
     const records = await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' }) as Promise<EventNotes | null>))
     const events = records.flatMap(record => {
@@ -97,6 +129,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   if (!EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
 
   await ensureCopied(stores, driverId)
+  await ensureOwnReportCards(stores, driverId, driverEmail, deps.sampleDriverSha256)
   const key = `${driverId}/${eventId}`
   const record = (await store.get(key, { type: 'json' })) as EventNotes | null
 
