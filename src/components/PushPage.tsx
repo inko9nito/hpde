@@ -226,6 +226,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       ref={scrollRef}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
+        // Below the banner while an admin acts as another driver (#396).
+        top: 'var(--acting-h, 0px)',
         zIndex: raised ? 31 : undefined,
         // Once in place, white is what Safari 26 samples to tint the
         // status bar — this fixed page is the element at the top edge —

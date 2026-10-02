@@ -745,8 +745,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     const sheet = screen.getByRole('dialog')
     const picker = within(sheet).getByLabelText('Driver')
     expect(picker).toHaveValue('')
-    // Everyone else, by name; the admin is "Me".
-    await waitFor(() => expect(within(picker).getAllByRole('option').map(o => o.textContent)).toEqual(['Me', 'Jason']))
+    // The admin is "Me"; then the test account, and everyone else by name (#396).
+    await waitFor(() => expect(within(picker).getAllByRole('option').map(o => o.textContent)).toEqual(['Me', 'Test account', 'Jason']))
     expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
 
     await userEvent.selectOptions(picker, 'Jason')
@@ -824,12 +824,55 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     expect(await screen.findByRole('tab', { name: 'My notes (1)' })).toBeInTheDocument()
     expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:24')
 
-    // Another event starts back on the admin's own.
+    // Another event is Jason's too: the switch is for everywhere (#396),
+    // and the banner over every page says so.
     window.location.hash = `#/event/${sameLayout.id}`
     const earlier = () => lapCalls('GET').filter(([url]) => String(url).includes(`event=${sameLayout.id}`))
     await waitFor(() => expect(earlier()).toHaveLength(1))
-    expect(String(earlier()[0][0])).not.toContain('driver=')
+    expect(String(earlier()[0][0])).toContain(`driver=${JASON}`)
+    const banner = screen.getByRole('region', { name: 'Acting as' })
+    expect(banner).toHaveTextContent('Acting as Jason')
+    // Its Switch back is back to the admin's own, everywhere.
+    await userEvent.click(within(banner).getByRole('button', { name: 'Switch back' }))
+    expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
+    await waitFor(() => expect(earlier()).toHaveLength(2))
+    expect(String(earlier()[1][0])).not.toContain('driver=')
+  })
+  it('switches driver from the menu, for every page, with a banner saying who until switched back (#396)', async () => {
+    window.location.hash = '#/'
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
+    await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.textContent, r.getAttribute('aria-checked')]))
+      .toEqual([['Me', 'true'], ['Test account', 'false'], ['Jason', 'false']]))
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Jason' }))
+    expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+    const banner = screen.getByRole('region', { name: 'Acting as' })
+    expect(banner).toHaveTextContent('Acting as Jason')
+    expect(screen.getByRole('button', { name: 'Account: v@example.com, acting as Jason' })).toBeInTheDocument()
+    const asked = (what: string) => fetchMock.mock.calls.some(([url]) => String(url).includes(`api/${what}?driver=${JASON}`))
+    // Their answers, for My events…
+    await waitFor(() => expect(asked('rsvps')).toBe(true))
+    // …and their evaluations, on a page that isn't an event's.
+    window.location.hash = '#/evaluations'
+    await waitFor(() => expect(asked('notes')).toBe(true))
+    // The menu says who, and the way back is the banner's.
+    await userEvent.click(within(banner).getByRole('button', { name: 'Switch back' }))
+    expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Account: v@example.com' })).toBeInTheDocument()
+  })
+
+  it('on the test account, says so in the banner (#309, #396)', async () => {
+    window.location.hash = '#/'
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Switch driver' })).getByRole('radio', { name: 'Test account' }))
+    expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('On the test account')
+    expect(screen.getByRole('button', { name: 'Account: v@example.com, on the test account' })).toBeInTheDocument()
   })
 })
 

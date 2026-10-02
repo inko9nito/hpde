@@ -5,10 +5,9 @@ import { RSVP_STATUSES } from '../utils/rsvp'
 import type { Rsvp, Rsvps } from '../utils/rsvp'
 
 // The signed-in driver's answers to "are you going?" (#235), from the rsvps
-// function: which events are theirs, and their run group at each. Nothing
-// is fetched for anyone who isn't signed in. An admin who has switched to
-// another driver on an event's page (#362) sees that driver's there
-// instead: useDriverRsvps, handed to what's on it with RsvpsScope.
+// function: which events are theirs, and their run group at each — or,
+// while an admin is acting as another driver or the test account (#396),
+// theirs. Nothing is fetched for anyone who isn't signed in.
 export const RSVPS_URL = `${import.meta.env.BASE_URL}api/rsvps`
 
 export type RsvpsStatus = 'off' | 'loading' | 'ready' | 'error'
@@ -42,7 +41,8 @@ const RsvpsContext = createContext<RsvpsValue | null>(null)
 
 /**
  * The answers of the signed-in driver (`driverId` undefined), of another
- * driver an admin picked (their user id, #362), or of nobody (null: off).
+ * driver (their user id: whoever an admin is acting as, #396), or of
+ * nobody (null: off).
  */
 function useRsvpsStore(driverId: string | null | undefined): RsvpsValue {
   const { status: authStatus, user, authedFetch } = useAuth()
@@ -101,17 +101,8 @@ function useRsvpsStore(driverId: string | null | undefined): RsvpsValue {
 }
 
 export function RsvpsProvider({ children }: { children: ReactNode }) {
-  const value = useRsvpsStore(undefined)
-  return <RsvpsContext.Provider value={value}>{children}</RsvpsContext.Provider>
-}
-
-/** Another driver's answers, for an admin who switched to them (#362); off for null. */
-export function useDriverRsvps(driverId: string | null): RsvpsValue {
-  return useRsvpsStore(driverId)
-}
-
-/** Whose answers what's inside sees: `value`, from useRsvps or useDriverRsvps. */
-export function RsvpsScope({ value, children }: { value: RsvpsValue; children: ReactNode }) {
+  const { actingAs } = useAuth()
+  const value = useRsvpsStore(actingAs?.id)
   return <RsvpsContext.Provider value={value}>{children}</RsvpsContext.Provider>
 }
 

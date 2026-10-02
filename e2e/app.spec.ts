@@ -261,10 +261,10 @@ test('the landing menu slides up, and Share slides up over the list (#273, #278)
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Share' })).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
-  // The test account is for admins (#309).
+  // Switching driver, the test account too, is for admins (#309, #396).
   await page.getByRole('button', { name: 'Menu' }).click()
   await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Switch to test account' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Switch driver/ })).toHaveCount(0)
 })
 
 test('anyone can share an event’s own link from its menu (#273)', async ({ page }) => {
@@ -374,6 +374,44 @@ test('the page under a pushed page doesn’t scroll while it’s open (#321)', a
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
   await expect.poll(documentScrolls).toBe(true)
+})
+
+test('back from an event’s page, the list is still scrolled where it was (#389)', async ({ page }) => {
+  // More events than fit on a phone, the last far down the list.
+  const many: EventConfig[] = Array.from({ length: 20 }, (_, i) => ({
+    ...upcoming,
+    id: `${isoInDays(10 + i * 7)}_day-${i}`,
+    name: `Track Day ${i}`,
+    days: [{ ...upcoming.days[0], date: isoInDays(10 + i * 7) }],
+  }))
+  await stubEvents(page, many)
+  await page.goto('/#/')
+  const last = page.getByRole('button', { name: /Track Day 19/ })
+  await last.scrollIntoViewIfNeeded()
+  const scrolled = await page.evaluate(() => window.scrollY)
+  expect(scrolled).toBeGreaterThan(0)
+  const scrollY = () => page.evaluate(() => window.scrollY)
+
+  // The Back button…
+  await last.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Back' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toHaveCount(0)
+  expect(await scrollY()).toBe(scrolled)
+  await expect(last).toBeInViewport()
+
+  // …and the browser's back (a swipe back on iPhone).
+  await last.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toBeInViewport()
+  await page.goBack()
+  await expect(page.getByRole('heading', { level: 1, name: 'Track Day 19' })).toHaveCount(0)
+  expect(await scrollY()).toBe(scrolled)
+  await expect(last).toBeInViewport()
+
+  // Another tab starts at its top.
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Tracks' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
+  expect(await scrollY()).toBe(0)
 })
 
 test('Share and the iOS widget slide up from the bottom (#278)', async ({ page }) => {
@@ -828,7 +866,8 @@ test('an admin logs another driver’s lap times, picked in the sheet (#288)', a
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   const picker = sheet.getByLabel('Driver')
-  await expect(picker.getByRole('option')).toHaveText(['Me', email])
+  // The admin is "Me"; then the test account, and everyone else (#396).
+  await expect(picker.getByRole('option')).toHaveText(['Me', 'Test account', email])
   await picker.selectOption({ label: email })
   // Worded as he'd see it (#364): only the picker says it's his.
   await expect(sheet).toContainText('Only you and admins can see your lap times.')
@@ -1244,10 +1283,16 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(alphaTrack).toContainText('No events yet')
 
   await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch to test account' }).click()
-  await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0)
-  // The account button says so, and the test account's laps show.
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: /^Switch driver/ }).click()
+  await page.getByRole('dialog', { name: 'Switch driver' }).getByRole('radio', { name: 'Test account' }).click()
+  await expect(page.getByRole('dialog', { name: 'Switch driver' })).toHaveCount(0)
+  // The account button and a banner over every page say so (#396), and the test account's laps show.
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
+  const banner = page.getByRole('region', { name: 'Acting as' })
+  await expect(banner).toHaveText(/On the test account/)
+  // The page starts below it, not under it.
+  const bannerBottom = (await banner.boundingBox())!.y + (await banner.boundingBox())!.height
+  expect((await page.getByRole('heading', { level: 1, name: 'Tracks' }).boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
   await expect(alphaTrack).toContainText('1 event')
   expect(asked).toContain('test-account')
 
@@ -1268,10 +1313,14 @@ test('an admin switches to the test account from the menu, sees its laps and spe
   await expect(table.getByRole('row', { name: /^2 / })).toHaveText(/1:24\.072\s*106\.3\s*69\.5/)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // Back the same way.
+  // An event's page, pushed over the tab, starts below the banner too.
+  const eventBack = page.getByRole('button', { name: /^Back/ }).first()
+  expect((await eventBack.boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
+
+  // Back with the banner's Switch back.
   await page.goto('/#/tracks')
-  await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Switch back to my account' }).click()
+  await banner.getByRole('button', { name: 'Switch back' }).click()
+  await expect(banner).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
   await expect(alphaTrack).toContainText('No events yet')
 })
