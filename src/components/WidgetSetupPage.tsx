@@ -258,7 +258,7 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
 
         {/* More info */}
         <div className="rounded-2xl border border-gray-200 bg-white px-4 shadow-sm">
-          <Accordion icon={<SlidersHorizontal size={16} />} title="Set run group and alert timing">
+          <Accordion icon={<SlidersHorizontal size={16} />} title="Set run group, alert timing and more">
             <p>
               Only want your run group, or alerts earlier or later? Tap and hold the widget, choose{' '}
               <strong>Edit Widget</strong>, and type into the <strong>Parameter</strong> box.
@@ -284,6 +284,11 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
                 title="Do both"
                 description="Put commas between them."
                 examples={['blue,15m', 'blue,orange,15m']}
+              />
+              <ParamOption
+                title="Open the Home Screen app"
+                description="Added HPDE to your Home Screen? Type webapp, and tapping the widget or an alert opens it instead of your browser."
+                examples={['webapp', 'blue,15m,webapp']}
               />
             </ul>
           </Accordion>

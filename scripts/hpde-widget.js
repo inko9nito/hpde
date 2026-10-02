@@ -20,12 +20,23 @@
 //                            today countdown card. Defaults to 10 days
 //                            out (past the single-day/week:day split);
 //                            `test-upcoming-3` picks a different count.
+//     webapp               — tapping the widget or one of its alerts opens
+//                            HPDE's Home Screen web app (a web clip)
+//                            instead of the browser. Only for a phone
+//                            that has one. Combine with anything else,
+//                            e.g. `orange,webapp`.
 //   Run-group filtering also drives notifications: sessions in the filtered
 //   groups are alerted N minutes before start; all-drivers events (anything
 //   without a run-group tag — meetings, lunch, etc.) always fire an alert.
 
 const DATA_URL = "https://myhpde.netlify.app/api/events.json"
 const SITE_URL = "https://myhpde.netlify.app/"
+// The site as a Home Screen web app (#375): since iOS 16.4, opening
+// `webapp://<host>/` opens the web app installed for that host. (It
+// ignores the path and opens the app's start page.) Scriptable can't see
+// which web apps are installed, and iOS doesn't say what the link does
+// on a phone without one, so it's opt-in: the `webapp` parameter flag.
+const WEB_APP_URL = "webapp://myhpde.netlify.app/"
 const CACHE_FILENAME = "hpde-events.json"
 // v2 (#295): entries are keyed by widget size and kept on this device.
 // The v1 file (keyed by parameter string, in iCloud) is left unread, so
@@ -271,10 +282,11 @@ function pickUpcoming(manifest, limit) {
   return { items: future.slice(0, limit), total: future.length }
 }
 
-// Reserved parameter tokens that aren't run-group ids: they flip debug
-// switches instead. Keep this small — every keyword here excludes a
-// potential future run-group id.
-const RESERVED_FLAG_TOKENS = new Set(["test"])
+// Reserved parameter tokens that aren't run-group ids: they flip
+// switches instead (`test` for debugging, `webapp` for where taps go).
+// Keep this small — every keyword here excludes a potential future
+// run-group id.
+const RESERVED_FLAG_TOKENS = new Set(["test", "webapp"])
 // `test-upcoming` rewrites the Test Event to FUTURE date(s) instead of
 // today, for exercising the no-event-today countdown card. Two
 // optional numeric parts, hyphen required before each:
@@ -335,6 +347,12 @@ function parseWidgetParameter(raw) {
 function readWidgetParameter() {
   const raw = typeof args !== "undefined" && args.widgetParameter
   return parseWidgetParameter(raw)
+}
+
+// Where a tap on the widget or one of its alerts goes: the Home Screen
+// web app with the `webapp` flag, else the site in the browser.
+function tapURL(flags) {
+  return flags && flags.webapp ? WEB_APP_URL : SITE_URL
 }
 
 // Validates group ids against a manifest's known run groups; unknown ids
@@ -611,7 +629,7 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   const p = palette(dark)
   w.backgroundColor = p.bg
   w.setPadding(10, WIDGET_SIDE_PAD_LEFT, 10, WIDGET_SIDE_PAD_RIGHT)
-  w.url = SITE_URL
+  w.url = tapURL(parsed && parsed.flags)
 
   const picked = pickToday(manifest)
   if (!picked) {
@@ -2271,7 +2289,7 @@ function addCountdownPill(row, days, bg, fg, t) {
   label.lineLimit = 1
 }
 
-function renderError(err) {
+function renderError(err, parsed) {
   const w = new ListWidget()
   const dark = Device.isUsingDarkAppearance()
   const p = palette(dark)
@@ -2282,7 +2300,7 @@ function renderError(err) {
   const e = w.addText(String(err && err.message ? err.message : err))
   e.font = rFont(10)
   e.textColor = p.muted
-  w.url = SITE_URL
+  w.url = tapURL(parsed && parsed.flags)
   return w
 }
 
@@ -2478,8 +2496,9 @@ function buildNotifContent(target, leadMinutes) {
 // own fixture flags. `state` holds only live instances (see
 // refreshNotifications).
 function computeMergedSpecs(feed, state, now) {
+  const instances = Object.values(state.instances || {})
   const wanted = new Map()
-  for (const inst of Object.values(state.instances || {})) {
+  for (const inst of instances) {
     const groups = inst.groups || []
     const lead = Number.isFinite(inst.leadMinutes) ? inst.leadMinutes : DEFAULT_LEAD_MIN
     for (const target of collectNotifTargets(withFixtureFlags(feed, inst.flags), now)) {
@@ -2494,12 +2513,15 @@ function computeMergedSpecs(feed, state, now) {
       if (!had || lead > had.lead) wanted.set(target.sessionKey, { target, lead, fireAt })
     }
   }
+  // The web app is on the phone or it isn't, so one widget set to
+  // `webapp` is enough for every alert to open it.
+  const openURL = tapURL({ webapp: instances.some(i => i.flags && i.flags.webapp) })
   const specs = []
   for (const { target, lead, fireAt } of wanted.values()) {
     const { title, body } = buildNotifContent(target, lead)
     specs.push({
       identifier: NOTIF_ID_PREFIX + target.sessionKey,
-      title, body, fireAt,
+      title, body, fireAt, openURL,
     })
   }
   specs.sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime())
@@ -2533,7 +2555,7 @@ async function scheduleSpecs(specs) {
       n.body = s.body
       n.threadIdentifier = NOTIF_THREAD_ID
       n.sound = NOTIF_SOUND
-      n.openURL = SITE_URL
+      n.openURL = s.openURL
       // Scriptable's `deliveryDate` is READ-ONLY (it reports when the
       // notification actually fired). To schedule for a future moment
       // you must call setTriggerDate(); without it, `schedule()` fires
@@ -2585,9 +2607,10 @@ async function refreshNotifications(feed, parsed) {
 // ---------- entrypoint ----------
 
 let widget
+// Read first, so the error screen opens where the parameter says too.
+const parsedRaw = readWidgetParameter()
 try {
   const data = await loadManifest()
-  const parsedRaw = readWidgetParameter()
   // Fixture events (test-live) ship in the manifest at their natural
   // date and are only rewritten when the user opts in: `test` moves it
   // to today (for testing the populated view / notifications),
@@ -2603,7 +2626,7 @@ try {
   } catch (_) {}
   widget = makeWidget(data, parsed, notifStatus)
 } catch (err) {
-  widget = renderError(err)
+  widget = renderError(err, parsedRaw)
 }
 
 if (config.runsInWidget) {

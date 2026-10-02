@@ -51,6 +51,7 @@ hard to find on the iPhone keyboard):
 | ----------------- | ---------------------------------------------------------------------- |
 | `<group id>`      | Include this run group in the filter (schedule rows + notifications).  |
 | `<N>m`            | Notification lead time in minutes (default `10m`).                     |
+| `webapp`          | Taps open HPDE's Home Screen web app, not the browser — see [Opening the Home Screen web app](#opening-the-home-screen-web-app). |
 | `test`            | Debug flag — see [Testing notifications](#testing-notifications).      |
 | `test-upcoming[-<count>][-<days>d]` | Debug flag — see [Testing the countdown card](#testing-the-countdown-card). |
 
@@ -93,6 +94,21 @@ notification, and there is no Scriptable API to override it. The only way
 to get a different icon is a native app (or a third-party push service like
 Web Live Activities from #160). We stay in Scriptable, so we live with the
 Scriptable braces icon.
+
+### Opening the Home Screen web app
+
+Tapping the widget or one of its alerts opens the site in the phone's
+default browser. If you've added HPDE to your Home Screen as a web app
+(a web clip), add `webapp` to the Parameter (e.g. `orange,webapp`) and
+taps open the web app instead (#375). For alerts, one widget with
+`webapp` is enough: every HPDE alert on the phone opens the web app.
+
+It's a switch rather than automatic because Scriptable can't see which
+web apps are installed. The widget opens `webapp://myhpde.netlify.app/`,
+which iOS (16.4 and later) hands to the web app installed for that
+site. What iOS does with that link on a phone without the web app isn't
+documented, so leave `webapp` off there. The web app opens on its start
+page, as when you tap its icon; iOS drops any path in the link.
 
 ### Testing notifications
 

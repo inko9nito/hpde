@@ -147,7 +147,8 @@ function installScriptableMocks(
     set backgroundGradient(v: unknown) { g.__background.gradient = v }
     set backgroundImage(v: unknown) { g.__background.image = v }
     set refreshAfterDate(_v) {}
-    set url(_v) {}
+    // Where a tap on the widget goes.
+    set url(v: string) { g.__widgetUrl = v }
     async presentMedium() {}
     async presentLarge() {}
   }
@@ -220,6 +221,7 @@ function installScriptableMocks(
         title: this.title,
         body: this.body,
         sound: this.sound,
+        openURL: this.openURL,
         nextTriggerDate: this.nextTriggerDate,
       })
     }
@@ -229,6 +231,7 @@ function installScriptableMocks(
   g.Notification = NotificationStub
   g.__scheduled = 0
   g.__notifs = []
+  g.__widgetUrl = undefined
 }
 
 async function runWidget(
@@ -1013,6 +1016,53 @@ describe('notification content', () => {
     const lunch = notifs.find(n => n.title.includes('Lunch'))
     expect(lunch).toBeDefined()
     expect(lunch!.title).toBe('🥙 Lunch · in 20m')
+  })
+})
+
+describe('where a tap goes: the browser, or the Home Screen web app (#375)', () => {
+  const SITE = 'https://myhpde.netlify.app/'
+  const WEB_APP = 'webapp://myhpde.netlify.app/'
+  const g = globalThis as any
+  const openURLs = () => (g.__notifs as Array<{ openURL: string }>).map(n => n.openURL)
+
+  it('opens the site in the browser from the widget and its alerts by default', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'orange')
+    expect(g.__widgetUrl).toBe(SITE)
+    expect(openURLs()).toEqual([SITE, SITE, SITE])
+  })
+
+  it('opens the web app from the widget and its alerts with `webapp`, and still reads the rest', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'orange,webapp,15m')
+    expect(g.__widgetUrl).toBe(WEB_APP)
+    // orange on-track + meeting + lunch, still at the parameter's lead time
+    expect(openURLs()).toEqual([WEB_APP, WEB_APP, WEB_APP])
+    for (const n of g.__notifs) expect(n.title).toMatch(/· in 15m$/)
+    expect((g.__texts as string[]).some(t => /Invalid/.test(t))).toBe(false)
+  })
+
+  it('opens the web app on Small and Large too, and on the live view', async () => {
+    for (const family of ['small', 'large']) {
+      await runWidget(family, RICH_MANIFEST, 'webapp')
+      expect(g.__widgetUrl).toBe(WEB_APP)
+    }
+  })
+
+  it('opens the web app from the error screen too', async () => {
+    const offlineNoCache = () => { g.__files.delete('/tmp/hpde-events.json') }
+    await expect(runWidget('medium', FUTURE_MANIFEST, 'webapp', offlineNoCache)).rejects.toThrow(/error screen/)
+    expect(g.__widgetUrl).toBe(WEB_APP)
+  })
+
+  it('opens the web app from every alert while any widget on the phone is set to `webapp`', async () => {
+    const files = new Map<string, string>()
+    await runWidget('small', FUTURE_MANIFEST, 'orange,webapp', () => {}, files)
+    await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+    expect(g.__widgetUrl).toBe(SITE)
+    // orange on-track + blue on-track + blue in-class + meeting + lunch
+    expect(openURLs()).toEqual(Array(5).fill(WEB_APP))
+    // Once that widget's parameter drops `webapp`, alerts go back to the browser.
+    await runWidget('small', FUTURE_MANIFEST, 'orange', () => {}, files)
+    expect(openURLs()).toEqual(Array(5).fill(SITE))
   })
 })
 
