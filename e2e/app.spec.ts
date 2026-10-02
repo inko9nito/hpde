@@ -1264,9 +1264,12 @@ test('a driver joins a shared car from its link, and its page says who drove it 
 
   await page.goto(`/#/join-car/${token}`)
   const invite = page.getByRole('dialog', { name: 'Shared car' })
-  await expect(invite).toContainText('Jason Smith is sharing this car with you.')
-  await expect(invite.getByRole('region', { name: 'The car' })).toContainText('The Mustang2015 Ford Mustang GT')
-  await invite.getByRole('button', { name: 'Join' }).click()
+  await expect(invite).toContainText('Jason Smith wants to share a car with you')
+  // The car front and center, as the Garage shows it, and Accept or Decline (#410).
+  await expect(invite.getByRole('region', { name: 'The car' })).toContainText('The Mustang2015 · Ford Mustang GT')
+  await expect(invite.getByRole('button', { name: 'Decline' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await invite.getByRole('button', { name: 'Accept' }).click()
   await expect(page.getByRole('status')).toHaveText('Added to your garage')
   await expect(page).toHaveURL(/#\/garage\/s1$/)
   await expect(page.getByRole('heading', { level: 1, name: 'The Mustang' })).toBeInViewport()
@@ -1274,29 +1277,36 @@ test('a driver joins a shared car from its link, and its page says who drove it 
 
   const carPage = page.locator('.fixed.inset-0', { has: page.getByRole('heading', { level: 1, name: 'The Mustang' }) })
   // Under its name, who else drives it.
-  await expect(carPage.locator('[data-drivers]')).toHaveText('Shared with Jason')
+  await expect(carPage.locator('[data-drivers]')).toContainText('Shared with Jason')
+  // By their picture, or without one, their initial (#410).
+  await expect(carPage.locator('[data-drivers] [data-avatar]')).toHaveText(['J'])
   // Each event, who drove it there, in their run group if they said.
   await carPage.getByRole('tab', { name: 'Events' }).click()
   const rows = carPage.getByRole('list', { name: 'Past events' }).getByRole('listitem')
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(0)).toContainText(alpha.name)
-  await expect(rows.nth(0).locator('[data-who-drove]')).toHaveText('YouBlueJasonRed')
+  // Each by their picture — here, their initial — with their name for screen readers (#410).
+  await expect(rows.nth(0).locator('[data-who-drove] [data-avatar]')).toHaveText(['R', 'J'])
+  await expect(rows.nth(0).locator('[data-who-drove] .sr-only')).toHaveText(['You', 'Jason'])
+  await expect(rows.nth(0).locator('[data-who-drove]')).toContainText('Blue')
+  await expect(rows.nth(0).locator('[data-who-drove]')).toContainText('Red')
   await expect(rows.nth(1)).toContainText(bravo.name)
-  await expect(rows.nth(1).locator('[data-who-drove]')).toHaveText('Jason')
+  await expect(rows.nth(1).locator('[data-who-drove] .sr-only')).toHaveText(['Jason'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Taking it out of their garage leaves it in Jason's.
   await carPage.getByRole('button', { name: 'Edit', exact: true }).click()
   const edit = page.getByRole('dialog', { name: 'Edit car' })
   await edit.getByRole('button', { name: 'Remove from your garage' }).click()
-  await expect(edit).toContainText('Take this car out of your garage? It stays in Jason’s, with its change log. Your event keeps its tire pressures.')
+  await expect(edit).toContainText('Take this car out of your garage? It stays in Jason’s, and the event you drove it at keeps it as it is now. You can put it back.')
   await expect(edit).toContainText('Only its drivers and admins can see this car.')
   await edit.getByRole('button', { name: 'Cancel' }).click()
 
   // In the Garage: who else drives it, and how many events it's been to.
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
-  await expect(page.getByRole('list', { name: 'Cars' })).toContainText('With Jason · 2 events')
+  await expect(page.getByRole('list', { name: 'Cars' })).toContainText('Shared with Jason · 2 events')
+  await expect(page.getByRole('list', { name: 'Cars' }).locator('[data-avatar]')).toHaveText(['R', 'J'])
 })
 
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {

@@ -3,15 +3,16 @@ import { Lock } from 'lucide-react'
 import { FormPage } from './NewEventPage'
 import { Notice } from './Notice'
 import { SignInPrompt } from './SignInPrompt'
-import { CarTile } from './CarRow'
+import { Avatar } from './Avatar'
+import { CarHero } from './CarRow'
 import { useAuth } from '../auth/AuthContext'
-import { useGarage } from '../data/GarageContext'
-import { carTitle } from '../utils/garage'
+import { useGarage, useInvitePhoto } from '../data/GarageContext'
 import type { CarInvite } from '../utils/garage'
 
 /**
- * An invite to share a car (#398), opened from its link: whose car, and
- * Join, which puts it in this driver's garage too. Slides up, with Cancel.
+ * An invite to share a car (#398), opened from its link: who it's from, the
+ * car front and center as the Garage shows it, and Accept — which puts it in
+ * this driver's garage too — or Decline (#410). Slides up, with Cancel.
  */
 export function JoinCarPage({ token, onClose, onJoined }: {
   token: string
@@ -51,6 +52,8 @@ export function JoinCarPage({ token, onClose, onJoined }: {
   }
 
   const page = { title: 'Shared car', onCancel: onClose, cancelDisabled: joining }
+  const photo = useInvitePhoto(token, invite)
+  const big = 'flex min-h-12 flex-1 items-center justify-center rounded-xl px-4 py-3 text-[15px] font-semibold transition-colors disabled:opacity-50'
   let content: React.ReactNode
   if (authStatus !== 'signed-in') {
     content = authStatus === 'loading'
@@ -59,31 +62,39 @@ export function JoinCarPage({ token, onClose, onJoined }: {
   } else if (failure) {
     content = <Notice title={failure} detail="Ask them to share the car again, for a new link." />
   } else if (!invite) {
-    content = <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" aria-busy="true" aria-label="Loading the invite" />
-  } else {
-    const title = carTitle(invite.car)
     content = (
-      <div className="flex flex-col gap-4">
-        <section aria-label="The car" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <CarTile size={48} />
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-bold text-gray-900">{invite.car.nickname ?? title}</h2>
-              {invite.car.nickname && <p className="truncate text-[13px] text-gray-500">{title}</p>}
-            </div>
-          </div>
-          <p className="mt-4 text-sm text-gray-700">
-            {invite.carId
-              ? 'It’s in your garage already.'
-              : <><span className="font-semibold">{invite.from}</span> is sharing this car with you.</>}
-          </p>
+      <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading the invite">
+        <div className="mx-auto h-5 w-2/3 animate-pulse rounded bg-gray-200" />
+        <div className="aspect-[16/9] animate-pulse rounded-2xl bg-gray-200" />
+      </div>
+    )
+  } else {
+    content = (
+      <div className="flex flex-col gap-5">
+        {/* Who it's from, then the car, as the Garage shows it (#410). */}
+        <p className="flex items-center justify-center gap-2.5 text-center text-[15px] text-gray-700">
+          {!invite.carId && <Avatar name={invite.from} url={invite.fromAvatar} size={32} />}
+          {invite.carId
+            ? 'It’s in your garage already.'
+            : <span><span className="font-semibold text-gray-900">{invite.from}</span> wants to share a car with you</span>}
+        </p>
+        <section aria-label="The car" className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <CarHero car={{ ...invite.car, ...(invite.photo ? { photo: invite.photo } : {}) }} src={photo} />
           {!invite.carId && (
-            <p className="mt-2 text-sm text-gray-500">
-              Join, and it’s in your garage too: you both keep up its details, photo and change log. Each of you adds it to your own events, with your own tire pressures, and its page shows who drove it where.
+            <p className="px-4 py-3.5 text-sm text-gray-600">
+              Accept, and it’s in your garage too. You both keep its setup and history up to date, and each of you adds it to your own events.
             </p>
           )}
         </section>
-        {joinFailure && <p role="alert" className="-mt-1 px-1 text-xs text-red-700">{joinFailure}</p>}
+        {joinFailure && <p role="alert" className="-mt-2 px-1 text-xs text-red-700">{joinFailure}</p>}
+        <div className="flex gap-3">
+          {invite.carId ? (
+            <button onClick={join} className={`${big} bg-gray-900 text-white hover:bg-gray-700`}>Open the car</button>
+          ) : (<>
+            <button onClick={onClose} disabled={joining} className={`${big} border border-gray-300 bg-white text-gray-900 hover:bg-gray-50`}>Decline</button>
+            <button onClick={join} disabled={joining} className={`${big} bg-gray-900 text-white hover:bg-gray-700`}>{joining ? 'Accepting…' : 'Accept'}</button>
+          </>)}
+        </div>
         <p className="flex items-center justify-center gap-1 text-[11px] text-gray-400">
           <Lock size={11} aria-hidden="true" />
           Only its drivers and admins can see this car.
@@ -94,14 +105,7 @@ export function JoinCarPage({ token, onClose, onJoined }: {
 
   return (
     <div role="dialog" aria-label="Shared car">
-      <FormPage
-        {...page}
-        save={{
-          label: invite?.carId ? 'Open' : joining ? 'Joining…' : 'Join',
-          disabled: authStatus !== 'signed-in' || !invite || joining,
-          onClick: join,
-        }}
-      >
+      <FormPage {...page}>
         {content}
       </FormPage>
     </div>

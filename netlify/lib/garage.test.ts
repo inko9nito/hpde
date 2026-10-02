@@ -12,7 +12,7 @@ const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
 const identityUsers: Record<string, unknown> = {
   'vera-token': { id: 'vera', email: 'vera@example.com' },
   'jason-token': { id: JASON, email: 'jason@example.com', user_metadata: { full_name: 'Jason Smith' } },
-  'dad-token': { id: 'dad', email: 'dad@example.com', user_metadata: { full_name: 'Rick Smith' } },
+  'dad-token': { id: 'dad', email: 'dad@example.com', user_metadata: { full_name: 'Rick Smith', avatar_url: 'https://pics.example/rick.jpg' } },
   'admin-token': { id: 'amy', email: 'amy@example.com', app_metadata: { roles: ['admin'] } },
 }
 const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
@@ -202,12 +202,33 @@ describe('garage function (#344)', () => {
     expect((await photo('GET', {})).status).toBe(200)
   })
 
-  it('removes a car and its log; its events keep their pressures, and the record goes with the last of it', async () => {
+  it('takes a car out of the garage: one that went to events is kept for them, and can be put back (#410)', async () => {
     await addCar()
+    await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: brakeJob } })
     await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup } })
     await call('PUT', { token: 'vera-token', query: '?event=other', body: { setup: { carId: 'car1' } } })
-    expect((await call('DELETE', { token: 'vera-token', query: '?car=car1' })).status).toBe(200)
-    const garage = await garageOf('vera-token')
+    // One that went nowhere just goes.
+    const miata = await addCar('vera-token', { make: 'Mazda', model: 'Miata' })
+    expect(await (await call('DELETE', { token: 'vera-token', query: `?car=${miata.id}` })).json()).toEqual({ deleted: miata.id })
+
+    now = new Date('2026-10-02T12:00:00.000Z')
+    const out = await call('DELETE', { token: 'vera-token', query: '?car=car1' })
+    expect((await out.json()).car).toMatchObject({ id: 'car1', ...cayman, archived: '2026-10-02T12:00:00.000Z' })
+    let garage = await garageOf('vera-token')
+    // Still on its events, with its log; out of the garage.
+    expect(garage.cars).toEqual([expect.objectContaining({ id: 'car1', archived: '2026-10-02T12:00:00.000Z', log: [expect.objectContaining(brakeJob)] })])
+    expect(garage.events[EVENT].carId).toBe('car1')
+    expect(garage.events.other.carId).toBe('car1')
+    // Not to be shared, or put back twice.
+    expect((await call('PUT', { token: 'vera-token', query: '?car=car1&invite=1' })).status).toBe(400)
+    expect((await call('PUT', { token: 'vera-token', query: '?car=car1&restore=1' })).status).toBe(200)
+    expect((await garageOf('vera-token')).cars[0]).not.toHaveProperty('archived')
+    expect((await call('PUT', { token: 'vera-token', query: '?car=car1&restore=1' })).status).toBe(400)
+
+    // Taken out again, then removed for good: its events keep their pressures, without it.
+    await call('DELETE', { token: 'vera-token', query: '?car=car1' })
+    expect(await (await call('DELETE', { token: 'vera-token', query: '?car=car1' })).json()).toEqual({ deleted: 'car1' })
+    garage = await garageOf('vera-token')
     expect(garage.cars).toEqual([])
     // Nothing left of the other event's but the car.
     expect(Object.keys(garage.events)).toEqual([EVENT])
@@ -376,17 +397,57 @@ describe('garage function (#344)', () => {
 
       expect((await call('DELETE', { token: 'jason-token', query: '?car=car1' })).status).toBe(200)
       const jasons = await garageOf('jason-token')
-      expect(jasons.cars).toEqual([])
-      // His event keeps its tire pressures, as with a car of his own.
-      expect(jasons.events[EVENT]).not.toHaveProperty('carId')
+      // His event keeps it as it was when he left (#410): his own copy, out of his garage.
+      expect(jasons.cars).toEqual([expect.objectContaining({ id: 'car1', ...cayman, archived: expect.any(String) })])
+      expect(jasons.cars[0]).not.toHaveProperty('drivers')
+      expect(jasons.events[EVENT].carId).toBe('car1')
+      expect(new Uint8Array(await (await photo('jason-token', '?car=car1&photo=1')).arrayBuffer())).toEqual(bytes)
       expect((await garageOf('vera-token')).cars[0].drivers.map((d: { id: string }) => d.id)).toEqual(['vera'])
-      expect(photos.size).toBe(1)
+      expect([...photos.keys()].sort()).toEqual([`${JASON}/car1`, 'shared/car1'])
 
+      // Vera never drove it at an event: with her, the last, it goes.
       expect((await call('DELETE', { token: 'vera-token', query: '?car=car1' })).status).toBe(200)
       expect((await garageOf('vera-token')).cars).toEqual([])
       expect(shared.size).toBe(0)
-      expect(photos.size).toBe(0)
+      expect([...photos.keys()]).toEqual([`${JASON}/car1`])
       expect(store.has('vera/garage')).toBe(false)
+    })
+
+    it('takes back a driver who left it: the car itself in place of what was kept of it', async () => {
+      await addCar()
+      await join('jason-token', await invite())
+      await call('PUT', { token: 'jason-token', query: `?event=${EVENT}`, body: { setup: { carId: 'car1' } } })
+      await call('DELETE', { token: 'jason-token', query: '?car=car1' })
+      expect((await join('jason-token', await invite())).status).toBe(200)
+      const jasons = await garageOf('jason-token')
+      expect(jasons.cars).toHaveLength(1)
+      expect(jasons.cars[0]).not.toHaveProperty('archived')
+      expect(jasons.cars[0].drivers.map((d: { id: string }) => d.id)).toEqual(['vera', JASON])
+      expect(jasons.events[EVENT].carId).toBe('car1')
+    })
+
+    it('shows the car’s photo and the sender’s picture with the invite, and each driver’s picture with the car', async () => {
+      await addCar('dad-token')
+      await photo('dad-token', '?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: bytes })
+      const token = await invite('dad-token')
+      const seen = (await (await call('GET', { token: 'jason-token', query: `?invite=${token}` })).json()).invite
+      expect(seen).toMatchObject({ from: 'Rick Smith', fromAvatar: 'https://pics.example/rick.jpg', photo: expect.any(String) })
+      expect(new Uint8Array(await (await photo('jason-token', `?invite=${token}&photo=1`)).arrayBuffer())).toEqual(bytes)
+      expect((await photo('jason-token', '?invite=not-a-real-invite-x&photo=1')).status).toBe(404)
+
+      await join('jason-token', token)
+      expect((await garageOf('jason-token')).cars[0].drivers).toEqual([
+        { id: 'dad', name: 'Rick Smith', avatar: 'https://pics.example/rick.jpg' },
+        { id: JASON, name: 'Jason Smith', you: true },
+      ])
+      // A picture added since shows from their next visit.
+      identityUsers['jason-token'] = { id: JASON, email: 'jason@example.com', user_metadata: { full_name: 'Jason Smith', avatar_url: 'https://pics.example/jason.jpg' } }
+      try {
+        await garageOf('jason-token')
+        expect((await garageOf('dad-token')).cars[0].drivers[1]).toEqual({ id: JASON, name: 'Jason Smith', avatar: 'https://pics.example/jason.jpg' })
+      } finally {
+        identityUsers['jason-token'] = { id: JASON, email: 'jason@example.com', user_metadata: { full_name: 'Jason Smith' } }
+      }
     })
 
     it('refuses an invite that’s expired, made up, or for a car that’s gone', async () => {

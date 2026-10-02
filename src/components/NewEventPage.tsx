@@ -366,7 +366,7 @@ export function FormPage({ title, subtitle, onCancel, cancelDisabled, save, chil
   subtitle?: string
   onCancel: () => void
   cancelDisabled?: boolean
-  save: React.ComponentProps<typeof PageHeader>['save']
+  save?: React.ComponentProps<typeof PageHeader>['save']
   children: React.ReactNode
 }) {
   return (

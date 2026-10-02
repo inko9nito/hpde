@@ -16,12 +16,21 @@ export interface GarageValue extends Garage {
   status: GarageStatus
   /** Adds a car (no id) or changes one; resolves to it as saved. Throws with a message to show. */
   saveCar(car: Omit<Car, 'id' | 'photo' | 'log' | 'updatedAt'> & { id?: string }): Promise<Car>
+  /**
+   * Takes a car out of the garage (#410). One that went to events is kept
+   * for them, archived, and can be put back; one that didn't, or one
+   * already archived, goes for good.
+   */
   removeCar(id: string): Promise<void>
+  /** Puts an archived car back in the garage. */
+  restoreCar(id: string): Promise<void>
   /** Sets a car's photo: the image, already shrunk (shrinkPhoto). */
   savePhoto(carId: string, photo: Blob): Promise<void>
   removePhoto(carId: string): Promise<void>
   /** Where a car's photo is, for useCarPhoto; none without one. */
   photoUrl(car: Car): string | null
+  /** Where an invite's car's photo is, for useInvitePhoto; none without one. */
+  invitePhotoUrl(token: string, invite: CarInvite): string | null
   /** Logs a job on a car (no id), or changes an entry. */
   saveEntry(carId: string, entry: Omit<LogEntry, 'id'> & { id?: string }): Promise<void>
   removeEntry(carId: string, entryId: string): Promise<void>
@@ -133,8 +142,11 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
   }, [send, change])
 
   const removeCar = useCallback(async (id: string) => {
-    await send(`car=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    // As the function does: its events keep their tire pressures, without it.
+    const res = await send(`car=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const kept = res.ok ? ((await res.json()).car as Car | undefined) : undefined
+    // Kept for its events, as the function keeps it: without its drivers, if it was shared.
+    if (kept) return change(g => ({ ...g, cars: g.cars.map(c => (c.id === id ? kept : c)) }))
+    // Gone: as the function does, its events keep their tire pressures, without it.
     change(g => ({
       cars: g.cars.filter(c => c.id !== id),
       events: Object.fromEntries(Object.entries(g.events).flatMap(([eventId, setup]): [string, EventSetup][] => {
@@ -143,6 +155,11 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
         return rest.sessions ? [[eventId, rest]] : []
       })),
     }))
+  }, [send, change])
+
+  const restoreCar = useCallback(async (id: string) => {
+    const back = (await (await send(`car=${encodeURIComponent(id)}&restore=1`, { method: 'PUT' })).json()).car as Car
+    change(g => ({ ...g, cars: g.cars.map(c => (c.id === id ? back : c)) }))
   }, [send, change])
 
   const saveEntry = useCallback(async (carId: string, entry: Omit<LogEntry, 'id'> & { id?: string }) => {
@@ -186,6 +203,12 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
     return `${url}${sep}car=${encodeURIComponent(car.id)}&photo=1&v=${encodeURIComponent(car.photo)}`
   }, [url])
 
+  const invitePhotoUrl = useCallback((token: string, invite: CarInvite) => {
+    if (!invite.photo) return null
+    const sep = url.includes('?') ? '&' : '?'
+    return `${url}${sep}invite=${encodeURIComponent(token)}&photo=1&v=${encodeURIComponent(invite.photo)}`
+  }, [url])
+
   const saveSetup = useCallback(async (eventId: string, setup: Omit<EventSetup, 'updatedAt'>) => {
     const saved = (await (await send(`event=${encodeURIComponent(eventId)}`, put({ setup }))).json()).setup as EventSetup
     change(g => ({ ...g, events: { ...g.events, [eventId]: saved } }))
@@ -224,8 +247,8 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
   }, [send, authedFetch, url, who])
 
   return useMemo(
-    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload }),
-    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload],
+    () => ({ status, ...garage, saveCar, removeCar, restoreCar, savePhoto, removePhoto, photoUrl, invitePhotoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload }),
+    [status, garage, saveCar, removeCar, restoreCar, savePhoto, removePhoto, photoUrl, invitePhotoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload],
   )
 }
 
@@ -245,9 +268,11 @@ const OFF: GarageValue = {
   ...EMPTY,
   saveCar: signIn,
   removeCar: signIn,
+  restoreCar: signIn,
   savePhoto: signIn,
   removePhoto: signIn,
   photoUrl: () => null,
+  invitePhotoUrl: () => null,
   saveEntry: signIn,
   removeEntry: signIn,
   saveSetup: signIn,
@@ -274,8 +299,17 @@ const photoCache = new Map<string, Promise<string | null>>()
  */
 export function useCarPhoto(car: Car | undefined): string | null {
   const { photoUrl } = useGarage()
+  return usePhotoAt(car ? photoUrl(car) : null)
+}
+
+/** The photo of the car an invite is for (#410), as useCarPhoto. */
+export function useInvitePhoto(token: string, invite: CarInvite | null): string | null {
+  const { invitePhotoUrl } = useGarage()
+  return usePhotoAt(invite ? invitePhotoUrl(token, invite) : null)
+}
+
+function usePhotoAt(url: string | null): string | null {
   const { authedFetch } = useAuth()
-  const url = car ? photoUrl(car) : null
   const [shown, setShown] = useState<{ url: string; src: string } | null>(null)
   useEffect(() => {
     if (!url) return

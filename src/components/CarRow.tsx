@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { CarFront, ChevronRight } from 'lucide-react'
-import { consumableLabel, consumablesOn, formatDay } from '../utils/garage'
+import { carHeading, carSubtitle, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { useCarPhoto } from '../data/GarageContext'
 
@@ -58,6 +58,36 @@ export function CarRow({ car, title, subtitle, onClick, label, dashed = false }:
       </span>
       <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
     </button>
+  )
+}
+
+/**
+ * A car as the Garage shows it (#410): its photo, landscape, with its name
+ * and year over the foot of it — or, with none (yet), a car on dark gray.
+ * The invite to share a car shows it the same way.
+ */
+export function CarHero({ car, src }: {
+  car: Pick<Car, 'year' | 'make' | 'model' | 'nickname' | 'photo'>
+  /** Its photo, once it's in. */
+  src: string | null
+}) {
+  const subtitle = carSubtitle(car)
+  return (
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800">
+      {src ? (
+        <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" data-car-photo />
+      ) : car.photo ? (
+        <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
+      ) : (
+        <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
+      )}
+      {/* Dark enough at the foot for the name to read over any photo. */}
+      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
+      <div className="absolute inset-x-0 bottom-0 px-4 pb-3.5">
+        <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
+        {subtitle && <p className="mt-0.5 truncate text-sm text-white/85">{subtitle}</p>}
+      </div>
+    </div>
   )
 }
 

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
+import { AvatarStack, useDriverAvatar } from './Avatar'
+import { CarHero, CarRow } from './CarRow'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
@@ -7,51 +9,34 @@ import { carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_CARS, carHeading, carOutings, carSubtitle, isShared, othersText } from '../utils/garage'
-import type { Car, Garage } from '../utils/garage'
-import type { Rsvps } from '../utils/rsvp'
+import { MAX_CARS, activeCars, carName, carOutings, isShared, othersText } from '../utils/garage'
+import type { Car } from '../utils/garage'
 import type { EventConfig } from '../types'
 
 /**
- * "6 events": how many the car went to, by whoever drove it — and who
- * else drives it, when it's shared (#398).
+ * A car in the Garage (#410): its photo with its name over it, and under
+ * it how many events it's been to — after its drivers' pictures, when
+ * it's shared (#398). Opens its page.
  */
-function eventsLine(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): string {
-  const n = carOutings(car, garage, events, rsvps).length
-  const went = n === 0 ? 'No events yet' : n === 1 ? '1 event' : `${n} events`
-  return isShared(car) ? `With ${othersText(car)} · ${went}` : went
-}
-
-/**
- * A car in the Garage (#410): its photo, landscape, with its name and
- * year over the foot of it — or, with none (yet), a car on dark gray — and
- * under it how many events it's been to. Opens its page.
- */
-function CarCard({ car, line }: { car: Car; line: string }) {
+function CarCard({ car, events }: { car: Car; events: number }) {
   const src = useCarPhoto(car)
+  const avatarOf = useDriverAvatar()
+  const shared = isShared(car)
+  // You first, then the others in the order they joined.
+  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
   return (
     <a
       href={carHash(car.id)}
       className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
       data-car-row
     >
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-gray-800">
-        {src ? (
-          <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" data-car-photo />
-        ) : car.photo ? (
-          <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
-        ) : (
-          <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
-        )}
-        {/* Dark enough at the foot for the name to read over any photo. */}
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-0 px-4 pb-3.5">
-          <h2 className="truncate font-rubik text-[22px] font-bold leading-tight text-white">{carHeading(car)}</h2>
-          {carSubtitle(car) && <p className="mt-0.5 truncate text-sm text-white/85">{carSubtitle(car)}</p>}
-        </div>
-      </div>
-      <div className="flex min-h-12 items-center gap-3 px-4 py-3">
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-500">{line}</span>
+      <CarHero car={car} src={src} />
+      <div className="flex min-h-12 items-center gap-2.5 px-4 py-3">
+        {shared && <AvatarStack people={drivers.map(d => ({ name: d.name, url: avatarOf(d) }))} size={24} />}
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
+          {shared && <span className="sr-only">Shared with {othersText(car)} · </span>}
+          {events === 0 ? 'No events yet' : events === 1 ? '1 event' : `${events} events`}
+        </span>
         <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
       </div>
     </a>
@@ -76,13 +61,16 @@ export function GaragePage({ events, onBack, onToast }: {
   // Add a car's page, while it's open: a new one each time (see CarPage).
   const [adding, setAdding] = useState<number | null>(null)
   const add = () => setAdding(n => (n ?? 0) + 1)
+  const cars = activeCars(garage.cars)
+  // Taken out of the garage, kept for the events they went to (#410).
+  const removed = garage.cars.filter(c => c.archived)
 
   return (
     <div className="min-h-screen bg-gray-50">
       <SubPageHeader
         title="Garage"
         onBack={onBack}
-        accessory={authStatus === 'signed-in' && garage.status === 'ready' && garage.cars.length > 0 && (
+        accessory={authStatus === 'signed-in' && garage.status === 'ready' && cars.length > 0 && (
           <p className="flex shrink-0 items-center gap-1 text-sm text-gray-500" title="Only you and admins can see your garage">
             <Lock size={14} aria-hidden="true" /> Private
           </p>
@@ -106,7 +94,7 @@ export function GaragePage({ events, onBack, onToast }: {
               Try again
             </button>
           </div>
-        ) : garage.cars.length === 0 ? (
+        ) : cars.length === 0 ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
             <CarFront size={22} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
@@ -120,13 +108,13 @@ export function GaragePage({ events, onBack, onToast }: {
         ) : (
           <div className="fade-in flex flex-col gap-4">
             <ul className="flex flex-col gap-4" aria-label="Cars">
-              {garage.cars.map(car => (
+              {cars.map(car => (
                 <li key={car.id}>
-                  <CarCard car={car} line={eventsLine(car, garage, events, rsvps)} />
+                  <CarCard car={car} events={carOutings(car, garage, events, rsvps).length} />
                 </li>
               ))}
             </ul>
-            {garage.cars.length < MAX_CARS && (
+            {cars.length < MAX_CARS && (
               <button
                 onClick={add}
                 className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white px-4 py-3 text-[15px] font-semibold text-gray-900 transition-colors hover:bg-gray-50"
@@ -136,6 +124,24 @@ export function GaragePage({ events, onBack, onToast }: {
               </button>
             )}
           </div>
+        )}
+        {authStatus === 'signed-in' && garage.status === 'ready' && removed.length > 0 && (
+          <section aria-label="Removed cars" className="fade-in mt-8">
+            <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+              <h2 className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">Removed</h2>
+              <span className="text-xs text-gray-500">Kept for the events they went to</span>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {removed.map(car => {
+                const n = carOutings(car, garage, events, rsvps).length
+                return (
+                  <li key={car.id}>
+                    <CarRow car={car} title={carName(car)} subtitle={n === 1 ? '1 event' : `${n} events`} onClick={() => { window.location.hash = carHash(car.id) }} />
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
         )}
       </div>
       {adding !== null && (

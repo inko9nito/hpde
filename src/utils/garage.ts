@@ -80,12 +80,21 @@ export interface Car {
   drivers?: CarDriver[]
   /** The events its other drivers drove it at, as the garage function sends it. */
   drives?: CarDrive[]
+  /**
+   * When it was taken out of the garage ("YYYY-MM-DDTHH:mm:ss.sssZ"): it
+   * stays on the events it went to, with its photo and log, and can be put
+   * back (#410). A shared car its driver left is kept this way too, as it
+   * was then.
+   */
+  archived?: string
 }
 
 /** One of a shared car's drivers (#398): who, by their name (or email, without one). */
 export interface CarDriver {
   id: string
   name: string
+  /** Their picture, from their sign-in, when they have one. */
+  avatar?: string
   /** The driver whose garage this is. */
   you?: boolean
 }
@@ -102,6 +111,10 @@ export interface CarInvite {
   car: Pick<Car, 'year' | 'make' | 'model' | 'nickname'>
   /** Who sent it. */
   from: string
+  /** Their picture, when they have one. */
+  fromAvatar?: string
+  /** Set when the car has a photo: which one, for the invite's photo URL. */
+  photo?: string
   /** "YYYY-MM-DDTHH:mm:ss.sssZ": when it stops working. */
   expires: string
   /** Their own car's id, when it's already in their garage. */
@@ -318,12 +331,12 @@ export function carName(car: Car): string {
  * A car's name over its photo (#410): its nickname, or its make and model —
  * with carSubtitle under it.
  */
-export function carHeading(car: Car): string {
+export function carHeading(car: Pick<Car, 'make' | 'model' | 'nickname'>): string {
   return car.nickname ?? `${car.make} ${car.model}`
 }
 
 /** Under carHeading: the year, and the make and model when it has a nickname. "2018 · Porsche Panamera 4S". */
-export function carSubtitle(car: Car): string {
+export function carSubtitle(car: Pick<Car, 'year' | 'make' | 'model' | 'nickname'>): string {
   return [car.year, car.nickname ? `${car.make} ${car.model}` : undefined].filter(Boolean).join(' · ')
 }
 
@@ -337,6 +350,11 @@ export function carEvents(carId: string, garage: Garage, events: EventConfig[]):
   return events
     .filter(e => garage.events[e.id]?.carId === carId)
     .sort((a, b) => eventStart(b).localeCompare(eventStart(a)))
+}
+
+/** The cars in the garage: all but those taken out of it (#410). */
+export function activeCars(cars: Car[]): Car[] {
+  return cars.filter(c => !c.archived)
 }
 
 /** Whether a car is shared with another driver (#398). */

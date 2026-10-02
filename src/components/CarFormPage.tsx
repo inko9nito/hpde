@@ -123,13 +123,25 @@ type PhotoChange = { blob: Blob; src: string } | 'remove' | null
 const card = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm'
 const outlineButton = 'rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-gray-50'
 
+/** What Remove asks first: what's kept of the car, and where (#410). */
+function removeText(others: string | null, events: number): string {
+  const went = events === 1 ? 'the event you drove it at' : `the ${events} events you drove it at`
+  if (others) {
+    return events
+      ? `Take this car out of your garage? It stays in ${others}’s, and ${went} ${events === 1 ? 'keeps' : 'keep'} it as it is now. You can put it back.`
+      : `Take this car out of your garage? It stays in ${others}’s.`
+  }
+  return events ? `Take this car out of your garage? It stays on ${went}, and you can put it back.` : 'Remove this car and its change log?'
+}
+
 /**
  * Adds a car to the garage, or changes or removes one (#344): a page that
  * slides up over the one it's opened from (#356), Cancel and Save across its
  * top — its photo, what it is and its lug nut torque. Nothing's saved
  * until Save; a photo picked is made small enough to upload first.
- * Removing a car takes its change log with it; the events it went to keep
- * their sessions' tire pressures.
+ * Removing a car that went to events keeps it for them, photo and change
+ * log and all, out of the garage, to be put back (#410); one that went to
+ * none goes.
  */
 export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
   /** The car to change; none to add one. */
@@ -281,10 +293,7 @@ export function CarFormPage({ car, events, onSaved, onRemoved, onClosed }: {
             {car && confirmingRemove && (
               <div className="flex flex-col items-center gap-1.5 text-sm">
                 <span className="text-center text-gray-700">
-                  {shared
-                    ? `Take this car out of your garage? It stays in ${others}’s, with its change log.`
-                    : 'Remove this car and its change log?'}
-                  {!!events && ` Your ${events === 1 ? 'event keeps its' : `${events} events keep their`} tire pressures.`}
+                  {removeText(shared ? others : null, events ?? 0)}
                 </span>
                 <div className="flex items-center gap-3">
                   <button

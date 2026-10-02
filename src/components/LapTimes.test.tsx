@@ -162,6 +162,9 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       if (init?.method === 'DELETE') return json({ car: withCar(({ photo: _gone, ...c }) => c) })
       return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg' } })
     }
+    if (carId && params.get('restore') && init?.method === 'PUT') {
+      return json({ car: withCar(({ archived: _was, ...c }) => c) })
+    }
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body))
       if (carId && body.events) {
@@ -200,6 +203,11 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       if (carId && entryId) {
         withCar(c => ({ ...c, log: (c.log ?? []).filter(e => e.id !== entryId) }))
         return json({ deleted: entryId })
+      }
+      // As the function does (#410): one that went to events is kept for them.
+      const car = garageData.cars.find(c => c.id === carId)
+      if (car && !car.archived && Object.values(garageData.events).some(e => e.carId === carId)) {
+        return json({ car: withCar(c => ({ ...c, archived: '2026-10-02T12:00:00.000Z' })) })
       }
       if (carId) {
         garageData = {
@@ -1763,6 +1771,59 @@ describe('the garage (#344)', () => {
     await waitFor(() => expect(window.location.hash).toBe('#/garage'))
     expect(garageCalls('DELETE')[0][0]).toContain('car=cayman')
     expect(await screen.findByText('No cars yet')).toBeInTheDocument()
+  })
+
+  it('takes a car that went to events out of the garage, keeping it for them (#410)', async () => {
+    garageData = { cars: [cayman], events: { [event.id]: { carId: 'cayman' } } }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    await userEvent.click(within(page).getByRole('button', { name: 'Edit' }))
+    const edit = screen.getByRole('dialog', { name: 'Edit car' })
+    await userEvent.click(within(edit).getByRole('button', { name: 'Remove from garage' }))
+    expect(edit).toHaveTextContent('Take this car out of your garage? It stays on the event you drove it at, and you can put it back.')
+    await userEvent.click(within(edit).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/garage'))
+    expect(screen.getByRole('status')).toHaveTextContent('Removed from your garage')
+    // Out of the Garage, under Removed; still the event's car.
+    expect(await screen.findByText('No cars yet')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Removed cars' })).toHaveTextContent('The Cayman · 1 event')
+    expect(garageData.events[event.id].carId).toBe('cayman')
+  })
+
+  it('shows a car taken out of the garage as kept for its events, and puts it back (#410)', async () => {
+    garageData = { cars: [{ ...cayman, archived: '2026-10-02T12:00:00.000Z' }], events: { [event.id]: { carId: 'cayman' } } }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    expect(within(page).getByRole('region', { name: 'Removed' })).toHaveTextContent('Removed from your garage on Oct 2, 2026. It’s kept for the event you drove it at.')
+    // Nothing to change on it till it's back.
+    for (const name of ['Edit', 'Share with another driver', 'Add entry']) expect(within(page).queryByRole('button', { name })).not.toBeInTheDocument()
+    await userEvent.click(within(page).getByRole('button', { name: 'Put back in garage' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Back in your garage')
+    expect(garageCalls('PUT')[0][0]).toContain('car=cayman&restore=1')
+    expect(within(page).queryByRole('region', { name: 'Removed' })).not.toBeInTheDocument()
+    expect(within(page).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+  })
+
+  it('shows a shared car’s drivers by their pictures, or their initial (#410)', async () => {
+    garageData = {
+      cars: [{
+        ...cayman,
+        drivers: [{ id: 'a', name: 'Vera Kim', you: true }, { id: 'j', name: 'Jason Smith', avatar: 'https://pics.example/jason.jpg' }],
+        drives: [{ eventId: event.id, driverId: 'j' }],
+      }],
+      events: {},
+    }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    const faces = (el: Element) => [...el.querySelectorAll('[data-avatar]')].map(a => a.getAttribute('src') ?? a.textContent)
+    // Theirs beside Share, then the one to add.
+    expect(faces(within(page).getByRole('button', { name: 'Share with another driver' }))).toEqual(['V', 'https://pics.example/jason.jpg'])
+    expect(page.querySelector('[data-drivers]')).toHaveTextContent('Shared with Jason')
+    expect(faces(page.querySelector('[data-drivers]')!)).toEqual(['https://pics.example/jason.jpg'])
+    await userEvent.click(within(page).getByRole('tab', { name: 'Events' }))
+    const who = page.querySelector('[data-who-drove]')!
+    expect(faces(who)).toEqual(['https://pics.example/jason.jpg'])
+    expect(who).toHaveTextContent('Jason')
   })
 
   it('lists a car’s events on its page; one opens over it on My notes, and Back returns to the car', async () => {

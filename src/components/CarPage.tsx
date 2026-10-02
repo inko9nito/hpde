@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, Plus, UserPlus, Users } from 'lucide-react'
+import { ChevronRight, Plus, UserPlus } from 'lucide-react'
+import { Avatar, AvatarStack, useDriverAvatar } from './Avatar'
+import { useAuth } from '../auth/AuthContext'
 import { BackButton } from './EventHeader'
-import { ICON_BUTTON } from './iconButton'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
 import { CarFormPage } from './CarFormPage'
@@ -78,6 +79,7 @@ function CarPhoto({ car }: { car: Car }) {
  * shared car's drivers who did, or for a car of their own, the group.
  */
 function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
+  const avatarOf = useDriverAvatar()
   const shown = outing.drivers.filter(d => shared || d.runGroup)
   if (shown.length === 0) return null
   return (
@@ -85,13 +87,70 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
       {shown.map(({ driver, runGroup }) => {
         const group = outing.event.runGroups.find(g => g.id === runGroup)
         return (
-          <span key={driver.id || 'you'} className="inline-flex items-center gap-1.5">
-            {shared && <span className="font-medium">{driverLabel(driver)}</span>}
+          <span key={driver.id || 'you'} className="inline-flex items-center gap-1" title={shared ? driverLabel(driver) : undefined}>
+            {/* Their picture, on a shared car (#410); their name for screen readers. */}
+            {shared && <><Avatar name={driver.name} url={avatarOf(driver)} size={20} /><span className="sr-only">{driverLabel(driver)}</span></>}
             {group && <GroupBadge group={group} size="sm" />}
           </span>
         )
       })}
     </span>
+  )
+}
+
+/**
+ * A car taken out of the garage (#410): when, that it's kept for its
+ * events, and the way to put it back — or to delete it for good.
+ */
+function RemovedNotice({ car, events, onRestore, onDelete }: {
+  car: Car
+  events: number
+  onRestore: () => Promise<void>
+  onDelete: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState<'restoring' | 'deleting' | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const run = async (what: 'restoring' | 'deleting', action: () => Promise<void>) => {
+    setBusy(what)
+    setFailure(null)
+    try {
+      await action()
+    } catch (err) {
+      setFailure((err as Error).message)
+      setBusy(null)
+    }
+  }
+  return (
+    <section aria-label="Removed" className={`${CARD_FRAME} mt-4 px-4 py-3.5`}>
+      <p className="text-sm text-gray-700">
+        Removed from your garage on {formatDay(car.archived!.slice(0, 10))}.
+        {events > 0 && ` It’s kept for the ${events === 1 ? 'event' : `${events} events`} you drove it at.`}
+      </p>
+      {confirming ? (
+        <div className="mt-3">
+          <p className="text-sm text-gray-700">Delete it for good? {events > 0 ? 'Your events keep their tire pressures, but not the car.' : ''}</p>
+          <div className="mt-2 flex items-center gap-4 text-sm font-semibold">
+            <button onClick={() => run('deleting', onDelete)} disabled={!!busy} className="text-red-600 hover:text-red-700 disabled:opacity-50">
+              {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={!!busy} className="font-normal text-gray-500 hover:text-gray-700">Keep</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            onClick={() => run('restoring', onRestore)}
+            disabled={!!busy}
+            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:opacity-50"
+          >
+            {busy === 'restoring' ? 'Putting it back…' : 'Put back in garage'}
+          </button>
+          <button onClick={() => setConfirming(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">Delete for good</button>
+        </div>
+      )}
+      {failure && <p role="alert" className="mt-2 text-xs text-red-700">{failure}</p>}
+    </section>
   )
 }
 
@@ -138,7 +197,8 @@ function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
 function SetupPanel({ car, onOpenEntry, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
-  onLog: () => void
+  /** None for a car out of the garage. */
+  onLog?: () => void
 }) {
   const on = consumablesOn(car)
   const log = logNewestFirst(car)
@@ -153,7 +213,7 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
 
       {/* Maintenance, as it's to sit beside Modifications (#390). */}
       <section aria-label="Maintenance">
-        <SectionTitle aside={<AddLink onClick={onLog}>Add entry</AddLink>}>Maintenance</SectionTitle>
+        <SectionTitle aside={onLog && <AddLink onClick={onLog}>Add entry</AddLink>}>Maintenance</SectionTitle>
         {on.length === 0 ? (
           <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Add an entry to keep track of what’s on the car.</p>
         ) : (
@@ -211,7 +271,8 @@ function dayTitle(date: string): string {
 function HistoryPanel({ car, onOpenEntry, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
-  onLog: () => void
+  /** None for a car out of the garage. */
+  onLog?: () => void
 }) {
   const log = logNewestFirst(car)
   const months: { month: string; days: { date: string; entries: LogEntry[] }[] }[] = []
@@ -222,7 +283,7 @@ function HistoryPanel({ car, onOpenEntry, onLog }: {
     if (days[days.length - 1]?.date !== e.date) days.push({ date: e.date, entries: [] })
     days[days.length - 1].entries.push(e)
   }
-  const add = <AddLink onClick={onLog}>Add entry</AddLink>
+  const add = onLog && <AddLink onClick={onLog}>Add entry</AddLink>
   if (log.length === 0) {
     return (
       <section aria-label="History">
@@ -277,13 +338,14 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
   car: Car
   outings: CarOuting[]
   onOpenEvent: (event: EventConfig) => void
-  onAdd: () => void
+  /** None for a car out of the garage. */
+  onAdd?: () => void
 }) {
   const shared = isShared(car)
   const status = (o: CarOuting) => classifyEvent(o.event)
   const upcoming = outings.filter(o => status(o) !== 'past').reverse()
   const past = outings.filter(o => status(o) === 'past')
-  const add = <AddLink onClick={onAdd}>Add to event</AddLink>
+  const add = onAdd && <AddLink onClick={onAdd}>Add to event</AddLink>
   const cards = (rows: CarOuting[], label: string) => (
     <ul className="space-y-4" aria-label={label}>
       {rows.map(o => (
@@ -347,6 +409,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   // A ref that re-renders: the title is only there once the car's loaded.
   const [title, setTitle] = useState<HTMLHeadingElement | null>(null)
   const collapsed = useScrolledPast(title, TOP_BAR_PX)
+  const avatarOf = useDriverAvatar()
+  const { user } = useAuth()
+  // You first, then the others in the order they joined; on a car of your own, you.
+  const drivers = car?.drivers?.length
+    ? [...car.drivers].sort((a, b) => Number(!!b.you) - Number(!!a.you))
+    : [{ id: '', name: user?.name ?? user?.email ?? 'You', you: true }]
+  const faces = drivers.map(d => ({ name: d.name, url: avatarOf(d) }))
 
   const topBar = (
     <div className="sticky top-0 z-30 bg-gray-50" style={{ height: TOP_BAR_PX }}>
@@ -362,14 +431,21 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         >
           {car ? carHeading(car) : ''}
         </span>
-        {car ? (
-          <div className="-mr-2 flex items-center justify-self-end">
-            {/* Who drives it is the car's, not its setup's (#398): shared from up here. */}
-            {(car.drivers?.length ?? 1) < MAX_DRIVERS && (
-              <button onClick={() => setSharing(true)} aria-label="Share with another driver" className={ICON_BUTTON}>
-                <UserPlus size={20} strokeWidth={2.25} />
+        {car && !car.archived ? (
+          <div className="-mr-2 flex items-center gap-1 justify-self-end">
+            {/* Who drives it is the car's, not its setup's (#398): their
+                pictures up here (#410), and another added from them. */}
+            {drivers.length < MAX_DRIVERS ? (
+              <button
+                onClick={() => setSharing(true)}
+                aria-label="Share with another driver"
+                className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full pl-1 pr-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                data-share-car
+              >
+                <AvatarStack people={faces} size={26} ring="ring-gray-50" />
+                <UserPlus size={18} strokeWidth={2.25} aria-hidden="true" />
               </button>
-            )}
+            ) : <AvatarStack people={faces} size={26} ring="ring-gray-50" />}
             <button
               onClick={() => setEditing(n => (n ?? 0) + 1)}
               className="rounded-lg px-2 py-2 text-[15px] font-semibold text-blue-600 hover:text-blue-700"
@@ -413,10 +489,25 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         <h1 ref={setTitle} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
         {subtitle && <p className="mt-0.5 px-1 text-[15px] text-gray-500">{subtitle}</p>}
         {isShared(car) && (
-          <p className="mt-2 flex items-center gap-1.5 px-1 text-sm text-gray-500" data-drivers>
-            <Users size={15} className="shrink-0" aria-hidden="true" />
+          <p className="mt-2 flex items-center gap-2 px-1 text-sm text-gray-500" data-drivers>
+            <AvatarStack people={drivers.filter(d => !d.you).map(d => ({ name: d.name, url: avatarOf(d) }))} size={22} ring="ring-gray-50" />
             <span className="min-w-0 truncate">Shared with {othersText(car)}</span>
           </p>
+        )}
+        {car.archived && (
+          <RemovedNotice
+            car={car}
+            events={went.length}
+            onRestore={async () => {
+              await garage.restoreCar(car.id)
+              onToast('Back in your garage')
+            }}
+            onDelete={async () => {
+              await garage.removeCar(car.id)
+              onToast('Car deleted')
+              onBack()
+            }}
+          />
         )}
         <CarPhoto car={car} />
       </div>
@@ -433,11 +524,11 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
       >
         {tab === 'setup' && (
-          <SetupPanel car={car} onOpenEntry={setEntry} onLog={() => setEntry('new')} />
+          <SetupPanel car={car} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />
         )}
-        {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={() => setEntry('new')} />}
+        {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />}
         {tab === 'events' && (
-          <EventsPanel car={car} outings={outings} onOpenEvent={onOpenEvent} onAdd={() => setAddingEvents(true)} />
+          <EventsPanel car={car} outings={outings} onOpenEvent={onOpenEvent} onAdd={car.archived ? undefined : () => setAddingEvents(true)} />
         )}
       </div>
 
@@ -448,7 +539,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           events={went.length}
           onSaved={() => onToast('Car saved')}
           onRemoved={() => {
-            onToast('Car removed')
+            onToast(went.length ? 'Removed from your garage' : 'Car removed')
             onBack()
           }}
           onClosed={() => setEditing(null)}
