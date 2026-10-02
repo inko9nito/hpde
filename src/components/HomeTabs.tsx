@@ -1,7 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react'
-import { CalendarDays, Car, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
+import type { ComponentType, CSSProperties, ReactNode } from 'react'
+import { CalendarDays, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AppMenu } from './AppMenu'
+import { GarageIcon } from './CarIcons'
 import { AccountButton } from './AccountButton'
 import { BackButton } from './EventHeader'
 
@@ -115,9 +116,12 @@ export function SubPageHeader({ title, onBack }: { title: string; onBack: () => 
   )
 }
 
-const MORE_ITEMS: readonly { page: MorePage; label: string; Icon: LucideIcon }[] = [
+/** A Lucide icon, or one of the car icons (#417) that take its props. */
+type TileIcon = ComponentType<{ size?: number; strokeWidth?: number; className?: string; 'aria-hidden'?: 'true' }>
+
+const MORE_ITEMS: readonly { page: MorePage; label: string; Icon: TileIcon }[] = [
   { page: 'evaluations', label: 'Instructor evaluations', Icon: ClipboardCheck },
-  { page: 'garage', label: 'Garage', Icon: Car },
+  { page: 'garage', label: 'Garage', Icon: GarageIcon },
 ]
 
 /**

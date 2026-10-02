@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Archive, CarFront, ChevronRight, Plus } from 'lucide-react'
+import { Archive, ChevronRight, Plus } from 'lucide-react'
 import { AvatarStack, useDriverAvatar } from './Avatar'
 import { CarHero, CarTile } from './CarRow'
+import { CarIcon } from './CarIcons'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
@@ -90,7 +91,7 @@ export function GaragePage({ events, onBack, onToast }: {
           </div>
         ) : cars.length === 0 ? (
           <div className="fade-in rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
-            <CarFront size={22} className="mx-auto text-gray-400" aria-hidden="true" />
+            <CarIcon size={36} className="mx-auto text-gray-400" aria-hidden="true" />
             <p className="mt-2 text-sm font-medium text-gray-700">No cars yet</p>
             <button
               onClick={add}

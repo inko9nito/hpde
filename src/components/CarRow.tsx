@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { CarFront, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { CarIcon } from './CarIcons'
 import { carHeading, carSubtitle, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { useCarPhoto } from '../data/GarageContext'
@@ -19,7 +20,7 @@ export function CarTile({ car, size = 48, rounded = 'rounded-xl' }: { car?: Car;
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      <CarFront size={Math.round(size * 0.46)} />
+      <CarIcon size={Math.round(size * 0.5)} />
     </span>
   )
 }
@@ -51,7 +52,7 @@ export function CarRow({ car, title, subtitle, onClick, label, dashed = false }:
     >
       {car?.photo
         ? <CarTile car={car} size={24} rounded="rounded-md" />
-        : <CarFront size={16} className="shrink-0 text-gray-500" aria-hidden="true" />}
+        : <CarIcon size={18} className="shrink-0 text-gray-500" aria-hidden="true" />}
       <span className="min-w-0 flex-1 truncate">
         <span className="font-semibold text-gray-900">{title}</span>
         {subtitle && <span className="text-gray-500"> · {subtitle}</span>}
@@ -83,7 +84,7 @@ export function CarHero({ car, src, corner, badge }: {
       ) : car.photo ? (
         <div className="absolute inset-0 animate-pulse bg-gray-700" aria-busy="true" />
       ) : (
-        <CarFront size={96} strokeWidth={1.25} className="absolute right-6 top-6 text-gray-600" aria-hidden="true" />
+        <CarIcon size={96} className="absolute right-6 top-4 text-gray-600" aria-hidden="true" />
       )}
       {/* Dark enough at the foot for the name to read over any photo. */}
       <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
