@@ -75,20 +75,21 @@ export async function ensureCopied({ records, meta, live }: DriverStores, driver
 /**
  * Whose records a request reaches: the signed-in driver's own — or, for an
  * admin, the driver named by `driver=<user id>` (#288), checked against
- * Identity, or the test account (#309). A Response to send instead when
- * the request can't have them. `what` names the records in messages.
+ * Identity, or the test account (#309) — and what to call them (their
+ * name, or their email without one). A Response to send instead when the
+ * request can't have them. `what` names the records in messages.
  */
 export async function whoseRecords(
-  user: { id: string; email?: string },
+  user: { id: string; email?: string; name?: string | null },
   asked: string | null,
   what: string,
   identity?: StoreDeps['identity'],
-): Promise<{ driverId: string; driverEmail?: string } | Response> {
+): Promise<{ driverId: string; driverEmail?: string; driverName?: string } | Response> {
   if (asked === TEST_DRIVER_ID) {
     if (!isAdmin(user)) return json(403, { error: 'Only admins can use the test account.' })
-    return { driverId: TEST_DRIVER_ID }
+    return { driverId: TEST_DRIVER_ID, driverName: 'Test account' }
   }
-  if (!asked || asked === user.id) return { driverId: user.id, driverEmail: user.email }
+  if (!asked || asked === user.id) return { driverId: user.id, driverEmail: user.email, driverName: user.name ?? user.email }
   if (!isAdmin(user)) return json(403, { error: `Only admins can log ${what} for other drivers.` })
   let driver
   try {
@@ -98,5 +99,5 @@ export async function whoseRecords(
     return json(502, { error: 'Couldn’t check that driver. Try again in a moment.' })
   }
   if (!driver) return json(404, { error: 'There’s no driver with that id.' })
-  return { driverId: driver.id, driverEmail: driver.email }
+  return { driverId: driver.id, driverEmail: driver.email, driverName: driver.name ?? driver.email }
 }

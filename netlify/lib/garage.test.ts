@@ -11,7 +11,8 @@ const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
 // Stands in for Netlify Identity's /user endpoint: one token per user.
 const identityUsers: Record<string, unknown> = {
   'vera-token': { id: 'vera', email: 'vera@example.com' },
-  'jason-token': { id: JASON, email: 'jason@example.com' },
+  'jason-token': { id: JASON, email: 'jason@example.com', user_metadata: { full_name: 'Jason Smith' } },
+  'dad-token': { id: 'dad', email: 'dad@example.com', user_metadata: { full_name: 'Rick Smith' } },
   'admin-token': { id: 'amy', email: 'amy@example.com', app_metadata: { roles: ['admin'] } },
 }
 const fakeFetch = async (url: URL, init: { headers: Record<string, string> }) => {
@@ -30,6 +31,8 @@ const identity = {
 
 const EVENT = '2026-09-11_msrc-1-7'
 let ids: string[] = []
+let tokens: string[] = []
+let now: Date | undefined
 
 const call = (
   method: string,
@@ -42,7 +45,10 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, newId: () => ids.shift()! } as never,
+    {
+      getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity,
+      newId: () => ids.shift()!, newToken: () => tokens.shift()!, now: () => now ?? new Date(),
+    } as never,
   )
 
 const cayman = { year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman', lugNutTorque: 118 }
@@ -60,6 +66,8 @@ describe('garage function (#344)', () => {
   beforeEach(() => {
     blobs.clear()
     ids = ['car1', 'car2', 'car3', 'ch1', 'ch2', 'ch3']
+    tokens = ['invite-token-0001', 'invite-token-0002', 'invite-token-0003']
+    now = undefined
   })
 
   it('needs a sign-in for everything', async () => {
@@ -257,5 +265,167 @@ describe('garage function (#344)', () => {
     await call('DELETE', { token: 'vera-token', context: preview, query: '?car=car1' })
     expect((await garageOf('vera-token')).cars).toHaveLength(1)
     expect((await (await call('GET', { token: 'vera-token', context: preview })).json()).cars).toEqual([])
+  })
+
+  describe('a car shared between drivers (#398)', () => {
+    const shared = blobs.data('site:garage-shared')
+    const photos = blobs.data('site:garage-photos')
+    const invite = async (token = 'vera-token', car = 'car1') => {
+      const res = await call('PUT', { token, query: `?car=${car}&invite=1` })
+      expect(res.status).toBe(200)
+      return (await res.json()).invite.token as string
+    }
+    const join = (token: string, invite: string) => call('PUT', { token, query: `?invite=${invite}` })
+    const photo = (token: string, query: string, init: RequestInit = {}) => handler(
+      new Request(`https://site.example/api/garage${query}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...init.headers as object } }),
+      {},
+      { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, newId: () => 'abcd' } as never,
+    )
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 9])
+
+    it('shares a car by an invite: its details, photo and log are both drivers’ from then on', async () => {
+      await addCar()
+      await photo('vera-token', '?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: bytes })
+      await call('PUT', { token: 'vera-token', query: '?car=car1', body: { entry: brakeJob } })
+      await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup } })
+
+      const token = await invite()
+      // What it's for, before taking it: the car, and who it's from.
+      const seen = await (await call('GET', { token: 'jason-token', query: `?invite=${token}` })).json()
+      expect(seen.invite).toMatchObject({ car: { year: 2019, make: 'Porsche', model: '718 Cayman GTS', nickname: 'The Cayman' }, from: 'vera@example.com' })
+      expect(seen.invite).not.toHaveProperty('carId')
+      expect(Date.parse(seen.invite.expires) - Date.now()).toBeGreaterThan(13 * 86_400_000)
+
+      expect((await (await join('jason-token', token)).json()).car).toEqual({ id: 'car1' })
+      // Once.
+      expect((await join('dad-token', token)).status).toBe(404)
+      expect(shared.has(`invite/${token}`)).toBe(false)
+
+      // In both garages, with both drivers, and its photo and log.
+      const jasons = await garageOf('jason-token')
+      const veras = await garageOf('vera-token')
+      for (const garage of [jasons, veras]) {
+        expect(garage.cars).toHaveLength(1)
+        expect(garage.cars[0]).toMatchObject({ id: 'car1', ...cayman, log: [{ id: 'car2', ...brakeJob }] })
+        expect(garage.cars[0].drivers.map((d: { name: string }) => d.name)).toEqual(['vera@example.com', 'Jason Smith'])
+      }
+      expect(jasons.cars[0].drivers[1]).toEqual({ id: JASON, name: 'Jason Smith', you: true })
+      expect(veras.cars[0].drivers[0]).toEqual({ id: 'vera', name: 'vera@example.com', you: true })
+      // Vera's event keeps it; Jason's garage has no events of hers.
+      expect(veras.events[EVENT]).toMatchObject({ carId: 'car1' })
+      expect(jasons.events).toEqual({})
+      // Out of Vera's own cars, into its own record; the photo with it.
+      expect(store.get('vera/garage')).toMatchObject({ cars: [], shared: ['car1'] })
+      expect(store.get(`${JASON}/garage`)).toEqual({ cars: [], events: {}, shared: ['car1'] })
+      expect([...photos.keys()]).toEqual(['shared/car1'])
+      expect(new Uint8Array(await (await photo('jason-token', '?car=car1&photo=1')).arrayBuffer())).toEqual(bytes)
+
+      // Either changes it, for both.
+      await call('PUT', { token: 'jason-token', body: { car: { id: 'car1', ...cayman, lugNutTorque: 100 } } })
+      await call('PUT', { token: 'jason-token', query: '?car=car1', body: { entry: { ...brakeJob, date: '2026-09-20' } } })
+      const changed = (await garageOf('vera-token')).cars[0]
+      expect(changed.lugNutTorque).toBe(100)
+      expect(changed.photo).toBeTruthy()
+      expect(changed.log).toHaveLength(2)
+      expect((await call('DELETE', { token: 'vera-token', query: '?car=car1&entry=car2' })).status).toBe(200)
+      expect((await garageOf('jason-token')).cars[0].log).toHaveLength(1)
+    })
+
+    it('says who drove it at which event, in which run group', async () => {
+      await addCar()
+      await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup: { carId: 'car1' } } })
+      await join('jason-token', await invite())
+      // Jason drives it at two events of his own; he said which group at one.
+      expect((await call('PUT', { token: 'jason-token', query: '?car=car1', body: { events: ['2026-10-03_ecr', EVENT] } })).status).toBe(200)
+      blobs.data('site:rsvps').set(JASON, { events: { '2026-10-03_ecr': { status: 'going', runGroup: 'blue' } } })
+      blobs.data('site:rsvps').set('vera', { events: { [EVENT]: { status: 'going', runGroup: 'pink' } } })
+
+      const veras = (await garageOf('vera-token')).cars[0]
+      expect(veras.drives).toEqual([
+        { eventId: '2026-10-03_ecr', driverId: JASON, runGroup: 'blue' },
+        { eventId: EVENT, driverId: JASON },
+      ])
+      // Each sees the others' — their own are in their garage's events.
+      expect((await garageOf('jason-token')).cars[0].drives).toEqual([{ eventId: EVENT, driverId: 'vera', runGroup: 'pink' }])
+    })
+
+    it('takes another driver from any of its drivers, and keeps to its own', async () => {
+      await addCar()
+      await join('jason-token', await invite())
+      // Jason invites his dad.
+      const token = await invite('jason-token')
+      expect((await (await call('GET', { token: 'dad-token', query: `?invite=${token}` })).json()).invite.from).toBe('Jason Smith')
+      await join('dad-token', token)
+      expect((await garageOf('vera-token')).cars[0].drivers.map((d: { id: string }) => d.id)).toEqual(['vera', JASON, 'dad'])
+      // One of its own drivers sees it's theirs already, and taking it again changes nothing.
+      const again = await invite()
+      expect((await (await call('GET', { token: 'dad-token', query: `?invite=${again}` })).json()).invite.carId).toBe('car1')
+      expect((await join('dad-token', again)).status).toBe(200)
+      expect((await garageOf('dad-token')).cars).toHaveLength(1)
+      expect(store.get('dad/garage')).toEqual({ cars: [], events: {}, shared: ['car1'] })
+      // No one else reaches it.
+      expect((await call('GET', { token: 'admin-token', query: '?car=car1&photo=1' })).status).toBe(404)
+      expect((await call('PUT', { token: 'admin-token', query: '?car=car1&invite=1' })).status).toBe(404)
+    })
+
+    it('takes it out of one driver’s garage only; it goes with the last', async () => {
+      await addCar()
+      await photo('vera-token', '?car=car1&photo=1', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: bytes })
+      await join('jason-token', await invite())
+      await call('PUT', { token: 'jason-token', query: `?event=${EVENT}`, body: { setup } })
+
+      expect((await call('DELETE', { token: 'jason-token', query: '?car=car1' })).status).toBe(200)
+      const jasons = await garageOf('jason-token')
+      expect(jasons.cars).toEqual([])
+      // His event keeps its tire pressures, as with a car of his own.
+      expect(jasons.events[EVENT]).not.toHaveProperty('carId')
+      expect((await garageOf('vera-token')).cars[0].drivers.map((d: { id: string }) => d.id)).toEqual(['vera'])
+      expect(photos.size).toBe(1)
+
+      expect((await call('DELETE', { token: 'vera-token', query: '?car=car1' })).status).toBe(200)
+      expect((await garageOf('vera-token')).cars).toEqual([])
+      expect(shared.size).toBe(0)
+      expect(photos.size).toBe(0)
+      expect(store.has('vera/garage')).toBe(false)
+    })
+
+    it('refuses an invite that’s expired, made up, or for a car that’s gone', async () => {
+      await addCar()
+      const token = await invite()
+      now = new Date(Date.now() + 15 * 86_400_000)
+      expect((await call('GET', { token: 'jason-token', query: `?invite=${token}` })).status).toBe(404)
+      expect((await join('jason-token', token)).status).toBe(404)
+      now = undefined
+      expect((await join('jason-token', 'not-a-real-invite-x')).status).toBe(404)
+      expect((await join('jason-token', '../x')).status).toBe(404)
+      expect((await join('jason-token', token)).status).toBe(200)
+      const gone = await invite()
+      await call('DELETE', { token: 'vera-token', query: '?car=car1' })
+      await call('DELETE', { token: 'jason-token', query: '?car=car1' })
+      expect((await join('dad-token', gone)).status).toBe(404)
+      expect((await garageOf('dad-token')).cars).toEqual([])
+    })
+
+    it('gives it an id of its own when another driver has a car with the same one', async () => {
+      await addCar()
+      await call('PUT', { token: 'vera-token', query: `?event=${EVENT}`, body: { setup: { carId: 'car1' } } })
+      ids = ['car1']
+      await addCar('jason-token')
+      await join('jason-token', await invite())
+      const veras = await garageOf('vera-token')
+      const id = veras.cars[0].id
+      expect(id).not.toBe('car1')
+      expect(veras.events[EVENT].carId).toBe(id)
+      expect((await garageOf('jason-token')).cars.map((c: { id: string }) => c.id)).toEqual(['car1', id])
+    })
+
+    it('on a deploy preview, starts from a copy of the shared car, and never changes the live one', async () => {
+      await addCar()
+      await join('jason-token', await invite())
+      const preview = { deploy: { context: 'deploy-preview' } }
+      await call('PUT', { token: 'jason-token', context: preview, body: { car: { id: 'car1', ...cayman, nickname: 'Preview' } } })
+      expect((await (await call('GET', { token: 'vera-token', context: preview })).json()).cars[0].nickname).toBe('Preview')
+      expect((await garageOf('vera-token')).cars[0].nickname).toBe('The Cayman')
+    })
   })
 })

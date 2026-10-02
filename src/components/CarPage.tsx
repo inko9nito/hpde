@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, Plus } from 'lucide-react'
+import { ChevronRight, Plus, UserPlus } from 'lucide-react'
 import { BackButton } from './EventHeader'
 import { CarTile, ConsumablesList, DetailRow } from './CarRow'
 import { CarFormPage } from './CarFormPage'
 import { ChangeSheet } from './ChangeSheet'
 import { DriveAtSheet } from './DriveAtSheet'
+import { GroupBadge } from './GroupBadge'
+import { ShareCarSheet } from './ShareCarSheet'
 import { TrackIcon } from './TrackIcon'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
-import { carEvents, carName, carTitle, consumableLabel, formatDay, logNewestFirst } from '../utils/garage'
-import type { Car, LogEntry } from '../utils/garage'
+import { useRsvps } from '../data/RsvpsContext'
+import { MAX_DRIVERS, carEvents, carName, carOutings, carTitle, consumableLabel, driverLabel, formatDay, isShared, logNewestFirst } from '../utils/garage'
+import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { formatDateRange } from '../utils/time'
 import type { EventConfig } from '../types'
 
@@ -49,13 +52,37 @@ function CarPhoto({ car }: { car: Car }) {
   )
 }
 
+/**
+ * Who drove the car at an event, in which run group (#398): each of a
+ * shared car's drivers who did, or for a car of their own, the group.
+ */
+function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
+  const shown = outing.drivers.filter(d => shared || d.runGroup)
+  if (shown.length === 0) return null
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-700" data-who-drove>
+      {shown.map(({ driver, runGroup }) => {
+        const group = outing.event.runGroups.find(g => g.id === runGroup)
+        return (
+          <span key={driver.id || 'you'} className="inline-flex items-center gap-1.5">
+            {shared && <span className="font-medium">{driverLabel(driver)}</span>}
+            {group && <GroupBadge group={group} size="sm" />}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 const footButton = 'mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50'
 
 /**
  * A car's details (#344), pushed over the Garage: what it is and its lug
- * nut torque (Edit to change them), what's on it now, the log of every
- * change to its consumables — each opens to change or remove — and the
- * events it went to, which open on their My notes.
+ * nut torque (Edit to change them), who drives it — shared with another
+ * driver, it's theirs to keep up too (#398) — what's on it now, the log of
+ * every change to its consumables — each opens to change or remove — and
+ * the events it went to, with who drove it there, in which run group,
+ * which open on their My notes.
  */
 export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   carId: string
@@ -65,11 +92,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   onToast: (text: string) => void
 }) {
   const garage = useGarage()
+  const { rsvps } = useRsvps()
   const car = garage.cars.find(c => c.id === carId)
   // Edit's page, while it's open: a new one each time, so one opened while
   // the last is still sliding away starts afresh.
   const [editing, setEditing] = useState<number | null>(null)
   const [addingEvents, setAddingEvents] = useState(false)
+  const [sharing, setSharing] = useState(false)
   // The log entry open in its sheet: one to change, or a new one.
   const [entry, setEntry] = useState<LogEntry | 'new' | null>(null)
 
@@ -108,7 +137,13 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
     )
   }
 
+  // Theirs: the events in their garage it's the car of.
   const went = carEvents(car.id, garage, events)
+  // And its other drivers', on a shared car (#398).
+  const outings = carOutings(car, garage, events, rsvps)
+  const shared = isShared(car)
+  // You first, then the others in the order they joined.
+  const drivers = [...(car.drivers ?? [])].sort((a, b) => Number(!!b.you) - Number(!!a.you))
   const log = logNewestFirst(car)
 
   return (
@@ -127,6 +162,28 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
             {car.nickname && <DetailRow label="Nickname">{car.nickname}</DetailRow>}
             <DetailRow label="Lug nut torque">{car.lugNutTorque !== undefined ? `${car.lugNutTorque} ft·lb` : '—'}</DetailRow>
           </dl>
+        </Card>
+
+        <Card
+          title="Drivers"
+          action={drivers.length < MAX_DRIVERS && (
+            <button onClick={() => setSharing(true)} className={footButton}><UserPlus size={16} aria-hidden="true" />Share with another driver</button>
+          )}
+        >
+          {shared ? (
+            <ul className="mt-2 flex flex-col gap-2" aria-label="Drivers">
+              {drivers.map(d => (
+                <li key={d.id} className="flex items-center gap-2.5 text-sm text-gray-900">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600" aria-hidden="true">
+                    {d.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 truncate">{d.you ? <><span className="font-semibold">You</span> <span className="text-gray-500">· {d.name}</span></> : d.name}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">Just you. Share it with someone else who drives it, and you both keep it up.</p>
+          )}
         </Card>
 
         <Card
@@ -170,20 +227,21 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           title="Events"
           action={<button onClick={() => setAddingEvents(true)} className={footButton}><Plus size={16} aria-hidden="true" />Add to events</button>}
         >
-          {went.length === 0 ? (
+          {outings.length === 0 ? (
             <p className="mt-1 text-xs text-gray-500">None yet.</p>
           ) : (
             <ul className="mt-2 flex flex-col gap-1" aria-label={`${carName(car)}’s events`}>
-              {went.map(e => (
-                <li key={e.id}>
+              {outings.map(outing => (
+                <li key={outing.event.id}>
                   <button
-                    onClick={() => onOpenEvent(e)}
+                    onClick={() => onOpenEvent(outing.event)}
                     className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-gray-50"
                   >
-                    <TrackIcon trackId={e.trackId} tone="dark" size={32} padding={0} radius="rounded-lg" />
+                    <TrackIcon trackId={outing.event.trackId} tone="dark" size={32} padding={0} radius="rounded-lg" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-gray-900">{e.name}</span>
-                      <span className="block text-xs text-gray-500">{formatDateRange(e.days)}</span>
+                      <span className="block truncate text-sm font-medium text-gray-900">{outing.event.name}</span>
+                      <span className="block text-xs text-gray-500">{formatDateRange(outing.event.days)}</span>
+                      <WhoDrove outing={outing} shared={shared} />
                     </span>
                     <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
                   </button>
@@ -207,6 +265,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
           onClosed={() => setEditing(null)}
         />
       )}
+      {sharing && <ShareCarSheet car={car} invite={garage.invite} onClose={() => setSharing(false)} />}
       {addingEvents && (
         <DriveAtSheet
           car={car}

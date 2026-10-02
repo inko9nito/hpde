@@ -30,6 +30,8 @@ import { GaragePage } from './components/GaragePage'
 import { EventCarSheet } from './components/EventCarSheet'
 import { CarFormPage } from './components/CarFormPage'
 import { CarPage, carHash, carIdFromHash } from './components/CarPage'
+import { JoinCarPage } from './components/JoinCarPage'
+import { inviteFromHash } from './components/ShareCarSheet'
 import type { HomeTab } from './components/HomeTabs'
 import { EvaluationsPage, latestCard } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
@@ -135,6 +137,8 @@ type Overlay =
   | { kind: 'new-event' }
   | { kind: 'widget' }
   | { kind: 'share'; eventId?: string }
+  // An invite to share a car (#398).
+  | { kind: 'join-car'; token: string }
   | { kind: 'edit-event' | 'edit-schedule'; eventId: string }
 
 // What the page stack (#274) reads from a hash: the event it's a page of —
@@ -156,6 +160,8 @@ function overlayFromHash(hash: string): Overlay | null {
   if (editEventId !== null) return { kind: 'edit-event', eventId: editEventId }
   const editScheduleId = eventIdFromEditScheduleHash(hash)
   if (editScheduleId !== null) return { kind: 'edit-schedule', eventId: editScheduleId }
+  const invite = inviteFromHash(hash)
+  if (invite !== null) return { kind: 'join-car', token: invite }
   return null
 }
 
@@ -809,7 +815,7 @@ export default function App() {
     )}
     {shownOverlay && (
       <PushPage
-        key={'eventId' in shownOverlay ? `${shownOverlay.kind} ${shownOverlay.eventId ?? ''}` : shownOverlay.kind}
+        key={'eventId' in shownOverlay ? `${shownOverlay.kind} ${shownOverlay.eventId ?? ''}` : 'token' in shownOverlay ? `${shownOverlay.kind} ${shownOverlay.token}` : shownOverlay.kind}
         open={overlay !== null}
         onExited={() => setLastOverlay(null)}
         onEnteredChange={setOverlayEntered}
@@ -847,6 +853,16 @@ export default function App() {
               setActiveTab('schedule')
               setHash(eventHash(shownOverlay.eventId))
               showToast('Schedule saved')
+            }}
+          />
+        ) : shownOverlay.kind === 'join-car' ? (
+          <JoinCarPage
+            token={shownOverlay.token}
+            onClose={() => setHash(HOME_TAB_HASH[homeTab])}
+            // Its page, over the Garage.
+            onJoined={(carId, joined) => {
+              if (joined) showToast('Added to your garage')
+              setHash(carHash(carId))
             }}
           />
         ) : shownOverlay.kind === 'widget' ? (
