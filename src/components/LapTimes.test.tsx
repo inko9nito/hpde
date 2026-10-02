@@ -1646,12 +1646,15 @@ describe('the garage (#344)', () => {
       await userEvent.click(within(page).getByRole('tab', { name: 'History' }))
       return within(page).getByRole('group', { name: 'Change log' })
     }
-    const log = () => within(within(page).getByRole('group', { name: 'Change log' })).getAllByRole('button')
+    // Each part changed, on lines of its own; a day's split by a rule.
+    const log = () => [...within(page).getByRole('group', { name: 'Change log' }).querySelectorAll<HTMLElement>('[data-history-part]')]
+    const days = () => within(within(page).getByRole('group', { name: 'Change log' })).getAllByRole('listitem').map(d => d.textContent)
     const months = async () => within(await history()).getAllByRole('heading').map(h => h.textContent)
     expect(await months()).toEqual(['April 2026', 'February 2026'])
-    expect(log().map(b => b.textContent)).toEqual([
-      'Apr 15Tires · Yokohama A052', 'Feb 20Tires · Hoosier R7Front pads · Hawk DTC-60at Speed Shop',
-    ])
+    expect(days()).toEqual(['Apr 15TiresYokohama A052', 'Feb 20TiresHoosier R7Speed ShopFront padsHawk DTC-60Speed Shop'])
+    expect(log().map(b => b.textContent)).toEqual(['TiresYokohama A052', 'TiresHoosier R7Speed Shop', 'Front padsHawk DTC-60Speed Shop'])
+    // Adding one is at the top, not the foot.
+    expect(within(page).getByRole('group', { name: 'Change log' }).querySelector('section')).toContainElement(within(page).getByRole('button', { name: 'Add entry' }))
 
     // A brake job: several consumables on one day at one shop, each asking what went on.
     await userEvent.click(within(page).getByRole('tab', { name: 'Setup' }))
@@ -1680,10 +1683,10 @@ describe('the garage (#344)', () => {
     })
     expect(within(page).getByRole('region', { name: 'Maintenance' })).toHaveTextContent('Rear padsHawk DTC-30Since May 1, 2026')
     expect(await months()).toEqual(['May 2026', 'April 2026', 'February 2026'])
-    expect(log()[0]).toHaveTextContent('May 1Rear pads · Hawk DTC-30Brake fluid · Motul RBF 660at Speed ShopFull flush.')
+    expect(days()[0]).toBe('May 1Rear padsHawk DTC-30Speed ShopBrake fluidMotul RBF 660Speed ShopFull flush.')
 
     // An entry opens to change it, or take it out.
-    await userEvent.click(log()[1])
+    await userEvent.click(log()[2])
     const edit = screen.getByRole('dialog', { name: 'Edit entry' })
     expect(within(edit).getByRole('button', { name: 'Tires' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(edit).getByLabelText('Tires')).toHaveValue('Yokohama A052')
@@ -1869,8 +1872,8 @@ describe('the garage (#344)', () => {
     const page = await carPage('The Cayman')
     await userEvent.click(within(page).getByRole('tab', { name: 'Events' }))
     expect(within(page).getByRole('region', { name: 'Past' })).toHaveTextContent('No events yet.')
-    await userEvent.click(within(page).getByRole('button', { name: 'Add to events' }))
-    const sheet = screen.getByRole('dialog', { name: 'Add to events' })
+    await userEvent.click(within(page).getByRole('button', { name: 'Add to event' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add to event' })
     const choices = await within(sheet).findAllByRole('checkbox')
     // Newest first; one with another car says so.
     expect(choices.map(c => c.textContent)).toEqual(['Lap DayMar 7, 2026', 'CCWFeb 7, 2026 · Now in Zoom'])

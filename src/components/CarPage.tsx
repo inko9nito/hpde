@@ -95,15 +95,19 @@ function WhoDrove({ outing, shared }: { outing: CarOuting; shared: boolean }) {
   )
 }
 
-/** Add entry: at the foot of Setup and History. */
-function LogButton({ onClick }: { onClick: () => void }) {
+/**
+ * "+ Add entry", "+ Add to event": across from a list's heading, at the top
+ * of the tab, so there's no scrolling to the end to add one — as the Events
+ * tab's Add event is.
+ */
+function AddLink({ onClick, children }: { onClick: () => void; children: string }) {
   return (
     <button
       onClick={onClick}
-      className="mt-7 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-gray-700"
+      className="-mr-2 inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
     >
-      <Plus size={18} aria-hidden="true" />
-      Add entry
+      <Plus size={16} aria-hidden="true" />
+      {children}
     </button>
   )
 }
@@ -126,7 +130,11 @@ function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
   return past
 }
 
-/** Setup (#410): what the car is fitted with now — its lug nut torque and its maintenance, the consumables last changed. */
+/**
+ * Setup (#410): what the car is fitted with now — its lug nut torque, its
+ * maintenance (the consumables last changed) and, to come, its
+ * modifications (#390).
+ */
 function SetupPanel({ car, onOpenEntry, onLog }: {
   car: Car
   onOpenEntry: (entry: LogEntry) => void
@@ -145,7 +153,7 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
 
       {/* Maintenance, as it's to sit beside Modifications (#390). */}
       <section aria-label="Maintenance">
-        <SectionTitle>Maintenance</SectionTitle>
+        <SectionTitle aside={<AddLink onClick={onLog}>Add entry</AddLink>}>Maintenance</SectionTitle>
         {on.length === 0 ? (
           <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Add an entry to keep track of what’s on the car.</p>
         ) : (
@@ -173,7 +181,11 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
         )}
       </section>
 
-      <LogButton onClick={onLog} />
+      {/* A place for them till they can be logged (#390). */}
+      <section aria-label="Modifications">
+        <SectionTitle>Modifications</SectionTitle>
+        <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>Coming soon: sway bars, coilovers, seats and the rest, as they go on.</p>
+      </section>
     </div>
   )
 }
@@ -192,7 +204,9 @@ function dayTitle(date: string): string {
 /**
  * History (#410): every change logged, newest first, a list for each
  * month — the day in a column of its own, not the events' stacked date —
- * each opening to change or remove.
+ * each part on lines of its own (what it is, what went on, where), parts
+ * changed the same day split by a rule, as a schedule's sessions at the
+ * same time are. Each opens its entry to change or remove.
  */
 function HistoryPanel({ car, onOpenEntry, onLog }: {
   car: Car
@@ -200,50 +214,57 @@ function HistoryPanel({ car, onOpenEntry, onLog }: {
   onLog: () => void
 }) {
   const log = logNewestFirst(car)
-  const months: { month: string; entries: LogEntry[] }[] = []
+  const months: { month: string; days: { date: string; entries: LogEntry[] }[] }[] = []
   for (const e of log) {
     const month = e.date.slice(0, 7)
-    if (months[months.length - 1]?.month !== month) months.push({ month, entries: [] })
-    months[months.length - 1].entries.push(e)
+    if (months[months.length - 1]?.month !== month) months.push({ month, days: [] })
+    const days = months[months.length - 1].days
+    if (days[days.length - 1]?.date !== e.date) days.push({ date: e.date, entries: [] })
+    days[days.length - 1].entries.push(e)
+  }
+  const add = <AddLink onClick={onLog}>Add entry</AddLink>
+  if (log.length === 0) {
+    return (
+      <section aria-label="History">
+        <ListTitle aside={add}>History</ListTitle>
+        <EmptyRow>Nothing logged yet.</EmptyRow>
+      </section>
+    )
   }
   return (
-    <>
-      {log.length === 0 ? (
-        <EmptyRow>Nothing logged yet.</EmptyRow>
-      ) : (
-        <div aria-label="Change log" role="group" className="space-y-7">
-          {months.map(({ month, entries }) => (
-            <section key={month} aria-label={monthTitle(`${month}-01`)}>
-              <ListTitle>{monthTitle(`${month}-01`)}</ListTitle>
-              <ul className={`${CARD_FRAME} overflow-hidden`}>
-                {entries.map(e => (
-                  <li key={e.id} className="border-b border-gray-100 last:border-b-0">
+    <div aria-label="Change log" role="group" className="space-y-7">
+      {months.map(({ month, days }, i) => (
+        <section key={month} aria-label={monthTitle(`${month}-01`)}>
+          <ListTitle aside={i === 0 ? add : undefined}>{monthTitle(`${month}-01`)}</ListTitle>
+          <ul className={`${CARD_FRAME} overflow-hidden`}>
+            {days.map(({ date, entries }) => (
+              <li key={date} className="flex gap-3 border-b border-gray-100 pl-4 last:border-b-0">
+                <span className="w-14 shrink-0 py-3 text-[13px] tabular-nums text-gray-500">{dayTitle(date)}</span>
+                <div className="min-w-0 flex-1 divide-y divide-gray-100">
+                  {entries.flatMap(e => e.parts.map((p, j) => (
                     <button
+                      key={`${e.id} ${p.part}`}
                       onClick={() => onOpenEntry(e)}
-                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                      className="flex w-full items-start gap-3 py-3 pr-4 text-left transition-colors hover:bg-gray-50"
+                      data-history-part
                     >
-                      <span className="w-14 shrink-0 pt-px text-[13px] tabular-nums text-gray-500">{dayTitle(e.date)}</span>
-                      <span className="min-w-0 flex-1">
-                        {e.parts.map(p => (
-                          <span key={p.part} className="block text-sm leading-snug">
-                            <span className="font-semibold text-gray-900">{consumableLabel(p.part)}</span>
-                            {p.what && <span className="text-gray-600"> · {p.what}</span>}
-                          </span>
-                        ))}
-                        {e.shop && <span className="mt-0.5 block text-xs text-gray-500">at {e.shop}</span>}
-                        {e.note && <span className="mt-0.5 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
+                      <span className="min-w-0 flex-1 text-sm leading-snug">
+                        <span className="block font-semibold text-gray-900">{consumableLabel(p.part)}</span>
+                        {p.what && <span className="block text-gray-700">{p.what}</span>}
+                        {e.shop && <span className="block text-gray-500">{e.shop}</span>}
+                        {/* The job's note, once, under its last part. */}
+                        {e.note && j === e.parts.length - 1 && <span className="mt-1 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
                       </span>
                       <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
                     </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      )}
-      <LogButton onClick={onLog} />
-    </>
+                  )))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }
 
@@ -262,15 +283,7 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
   const status = (o: CarOuting) => classifyEvent(o.event)
   const upcoming = outings.filter(o => status(o) !== 'past').reverse()
   const past = outings.filter(o => status(o) === 'past')
-  const add = (
-    <button
-      onClick={onAdd}
-      className="-mr-2 inline-flex items-center gap-1 rounded-md px-2 py-1 font-rubik text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-    >
-      <Plus size={16} aria-hidden="true" />
-      Add to events
-    </button>
-  )
+  const add = <AddLink onClick={onAdd}>Add to event</AddLink>
   const cards = (rows: CarOuting[], label: string) => (
     <ul className="space-y-4" aria-label={label}>
       {rows.map(o => (

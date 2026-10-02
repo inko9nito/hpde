@@ -53,13 +53,13 @@ export function DriveAtSheet({ car, garage, onSave, onClose }: {
 
   return (
     <Sheet
-      label="Add to events"
+      label="Add to event"
       busy={busy}
       onClose={onClose}
       data-drive-at-sheet
       heading={<>
         <p className="text-xs text-gray-500">{carName(car)}</p>
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">Add to events</h2>
+        <h2 className="mt-0.5 text-lg font-bold text-gray-900">Add to event</h2>
       </>}
     >
       {status === 'loading' ? (

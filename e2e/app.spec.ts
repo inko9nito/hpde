@@ -1121,13 +1121,13 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await noSideScroll()
   // History: the job, under its month.
   await page.getByRole('tab', { name: 'History' }).click()
-  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 1Front pads · Hawk DTC-60Front rotorsat Speed Shop')
+  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 1Front padsHawk DTC-60Speed ShopFront rotorsSpeed Shop')
   await noSideScroll()
 
   // Added to an event from its page: any the driver didn't say they're not going to.
   await page.getByRole('tab', { name: 'Events' }).click()
-  await page.getByRole('button', { name: 'Add to events' }).click()
-  const pick = page.getByRole('dialog', { name: 'Add to events' })
+  await page.getByRole('button', { name: 'Add to event' }).click()
+  const pick = page.getByRole('dialog', { name: 'Add to event' })
   await pick.getByRole('checkbox', { name: new RegExp(`^${alpha.name}`) }).click()
   await noSideScroll()
   await pick.getByRole('button', { name: 'Add to event' }).click()
