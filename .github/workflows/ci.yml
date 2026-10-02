@@ -86,6 +86,17 @@ jobs:
             sleep 10
           done
           echo "::error::Timed out waiting for the deploy preview (last status: $state)"; exit 1
+      - name: Warm up the preview's functions
+        # A preview's first request to the events function copies the live
+        # events into its own store, and was slow (~16s); two at once on the
+        # fresh function, as the checks start, had one dropped (#391). So one
+        # request each, retried, before the checks run in parallel.
+        run: |
+          for path in /api/events /api/events.json; do
+            curl -fsS -o /dev/null --max-time 60 --retry 5 --retry-delay 5 --retry-all-errors "$PREVIEW_URL$path" \
+              || { echo "::error::$path on the preview never answered"; exit 1; }
+            echo "$path answers"
+          done
       - name: Install browsers
         run: npx playwright install --with-deps chromium webkit
       - name: Checks against the deploy preview
