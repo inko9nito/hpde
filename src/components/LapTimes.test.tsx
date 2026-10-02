@@ -1795,7 +1795,7 @@ describe('the garage (#344)', () => {
     garageData = { cars: [{ ...cayman, archived: '2026-10-02T12:00:00.000Z' }], events: { [event.id]: { carId: 'cayman' } } }
     openWithGarage('#/garage/archived')
     const list = await screen.findByRole('list', { name: 'Archived cars' })
-    expect(within(list).getByRole('button')).toHaveTextContent('The Cayman · 1 event · archived Oct 2, 2026')
+    expect(within(list).getByRole('button')).toHaveTextContent('The Cayman1 event · archived Oct 2, 2026')
     await userEvent.click(within(list).getByRole('button'))
     expect(window.location.hash).toBe('#/garage/cayman')
     const page = await carPage('The Cayman')

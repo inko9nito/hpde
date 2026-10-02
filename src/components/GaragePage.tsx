@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Archive, CarFront, ChevronRight, Lock, Plus } from 'lucide-react'
 import { AvatarStack, useDriverAvatar } from './Avatar'
-import { CarHero, CarRow } from './CarRow'
+import { CarHero, CarTile } from './CarRow'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { CarFormPage } from './CarFormPage'
@@ -170,12 +170,19 @@ export function ArchivedCarsPage({ events, onBack, onOpenCar }: {
               const n = carOutings(car, garage, events, rsvps).length
               return (
                 <li key={car.id}>
-                  <CarRow
-                    car={car}
-                    title={carName(car)}
-                    subtitle={`${n === 1 ? '1 event' : `${n} events`} · archived ${formatDay(car.archived!.slice(0, 10))}`}
+                  <button
                     onClick={() => onOpenCar(car.id)}
-                  />
+                    className="flex w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+                  >
+                    <CarTile car={car} size={48} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-gray-900">{carName(car)}</span>
+                      <span className="mt-0.5 block truncate text-[13px] text-gray-500">
+                        {n === 1 ? '1 event' : `${n} events`} · archived {formatDay(car.archived!.slice(0, 10))}
+                      </span>
+                    </span>
+                    <ChevronRight size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </button>
                 </li>
               )
             })}
