@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
@@ -96,9 +96,11 @@ function useHashRoute() {
       swiped = e.hasUAVisualTransition === true
     }
     const onHashChange = () => {
+      // The page underneath keeps its place: back from an event's page,
+      // the list is where you left it (#389). Only a tab switch starts at
+      // the top (App).
       setRoute({ hash: window.location.hash, swiped })
       swiped = false
-      window.scrollTo(0, 0)
     }
     window.addEventListener('popstate', onPopState)
     window.addEventListener('hashchange', onHashChange)
@@ -344,6 +346,14 @@ export default function App() {
     ?? (morePage !== null || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
+  // Another tab starts at its top; pages opened over a tab, and closed
+  // again, leave it scrolled where it was (#389).
+  const shownTabRef = useRef(homeTab)
+  useLayoutEffect(() => {
+    if (shownTabRef.current === homeTab) return
+    shownTabRef.current = homeTab
+    window.scrollTo(0, 0)
+  }, [homeTab])
   // A link to an event we don't have (yet): an app-created one before the
   // fetch lands, or one that was deleted. Don't show some other event.
   const routeMissing = isOnEventRoute && !ALL_EVENTS.some(e => e.id === routeEventId)
