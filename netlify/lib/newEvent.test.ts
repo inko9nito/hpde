@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { buildEvent, editDetails, isAdmin, slugify } from './newEvent.mjs'
 import handler from '../functions/events.mts'
 import { fakeBlobs } from './fakeBlobs'
-import { IMPORTED_KEY, SCHEDULES_ADDED, scheduleAddedKey } from './pastEvents.mjs'
+import { PAST_IMPORTS, SCHEDULES_ADDED, scheduleAddedKey } from './pastEvents.mjs'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:events')
@@ -114,10 +114,10 @@ describe('isAdmin', () => {
 
 describe('events function', () => {
   // As every store is once its first read has added the past events and
-  // their schedules (#310, #339; tested in pastEvents.test.ts): these start
+  // their schedules (#310, #373, #339; tested in pastEvents.test.ts): these start
   // from what's in them.
   const imported = { at: '2026-09-28T00:00:00.000Z', imported: [] }
-  const done = [IMPORTED_KEY, ...SCHEDULES_ADDED.map(scheduleAddedKey)]
+  const done = [...PAST_IMPORTS.map(i => i.key), ...SCHEDULES_ADDED.map(scheduleAddedKey)]
   beforeEach(() => {
     blobs.clear()
     for (const key of done) {

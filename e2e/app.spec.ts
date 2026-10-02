@@ -206,6 +206,22 @@ test('says "Schedule coming soon" for an event with no schedule', async ({ page 
   await expect(page.getByText('Schedule coming soon')).toBeVisible()
 })
 
+// A past event added without one (#373) won't get one now.
+test('says "No schedule" for a past event with none', async ({ page }) => {
+  const past: EventConfig = {
+    ...upcoming,
+    id: '2024-12-07_tde-at-msrc-1-7-cw',
+    name: 'TDE at MSRC 1.7 CW',
+    runGroups: [{ id: 'orange', label: 'Orange', bgClass: 'bg-runorange-500', textClass: 'text-white' }],
+    days: [{ id: 'saturday', label: 'Saturday', date: '2024-12-07', activities: [] }],
+  }
+  await stubEvents(page, [past, ...TEST_EVENTS])
+  await page.goto(`/#/event/${past.id}`)
+  await expect(page.getByText('No schedule', { exact: true })).toBeVisible()
+  await expect(page.getByText('None was posted for this event.')).toBeVisible()
+  await expect(page.getByText('Schedule coming soon')).toHaveCount(0)
+})
+
 test('says when a linked event doesn’t exist', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/event/2099-01-01_deleted')
