@@ -13,7 +13,7 @@ import { Legend } from './components/Legend'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
-import { PushPage, useUnderPushedPages } from './components/PushPage'
+import { PushPage, useSheetUp, useUnderPushedPages } from './components/PushPage'
 import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
@@ -50,7 +50,7 @@ import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
-import { useChromeColor, HEADER_CHROME_COLOR } from './utils/chromeColor'
+import { useChromeColor, HEADER_CHROME_COLOR, SHEET_CHROME_COLOR } from './utils/chromeColor'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -427,9 +427,12 @@ export default function App() {
   // it white; the iOS widget page is gray to the top.
   const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget'
   const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
-  useChromeColor(whiteTop ? HEADER_CHROME_COLOR : null)
+  // Black over a sheet, as what's under it shrinks back on black (#415).
+  const sheetUp = useSheetUp()
+  useChromeColor(sheetUp ? SHEET_CHROME_COLOR : whiteTop ? HEADER_CHROME_COLOR : null)
   // The tabs slide a little way left under the first page pushed over them (#367).
   const underPages = useUnderPushedPages(swiped)
+  const underTabBar = useUnderPushedPages(swiped, 'tab bar')
 
   const eventStatus = classifyEvent(activeEvent)
 
@@ -564,7 +567,7 @@ export default function App() {
         {homeTab === 'more' && <MoreTab />}
       </div>
     </PullToRefresh>
-    <TabBar active={homeTab} style={underPages} />
+    <TabBar active={homeTab} style={underTabBar} />
     {/* Before the event's page, which goes over it when opened from it. */}
     {shownMorePage && (
       <PushPage
@@ -828,6 +831,8 @@ export default function App() {
         instant={swiped}
         whiteHeader={overlayWhiteTop}
         from="bottom"
+        // A sheet, but for the iOS widget page, closed with ✕ (#415).
+        sheet={overlayWhiteTop}
       >
         {shownOverlay.kind === 'new-event' ? (
           <NewEventPage

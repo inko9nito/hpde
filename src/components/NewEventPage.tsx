@@ -370,7 +370,8 @@ export function FormPage({ title, subtitle, onCancel, cancelDisabled, save, chil
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-gray-50">
+    // As tall as the sheet it's on, at least (#415).
+    <div className="min-h-full bg-gray-50">
       <PageHeader title={title} subtitle={subtitle} onCancel={onCancel} cancelDisabled={cancelDisabled} save={save} />
       <div className="mx-auto max-w-lg px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4 sm:px-4 sm:pt-6">
         {children}

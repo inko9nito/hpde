@@ -330,7 +330,8 @@ async function signInAsAdmin(page: Page) {
 }
 
 // Follows the page that `open()` brings in, frame by frame, until it
-// settles: which way it moved, and where it ended up.
+// settles where it rests — the top of the screen, or a sheet's a little
+// below it (#415): which way it moved.
 async function trackSlide(page: Page, open: () => Promise<void>, heading: string) {
   const track = page.evaluate(heading => new Promise<{ fromBelow: boolean; fromSide: boolean }>(resolve => {
     let fromBelow = false
@@ -342,12 +343,13 @@ async function trackSlide(page: Page, open: () => Promise<void>, heading: string
       const page = h?.closest<HTMLElement>('.fixed')
       if (page) {
         const { top, left } = page.getBoundingClientRect()
-        if (top > 1) fromBelow = true
+        const rest = parseFloat(getComputedStyle(page).top)
+        if (top > rest + 1) fromBelow = true
         if (left > 1) fromSide = true
         const at = `${top},${left}`
         still = at === last ? still + 1 : 0
         last = at
-        if (still > 10 && top === 0 && left === 0) return resolve({ fromBelow, fromSide })
+        if (still > 10 && top === rest && left === 0) return resolve({ fromBelow, fromSide })
       }
       requestAnimationFrame(step)
     }
@@ -537,9 +539,9 @@ test('a page iOS has swiped away, or back, doesn’t slide across again after it
 
 // The page with this heading, caught as its slide starts and held — with
 // everything that started moving with it — `at` each of these many ms into
-// it: where it is, and the tab bar under it, as a share of the screen; how
-// dark it makes what's under it; and whether that's still kept from
-// scrolling.
+// it: how far it has still to go, as a share of the screen it crosses; where
+// the tab bar under it is, as a share of the screen; how dark it makes
+// what's under it; and whether that's still kept from scrolling.
 async function slideAt(page: Page, move: () => Promise<unknown>, heading: string, at: number[]) {
   const caught = page.evaluate(({ heading, at }) => new Promise<{ x: number; y: number; tabs: number; dim: number | null; locked: boolean }[]>(resolve => {
     addEventListener('transitionrun', function onRun(e) {
@@ -550,13 +552,15 @@ async function slideAt(page: Page, move: () => Promise<unknown>, heading: string
       const moving = document.getAnimations()
       moving.forEach(a => a.pause())
       const tabBar = document.querySelector('nav[aria-label="Sections"]')!
-      const dim = el.previousElementSibling?.matches('[data-covering-dim]') ? el.previousElementSibling : null
+      const dim = el.previousElementSibling?.matches('[data-covering-dim], [data-sheet-dim]') ? el.previousElementSibling : null
+      // A sheet rests a little below the top of the screen (#415).
+      const rest = parseFloat(getComputedStyle(el).top)
       const seen = at.map(ms => {
         moving.forEach(a => { a.currentTime = ms })
         const { left, top } = el.getBoundingClientRect()
         return {
           x: left / innerWidth,
-          y: top / innerHeight,
+          y: (top - rest) / (innerHeight - rest),
           tabs: tabBar.getBoundingClientRect().left / innerWidth,
           dim: dim && Number(getComputedStyle(dim).opacity),
           locked: document.documentElement.classList.contains('push-page-open'),
@@ -595,11 +599,57 @@ test('pages slide in and out, and up, with iOS’s own spring, the tabs a third 
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('push-page-open'))).toBe(false)
   await expect.poll(async () => (await page.getByRole('navigation', { name: 'Sections' }).boundingBox())?.x).toBe(0)
 
-  // A page with Cancel: up from the bottom, on the same spring, over the
-  // tabs as they are.
+  // A page with Cancel: a sheet, up from the bottom on the same spring, as
+  // the tabs shrink back to 92% under it, darkening (#415).
   const up = await slideAt(page, () => page.getByRole('link', { name: 'Add event' }).click(), 'New event', [100])
   expect(up.map(p => p.y)).toEqual([expect.closeTo(1 - along(100), 2)])
-  expect(up.map(p => [p.tabs, p.dim])).toEqual([[0, null]])
+  expect(up.map(p => [p.tabs, p.dim])).toEqual([[expect.closeTo(0.04 * along(100), 2), expect.closeTo(0.12 * along(100), 2)]])
+})
+
+// What the page it's on, and its own page sheet, look like once a sheet
+// has come up (#415), as on iOS: what's under it shrunk back into a dimmed
+// card on black, its top edge showing above the sheet; the sheet with round
+// top corners, and iOS's 17 pt Cancel, title and Save.
+test('a page with Cancel and Save is a sheet over a card of the page it covers (#415)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto(`/#/event/${upcoming.id}`)
+  const eventPage = page.getByRole('heading', { level: 1, name: upcoming.name }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  const tabs = page.locator('.tab-fade').first()
+  const html = page.locator('html')
+  await page.getByRole('link', { name: 'Add schedule' }).click()
+  const sheet = page.getByRole('heading', { level: 1, name: 'Edit schedule' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+
+  // 18 px from the top, the card 8 px, 92% as wide and centered.
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  const width = page.viewportSize()!.width
+  await expect.poll(async () => {
+    const box = (await eventPage.boundingBox())!
+    return [box.y, box.x, box.width].map(n => Math.round(n * 10) / 10)
+  }).toEqual([8, Math.round(width * 0.04 * 10) / 10, Math.round(width * 0.92 * 10) / 10])
+  await expect(sheet).toHaveCSS('border-top-left-radius', '12px')
+  await expect(eventPage).not.toHaveCSS('border-top-left-radius', '0px')
+  await expect(page.locator('[data-sheet-dim]')).toHaveCSS('opacity', '0.12')
+  await expect(html).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+  // The tabs, out of sight under the event's page, stay out of sight at
+  // its card's corners.
+  await expect(tabs).toHaveCSS('visibility', 'hidden')
+  for (const name of ['Cancel', 'Save']) {
+    await expect(sheet.getByRole('button', { name })).toHaveCSS('font-size', '17px')
+  }
+  await expect(sheet.getByRole('heading', { level: 1 })).toHaveCSS('font-size', '17px')
+
+  // Taps above the sheet don't reach the page under it.
+  await page.mouse.click(width / 2, 12)
+  await expect(sheet).toBeInViewport()
+
+  // Cancel: down it goes, and the event's page is itself again.
+  await sheet.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit schedule' })).toHaveCount(0)
+  await expect.poll(async () => await eventPage.boundingBox()).toEqual({ x: 0, y: 0, width, height: page.viewportSize()!.height })
+  await expect(eventPage).toHaveCSS('border-top-left-radius', '0px')
+  await expect(tabs).toHaveCSS('visibility', 'visible')
+  await expect(html).not.toHaveClass(/page-sheet/)
 })
 
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {

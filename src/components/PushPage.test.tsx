@@ -243,3 +243,88 @@ describe('PushPage direction (#278)', () => {
     expect(onExited).toHaveBeenCalled()
   })
 })
+
+describe('a page sheet (#415)', () => {
+  const nextFrame = () => act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+
+  // The tabs, a page pushed over them, and a sheet over both.
+  function Stack({ pushed, sheet }: { pushed: boolean; sheet: boolean }) {
+    const tabs = useUnderPushedPages(false)
+    const tabBar = useUnderPushedPages(false, 'tab bar')
+    return (
+      <>
+        <div data-testid="tabs" style={tabs} />
+        <div data-testid="tab bar" style={tabBar} />
+        <div data-testid="pushed"><PushPage open={pushed}><div /></PushPage></div>
+        <div data-testid="sheet"><PushPage open={sheet} from="bottom" sheet><div /></PushPage></div>
+      </>
+    )
+  }
+  const pageIn = (el: HTMLElement) => el.lastElementChild as HTMLElement
+  const receded = 'translateY(calc(env(safe-area-inset-top) + 8px)) scale(0.92)'
+
+  it('stops below the status bar, with round top corners, and dims what’s under it', async () => {
+    const { getByTestId } = render(<Stack pushed={false} sheet />)
+    const sheet = pageIn(getByTestId('sheet'))
+    expect(sheet.style.top).toBe('calc(var(--acting-h, 0px) + env(safe-area-inset-top) + 18px)')
+    expect(sheet.style.borderRadius).toBe('12px 12px 0 0')
+    const dim = getByTestId('sheet').querySelector<HTMLElement>('[data-sheet-dim]')!
+    expect(dim.style.opacity).toBe('0')
+    await nextFrame()
+    expect(sheet.style.transform).toBe('translateY(0)')
+    expect(dim.style.opacity).toBe('0.12')
+    expect(document.documentElement.classList.contains('page-sheet-up')).toBe(true)
+  })
+
+  it('shrinks the tabs back into a card as it comes up, and back as it goes', async () => {
+    const { getByTestId, rerender } = render(<Stack pushed={false} sheet={false} />)
+    const tabs = getByTestId('tabs')
+    expect(tabs.style.clipPath).toBe('')
+
+    rerender(<Stack pushed={false} sheet />)
+    // On screen, not up yet: cut off at the top of the screen, square.
+    expect(tabs.style.transform).toBe('')
+    expect(tabs.style.clipPath).toBe('inset(0px 0 0 0 round 0px)')
+    await nextFrame()
+    expect(tabs.style.transform).toBe(receded)
+    expect(tabs.style.clipPath).toBe('inset(0px 0 0 0 round 10.87px)')
+    expect(getByTestId('tab bar').style.transform).toBe(receded)
+    expect(getByTestId('tab bar').style.transformOrigin).toBe('50% calc(var(--acting-h, 0px) + 100% - 100dvh)')
+
+    rerender(<Stack pushed={false} sheet={false} />)
+    expect(tabs.style.transform).toBe('')
+    expect(document.documentElement.classList.contains('page-sheet-up')).toBe(false)
+    slideEnd(pageIn(getByTestId('sheet')))
+    expect(tabs.style.clipPath).toBe('')
+    expect(document.documentElement.classList.contains('page-sheet-open')).toBe(false)
+  })
+
+  it('shrinks the page it covers into a card, and hides what that page covers', async () => {
+    const { getByTestId, rerender } = render(<Stack pushed sheet={false} />)
+    await nextFrame()
+    const pushed = pageIn(getByTestId('pushed'))
+    expect(getByTestId('tabs').style.visibility).toBe('')
+
+    rerender(<Stack pushed sheet />)
+    await nextFrame()
+    expect(pushed.style.transform).toBe(receded)
+    expect(pushed.style.borderRadius).toBe('10.87px')
+    expect(getByTestId('tabs').style.visibility).toBe('hidden')
+    expect(getByTestId('tabs').style.transform).toBe('translateX(-30%)')
+    // The sheet itself stays as it is.
+    expect(pageIn(getByTestId('sheet')).style.transform).toBe('translateY(0)')
+  })
+
+  it('leaves a page that slides up without being a sheet as it was (the iOS widget page)', async () => {
+    const { getByTestId } = render(
+      <>
+        <div data-testid="tabs" style={{}} />
+        <div data-testid="page"><PushPage open from="bottom"><div /></PushPage></div>
+      </>,
+    )
+    await nextFrame()
+    const page = pageIn(getByTestId('page'))
+    expect(page.style.top).toBe('var(--acting-h, 0px)')
+    expect(getByTestId('page').querySelector('[data-sheet-dim]')).toBeNull()
+  })
+})
