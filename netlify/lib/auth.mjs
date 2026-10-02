@@ -24,7 +24,8 @@ export const UNAUTHORIZED = json(401, { error: 'Please sign in to continue.' })
 // For functions in the current (Request/Response) format, where Netlify
 // doesn't decode the Identity token into context. Asks Identity who the
 // Bearer token belongs to — Identity validates it, so a forged or expired
-// token gets null. Same shape as requireUser().
+// token gets null. Same shape as requireUser(), with their name when
+// they've given one (Google sign-in does), for a shared car's drivers (#398).
 export async function userFromRequest(req, fetchImpl = fetch) {
   const auth = req.headers.get('authorization')
   if (!auth?.startsWith('Bearer ')) return null
@@ -34,7 +35,7 @@ export async function userFromRequest(req, fetchImpl = fetch) {
     })
     if (!res.ok) return null
     const user = await res.json()
-    return { id: user.id, email: user.email, roles: user.app_metadata?.roles ?? [] }
+    return { id: user.id, email: user.email, name: user.user_metadata?.full_name ?? null, roles: user.app_metadata?.roles ?? [] }
   } catch {
     return null
   }

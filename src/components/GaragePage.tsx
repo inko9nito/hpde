@@ -7,14 +7,22 @@ import { CarRow } from './CarRow'
 import { carHash } from './CarPage'
 import { useAuth } from '../auth/AuthContext'
 import { useGarage } from '../data/GarageContext'
-import { MAX_CARS, carEvents, carName, formatDay, eventStart } from '../utils/garage'
+import { useRsvps } from '../data/RsvpsContext'
+import { MAX_CARS, carName, carOutings, formatDay, eventStart, isShared, othersText } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
+import type { Rsvps } from '../utils/rsvp'
 import type { EventConfig } from '../types'
 
-/** "Last at Alpha Track Day · Mar 7, 2026": the car's latest event, under its name. */
-function lastSeen(car: Car, garage: Garage, events: EventConfig[]): string {
-  const [last] = carEvents(car.id, garage, events)
-  return last ? `Last at ${last.name} · ${formatDay(eventStart(last))}` : 'No events yet'
+/**
+ * "Last at Alpha Track Day · Mar 7, 2026": the car's latest event, by
+ * whoever drove it, under its name — and who else drives it, when it's
+ * shared (#398).
+ */
+function lastSeen(car: Car, garage: Garage, events: EventConfig[], rsvps: Rsvps): string {
+  const [last] = carOutings(car, garage, events, rsvps)
+  const seen = last ? `Last at ${last.event.name} · ${formatDay(eventStart(last.event))}` : 'No events yet'
+  if (!isShared(car)) return seen
+  return `With ${othersText(car)} · ${seen}`
 }
 
 /**
@@ -31,6 +39,7 @@ export function GaragePage({ events, onBack, onToast }: {
 }) {
   const { status: authStatus } = useAuth()
   const garage = useGarage()
+  const { rsvps } = useRsvps()
   // Add a car's page, while it's open: a new one each time (see CarPage).
   const [adding, setAdding] = useState<number | null>(null)
   const add = () => setAdding(n => (n ?? 0) + 1)
@@ -75,7 +84,7 @@ export function GaragePage({ events, onBack, onToast }: {
             <ul className="flex flex-col gap-3" aria-label="Cars">
               {garage.cars.map(car => (
                 <li key={car.id}>
-                  <CarRow car={car} title={carName(car)} subtitle={lastSeen(car, garage, events)} href={carHash(car.id)} />
+                  <CarRow car={car} title={carName(car)} subtitle={lastSeen(car, garage, events, rsvps)} href={carHash(car.id)} />
                 </li>
               ))}
             </ul>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  carEvents, carName, carTitle, cleanCar, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, formatDay, logNewestFirst, partOptions, shopOptions,
+  carEvents, carName, carOutings, carTitle, cleanCar, driverLabel, isShared, othersText, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, formatDay, logNewestFirst, partOptions, shopOptions,
 } from './garage'
 import type { Car, Garage } from './garage'
 import type { EventConfig } from '../types'
@@ -91,5 +91,40 @@ describe('garage (#344)', () => {
 
   it('writes a day out', () => {
     expect(formatDay('2026-03-07')).toBe('Mar 7, 2026')
+  })
+})
+
+describe('a car shared between drivers (#398)', () => {
+  const shared: Car = {
+    ...cayman,
+    drivers: [{ id: 'v', name: 'Vera Smith', you: true }, { id: 'j', name: 'Jason Smith' }, { id: 'r', name: 'rick@example.com' }],
+    drives: [{ eventId: 'may', driverId: 'j', runGroup: 'blue' }, { eventId: 'sept', driverId: 'r' }, { eventId: 'gone', driverId: 'j' }],
+  }
+  const theirs: Garage = { cars: [shared], events: { march: { carId: 'c' }, sept: { carId: 'c' }, other: { carId: 'm' } } }
+
+  it('says who drives it: You, a first name, or an email without a name', () => {
+    expect(isShared(shared)).toBe(true)
+    expect(isShared(cayman)).toBe(false)
+    expect(isShared({ ...cayman, drivers: [{ id: 'v', name: 'Vera', you: true }] })).toBe(false)
+    expect(shared.drivers!.map(driverLabel)).toEqual(['You', 'Jason', 'rick@example.com'])
+    expect(othersText(shared)).toBe('Jason and rick@example.com')
+    expect(othersText({ ...shared, drivers: shared.drivers!.slice(0, 2) })).toBe('Jason')
+  })
+
+  it('lists the events it went to, newest first, with who drove it at each, in which group', () => {
+    const outings = carOutings(shared, theirs, events, { sept: { status: 'going', runGroup: 'pink' } })
+    expect(outings.map(o => o.event.id)).toEqual(['sept', 'may', 'march'])
+    expect(outings[0].drivers).toEqual([
+      { driver: shared.drivers![0], runGroup: 'pink' },
+      { driver: shared.drivers![2] },
+    ])
+    expect(outings[1].drivers).toEqual([{ driver: shared.drivers![1], runGroup: 'blue' }])
+    expect(outings[2].drivers).toEqual([{ driver: shared.drivers![0] }])
+  })
+
+  it('lists a car of their own’s events as theirs', () => {
+    const outings = carOutings(cayman, garage, events, { may: { status: 'going', runGroup: 'blue' } })
+    expect(outings.map(o => o.event.id)).toEqual(['sept', 'may', 'march'])
+    expect(outings[1].drivers).toEqual([{ driver: { id: '', name: 'You', you: true }, runGroup: 'blue' }])
   })
 })

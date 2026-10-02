@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import type { Car, EventSetup, Garage, LogEntry } from '../utils/garage'
+import type { Car, CarInvite, EventSetup, Garage, LogEntry } from '../utils/garage'
 
 // The signed-in driver's garage (#344), from the garage function: their
 // cars, and what each event ran on. Shared by the Garage tab and the event
@@ -30,6 +30,12 @@ export interface GarageValue extends Garage {
   removeSetup(eventId: string): Promise<void>
   /** Makes a car the one driven at each of these events, instead of any other. */
   driveAt(carId: string, eventIds: string[]): Promise<void>
+  /** An invite to share a car with another driver (#398): the link's token, and when it stops working. */
+  invite(carId: string): Promise<{ token: string; expires: string }>
+  /** What an invite is for. Throws with a message to show when it's expired or used. */
+  readInvite(token: string): Promise<CarInvite>
+  /** Takes an invite: the car's in this garage too. Resolves to its id. */
+  join(token: string): Promise<string>
   reload(): void
 }
 
@@ -44,6 +50,16 @@ async function errorFrom(res: Response): Promise<Error> {
 }
 
 const EMPTY: Garage = { cars: [], events: {} }
+
+async function fetchGarage(authedFetch: (url: string, init?: RequestInit) => Promise<Response>, url: string): Promise<Garage> {
+  const res = await authedFetch(url)
+  if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw await errorFrom(res)
+  const body = await res.json()
+  return {
+    cars: Array.isArray(body?.cars) ? body.cars : [],
+    events: body?.events && typeof body.events === 'object' ? body.events : {},
+  }
+}
 
 const GarageContext = createContext<GarageValue | null>(null)
 
@@ -72,18 +88,8 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
     setFailed(false)
     ;(async () => {
       try {
-        const res = await authedFetch(url)
-        if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw await errorFrom(res)
-        const body = await res.json()
-        if (!cancelled) {
-          setLoaded({
-            who,
-            garage: {
-              cars: Array.isArray(body?.cars) ? body.cars : [],
-              events: body?.events && typeof body.events === 'object' ? body.events : {},
-            },
-          })
-        }
+        const garage = await fetchGarage(authedFetch, url)
+        if (!cancelled) setLoaded({ who, garage })
       } catch {
         if (!cancelled) setFailed(true)
       }
@@ -121,7 +127,7 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
     const saved = (await (await send('', put({ car }))).json()).car as Car
     change(g => ({
       ...g,
-      cars: g.cars.some(c => c.id === saved.id) ? g.cars.map(c => (c.id === saved.id ? saved : c)) : [...g.cars, saved],
+      cars: g.cars.some(c => c.id === saved.id) ? g.cars.map(c => (c.id === saved.id ? sharing(c, saved) : c)) : [...g.cars, saved],
     }))
     return saved
   }, [send, change])
@@ -157,7 +163,7 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
   }, [send, change])
 
   const replaceCar = useCallback((saved: Car) => {
-    change(g => ({ ...g, cars: g.cars.map(c => (c.id === saved.id ? saved : c)) }))
+    change(g => ({ ...g, cars: g.cars.map(c => (c.id === saved.id ? sharing(c, saved) : c)) }))
   }, [change])
 
   const savePhoto = useCallback(async (carId: string, photo: Blob) => {
@@ -198,12 +204,34 @@ function useGarageStore(driverId: string | null | undefined): GarageValue {
     change(g => ({ ...g, events: { ...g.events, ...saved } }))
   }, [send, change])
 
+  const invite = useCallback(async (carId: string) => {
+    return (await (await send(`car=${encodeURIComponent(carId)}&invite=1`, { method: 'PUT' })).json()).invite as { token: string; expires: string }
+  }, [send])
+
+  const readInvite = useCallback(async (token: string) => {
+    return (await (await send(`invite=${encodeURIComponent(token)}`, { method: 'GET' })).json()).invite as CarInvite
+  }, [send])
+
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
+  // The car comes with its drivers and what they drove it at: the whole
+  // garage afresh, in before its page opens.
+  const join = useCallback(async (token: string) => {
+    const { car } = await (await send(`invite=${encodeURIComponent(token)}`, { method: 'PUT' })).json()
+    const garage = await fetchGarage(authedFetch, url)
+    if (who) setLoaded({ who, garage })
+    return car.id as string
+  }, [send, authedFetch, url, who])
+
   return useMemo(
-    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload }),
-    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, reload],
+    () => ({ status, ...garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload }),
+    [status, garage, saveCar, removeCar, savePhoto, removePhoto, photoUrl, saveEntry, removeEntry, saveSetup, removeSetup, driveAt, invite, readInvite, join, reload],
   )
+}
+
+/** A car as saved, keeping who drives it (#398), which the function sends only with the garage. */
+function sharing(old: Car, saved: Car): Car {
+  return old.drivers ? { ...saved, drivers: old.drivers, ...(old.drives ? { drives: old.drives } : {}) } : saved
 }
 
 export function GarageProvider({ children }: { children: ReactNode }) {
@@ -225,6 +253,9 @@ const OFF: GarageValue = {
   saveSetup: signIn,
   removeSetup: signIn,
   driveAt: signIn,
+  invite: signIn,
+  readInvite: signIn,
+  join: signIn,
   reload() {},
 }
 

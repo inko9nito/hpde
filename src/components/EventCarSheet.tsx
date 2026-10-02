@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowLeftRight, Check, ChevronRight, Lock, Plus } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { CarTile, ConsumablesList, DetailRow } from './CarRow'
-import { carName, carTitle, eventStart } from '../utils/garage'
+import { carName, carTitle, eventStart, isShared } from '../utils/garage'
 import type { Car, Garage } from '../utils/garage'
 import type { EventConfig } from '../types'
 
@@ -144,7 +144,7 @@ export function EventCarSheet({ event, garage, car, onPick, onAddCar, onRemove, 
         )}
         <p className="flex items-center gap-1 text-[11px] text-gray-400">
           <Lock size={11} aria-hidden="true" />
-          Only you and admins can see your garage.
+          {car && isShared(car) ? 'Only its drivers and admins can see this car.' : 'Only you and admins can see your garage.'}
         </p>
       </div>
     </Sheet>

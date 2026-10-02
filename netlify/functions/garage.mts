@@ -1,8 +1,10 @@
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { ensureCopied, openStores, whoseRecords } from '../lib/driverStore.mts'
-import type { StoreDeps } from '../lib/driverStore.mts'
-import { MAX_CARS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_LIMIT, PHOTO_TYPES, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
-import type { Car, EventSetup, Garage, LogEntry } from '../../src/utils/garage.ts'
+import type { DriverStores, StoreDeps } from '../lib/driverStore.mts'
+import { ensureRsvpsCopied, openRsvpStores } from '../lib/rsvpStore.mts'
+import type { DriverRsvps } from '../lib/rsvpStore.mts'
+import { INVITE_DAYS, MAX_CARS, MAX_DRIVERS, MAX_EVENTS, MAX_LOG, MAX_PHOTO_BYTES, PHOTO_LIMIT, PHOTO_TYPES, cleanCar, cleanEntry, cleanSetup } from '../../src/utils/garage.ts'
+import type { Car, CarDrive, CarDriver, CarInvite, EventSetup, Garage, LogEntry } from '../../src/utils/garage.ts'
 
 // A signed-in driver's garage (#344), private to them, as their laps and
 // notes are: every request needs their sign-in and only reaches their own
@@ -27,12 +29,29 @@ import type { Car, EventSetup, Garage, LogEntry } from '../../src/utils/garage.t
 //                                car, and each session's pressures
 //   DELETE ?event=               removes an event's setup
 //
+// A car can be shared with other drivers (#398) — Jason and his dad, one
+// Mustang: its details, photo and log are theirs together, and each of
+// them drives it at their own events, with their own tire pressures.
+//   PUT    ?car=<id>&invite=1    an invite to share it: { invite: { token,
+//                                expires } }, for a link. Works once, for
+//                                INVITE_DAYS days.
+//   GET    ?invite=<token>       what the invite is for: { invite } (CarInvite)
+//   PUT    ?invite=<token>       takes it: the car's in their garage too
+//   DELETE ?car=<id>             on a shared car, takes it out of their
+//                                garage only; it goes with its last driver
+// A shared car comes with its drivers (`drivers`, each by name) and the
+// events the others drove it at, in their run group there (`drives`).
+//
 // Kept in Netlify Blobs, one record per driver, keyed `<user id>/garage`;
-// photos in a store of their own, keyed `<user id>/<car id>`. A deploy
+// photos in a store of their own, keyed `<user id>/<car id>`. A shared car
+// moves out of its first driver's record, when another takes the invite,
+// to one of its own in the shared store, keyed `car/<car id>` (its photo:
+// `shared/<car id>`), and each of its drivers' records lists it under
+// `shared`; invites are kept there too, keyed `invite/<token>`. A deploy
 // preview gets stores of its own: the garage starts as a copy of the
-// driver's live one the first time it's used there, and a photo not
-// changed there is read from the live store — so changes there never
-// touch the live garage. Each deploy copies afresh.
+// driver's live one the first time it's used there, as does a shared car,
+// and a photo not changed there is read from the live store — so changes
+// there never touch the live garage. Each deploy copies afresh.
 //
 // TypeScript (.mts) so it can share the checks in src/; Netlify bundles it
 // with esbuild (see netlify/lib/functionsLoad.test.ts).
@@ -42,12 +61,54 @@ export const GARAGE_STORE = 'garage'
 // On a preview: which drivers' live garages have been copied in.
 export const GARAGE_META_STORE = 'garage-meta'
 export const PHOTO_STORE = 'garage-photos'
+// Shared cars and the invites to them (#398).
+export const SHARED_STORE = 'garage-shared'
+// On a preview: which shared cars have been copied in.
+export const SHARED_META_STORE = 'garage-shared-meta'
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
+const TOKEN = /^[A-Za-z0-9_-]{16,64}$/
 
-type Deps = StoreDeps & { fetch?: typeof fetch; newId?: () => string }
+type Deps = StoreDeps & { fetch?: typeof fetch; newId?: () => string; newToken?: () => string; now?: () => Date }
 
 const randomId = () => crypto.randomUUID().slice(0, 8)
+const randomToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(18))).toString('base64url')
+
+/** A driver's record: their own cars, the shared cars they drive, and each event's setup. */
+type DriverRecord = Garage & { shared?: string[] }
+
+/** A shared car (#398): the car, and who drives it. */
+interface SharedCar {
+  car: Car
+  drivers: CarDriver[]
+}
+
+/** An invite to share a car: whose garage it's in until it's shared, or that it already is. */
+interface Invite {
+  carId: string
+  /** The driver who sent it. */
+  from: CarDriver
+  /** Set while the car is still in the sender's own garage. */
+  owner?: string
+  expires: string
+}
+
+/** A shared car's record, copied in from the live store the first time a preview reads it. */
+async function readShared(stores: DriverStores, key: string): Promise<SharedCar | null> {
+  if (stores.live && !(await stores.meta.get(key, { type: 'json' }))) {
+    const live = await stores.live.get(key, { type: 'json' })
+    if (live) await stores.records.setJSON(key, live, { onlyIfNew: true })
+    await stores.meta.setJSON(key, { at: new Date().toISOString() })
+  }
+  return (await stores.records.get(key, { type: 'json' })) as SharedCar | null
+}
+
+/** A photo, from the deploy's own store or, on a preview, the live one. */
+async function readPhoto(photos: DriverStores, key: string) {
+  return (await photos.records.getWithMetadata(key, { type: 'arrayBuffer' }))
+    ?? (await photos.live?.getWithMetadata(key, { type: 'arrayBuffer' }))
+    ?? null
+}
 
 export default async function handler(req: Request, context: unknown, deps: Deps = {}) {
   if (!['GET', 'PUT', 'DELETE'].includes(req.method)) return json(405, { error: 'Method not allowed.' })
@@ -59,35 +120,121 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const whose = await whoseRecords(user, params.get('driver'), 'a garage', deps.identity)
   if (whose instanceof Response) return whose
   const { driverId } = whose
+  const me: CarDriver = { id: driverId, name: whose.driverName ?? 'A driver' }
 
   const stores = openStores(context, deps, GARAGE_STORE, GARAGE_META_STORE)
-  await ensureCopied(stores, driverId)
+  const sharedStores = openStores(context, deps, SHARED_STORE, SHARED_META_STORE)
+  const photos = () => openStores(context, deps, PHOTO_STORE, `${PHOTO_STORE}-meta`)
   const store = stores.records
-  const key = `${driverId}/garage`
-  const record = (await store.get(key, { type: 'json' })) as Garage | null
-  const garage: Garage = { cars: record?.cars ?? [], events: record?.events ?? {} }
+  const updatedAt = (deps.now?.() ?? new Date()).toISOString()
+  const newId = deps.newId ?? randomId
+
+  // A driver's record, as it's kept.
+  const recordOf = async (id: string): Promise<DriverRecord> => {
+    await ensureCopied(stores, id)
+    const record = (await store.get(`${id}/garage`, { type: 'json' })) as DriverRecord | null
+    return { cars: record?.cars ?? [], events: record?.events ?? {}, ...(record?.shared?.length ? { shared: record.shared } : {}) }
+  }
+  // Saves what's left, or with nothing left, removes the record.
+  const putRecord = async (id: string, next: DriverRecord) => {
+    const { shared, ...rest } = next
+    if (rest.cars.length === 0 && Object.keys(rest.events).length === 0 && !shared?.length) await store.delete(`${id}/garage`)
+    else await store.setJSON(`${id}/garage`, shared?.length ? { ...rest, shared } : rest)
+  }
+
+  const record = await recordOf(driverId)
+  // The shared cars they drive: those still there, with them among its drivers.
+  const sharedCars = (await Promise.all((record.shared ?? []).map(id => readShared(sharedStores, `car/${id}`))))
+    .filter((s): s is SharedCar => !!s && s.drivers.some(d => d.id === driverId))
+  const garage: Garage = { cars: [...record.cars, ...sharedCars.map(s => s.car)], events: record.events }
+
+  const put = (next: Garage) => putRecord(driverId, {
+    cars: next.cars.filter(c => !sharedCars.some(s => s.car.id === c.id)),
+    events: next.events,
+    ...(record.shared ? { shared: record.shared } : {}),
+  })
+
+  // An invite: what it's for, and taking it (#398).
+  const token = params.get('invite')
+  if (token !== null && token !== '1') {
+    if (!TOKEN.test(token)) return json(404, { error: 'That invite has expired, or was already used.' })
+    const inviteKey = `invite/${token}`
+    const invite = (await sharedStores.records.get(inviteKey, { type: 'json' })) as Invite | null
+    if (!invite || invite.expires < updatedAt) return json(404, { error: 'That invite has expired, or was already used.' })
+    const shared = invite.owner ? null : await readShared(sharedStores, `car/${invite.carId}`)
+    const owner = invite.owner ? await recordOf(invite.owner) : null
+    const car = shared?.car ?? owner?.cars.find(c => c.id === invite.carId)
+    if (!car) return json(404, { error: 'That car isn’t in their garage any more.' })
+    const mine = invite.owner === driverId || shared?.drivers.some(d => d.id === driverId)
+
+    if (req.method === 'GET') {
+      const { year, make, model, nickname } = car
+      const shown: CarInvite = {
+        car: { ...(year !== undefined ? { year } : {}), make, model, ...(nickname ? { nickname } : {}) },
+        from: invite.from.name,
+        expires: invite.expires,
+        ...(mine ? { carId: car.id } : {}),
+      }
+      return json(200, { invite: shown })
+    }
+    if (req.method !== 'PUT') return json(405, { error: 'Method not allowed.' })
+    if (mine) return json(200, { car: { id: car.id } })
+    if (garage.cars.length >= MAX_CARS) return json(400, { error: `Your garage is full (at most ${MAX_CARS} cars).` })
+    if ((shared?.drivers.length ?? 1) >= MAX_DRIVERS) return json(400, { error: `That car has as many drivers as it can (${MAX_DRIVERS}).` })
+
+    let id = car.id
+    if (owner) {
+      // Out of its first driver's garage, into one of its own — under a
+      // new id if its own is taken there, or in this garage.
+      const taken = async (candidate: string) => garage.cars.some(c => c.id === candidate)
+        || !!(await readShared(sharedStores, `car/${candidate}`))
+      while (await taken(id)) id = randomId()
+      if (car.photo) {
+        const found = await readPhoto(photos(), `${invite.owner}/${car.id}`)
+        if (found) await photos().records.set(`shared/${id}`, found.data as ArrayBuffer, { metadata: found.metadata })
+        await photos().records.delete(`${invite.owner}/${car.id}`)
+      }
+      await sharedStores.records.setJSON(`car/${id}`, { car: { ...car, id }, drivers: [invite.from, me] } satisfies SharedCar)
+      const events = id === car.id ? owner.events : Object.fromEntries(Object.entries(owner.events).map(([e, setup]) => [e, setup.carId === car.id ? { ...setup, carId: id } : setup]))
+      await putRecord(invite.owner!, { cars: owner.cars.filter(c => c.id !== car.id), events, shared: [...(owner.shared ?? []), id] })
+    } else {
+      if (garage.cars.some(c => c.id === id)) return json(409, { error: 'A car of yours has the same id as that one. Remove it, or ask for another invite.' })
+      await sharedStores.records.setJSON(`car/${id}`, { ...shared!, drivers: [...shared!.drivers, me] })
+    }
+    await putRecord(driverId, { ...record, shared: [...(record.shared ?? []).filter(s => s !== id), id] })
+    await sharedStores.records.delete(inviteKey)
+    return json(200, { car: { id } })
+  }
 
   const eventId = params.get('event')
   const carId = params.get('car')
   const car = carId !== null ? garage.cars.find(c => c.id === carId) : undefined
   if (carId !== null && !car) return json(404, { error: 'That car isn’t in the garage.' })
+  const sharedCar = car ? sharedCars.find(s => s.car.id === car.id) : undefined
+  // Changes the car where it's kept: a shared one in its own record.
+  const replaceCar = (next: Car) => sharedCar
+    ? sharedStores.records.setJSON(`car/${next.id}`, { ...sharedCar, car: next })
+    : put({ ...garage, cars: garage.cars.map(c => (c.id === next.id ? next : c)) })
+  const photoKey = car ? (sharedCar ? `shared/${car.id}` : `${driverId}/${car.id}`) : ''
 
-  // Saves what's left, or with nothing left, removes the record.
-  const put = async (next: Garage) => {
-    if (next.cars.length === 0 && Object.keys(next.events).length === 0) await store.delete(key)
-    else await store.setJSON(key, next)
+  if (car && params.get('invite') === '1') {
+    if (req.method !== 'PUT') return json(405, { error: 'Method not allowed.' })
+    if ((sharedCar?.drivers.length ?? 1) >= MAX_DRIVERS) return json(400, { error: `That car has as many drivers as it can (${MAX_DRIVERS}).` })
+    const invite: Invite = {
+      carId: car.id,
+      from: sharedCar?.drivers.find(d => d.id === driverId) ?? me,
+      ...(sharedCar ? {} : { owner: driverId }),
+      expires: new Date(Date.parse(updatedAt) + INVITE_DAYS * 86_400_000).toISOString(),
+    }
+    const fresh = (deps.newToken ?? randomToken)()
+    await sharedStores.records.setJSON(`invite/${fresh}`, invite)
+    return json(200, { invite: { token: fresh, expires: invite.expires } })
   }
-  const replaceCar = (next: Car) => put({ ...garage, cars: garage.cars.map(c => (c.id === next.id ? next : c)) })
-  const updatedAt = new Date().toISOString()
-  const newId = deps.newId ?? randomId
 
   if (car && params.get('photo')) {
-    const photos = openStores(context, deps, PHOTO_STORE, `${PHOTO_STORE}-meta`)
-    const photoKey = `${driverId}/${car.id}`
     if (req.method === 'GET') {
       if (!car.photo) return json(404, { error: 'That car has no photo.' })
-      const found = (await photos.records.getWithMetadata(photoKey, { type: 'arrayBuffer' }))
-        ?? (await photos.live?.getWithMetadata(photoKey, { type: 'arrayBuffer' }))
+      const found = await readPhoto(photos(), photoKey)
       if (!found) return json(404, { error: 'That car has no photo.' })
       return new Response(found.data as ArrayBuffer, {
         headers: {
@@ -98,7 +245,7 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       })
     }
     if (req.method === 'DELETE') {
-      await photos.records.delete(photoKey)
+      await photos().records.delete(photoKey)
       const { photo: _gone, ...rest } = car
       await replaceCar({ ...rest, updatedAt })
       return json(200, { car: { ...rest, updatedAt } })
@@ -108,13 +255,36 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     const data = await req.arrayBuffer()
     if (data.byteLength === 0) return json(400, { error: 'The photo is empty.' })
     if (data.byteLength > MAX_PHOTO_BYTES) return json(400, { error: `That photo is over the ${PHOTO_LIMIT} limit.` })
-    await photos.records.set(photoKey, data, { metadata: { contentType: type } })
+    await photos().records.set(photoKey, data, { metadata: { contentType: type } })
     const next: Car = { ...car, photo: `${Date.now().toString(36)}${newId().slice(0, 4)}`, updatedAt }
     await replaceCar(next)
     return json(200, { car: next })
   }
 
-  if (req.method === 'GET') return json(200, garage)
+  if (req.method === 'GET') {
+    // A shared car's drivers, and the events the others drove it at, in
+    // their run group there.
+    const rsvpStores = openRsvpStores(context, deps)
+    const others = [...new Set(sharedCars.flatMap(s => s.drivers.map(d => d.id)))].filter(id => id !== driverId)
+    const theirs = new Map(await Promise.all(others.map(async id => {
+      await ensureRsvpsCopied(rsvpStores, id)
+      const rsvps = (await rsvpStores.rsvps.get(id, { type: 'json' })) as DriverRsvps | null
+      return [id, { events: (await recordOf(id)).events, rsvps: rsvps?.events ?? {} }] as const
+    })))
+    const shown = (s: SharedCar): Car => ({
+      ...s.car,
+      drivers: s.drivers.map(d => (d.id === driverId ? { ...d, you: true } : d)),
+      drives: s.drivers.flatMap(d => {
+        const them = theirs.get(d.id)
+        if (!them) return []
+        return Object.entries(them.events).filter(([, setup]) => setup.carId === s.car.id).map(([eventId]): CarDrive => {
+          const runGroup = them.rsvps[eventId]?.runGroup
+          return { eventId, driverId: d.id, ...(runGroup ? { runGroup } : {}) }
+        })
+      }),
+    })
+    return json(200, { cars: [...record.cars, ...sharedCars.map(shown)], events: garage.events })
+  }
 
   if (req.method === 'DELETE') {
     const entryId = params.get('entry')
@@ -126,7 +296,13 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       return json(200, { deleted: entryId })
     }
     if (car) {
-      if (car.photo) await openStores(context, deps, PHOTO_STORE, `${PHOTO_STORE}-meta`).records.delete(`${driverId}/${car.id}`)
+      // A shared car stays with its other drivers; with none, it goes.
+      const drivers = sharedCar?.drivers.filter(d => d.id !== driverId) ?? []
+      if (drivers.length) await sharedStores.records.setJSON(`car/${car.id}`, { ...sharedCar!, drivers })
+      else {
+        if (car.photo) await photos().records.delete(photoKey)
+        if (sharedCar) await sharedStores.records.delete(`car/${car.id}`)
+      }
       // Its events keep their tire pressures, without the car.
       const events = Object.fromEntries(Object.entries(garage.events).flatMap(([id, setup]): [string, EventSetup][] => {
         if (setup.carId !== carId) return [[id, setup]]
@@ -134,7 +310,11 @@ export default async function handler(req: Request, context: unknown, deps: Deps
         // Nothing left but the car: nothing to keep.
         return 'value' in cleanSetup(rest, []) ? [[id, rest]] : []
       }))
-      await put({ cars: garage.cars.filter(c => c.id !== carId), events })
+      await putRecord(driverId, {
+        cars: record.cars.filter(c => c.id !== carId),
+        events,
+        shared: (record.shared ?? []).filter(id => id !== carId),
+      })
       return json(200, { deleted: carId })
     }
     if (eventId === null || !EVENT_ID.test(eventId)) return json(400, { error: 'Missing event.' })
@@ -198,7 +378,10 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     const old = garage.cars.find(c => c.id === id)
     if (!old) return json(404, { error: 'That car isn’t in the garage.' })
     const changed: Car = { id, ...cleaned.value, ...(old.photo ? { photo: old.photo } : {}), ...(old.log ? { log: old.log } : {}), updatedAt }
-    await put({ ...garage, cars: garage.cars.map(c => (c.id === id ? changed : c)) })
+    if (sharedCars.some(s => s.car.id === id)) {
+      const s = sharedCars.find(s => s.car.id === id)!
+      await sharedStores.records.setJSON(`car/${id}`, { ...s, car: changed })
+    } else await put({ ...garage, cars: garage.cars.map(c => (c.id === id ? changed : c)) })
     return json(200, { car: changed })
   }
   if (garage.cars.length >= MAX_CARS) return json(400, { error: `That’s too many cars (at most ${MAX_CARS}).` })
