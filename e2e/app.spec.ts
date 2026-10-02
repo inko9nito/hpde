@@ -1800,6 +1800,23 @@ test('the checkers pulse while the app loads, and go once it has (#365)', async 
   await expect(loader).toHaveCount(0)
 })
 
+test('in the Home Screen app, the loader’s checkers sit at the middle of the screen, where the launch image has them (#365)', async ({ page }) => {
+  // The app starts below the status bar: the screen is 47pt taller than the page.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'standalone', { get: () => true })
+    Object.defineProperty(Screen.prototype, 'height', { get: () => window.innerHeight + 47 })
+  })
+  await stubEvents(page)
+  await page.route(/\/assets\/index-[^/]*\.js$/, () => {})
+  await page.goto('/#/', { waitUntil: 'commit' })
+  const checkers = page.getByRole('progressbar', { name: 'Loading' }).locator('svg')
+  await expect(checkers).toBeVisible()
+  // Half the status bar higher than the page's middle: the screen's middle.
+  const box = (await checkers.boundingBox())!
+  const innerHeight = await page.evaluate(() => window.innerHeight)
+  expect(Math.round(box.y + box.height / 2)).toBe(Math.round((innerHeight - 47) / 2))
+})
+
 test.describe('Add to Home Screen banner (#379)', () => {
   test.use({
     homeScreenBanner: true,

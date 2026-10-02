@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "widget:preview": "node scripts/widget-preview.mjs",
     "widget:showcase": "node scripts/widget-showcase.mjs",
-    "icons:generate": "node scripts/app-icon/generate.mjs"
+    "icons:generate": "node scripts/app-icon/generate.mjs",
+    "launch-screens:generate": "node scripts/launch-screens/generate.mjs"
   },
   "dependencies": {
     "@fontsource-variable/rubik": "^5.3.0",

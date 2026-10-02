@@ -22,3 +22,11 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Content-Type = "application/manifest+json"
+
+# Vite names each built asset by its contents, so a changed one is a new
+# URL: cache them for good. Netlify's default had the Home Screen app check
+# every one with the server each time it opened (#365).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
