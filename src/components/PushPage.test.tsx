@@ -268,6 +268,8 @@ describe('a page sheet (#415)', () => {
     const sheet = pageIn(getByTestId('sheet'))
     expect(sheet.style.top).toBe('calc(var(--acting-h, 0px) + env(safe-area-inset-top) + 18px)')
     expect(sheet.style.borderRadius).toBe('12px 12px 0 0')
+    // Over every page, raised ones too.
+    expect(sheet.style.zIndex).toBe('35')
     const dim = getByTestId('sheet').querySelector<HTMLElement>('[data-sheet-dim]')!
     expect(dim.style.opacity).toBe('0')
     await nextFrame()

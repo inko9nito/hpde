@@ -652,6 +652,28 @@ test('a page with Cancel and Save is a sheet over a card of the page it covers (
   await expect(html).not.toHaveClass(/page-sheet/)
 })
 
+// An event's page opened from a track (or car) page goes over it, above
+// the other pages (#274); its Edit details went under it, out of sight.
+test('Edit details comes up over an event’s page opened from a track page (#415)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/track/msrc-2-0-cw')
+  await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toBeVisible()
+  await page.evaluate(id => { location.hash = `#/event/${id}` }, alpha.id)
+  await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Edit details' }).click()
+  const sheet = page.getByRole('heading', { level: 1, name: 'Edit details' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  // On top, where a tap lands.
+  const cancel = sheet.getByRole('button', { name: 'Cancel' })
+  const box = (await cancel.boundingBox())!
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.textContent, [box.x + box.width / 2, box.y + box.height / 2])).toBe('Cancel')
+  await cancel.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit details' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: alpha.name })).toBeInViewport()
+})
+
 test('an admin adds a schedule: days in markdown, group colors picked from names, preview, save (#232)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
@@ -1054,7 +1076,9 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await card.getByLabel('Acknowledges all flags early').fill('65')
   await card.getByLabel('Instructor notes').fill('Very smooth; got faster as the day went on.')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await card.getByRole('button', { name: 'Save evaluation' }).click()
+  // A page sheet: Cancel and Save across its top (#415).
+  await expect(card.getByRole('button', { name: 'Cancel' })).toBeVisible()
+  await card.getByRole('button', { name: 'Save' }).click()
   await expect(card).toBeHidden()
 
   const report = page.getByRole('region', { name: 'Instructor evaluation' })

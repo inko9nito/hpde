@@ -1,7 +1,9 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Lock } from 'lucide-react'
-import { Sheet } from './Sheet'
+import { PushPage } from './PushPage'
+import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
 import { RunGroupSelect } from './RunGroupSelect'
 import { ReportCardSwitch } from './ReportCardSwitch'
@@ -135,8 +137,10 @@ const YES_NO = [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] as
  * card for the group they drove in, else the one their latest evaluation
  * was on. Everything's optional; save what the card has. The group they
  * drove in is the event's, shown to confirm, not picked here.
+ *
+ * A page sheet, with Cancel and Save across its top (#415).
  */
-export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, onSave, onRemove, onClose }: {
+export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, onSave, onRemove, onClosed }: {
   /** A TDE event (isTdeEvent) gets the report card's fields. */
   event: EventConfig
   /** Every event, to color the groups as the app does. */
@@ -146,10 +150,14 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   runGroup?: RunGroupConfig | null
   /** The card their latest TDE evaluation elsewhere was on, once it's known. */
   lastCard?: CardId
+  /** Saves it, throwing with a message to show; the page then slides away. */
   onSave: (evaluation: EventEvaluation) => Promise<void>
+  /** Removes it, likewise. */
   onRemove: () => Promise<void>
-  onClose: () => void
+  /** Once it's slid away. */
+  onClosed: () => void
 }) {
+  const [open, setOpen] = useState(true)
   const groupCard = cardForGroup(runGroup?.label)
   const [draft, setDraft] = useState(() =>
     draftFrom(existing, existing ? cardOf(existing).id : groupCard?.id ?? lastCard ?? TDE_CARDS[0].id))
@@ -174,28 +182,43 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   const groupFor = (name: string) => groups.find(group => group.label.toLowerCase() === name.toLowerCase())
   const groupName = (groupId: string | null) => groups.find(group => group.id === groupId)?.label ?? ''
 
+  const close = () => setOpen(false)
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busyRef.current) setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   async function run(what: 'saving' | 'removing', action: () => Promise<void>) {
     setBusy(what)
     setFailure(null)
     try {
       await action()
+      close()
     } catch (err) {
       setFailure((err as Error).message)
       setBusy(null)
     }
   }
 
-  return (
-    <Sheet
-      label="Instructor evaluation"
-      busy={!!busy}
-      onClose={onClose}
-      data-evaluation-sheet
-      heading={<>
-        <p className="text-xs text-gray-500">{event.name}</p>
-        <h2 className="mt-0.5 text-lg font-bold text-gray-900">Instructor evaluation</h2>
-      </>}
-    >
+  return createPortal(
+    <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
+      {/* On its way out once closed: gone to a screen reader, and to taps. */}
+      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-white" data-evaluation-sheet>
+      <PageHeader
+        title="Instructor evaluation"
+        subtitle={event.name}
+        onCancel={close}
+        cancelDisabled={!!busy}
+        save={{
+          label: busy === 'saving' ? 'Saving…' : 'Save',
+          disabled: !('value' in cleaned) || !!busy,
+          onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
+        }}
+      />
+      <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
       {/* Which run group's paper card it's filled in from (#350). */}
       {tde && (
         <div className="mt-3">
@@ -386,13 +409,6 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
       {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        <button
-          onClick={() => 'value' in cleaned && run('saving', () => onSave(cleaned.value))}
-          disabled={!('value' in cleaned) || !!busy}
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-        >
-          {busy === 'saving' ? 'Saving…' : 'Save evaluation'}
-        </button>
         {existing && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
             Remove evaluation
@@ -414,6 +430,9 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           Only you and admins can see your notes.
         </p>
       </div>
-    </Sheet>
+      </div>
+      </div>
+    </PushPage>,
+    document.body,
   )
 }

@@ -23,6 +23,13 @@ const RECEDED_DIM = 0.12
 /** Where a sheet's top edge stops: below the acting banner and status bar. */
 export const SHEET_TOP = 'calc(var(--acting-h, 0px) + env(safe-area-inset-top) + 18px)'
 const SHEET_RADIUS = '12px'
+// Over every page, a raised one too (#274): an event's page opened from a
+// track or car page sat over its own Edit details at 31.
+const SHEET_Z = 35
+
+function zIndex(sheet: boolean, raised: boolean) {
+  return sheet ? SHEET_Z : raised ? 31 : undefined
+}
 
 // Pages pushed from the right that are in place. Each covers whatever is
 // under it, and the first covers the tabs. Pages that slide up (Share, New
@@ -100,14 +107,15 @@ function useSheet(page: Pushed, shown: boolean, up: boolean) {
 }
 
 /**
- * Whether a sheet is over `page` — or, without one, over the tabs:
+ * Whether a sheet is over `page` — every sheet is over every page —
+ * or, without one, over the tabs:
  * 'up' once one is in place (or on its way there), 'shown' while one is on
  * screen but down (sliding in or out), else 'none'.
  */
 type UnderSheet = 'none' | 'shown' | 'up'
 function useUnderSheet(page?: Pushed): UnderSheet {
   return useSyncExternalStore(onCoveringChange, () => {
-    const over = sheets.filter(sheet => !page || (sheet.page !== page && isOver(sheet.page, page)))
+    const over = sheets.filter(sheet => sheet.page !== page)
     return over.some(sheet => sheet.up) ? 'up' : over.length > 0 ? 'shown' : 'none'
   })
 }
@@ -361,9 +369,9 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       <div
         aria-hidden="true"
         data-sheet-dim
-        className="fixed inset-0 z-30 bg-black"
+        className="fixed inset-0 bg-black"
         style={{
-          zIndex: raised ? 31 : undefined,
+          zIndex: SHEET_Z,
           opacity: inPosition ? RECEDED_DIM : 0,
           transition: slide('opacity', instant),
         }}
@@ -379,7 +387,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // Below the banner while an admin acts as another driver (#396);
         // a sheet, below the status bar too, with the card under it showing.
         top: isSheet ? SHEET_TOP : 'var(--acting-h, 0px)',
-        zIndex: raised ? 31 : undefined,
+        zIndex: zIndex(isSheet, raised),
         // Out of sight under the page pushed over it, while a sheet makes
         // that one a card: hidden, so it doesn't show at the card's corners.
         visibility: covered && underSheet !== 'none' ? 'hidden' : undefined,
