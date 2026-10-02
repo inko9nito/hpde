@@ -359,7 +359,7 @@ function EventsPanel({ car, outings, onOpenEvent, onAdd }: {
             event={o.event}
             muted={status(o) === 'past'}
             live={status(o) === 'live'}
-            before={<WhoDrove outing={o} shared={shared} />}
+            below={<WhoDrove outing={o} shared={shared} />}
             onClick={() => onOpenEvent(o.event)}
           />
         </li>
@@ -424,7 +424,10 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
 
   const topBar = (
     <div className="sticky top-0 z-30 bg-gray-50" style={{ height: TOP_BAR_PX }}>
-      <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(4rem,1fr)_minmax(0,max-content)_minmax(4rem,1fr)] items-center gap-2 px-4">
+      {/* Each side at least as wide as what's in it — the drivers' pictures
+          and Edit — so the name between them truncates rather than running
+          under them. */}
+      <div className="mx-auto grid h-full max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4">
         <div className="justify-self-start"><BackButton onClick={onBack} /></div>
         {/* The title's echo, once it's scrolled away — hidden from
             assistive tech so the name isn't announced twice. */}

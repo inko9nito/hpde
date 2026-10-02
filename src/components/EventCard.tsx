@@ -36,15 +36,15 @@ export function EmptyRow({ children }: { children: string }) {
 
 /**
  * Event name (with a LIVE pill when it's on today) over its organizer —
- * after their run group there, on My events (#330), or who drove a car
- * there, on its page (#408).
+ * after their run group there, on My events (#330) — and, on a car's page,
+ * who drove it there, a line to itself (#408, #410).
  */
-export function EventTitle({ event, live, group, before }: {
+export function EventTitle({ event, live, group, below }: {
   event: EventConfig
   live: boolean
   group?: RunGroupConfig
-  /** Ahead of the organizer, in place of a run group. */
-  before?: ReactNode
+  /** A line of its own under the organizer: a car's drivers there, in their run groups. */
+  below?: ReactNode
 }) {
   return (
     <div className="min-w-0 flex-1">
@@ -56,11 +56,11 @@ export function EventTitle({ event, live, group, before }: {
       </div>
       <div className="mt-0.5 flex min-w-0 items-center gap-2">
         {group && <GroupBadge group={group} size="sm" />}
-        {before}
         <span className="truncate text-sm text-gray-500">
           {event.organizer ?? 'Organizer not set'}
         </span>
       </div>
+      {below && <div className="mt-1.5 flex min-w-0">{below}</div>}
     </div>
   )
 }
@@ -74,14 +74,14 @@ export function EventCard({
   muted,
   live,
   group,
-  before,
+  below,
   onClick,
 }: {
   event: EventConfig
   muted: boolean
   live: boolean
   group?: RunGroupConfig
-  before?: ReactNode
+  below?: ReactNode
   onClick: () => void
 }) {
   return (
@@ -92,7 +92,7 @@ export function EventCard({
       }`}
     >
       <DateBlock event={event} muted={muted} />
-      <EventTitle event={event} live={live} group={group} before={before} />
+      <EventTitle event={event} live={live} group={group} below={below} />
       {/* Same dark tile as the event page header; no padding, the SVGs
           carry their own margin. */}
       <TrackIcon trackId={event.trackId} tone="dark" size={48} padding={0} radius="rounded-xl" />
