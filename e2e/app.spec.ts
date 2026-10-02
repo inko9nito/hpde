@@ -1881,7 +1881,9 @@ test('a car’s page opened from one of its events, after another of its events,
   await expect(page).toHaveURL(new RegExp(`#/event/${second.id}$`))
   // …which has the Garage under the car's page now: the car's page still opens over it.
   await openCar()
-  await expect(carPage.getByRole('button', { name: 'Edit details' })).toBeInViewport({ ratio: 1 })
+  // All of it, across: its header (which stays at the top, wherever the
+  // page was left scrolled) is wholly on screen.
+  await expect(carPage.getByRole('heading', { level: 1, name: 'The Cayman' })).toBeInViewport({ ratio: 1 })
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
   await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()
