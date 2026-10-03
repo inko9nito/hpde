@@ -972,36 +972,30 @@ export default function App() {
           // With laps, they drove it: "Drove", in this group or a later one's (#377).
           const rsvp = await lapLog.save(session)
           if (rsvp) eventRsvps.remember(activeEvent.id, rsvp)
-          setLapSlot(null)
           showToast('Lap times saved')
         }}
         onRemove={async key => {
           await lapLog.remove(key)
-          setLapSlot(null)
           showToast('Lap times removed')
         }}
         onSaveEvaluation={async session => {
           await notesLog.saveSession(session)
-          setLapSlot(null)
           showToast('Feedback saved')
         }}
         onRemoveEvaluation={async key => {
           await notesLog.removeSession(key)
-          setLapSlot(null)
           showToast('Feedback removed')
         }}
         pressures={garageOn ? {
           saved: key => pressuresByKey.get(key),
           onSave: async pressures => {
             await garage.saveSetup(activeEvent.id, withPressures(eventSetup, pressures.key, pressures))
-            setLapSlot(null)
             showToast('Tire pressures saved')
           },
           onRemove: async key => {
             const next = withPressures(eventSetup, key, null)
             if (Object.keys(next).length) await garage.saveSetup(activeEvent.id, next)
             else await garage.removeSetup(activeEvent.id)
-            setLapSlot(null)
             showToast('Tire pressures removed')
           },
         } : undefined}

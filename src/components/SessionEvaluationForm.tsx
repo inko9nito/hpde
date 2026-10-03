@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { PageHeader } from './PageHeader'
+import { PAGE_BODY, PageHeader } from './PageHeader'
 import type { Toolbar } from './PageHeader'
 import { MAX_FEEDBACK, MAX_NAME } from '../utils/evaluation'
 import type { SessionEvaluation } from '../utils/evaluation'
@@ -56,6 +56,7 @@ export function SessionEvaluationForm({ toolbar, existing, onBusyChange, onSave,
           })),
         }}
       />
+      <div className={PAGE_BODY}>
       <label htmlFor={feedbackId} className="mt-4 text-xs font-medium text-gray-700">
         What they said
       </label>
@@ -104,6 +105,7 @@ export function SessionEvaluationForm({ toolbar, existing, onBusyChange, onSave,
             </button>
           </div>
         )}
+      </div>
       </div>
     </>
   )

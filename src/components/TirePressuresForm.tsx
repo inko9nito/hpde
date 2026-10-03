@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { inputClass } from './SessionEvaluationForm'
-import { PageHeader } from './PageHeader'
+import { PAGE_BODY, PageHeader } from './PageHeader'
 import type { Toolbar } from './PageHeader'
 import { CORNERS, MAX_NOTE, MAX_PSI, cleanPressures, cornersText } from '../utils/garage'
 import type { CornerId, Corners, SessionPressures } from '../utils/garage'
@@ -83,6 +83,7 @@ export function TirePressuresForm({ toolbar, session, existing, onBusyChange, on
           onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
         }}
       />
+      <div className={PAGE_BODY}>
       {WHEN.map(w => {
         const [draft, setDraft] = drafts[w.id]
         return (
@@ -150,6 +151,7 @@ export function TirePressuresForm({ toolbar, session, existing, onBusyChange, on
             </button>
           </div>
         )}
+      </div>
       </div>
     </>
   )

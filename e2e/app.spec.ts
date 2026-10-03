@@ -921,10 +921,12 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
-  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  await expect(sheet).toBeVisible()
+  const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await expect(menu).toBeVisible()
   // It opens on what the session can have (#205).
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  // It slides up as a page sheet, as the list slides away (#388).
+  const sheet = page.getByRole('dialog', { name: /^Lap times, / })
   // A sheet along the bottom of the screen, as wide as the phone at most.
   const viewport = page.viewportSize()!
   await expect.poll(async () => {
@@ -980,6 +982,78 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
 // With laps, they drove it (#377): saving them answers "Did you drive?",
 // in the session's group, and the header says so straight away.
+// Whether what `selector` finds moves down before it goes (#388): a sheet
+// sliding away, not vanishing. Watches from now; `act` starts it going.
+async function slidAway(page: Page, selector: string, act: () => Promise<unknown>) {
+  const watch = page.evaluate(selector => new Promise<boolean>(resolve => {
+    const el = document.querySelector(selector)!
+    const start = el.getBoundingClientRect().top
+    let moved = false
+    const step = () => {
+      if (!el.isConnected) return resolve(moved)
+      if (el.getBoundingClientRect().top > start + 20) moved = true
+      requestAnimationFrame(step)
+    }
+    step()
+  }), selector)
+  await act()
+  return watch
+}
+
+// Whether what `selector` finds, once there, rises into place from lower down.
+function risesInto(page: Page, selector: string) {
+  return page.evaluate(selector => new Promise<boolean>(resolve => {
+    let first: number | undefined
+    let last: number | undefined
+    let still = 0
+    const step = () => {
+      const top = document.querySelector(selector)?.getBoundingClientRect().top
+      if (top !== undefined) {
+        first ??= top
+        still = top === last ? still + 1 : 0
+        last = top
+        if (still > 10) return resolve(first > top + 20)
+      }
+      requestAnimationFrame(step)
+    }
+    step()
+  }), selector)
+}
+
+test('a session’s sheet slides down as what’s picked from it slides up, and back up on Cancel; ✕ slides it away (#388)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  await page.goto(`/#/event/${alpha.id}`)
+  const list = '[data-lap-sheet] [role="dialog"]'
+  const opened = risesInto(page, list)
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  expect(await opened).toBe(true)
+  const menu = page.getByRole('dialog', { name: '8:30 AM · Blue', exact: true })
+
+  // Picked: the list slides down as its page slides up.
+  const up = trackSlide(page, () => Promise.resolve(), 'Instructor feedback')
+  expect(await slidAway(page, list, () => menu.getByRole('button', { name: /^Instructor feedback/ }).click())).toBe(true)
+  expect(await up).toEqual({ fromBelow: true, fromSide: false })
+  const sheet = page.getByRole('dialog', { name: 'Instructor feedback, 8:30 AM · Blue' })
+  await expect(menu).toHaveCount(0)
+  // A page sheet, all the way to the bottom of the screen.
+  const box = (await sheet.boundingBox())!
+  expect(Math.round(box.y + box.height)).toBeGreaterThanOrEqual(page.viewportSize()!.height)
+
+  // Cancel: it slides down, and the list back up.
+  const back = risesInto(page, list)
+  expect(await slidAway(page, '[data-lap-page]', () => sheet.getByRole('button', { name: 'Cancel' }).click())).toBe(true)
+  expect(await back).toBe(true)
+  await expect(menu).toBeVisible()
+
+  // ✕ slides it down and away.
+  expect(await slidAway(page, list, () => menu.getByRole('button', { name: 'Close' }).click())).toBe(true)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
 test('saving lap times at a past event answers "I drove", in the session’s group (#377)', async ({ page }) => {
   const past: EventConfig = {
     id: '2025-10-04_past-track-day',
@@ -1004,8 +1078,10 @@ test('saving lap times at a past event answers "I drove", in the session’s gro
   await page.goto(`/#/event/${past.id}`)
   await expect(page.getByRole('button', { name: 'Did you drive?' })).toBeVisible()
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
-  const sheet = page.getByRole('dialog', { name: /8:30 AM · Blue/ })
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  const menu = page.getByRole('dialog', { name: /8:30 AM · Blue/ })
+  await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  // It slides up as a page sheet, as the list slides away (#388).
+  const sheet = page.getByRole('dialog', { name: /^Lap times, / })
   await sheet.getByLabel('Lap times or timestamps').fill(['1:52', '1:46'].join('\n'))
   await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('Lap times saved')
@@ -1102,8 +1178,10 @@ test('an admin logs another driver’s lap times, switched to from the account m
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
-  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
+  // It slides up as a page sheet, as the list slides away (#388).
+  const sheet = page.getByRole('dialog', { name: /^Lap times, / })
   await expect(page.getByLabel('Driver')).toHaveCount(0)
   // Only the banner says it's his (#364), and nothing says who can see it (#414).
   await expect(sheet).not.toContainText('admins can see')
@@ -1161,8 +1239,10 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
 
   await page.goto(`/#/event/${tde.id}`)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
-  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor feedback/ }).click()
+  const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor feedback/ }).click()
+  // It slides up as a page sheet, as the list slides away (#388).
+  const sheet = page.getByRole('dialog', { name: /^Instructor feedback, / })
   await sheet.getByLabel('What they said').fill('Unwind the wheel sooner and use all of the exit curb.')
   await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(sheet).toBeHidden()
@@ -1179,11 +1259,11 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await card.getByLabel('Instructor', { exact: true }).fill('John Harms')
   // Picked from a menu of run group badges, which stays on screen.
   await card.getByRole('button', { name: 'Same track & direction: none' }).click()
-  const menu = card.getByRole('listbox', { name: 'Same track & direction' })
-  const menuBox = (await menu.boundingBox())!
+  const badges = card.getByRole('listbox', { name: 'Same track & direction' })
+  const menuBox = (await badges.boundingBox())!
   expect(menuBox.x).toBeGreaterThanOrEqual(0)
   expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(page.viewportSize()!.width)
-  await menu.getByRole('option', { name: 'Green' }).click()
+  await badges.getByRole('option', { name: 'Green' }).click()
   await expect(card.getByRole('button', { name: 'Same track & direction: Green' })).toBeVisible()
   // Blue's card says how they'd run in it, and can name a second group.
   await card.getByRole('combobox', { name: 'Same track & direction: how' }).selectOption('Part-time solo')
@@ -1383,8 +1463,10 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   // A session's pressures, each corner, from the schedule.
   await page.getByRole('tab', { name: 'Schedule' }).click()
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
-  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Tire pressures/ }).click()
+  const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  // It slides up as a page sheet, as the list slides away (#388): measured once it's up.
+  await trackSlide(page, () => menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Tire pressures/ }).click(), 'Tire pressures')
+  const sheet = page.getByRole('dialog', { name: /^Tire pressures, / })
   for (const corner of ['Front left', 'Front right', 'Rear left', 'Rear right']) {
     await sheet.getByLabel(`${corner}, before the session`).fill('30')
     await sheet.getByLabel(`${corner}, after the session`).fill('36.5')

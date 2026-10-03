@@ -1,14 +1,18 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
-import { PageHeader } from './PageHeader'
+import { PAGE_BODY, PageHeader } from './PageHeader'
 import type { Toolbar } from './PageHeader'
 import { Sheet } from './Sheet'
+import type { Dismiss } from './Sheet'
+import { PushPage } from './PushPage'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { TirePressuresForm, pressuresText } from './TirePressuresForm'
 import { formatTime, formatAmPm } from '../utils/time'
+import { IOS_SPRING_MS } from '../utils/iosSpring'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
@@ -88,16 +92,24 @@ export function shortDate(iso: string): string {
 /**
  * The sheet a session you drove opens in (#210): what you can add to it
  * (#205) — its tire pressures, your instructor's feedback (#340) and its
- * lap times, in the order the day goes — each opening in the sheet under
- * Cancel, its name and Save (#388). Cancel goes back to the list (or
- * closes the sheet, opened for just that one). Lap times: paste your times,
- * check what was read, save. Opens from the bottom like an iOS sheet.
+ * lap times, in the order the day goes. Each slides up as a page sheet
+ * with Cancel, its name and Save across its top (#356, #415), as the sheet
+ * slides down (#388); Cancel slides it back down and the sheet back up (or
+ * closes it, opened for just that one), and Save closes both. Lap times:
+ * paste your times, check what was read, save.
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
   loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, pressures, onClose,
 }: Props) {
-  const [view, setView] = useState<SessionView>(startView)
+  // What's up: the list (a sheet from the bottom), or one of what's on it,
+  // in a page sheet (#388) — sliding up as the list slides down.
+  const [menuShown, setMenuShown] = useState(startView === 'menu')
+  const [page, setPage] = useState<Exclude<SessionView, 'menu'> | null>(startView === 'menu' ? null : startView)
+  const [pageOpen, setPageOpen] = useState(page !== null)
+  const menuDismiss = useRef<Dismiss | null>(null)
+  // Saved or removed: once the page is down, the sheet's done.
+  const finished = useRef(false)
   // With more than one group on track, start from the one that already has
   // laps or notes; failing that, ask — saved under the wrong group, they'd
   // be lost.
@@ -168,6 +180,7 @@ export function LapTimesSheet({
         date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, laps: parsed.laps,
         ...(summary.trim() ? { summary: summary.trim() } : {}),
       })
+      finish()
     } catch (err) {
       setFailure((err as Error).message)
       setBusy(null)
@@ -180,6 +193,7 @@ export function LapTimesSheet({
     setFailure(null)
     try {
       await onRemove(existing.key)
+      finish()
     } catch (err) {
       setFailure((err as Error).message)
       setBusy(null)
@@ -204,25 +218,68 @@ export function LapTimesSheet({
   }
 
   const key = group ? sessionKey(slot.date, slot.time, group) : null
+  const pageBusy = !!busy || evaluationBusy
 
-  // Each one's toolbar: Cancel, what's being edited, and the session it's for.
-  const back = () => (startView === 'menu' ? setView('menu') : onClose())
-  const toolbar: Toolbar | null = view === 'menu' ? null : {
-    title: VIEW_TITLE[view],
+  // One of them picked: its page comes up as the list goes down.
+  function openPage(next: Exclude<SessionView, 'menu'>) {
+    setPage(next)
+    setPageOpen(true)
+    menuDismiss.current?.(() => setMenuShown(false))
+  }
+  // Its Cancel, Escape, or dragged down.
+  function cancelPage() {
+    if (!pageBusy) setPageOpen(false)
+  }
+  // Saved or removed: down it goes, and the sheet with it.
+  function finish() {
+    finished.current = true
+    setPageOpen(false)
+  }
+  // Once it's down: back to the list, with nothing typed kept — or done.
+  const closed = useRef(false)
+  function pageClosed() {
+    if (closed.current) return
+    closed.current = true
+    if (finished.current || startView !== 'menu') return onClose()
+    setPage(null)
+    startFrom(group)
+    setMenuShown(true)
+  }
+  useEffect(() => {
+    if (pageOpen) {
+      closed.current = false
+      return
+    }
+    if (page === null) return
+    // Should its slide's end not be heard, it's down by now anyway.
+    const id = setTimeout(pageClosed, IOS_SPRING_MS + 100)
+    return () => clearTimeout(id)
+  }, [pageOpen])
+  const cancelRef = useRef(cancelPage)
+  cancelRef.current = cancelPage
+  useEffect(() => {
+    if (!pageOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelRef.current() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [pageOpen])
+
+  // Its toolbar: Cancel, what's being edited, and the session it's for.
+  const toolbar: Toolbar | null = page === null ? null : {
+    title: VIEW_TITLE[page],
     subtitle: [overline, `${formatTime(slot.time)} ${formatAmPm(slot.time)}`, group && groupFor(group, runGroups).label].filter(Boolean).join(' · '),
-    onCancel: back,
-    // Across the sheet's padding, edge to edge.
-    className: '-mx-4',
+    onCancel: cancelPage,
   }
 
   return (
+    <>
+    {menuShown && (
     <Sheet
       label={title}
-      busy={!!busy || evaluationBusy}
       onClose={onClose}
+      dismissRef={menuDismiss}
       data-lap-sheet
-      // Once one's picked, its toolbar is the heading.
-      heading={view !== 'menu' ? undefined : <>
+      heading={<>
         {/* Like the session's card on the schedule: its time and group. */}
         {overline && <p className="text-xs text-gray-500">{overline}</p>}
         <h2 className="mt-0.5 flex items-center gap-3">
@@ -234,16 +291,11 @@ export function LapTimesSheet({
         </h2>
       </>}
     >
-      {/* Till there's a form to save, Save waits. */}
-      {toolbar && (waiting || group === null) && (
-        <PageHeader {...toolbar} save={{ label: 'Save', disabled: true }} />
-      )}
-
       {waiting && (
         <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>
       )}
 
-      {slot.groups.length > 1 && (view === 'menu' || group === null) && !waiting && (
+      {slot.groups.length > 1 && !waiting && (
         <fieldset className="mt-4">
           <legend className="text-xs font-medium text-gray-700">
             Which group were you driving in?
@@ -263,7 +315,7 @@ export function LapTimesSheet({
         </fieldset>
       )}
 
-      {view === 'menu' && !waiting && (
+      {!waiting && (
         <nav aria-label="Session info" className="mt-4 flex flex-col gap-2">
           {/* In the order the day goes: pressures before and after, what the instructor said, then the timing sheet. */}
           {pressures && (
@@ -272,7 +324,7 @@ export function LapTimesSheet({
               title={VIEW_TITLE.pressures}
               detail={tires && pressuresText(tires)}
               disabled={group === null}
-              onClick={() => setView('pressures')}
+              onClick={() => openPage('pressures')}
             />
           )}
           <MenuRow
@@ -280,19 +332,40 @@ export function LapTimesSheet({
             title={VIEW_TITLE.evaluation}
             detail={notes?.evaluation.feedback}
             disabled={group === null}
-            onClick={() => setView('evaluation')}
+            onClick={() => openPage('evaluation')}
           />
           <MenuRow
             icon={Timer}
             title={VIEW_TITLE.laps}
             detail={existing && lapsDetail(existing)}
             disabled={group === null}
-            onClick={() => setView('laps')}
+            onClick={() => openPage('laps')}
           />
         </nav>
       )}
+    </Sheet>
+    )}
 
-      {view === 'laps' && toolbar && group !== null && !waiting && (<>
+    {page !== null && toolbar && createPortal(
+      <PushPage open={pageOpen} onExited={pageClosed} onDismiss={cancelPage} raised from="bottom" sheet>
+      {/* On its way out once closed: gone to a screen reader, and to taps. */}
+      <div
+        role="dialog"
+        aria-label={`${VIEW_TITLE[page]}, ${title}`}
+        aria-hidden={!pageOpen || undefined}
+        inert={!pageOpen || undefined}
+        className="min-h-full bg-white"
+        data-lap-page
+      >
+      {/* Till there's a form to save, Save waits. */}
+      {(waiting || group === null) && <>
+        <PageHeader {...toolbar} save={{ label: 'Save', disabled: true }} />
+        <div className={PAGE_BODY}>
+          {waiting && <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>}
+        </div>
+      </>}
+
+      {page === 'laps' && group !== null && !waiting && (<>
         {existing && !editing ? (
           // Saved laps open read-only: Done, or Edit to change them.
           <PageHeader
@@ -305,11 +378,12 @@ export function LapTimesSheet({
           // Cancel puts back what's saved, or goes back without any.
           <PageHeader
             {...toolbar}
-            onCancel={existing ? cancelEdit : () => { startFrom(group); toolbar.onCancel() }}
+            onCancel={existing ? cancelEdit : cancelPage}
             cancelDisabled={!!busy}
             save={{ label: busy === 'saving' ? 'Saving…' : 'Save', disabled: !canSave, onClick: save }}
           />
         )}
+        <div className={PAGE_BODY}>
 
         {existing && !editing && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
@@ -440,34 +514,49 @@ export function LapTimesSheet({
             </div>
           )}
         </div>
+        </div>
       </>)}
 
-      {view === 'evaluation' && toolbar && group !== null && key !== null && !waiting && (
+      {page === 'evaluation' && group !== null && key !== null && !waiting && (
         <SessionEvaluationForm
           toolbar={toolbar}
           // Fresh for each group and driver, from what they have saved.
           key={`${key} ${driver?.id ?? ''}`}
           existing={notes?.evaluation}
           onBusyChange={setEvaluationBusy}
-          onSave={evaluation => onSaveEvaluation({
-            date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, evaluation,
-          })}
-          onRemove={() => onRemoveEvaluation(key)}
+          onSave={async evaluation => {
+            await onSaveEvaluation({ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, evaluation })
+            finish()
+          }}
+          onRemove={async () => {
+            await onRemoveEvaluation(key)
+            finish()
+          }}
         />
       )}
 
-      {view === 'pressures' && toolbar && pressures && group !== null && key !== null && !waiting && (
+      {page === 'pressures' && pressures && group !== null && key !== null && !waiting && (
         <TirePressuresForm
           toolbar={toolbar}
           key={key}
           session={{ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber }}
           existing={tires}
           onBusyChange={setEvaluationBusy}
-          onSave={pressures.onSave}
-          onRemove={() => pressures.onRemove(key)}
+          onSave={async p => {
+            await pressures.onSave(p)
+            finish()
+          }}
+          onRemove={async () => {
+            await pressures.onRemove(key)
+            finish()
+          }}
         />
       )}
-    </Sheet>
+      </div>
+      </PushPage>,
+      document.body,
+    )}
+    </>
   )
 }
 
