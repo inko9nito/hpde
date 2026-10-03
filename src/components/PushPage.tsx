@@ -134,9 +134,27 @@ export function useRecedeUnder(shown: boolean, up: boolean) {
   useHtmlClass('page-sheet-up', up)
 }
 
-/** Whether a sheet is up, over anything (#415): the status bar turns black over it. */
+// How long what's under a sheet takes to grow back up under the status bar
+// once the sheet starts going: 97% of the way along iOS's spring.
+const BACK_UNDER_STATUS_BAR_MS = 300
+
+/**
+ * Whether a sheet is up, over anything (#415): the status bar turns black
+ * over it. Still up for a moment once it starts going, till what's under it
+ * has grown back up under the status bar — not gray over black (#445).
+ */
 export function useSheetUp(): boolean {
-  return useUnderSheet() === 'up'
+  const up = useUnderSheet() === 'up'
+  const [held, setHeld] = useState(up)
+  useEffect(() => {
+    if (up) {
+      setHeld(true)
+      return
+    }
+    const id = setTimeout(() => setHeld(false), BACK_UNDER_STATUS_BAR_MS)
+    return () => clearTimeout(id)
+  }, [up])
+  return up || held
 }
 
 /** Whether a page is pushed over `page` — or, without one, over the tabs. */

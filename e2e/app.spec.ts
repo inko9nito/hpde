@@ -1132,8 +1132,21 @@ test('a session’s list fades out, the sheet grows into a page sheet, and what�
   // What's under it shrinks back into a card on black.
   await expect(page.locator('html')).toHaveClass(/page-sheet-up/)
 
-  // Cancel: the same, back — never closing on the way.
+  // Cancel: the same, back — never closing on the way. The status bar stays
+  // black till what's under the sheet has grown back up under it, at least
+  // the fade and most of the resize, rather than gray over black.
+  await expect.poll(chrome).toBe('#000000')
+  const blackFor = page.evaluate(() => new Promise<number>(resolve => {
+    const start = performance.now()
+    const step = () => {
+      if (document.querySelector('meta[name="theme-color"]')?.getAttribute('content') !== '#000000') return resolve(performance.now() - start)
+      requestAnimationFrame(step)
+    }
+    step()
+  }))
   const back = await watchSheet(page, () => sheet.getByRole('button', { name: 'Cancel' }).click())
+  expect(await blackFor).toBeGreaterThan(400)
+  await expect.poll(chrome).toBe('#999999')
   expect(back).toEqual({ resized: true, resizedShowing: false })
   await expect(menu.getByRole('navigation', { name: 'Session info' })).toBeVisible()
   await expect.poll(async () => (await menu.boundingBox())!.y).toBe(listTop)
