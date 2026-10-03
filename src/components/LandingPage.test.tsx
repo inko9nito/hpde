@@ -136,15 +136,16 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('opens Share and the iOS widget from tiles, after the pages it lists', async () => {
+  it('opens Share and the iOS widget from a list under the tiles', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
-    const tiles = screen.getByRole('list', { name: 'More' })
-    expect(within(tiles).getAllByRole('link').map(l => l.textContent)).toEqual(['Instructor evaluations', 'Garage', 'Share', 'iOS widget'])
+    expect(within(screen.getByRole('list', { name: 'More' })).getAllByRole('link').map(l => l.textContent)).toEqual(['Instructor evaluations', 'Garage'])
+    const links = screen.getByRole('list', { name: 'Share and widget' })
+    expect(within(links).getAllByRole('link').map(l => l.textContent)).toEqual(['Share', 'iOS widget'])
     // The menu that held them beside the account button is gone.
     expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument()
 
-    await userEvent.click(within(tiles).getByRole('link', { name: 'Share' }))
+    await userEvent.click(within(links).getByRole('link', { name: 'Share' }))
     await waitFor(() => expect(window.location.hash).toBe('#/share'))
     const share = await screen.findByRole('dialog', { name: 'Share this app' })
     expect(within(share).getByRole('button', { name: 'Copy link' })).toHaveTextContent('https://myhpde.netlify.app/')
@@ -153,7 +154,7 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     await userEvent.click(within(share).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))
 
-    await userEvent.click(within(screen.getByRole('list', { name: 'More' })).getByRole('link', { name: 'iOS widget' }))
+    await userEvent.click(within(screen.getByRole('list', { name: 'Share and widget' })).getByRole('link', { name: 'iOS widget' }))
     await waitFor(() => expect(window.location.hash).toBe('#/widget-setup'))
     expect(await screen.findByRole('heading', { level: 1, name: 'iOS widget' })).toBeInTheDocument()
   })

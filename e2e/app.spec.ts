@@ -279,13 +279,13 @@ test('Share shares the live address with a QR code, in a sheet (#411)', async ({
   await expectShareSheet(page, sheet)
 })
 
-test('Share slides up from its tile on the More tab, over the tab (#278, #416)', async ({ page }) => {
+test('Share slides up from its row on the More tab, over the tab (#278, #416)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/more')
   // The menu that held it beside the account button is gone (#416).
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0)
-  await page.getByRole('list', { name: 'More' }).getByRole('link', { name: 'Share' }).click()
+  await page.getByRole('list', { name: 'Share and widget' }).getByRole('link', { name: 'Share' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this app' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
   await expectShareSheet(page, sheet)
@@ -293,7 +293,7 @@ test('Share slides up from its tile on the More tab, over the tab (#278, #416)',
   await expect(sheet).toHaveCount(0)
   await expect(page).toHaveURL(/#\/more$/)
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
-  // The build date is under the tiles (#395), not under the events list.
+  // The build date is at the bottom (#395), not under the events list.
   await expect(page.getByText(/^build /)).toBeVisible()
   await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Events' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeVisible()
@@ -453,15 +453,15 @@ test('back from an event’s page, the list is still scrolled where it was (#389
 test('Share and the iOS widget slide up from the bottom, from the More tab (#278, #416)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/more')
-  const tiles = page.getByRole('list', { name: 'More' })
+  const links = page.getByRole('list', { name: 'Share and widget' })
   // Share, as a sheet (#411).
-  await tiles.getByRole('link', { name: 'Share' }).click()
+  await links.getByRole('link', { name: 'Share' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this app' })
   await expectShareSheet(page, sheet)
   await sheet.getByRole('button', { name: 'Close' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
   // The iOS widget, as a page sheet with ✕ (#415).
-  const slide = await trackSlide(page, () => tiles.getByRole('link', { name: 'iOS widget' }).click(), 'iOS widget')
+  const slide = await trackSlide(page, () => links.getByRole('link', { name: 'iOS widget' }).click(), 'iOS widget')
   expect(slide).toEqual({ fromBelow: true, fromSide: false })
   const widget = page.getByRole('heading', { level: 1, name: 'iOS widget' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
   await expect.poll(async () => (await widget.boundingBox())?.y).toBe(18)

@@ -1,5 +1,5 @@
 import type { ComponentType, CSSProperties, ReactNode } from 'react'
-import { CalendarDays, ClipboardCheck, Ellipsis, Route, Share, Smartphone } from 'lucide-react'
+import { CalendarDays, ChevronRight, ClipboardCheck, Ellipsis, Route, Share, Smartphone } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GarageIcon } from './CarIcons'
 import { AccountButton } from './AccountButton'
@@ -124,16 +124,20 @@ type TileIcon = ComponentType<{ size?: number; strokeWidth?: number; className?:
 const MORE_ITEMS: readonly { href: string; label: string; Icon: TileIcon }[] = [
   { href: MORE_PAGE_HASH.evaluations, label: 'Instructor evaluations', Icon: ClipboardCheck },
   { href: MORE_PAGE_HASH.garage, label: 'Garage', Icon: GarageIcon },
-  // From the menu that was beside the account button (#416): a sheet (#411)
-  // and a page sheet (#415), both up from the bottom.
+]
+
+// From the menu that was beside the account button (#416): a sheet (#411)
+// and a page sheet (#415), both up from the bottom.
+const MORE_LINKS: readonly { href: string; label: string; Icon: LucideIcon }[] = [
   { href: SHARE_HASH, label: 'Share', Icon: Share },
   { href: '#/widget-setup', label: 'iOS widget', Icon: Smartphone },
 ]
 
 /**
- * The More tab (#345): the rest of the app, as tiles (#371) — each opening
- * its page over it — with outlined icons, as in the tab bar it's the
- * overflow of (white on black is for tracks). The build date under them
+ * The More tab (#345): the rest of the app's pages, as tiles (#371) — each
+ * opening its page over it — with outlined icons, as in the tab bar it's
+ * the overflow of (white on black is for tracks). Under them, as a list,
+ * as in iOS Settings (#416): Share and the iOS widget. Then the build date
  * (#395), out of the way of the events list.
  */
 export function MoreTab() {
@@ -150,6 +154,20 @@ export function MoreTab() {
               >
                 <Icon size={28} strokeWidth={1.75} className="shrink-0 text-gray-700" aria-hidden="true" />
                 <span className="font-rubik text-[15px] leading-tight text-gray-900">{label}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <ul className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="Share and widget">
+          {MORE_LINKS.map(({ href, label, Icon }) => (
+            <li key={href}>
+              <a
+                href={href}
+                className="flex min-h-[52px] items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50 active:bg-gray-100"
+              >
+                <Icon size={20} strokeWidth={1.75} className="shrink-0 text-gray-700" aria-hidden="true" />
+                <span className="flex-1 font-rubik text-[15px] text-gray-900">{label}</span>
+                <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
               </a>
             </li>
           ))}
