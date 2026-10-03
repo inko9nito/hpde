@@ -10,6 +10,8 @@ export interface Driver {
   id: string
   email: string
   name: string | null
+  /** Their picture (#416): from Edit profile, or their sign-in's. */
+  avatar?: string | null
 }
 
 export type DriversStatus = 'off' | 'loading' | 'ready' | 'error'

@@ -75,7 +75,7 @@ const fakeWidget = {
 // Another driver an admin can log laps for (#288).
 const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
 const DRIVERS = [
-  { id: JASON, email: 'jason@example.com', name: 'Jason' },
+  { id: JASON, email: 'jason@example.com', name: 'Jason', avatar: 'https://pics.example/jason.jpg' },
   { id: 'u', email: 'v@example.com', name: 'Vera' },
 ]
 
@@ -859,12 +859,17 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
     const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
-    await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.textContent, r.getAttribute('aria-checked')]))
+    await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.getAttribute('aria-label'), r.getAttribute('aria-checked')]))
       .toEqual([['Me', 'true'], ['Test account', 'false'], ['Jason', 'false']]))
+    // Each driver with their picture (#416).
+    expect(within(sheet).getByRole('radio', { name: 'Jason' }).querySelector('img')).toHaveAttribute('src', 'https://pics.example/jason.jpg')
     await userEvent.click(within(sheet).getByRole('radio', { name: 'Jason' }))
     expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+    // Plain that it's his app they're in (#416): his picture, and everything as him.
     const banner = screen.getByRole('region', { name: 'Acting as' })
     expect(banner).toHaveTextContent('Acting as Jason')
+    expect(banner).toHaveTextContent('Everything shows and saves as them')
+    expect(banner.querySelector('img')).toHaveAttribute('src', 'https://pics.example/jason.jpg')
     expect(screen.getByRole('button', { name: 'Account: v@example.com, acting as Jason' })).toBeInTheDocument()
     const asked = (what: string) => fetchMock.mock.calls.some(([url]) => String(url).includes(`api/${what}?driver=${JASON}`))
     // Their answers, for My events…

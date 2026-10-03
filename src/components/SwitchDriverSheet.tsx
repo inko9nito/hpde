@@ -1,6 +1,7 @@
-import { Check, FlaskConical, UserRound } from 'lucide-react'
+import { Check, FlaskConical } from 'lucide-react'
 import { TEST_DRIVER, useAuth } from '../auth/AuthContext'
 import { Sheet } from './Sheet'
+import { Avatar } from './Avatar'
 import { driverName, useDrivers } from '../data/drivers'
 import type { Driver } from '../data/drivers'
 
@@ -32,7 +33,7 @@ function useChoices(active: boolean): { choices: { driver: Driver | null; label:
  * answers and garage and to log them for them. Picking one closes it.
  */
 export function SwitchDriverSheet({ onClose }: { onClose: () => void }) {
-  const { actingAs, setActingAs } = useAuth()
+  const { user, actingAs, setActingAs } = useAuth()
   const { choices, status } = useChoices(true)
 
   return (
@@ -46,19 +47,26 @@ export function SwitchDriverSheet({ onClose }: { onClose: () => void }) {
       <ul role="radiogroup" aria-label="Driver" className="mt-4 flex flex-col gap-2">
         {choices.map(({ driver, label }) => {
           const on = (actingAs?.id ?? null) === (driver?.id ?? null)
-          const Icon = driver?.id === TEST_DRIVER.id ? FlaskConical : UserRound
+          // Each with their picture (#416); "Me" with theirs.
+          const picture = driver?.id === TEST_DRIVER.id
+            ? <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-400 text-gray-900"><FlaskConical size={14} strokeWidth={2.25} aria-hidden="true" /></span>
+            : driver
+              ? <Avatar name={label} url={driver.avatar} size={28} />
+              : <Avatar name={user?.name ?? user?.email ?? 'Me'} url={user?.avatarUrl} size={28} />
           return (
             <li key={driver?.id ?? 'me'}>
               <button
                 role="radio"
                 aria-checked={on}
+                // Their name alone: not the letter a picture-less avatar shows.
+                aria-label={label}
                 onClick={() => {
                   setActingAs(driver)
                   onClose()
                 }}
                 className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
               >
-                <Icon size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                {picture}
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{label}</span>
                 {on && <Check size={16} strokeWidth={2.5} className="shrink-0 text-gray-900" aria-hidden="true" />}
               </button>

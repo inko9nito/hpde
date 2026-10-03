@@ -68,13 +68,16 @@ describe('a driver’s name and picture as the app shows them (#416)', () => {
   it('names drivers on an admin’s Switch driver (#396)', async () => {
     const identity = {
       listUsers: async ({ page = 1 }: { page?: number }) => page > 1 ? [] : [
-        { id: 'a', email: 'vera@example.com', name: 'Vera M', userMetadata: { full_name: 'Vera M', hpde_name: 'Vee' } },
-        { id: 'b', email: 'amy@example.com', name: 'Amy', userMetadata: { full_name: 'Amy' } },
+        { id: 'a', email: 'vera@example.com', name: 'Vera M', pictureUrl: 'https://pics.example/vera.jpg', userMetadata: { full_name: 'Vera M', avatar_url: 'https://pics.example/vera.jpg', hpde_name: 'Vee', hpde_avatar: '/api/profile?avatar=a&v=1' } },
+        { id: 'b', email: 'amy@example.com', name: 'Amy', pictureUrl: 'https://pics.example/amy.jpg', userMetadata: { full_name: 'Amy', avatar_url: 'https://pics.example/amy.jpg' } },
+        { id: 'c', email: 'bo@example.com', userMetadata: {} },
       ],
     }
+    // With their pictures too, for Switch driver and its banner.
     expect(await listDrivers(identity as never)).toEqual([
-      { id: 'b', email: 'amy@example.com', name: 'Amy' },
-      { id: 'a', email: 'vera@example.com', name: 'Vee' },
+      { id: 'b', email: 'amy@example.com', name: 'Amy', avatar: 'https://pics.example/amy.jpg' },
+      { id: 'c', email: 'bo@example.com', name: null },
+      { id: 'a', email: 'vera@example.com', name: 'Vee', avatar: '/api/profile?avatar=a&v=1' },
     ])
   })
 })

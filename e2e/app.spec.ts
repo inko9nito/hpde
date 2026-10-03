@@ -1004,7 +1004,10 @@ test('an admin logs another driver’s lap times, switched to from the account m
   await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: /^Switch driver/ }).click()
   const switcher = page.getByRole('dialog', { name: 'Switch driver' })
   // The admin is "Me"; then the test account, and everyone else (#396).
-  await expect(switcher.getByRole('radio')).toHaveText(['Me', 'Test account', email])
+  await expect(switcher.getByRole('radio')).toHaveCount(3)
+  expect(await switcher.getByRole('radio').evaluateAll(radios => radios.map(r => r.getAttribute('aria-label')))).toEqual(['Me', 'Test account', email])
+  // Each with their picture, or their initial without one (#416).
+  await expect(switcher.getByRole('radio', { name: email }).locator('[data-avatar]')).toHaveText(email[0].toUpperCase())
   await switcher.getByRole('radio', { name: email }).click()
   await expect(switcher).toHaveCount(0)
   const banner = page.getByRole('region', { name: 'Acting as' })
