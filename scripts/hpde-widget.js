@@ -645,10 +645,13 @@ function makeWidget({ manifest, stale }, parsed, notifStatus) {
   renderHeader(w, event, day, p, stale, summary)
 
   // An event created in the app (#229) has no schedule until one is added.
-  // Say so, as the app does, instead of drawing an empty timeline.
+  // Say so, as the app does, instead of drawing an empty timeline. This is
+  // the event's own day, so check back as often as a live schedule does:
+  // a schedule added that morning should show up within minutes (#436),
+  // not after the 15 minutes this used to wait plus whatever iOS adds.
   if (day.activities.length === 0) {
     renderCenteredMessage(w, p, "Schedule coming soon")
-    w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000)
+    w.refreshAfterDate = new Date(Date.now() + 60 * 1000)
     return w
   }
 
