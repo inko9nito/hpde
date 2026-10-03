@@ -1,16 +1,18 @@
 import type { ComponentType, CSSProperties, ReactNode } from 'react'
-import { CalendarDays, ClipboardCheck, Ellipsis, Route } from 'lucide-react'
+import { CalendarDays, ChevronRight, ClipboardCheck, Ellipsis, Route, Share, Smartphone } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { AppMenu } from './AppMenu'
 import { GarageIcon } from './CarIcons'
 import { AccountButton } from './AccountButton'
 import { BackButton } from './EventHeader'
+import { Footer } from './Footer'
+import { SHARE_HASH } from './ShareSheet'
 
 // The app's top-level sections (#274): Events (the list of events), Tracks
 // (lap times by track layout) and More (#345), picked from a tab bar along
 // the bottom, as in an iOS app. More is the rest — Instructor evaluations
-// and the Garage — as tiles, each of which slides in over it, as pushed
-// pages — an event, a track — slide in over the tabs.
+// and the Garage, each of which slides in over it, as pushed pages — an
+// event, a track — slide in over the tabs; and Share and the iOS widget
+// (#416), which slide up — as tiles.
 
 export type HomeTab = 'events' | 'tracks' | 'more'
 
@@ -80,16 +82,16 @@ export function TabBar({ active, style }: { active: HomeTab; style?: CSSProperti
   )
 }
 
-/** A tab's title, with the app menu and account button across from it; `children` go under it. */
+/**
+ * A tab's title, with the account button across from it — its menu has
+ * Edit profile, Switch driver and Log out (#416); `children` go under it.
+ */
 export function HomeHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-rubik text-2xl font-bold leading-tight text-gray-900">{title}</h1>
-        <div className="flex shrink-0 items-center gap-1">
-          <AppMenu />
-          <AccountButton reserveSpace={false} />
-        </div>
+        <AccountButton reserveSpace={false} />
       </div>
       {children}
     </div>
@@ -119,15 +121,24 @@ export function SubPageHeader({ title, onBack }: { title: string; onBack: () => 
 /** A Lucide icon, or one of the car icons (#417) that take its props. */
 type TileIcon = ComponentType<{ size?: number; strokeWidth?: number; className?: string; 'aria-hidden'?: 'true' }>
 
-const MORE_ITEMS: readonly { page: MorePage; label: string; Icon: TileIcon }[] = [
-  { page: 'evaluations', label: 'Instructor evaluations', Icon: ClipboardCheck },
-  { page: 'garage', label: 'Garage', Icon: GarageIcon },
+const MORE_ITEMS: readonly { href: string; label: string; Icon: TileIcon }[] = [
+  { href: MORE_PAGE_HASH.evaluations, label: 'Instructor evaluations', Icon: ClipboardCheck },
+  { href: MORE_PAGE_HASH.garage, label: 'Garage', Icon: GarageIcon },
+]
+
+// From the menu that was beside the account button (#416): a sheet (#411)
+// and a page sheet (#415), both up from the bottom.
+const MORE_LINKS: readonly { href: string; label: string; Icon: LucideIcon }[] = [
+  { href: SHARE_HASH, label: 'Share', Icon: Share },
+  { href: '#/widget-setup', label: 'iOS widget', Icon: Smartphone },
 ]
 
 /**
- * The More tab (#345): the rest of the app, as tiles (#371) — each opening
- * its page over it — with outlined icons, as in the tab bar it's the
- * overflow of (white on black is for tracks).
+ * The More tab (#345): the rest of the app's pages, as tiles (#371) — each
+ * opening its page over it — with outlined icons, as in the tab bar it's
+ * the overflow of (white on black is for tracks). Under them, as a list,
+ * as in iOS Settings (#416): Share and the iOS widget. Then the build date
+ * (#395), out of the way of the events list.
  */
 export function MoreTab() {
   return (
@@ -135,10 +146,10 @@ export function MoreTab() {
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="More" />
         <ul className="grid grid-cols-2 gap-3" aria-label="More">
-          {MORE_ITEMS.map(({ page, label, Icon }) => (
-            <li key={page} className="flex">
+          {MORE_ITEMS.map(({ href, label, Icon }) => (
+            <li key={href} className="flex">
               <a
-                href={MORE_PAGE_HASH[page]}
+                href={href}
                 className="flex min-h-[112px] w-full flex-col items-center gap-2.5 rounded-2xl border border-gray-200 bg-white px-3 py-5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
               >
                 <Icon size={28} strokeWidth={1.75} className="shrink-0 text-gray-700" aria-hidden="true" />
@@ -147,7 +158,22 @@ export function MoreTab() {
             </li>
           ))}
         </ul>
+        <ul className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="Share and widget">
+          {MORE_LINKS.map(({ href, label, Icon }) => (
+            <li key={href}>
+              <a
+                href={href}
+                className="flex min-h-[52px] items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50 active:bg-gray-100"
+              >
+                <Icon size={20} strokeWidth={1.75} className="shrink-0 text-gray-700" aria-hidden="true" />
+                <span className="flex-1 font-rubik text-[15px] text-gray-900">{label}</span>
+                <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
+              </a>
+            </li>
+          ))}
+        </ul>
       </div>
+      <Footer />
     </div>
   )
 }

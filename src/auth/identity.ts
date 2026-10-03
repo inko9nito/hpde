@@ -12,12 +12,16 @@ export interface IdentityToken {
 export interface IdentityUser {
   id: string
   email: string
-  user_metadata?: { full_name?: string; avatar_url?: string }
+  // Google's full_name and avatar_url, and the app's own name and picture (#416).
+  user_metadata?: { full_name?: string; avatar_url?: string; [key: string]: unknown }
   app_metadata?: { roles?: string[] }
   // gotrue-js's copy of the sign-in (the widget is built on it).
   token?: IdentityToken | null
   // The access token, renewed first if it's (nearly) expired.
   jwt(): Promise<string>
+  // gotrue-js: changes their user_metadata (a key set to null goes) and
+  // keeps the answer, in this copy of the user and the saved sign-in.
+  update(attributes: { data: Record<string, unknown> }): Promise<IdentityUser>
 }
 
 // Where gotrue-js keeps the sign-in, in every version the widget has used.

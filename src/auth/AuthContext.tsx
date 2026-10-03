@@ -12,6 +12,7 @@ import {
 import type { IdentityUser, IdentityWidget } from './identity'
 import { TEST_DRIVER_ID } from '../data/testAccount'
 import type { Driver } from '../data/drivers'
+import { PROFILE_AVATAR_KEY, PROFILE_NAME_KEY, profileParts } from '../utils/profile'
 
 // 'unavailable' = this copy of the site has no Identity service (GitHub
 // Pages, local dev). Everything public still works; sign-in is hidden.
@@ -20,8 +21,12 @@ export type AuthStatus = 'loading' | 'unavailable' | 'signed-out' | 'signed-in'
 export interface AuthUser {
   id: string
   email: string
+  // Their name and picture as the app shows them (#416): the ones they set
+  // on Edit profile, or else Google's.
   name: string | null
   avatarUrl: string | null
+  // Each on its own: what they set on Edit profile, and Google's.
+  profile: ReturnType<typeof profileParts>
   // Identity roles (set in the Netlify UI). "admin" can create events
   // (#229); the events function enforces it server-side.
   roles: string[]
@@ -31,9 +36,10 @@ interface AuthValue {
   status: AuthStatus
   user: AuthUser | null
   signIn(): void
-  // Opens the widget's account panel (shows who's signed in + Log out).
-  openAccount(): void
   signOut(): void
+  // Edit profile (#416): the name and picture to show in the app — null
+  // for Google's. Throws with a message to show.
+  saveProfile(profile: { name: string | null; avatarUrl: string | null }): Promise<void>
   // fetch() with the signed-in user's token attached, for calls to the
   // personal-data functions (notes, garage).
   authedFetch(input: RequestInfo, init?: RequestInit): Promise<Response>
@@ -102,11 +108,13 @@ export class SignedOutError extends Error {
 }
 
 function toAuthUser(u: IdentityUser): AuthUser {
+  const profile = profileParts(u.user_metadata)
   return {
     id: u.id,
     email: u.email,
-    name: u.user_metadata?.full_name ?? null,
-    avatarUrl: u.user_metadata?.avatar_url ?? null,
+    name: profile.own.name ?? profile.signIn.name,
+    avatarUrl: profile.own.avatarUrl ?? profile.signIn.avatarUrl,
+    profile,
     roles: u.app_metadata?.roles ?? [],
   }
 }
@@ -116,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [identityUser, setIdentityUser] = useState<IdentityUser | null>(null)
   const [widget, setWidget] = useState<IdentityWidget | null>(null)
   const [acting, setActing] = useState<ActingAsRecord | null>(readActingAs)
+  // Bumped when Edit profile changes the user in place (gotrue-js keeps it there).
+  const [profileSaves, setProfileSaves] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -215,8 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [identityUser, renew])
 
   const signIn = useCallback(() => startGoogleSignIn(), [])
-  const openAccount = useCallback(() => widget?.open(), [widget])
   const signOut = useCallback(() => widget?.logout(), [widget])
+  // In their Identity user_metadata, under the app's own keys: Google's
+  // stay as they are (#416). Null takes a key out — back to Google's.
+  const saveProfile = useCallback(
+    async ({ name, avatarUrl }: { name: string | null; avatarUrl: string | null }) => {
+      if (!identityUser) throw new SignedOutError()
+      await renew(identityUser)
+      try {
+        await identityUser.update({ data: { [PROFILE_NAME_KEY]: name, [PROFILE_AVATAR_KEY]: avatarUrl } })
+      } catch (err) {
+        console.error('Saving the profile failed:', err)
+        throw new Error('Couldn’t save your profile. Check your connection and try again.')
+      }
+      setProfileSaves(n => n + 1)
+    },
+    [identityUser, renew],
+  )
   const authedFetch = useCallback(
     async (input: RequestInfo, init: RequestInit = {}) => {
       if (!identityUser) throw new SignedOutError()
@@ -235,7 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeActingAs(null)
   }, [status, acting])
 
-  const user = useMemo(() => (identityUser ? toAuthUser(identityUser) : null), [identityUser])
+  // Again after Edit profile, which changes identityUser in place.
+  const user = useMemo(() => (identityUser ? toAuthUser(identityUser) : null), [identityUser, profileSaves])
   // The admin role (ADMIN_ROLE); the functions check it too.
   const isAdmin = status === 'signed-in' && !!user?.roles.includes('admin')
   const userId = user?.id ?? null
@@ -249,8 +275,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isAdmin, userId])
 
   const value = useMemo<AuthValue>(
-    () => ({ status, user, signIn, openAccount, signOut, authedFetch, actingAs, setActingAs, testAccount }),
-    [status, user, signIn, openAccount, signOut, authedFetch, actingAs, setActingAs, testAccount],
+    () => ({ status, user, signIn, signOut, saveProfile, authedFetch, actingAs, setActingAs, testAccount }),
+    [status, user, signIn, signOut, saveProfile, authedFetch, actingAs, setActingAs, testAccount],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -260,8 +286,8 @@ const SIGNED_OUT_FALLBACK: AuthValue = {
   status: 'unavailable',
   user: null,
   signIn: () => {},
-  openAccount: () => {},
   signOut: () => {},
+  saveProfile: () => Promise.reject(new SignedOutError()),
   authedFetch: () => Promise.reject(new SignedOutError()),
   actingAs: null,
   setActingAs: () => {},

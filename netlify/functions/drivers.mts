@@ -4,7 +4,7 @@ import { listDrivers } from '../lib/drivers.mjs'
 
 // Who an admin can log lap times for (#288): everyone who has signed in,
 // with their name and email, for the menu's Switch driver (#396). Admins only.
-//   GET   { drivers: [{ id, email, name }] }, by name
+//   GET   { drivers: [{ id, email, name, avatar? }] }, by name
 //
 // Written in the current function format: only it gets the Identity admin
 // token that listing users needs (see netlify/lib/drivers.mjs).

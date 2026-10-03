@@ -1,4 +1,5 @@
 import { admin } from '@netlify/identity'
+import { profileOf } from './profile.mjs'
 
 // The drivers an admin can log lap times for (#288): everyone who has
 // signed in, from Netlify Identity's admin API. That API needs a token only
@@ -13,8 +14,12 @@ const PER_PAGE = 100
 // 2,000 people: far more than this site will have; a stop if paging misbehaves.
 const MAX_PAGES = 20
 
+// Their name and picture as the app shows them: from Edit profile (#416),
+// or their sign-in's — the picture for Switch driver and its banner.
 function toDriver(user) {
-  return { id: user.id, email: user.email ?? '', name: user.name ?? null }
+  const profile = profileOf(user.userMetadata)
+  const avatar = profile.avatar ?? user.pictureUrl ?? null
+  return { id: user.id, email: user.email ?? '', name: profile.name ?? user.name ?? null, ...(avatar ? { avatar } : {}) }
 }
 
 const label = driver => driver.name ?? driver.email

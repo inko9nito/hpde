@@ -75,7 +75,7 @@ const fakeWidget = {
 // Another driver an admin can log laps for (#288).
 const JASON = '5b0f2c1e-8d3a-4f6b-9c2d-7e1a0b3c4d5e'
 const DRIVERS = [
-  { id: JASON, email: 'jason@example.com', name: 'Jason' },
+  { id: JASON, email: 'jason@example.com', name: 'Jason', avatar: 'https://pics.example/jason.jpg' },
   { id: 'u', email: 'v@example.com', name: 'Vera' },
 ]
 
@@ -733,7 +733,7 @@ describe('lap times (#210)', () => {
 })
 
 
-// Switch driver (#396): from the menu, the one place to pick it (#399),
+// Switch driver (#396): from the account menu (#416), the one place to pick it (#399),
 // then back to the page it was picked from; back to "Me" is the banner's
 // Switch back, on every page.
 async function switchDriver(name: string) {
@@ -744,8 +744,8 @@ async function switchDriver(name: string) {
   }
   const back = window.location.hash
   window.location.hash = '#/'
-  await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-  await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+  await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
   const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
   await userEvent.click(await within(sheet).findByRole('radio', { name }))
   expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
@@ -758,7 +758,7 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   })
   beforeEach(() => { roles = ['admin'] })
 
-  it('switches driver only from the menu: no picker on the event, its "…" menu, the schedule or the sheet (#399)', async () => {
+  it('switches driver only from the account menu: no picker on the event, its "…" menu, the schedule or the sheet (#399)', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     expect(screen.queryByRole('menuitem', { name: /^Switch driver/ })).not.toBeInTheDocument()
@@ -852,19 +852,24 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     await waitFor(() => expect(earlier()).toHaveLength(2))
     expect(String(earlier()[1][0])).not.toContain('driver=')
   })
-  it('switches driver from the menu, for every page, with a banner saying who until switched back (#396)', async () => {
+  it('switches driver from the account menu, for every page, with a banner saying who until switched back (#396)', async () => {
     window.location.hash = '#/'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
     expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
     const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
-    await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.textContent, r.getAttribute('aria-checked')]))
+    await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.getAttribute('aria-label'), r.getAttribute('aria-checked')]))
       .toEqual([['Me', 'true'], ['Test account', 'false'], ['Jason', 'false']]))
+    // Each driver with their picture (#416).
+    expect(within(sheet).getByRole('radio', { name: 'Jason' }).querySelector('img')).toHaveAttribute('src', 'https://pics.example/jason.jpg')
     await userEvent.click(within(sheet).getByRole('radio', { name: 'Jason' }))
     expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
+    // Plain that it's his app they're in (#416): his picture, and everything as him.
     const banner = screen.getByRole('region', { name: 'Acting as' })
     expect(banner).toHaveTextContent('Acting as Jason')
+    expect(banner).toHaveTextContent('Everything shows and saves as them')
+    expect(banner.querySelector('img')).toHaveAttribute('src', 'https://pics.example/jason.jpg')
     expect(screen.getByRole('button', { name: 'Account: v@example.com, acting as Jason' })).toBeInTheDocument()
     const asked = (what: string) => fetchMock.mock.calls.some(([url]) => String(url).includes(`api/${what}?driver=${JASON}`))
     // Their answers, for My events…
@@ -881,8 +886,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   it('on the test account, says so in the banner (#309, #396)', async () => {
     window.location.hash = '#/'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Switch driver' })).getByRole('radio', { name: 'Test account' }))
     expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('On the test account')
     expect(screen.getByRole('button', { name: 'Account: v@example.com, on the test account' })).toBeInTheDocument()
@@ -1540,7 +1545,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(lapCalls('GET')).toHaveLength(0)
   })
 
-  it('switches tabs from the tab bar; More lists Instructor evaluations and the Garage, which opens over it', async () => {
+  it('switches tabs from the tab bar; More has tiles for Instructor evaluations and the Garage — which opens over it — and a list of Share and the iOS widget', async () => {
     openAt('#/')
     expect(await screen.findByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
@@ -1551,6 +1556,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'More' })).toBeInTheDocument()
     const items = within(screen.getByRole('list', { name: 'More' })).getAllByRole('link')
     expect(items.map(a => a.getAttribute('href'))).toEqual(['#/evaluations', '#/garage'])
+    expect(within(screen.getByRole('list', { name: 'Share and widget' })).getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/share', '#/widget-setup'])
 
     await userEvent.click(items[1])
     expect(window.location.hash).toBe('#/garage')

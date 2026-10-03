@@ -1,7 +1,7 @@
 import { formatBuildTime } from '../utils/time'
 
-/** Landing page only (#273): the build date. The iOS widget and Share
- *  links moved to the landing page's menu. */
+/** The build date, under the More tab's tiles (#395) — it was under the
+ *  events list (#273). */
 export function Footer() {
   return (
     <div className="mt-6 pb-8 text-center font-mono text-[10px] text-gray-400">
