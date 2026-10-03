@@ -1023,6 +1023,23 @@ describe('notification content', () => {
     expect(orange!.body).toBe('On track at 8:50 AM')
   })
 
+  it('titles Pink alerts with 🎟️, since there is no pink circle emoji (#442)', async () => {
+    const event = FUTURE_MANIFEST.events[0]
+    const pinkManifest = {
+      events: [{
+        ...event,
+        runGroups: [...event.runGroups, { id: 'pink', label: 'Pink', color: '#D449B9' }],
+        days: event.days.map(d => ({
+          ...d,
+          activities: d.activities.map(a => (a.time === '08:50' ? { ...a, onTrack: ['pink'] } : a)),
+        })),
+      }],
+    }
+    await runWidget('medium', pinkManifest, 'pink|15m')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string }>
+    expect(notifs.map(n => n.title)).toContain('🎟️ Pink · in 15m')
+  })
+
   it('leaves general all-drivers events without a group emoji but still says "in Nm"', async () => {
     await runWidget('medium', FUTURE_MANIFEST, '|20m')
     const notifs = (globalThis as any).__notifs as Array<{ title: string }>
