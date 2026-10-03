@@ -213,6 +213,59 @@ describe('notes function (#340)', () => {
   })
 })
 
+describe('track conditions in the notes (#347)', () => {
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+  })
+
+  const wet = { surface: 'wet', sky: 'rain', airF: 68, note: 'Standing water at Turn 2.' }
+  const { evaluation: _e, ...session1Only } = session1
+
+  it('saves a session’s conditions on their own, and with its evaluation', async () => {
+    const res = await call('PUT', { token: 'vera-token', body: { session: { ...session1Only, conditions: wet } } })
+    expect(res.status).toBe(200)
+    const { session } = await res.json()
+    expect(session).toMatchObject({ key: '2026-09-12 08:30 pink', conditions: wet })
+    expect(session).not.toHaveProperty('evaluation')
+
+    await call('PUT', { token: 'vera-token', body: { session: { ...session2, conditions: { surface: 'damp' } } } })
+    const { sessions } = await notesOf('vera-token')
+    expect(sessions[0].conditions).toEqual(wet)
+    expect(sessions[1]).toMatchObject({ evaluation: session2.evaluation, conditions: { surface: 'damp' } })
+  })
+
+  it('refuses a session with neither, or conditions it can’t read', async () => {
+    const bad = async (session: unknown) => (await call('PUT', { token: 'vera-token', body: { session } })).status
+    expect(await bad(session1Only)).toBe(400)
+    expect(await bad({ ...session1Only, conditions: {} })).toBe(400)
+    expect(await bad({ ...session1Only, conditions: { surface: 'icy' } })).toBe(400)
+    expect(await bad({ ...session1Only, conditions: { airF: 'hot' } })).toBe(400)
+    expect(store.size).toBe(0)
+  })
+
+  it('saves and removes a note on the event’s conditions, keeping the record while it’s there', async () => {
+    const res = await call('PUT', { token: 'vera-token', body: { conditions: { note: ' Wet morning, dry afternoon. ' } } })
+    expect(res.status).toBe(200)
+    expect((await res.json()).conditions).toMatchObject({ note: 'Wet morning, dry afternoon.' })
+    expect((await notesOf('vera-token')).conditions.note).toBe('Wet morning, dry afternoon.')
+    expect((await notesOf('vera-token', '')).events[0].conditions.note).toBe('Wet morning, dry afternoon.')
+    expect((await call('PUT', { token: 'vera-token', body: { conditions: { note: '' } } })).status).toBe(400)
+
+    expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}&conditions=1` })).status).toBe(200)
+    expect(await notesOf('vera-token')).toEqual({ sessions: [] })
+    expect(store.size).toBe(0)
+    expect((await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}&conditions=1` })).status).toBe(404)
+  })
+
+  it('keeps the event’s note when its last session is removed', async () => {
+    await call('PUT', { token: 'vera-token', body: { conditions: { note: 'Hot.' } } })
+    await call('PUT', { token: 'vera-token', body: { session: session1 } })
+    await call('DELETE', { token: 'vera-token', query: `?event=${EVENT}&session=${encodeURIComponent('2026-09-12 08:30 pink')}` })
+    expect(await notesOf('vera-token')).toMatchObject({ conditions: { note: 'Hot.' }, sessions: [] })
+  })
+})
+
 describe('the sample laps’ driver’s report cards (#350)', () => {
   const [nov, dec] = SAMPLE_REPORT_CARDS
   beforeEach(() => {

@@ -3,6 +3,7 @@ import { inputClass } from './SessionEvaluationForm'
 import { MAX_CONDITIONS_NOTE, SKIES, SURFACES } from '../utils/conditions'
 import type { SessionConditions, Sky, Surface } from '../utils/conditions'
 import type { HourWeather } from '../data/weather'
+import { SKY_ICONS } from './skyIcons'
 
 /** A temperature as typed: an optional minus and up to three digits. */
 function tempInput(t: string): string {
@@ -84,7 +85,9 @@ export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemov
           {skyFromNearby && <span className="font-normal text-gray-400">From nearby weather</span>}
         </legend>
         <div className="mt-1.5 grid grid-cols-5 gap-2">
-          {SKIES.map(s => (
+          {SKIES.map(s => {
+            const Icon = SKY_ICONS[s.id]
+            return (
             <button
               key={s.id}
               type="button"
@@ -93,10 +96,11 @@ export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemov
               onClick={() => setSky(sky === s.id ? undefined : s.id)}
               className={`${chip(sky === s.id)} flex flex-col items-center gap-1 !px-1 !py-2 !text-[11px] leading-tight`}
             >
-              <s.icon size={20} aria-hidden="true" />
+              <Icon size={20} aria-hidden="true" />
               <span className="truncate">{s.id === 'partly' ? 'Partly' : s.label}</span>
             </button>
-          ))}
+            )
+          })}
         </div>
       </fieldset>
 

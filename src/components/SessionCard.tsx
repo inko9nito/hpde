@@ -1,7 +1,8 @@
 import { ChevronRight, ClipboardCheck, Disc3, Timer, Waves } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
-import { conditionsText, skyOf } from '../utils/conditions'
+import { conditionsText } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
 import type { SessionConditions } from '../utils/conditions'
 import type { SessionActivity, RunGroupConfig } from '../types'
 
@@ -33,7 +34,7 @@ function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig
 
 export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation, hasPressures, conditions }: Props) {
   const conditionsLine = conditions && conditionsText(conditions)
-  const ConditionsIcon = conditions?.sky ? skyOf(conditions.sky).icon : Waves
+  const ConditionsIcon = conditions?.sky ? SKY_ICONS[conditions.sky] : Waves
   const onTrack = resolveGroups(activity.onTrack, runGroups)
   const inClass = resolveGroups(activity.inClass ?? [], runGroups)
 
@@ -57,7 +58,7 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, ha
           {onTrack.length > 0 && (onOpenLaps ? (
             <button
               onClick={onOpenLaps}
-              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}${hasEvaluation ? ' (evaluated)' : ''}${hasPressures ? ' (tire pressures)' : ''}`}
+              aria-label={`Lap times: ${formatTime(activity.time)} ${formatAmPm(activity.time)}, ${onTrack.map(g => g.label).join(', ')}${hasLaps ? ' (saved)' : ''}${hasEvaluation ? ' (evaluated)' : ''}${hasPressures ? ' (tire pressures)' : ''}${conditions ? ' (track conditions)' : ''}`}
               // The highlight reaches 6px past the row on every side, 10px
               // short of the card's edge. A divider or note below sits only
               // 12px away, not 16, so there the row keeps 4px more room. On its

@@ -7,8 +7,9 @@
 //     (the air and sky start from the nearby weather), with a note — kept
 //     with their notes for the event, like an instructor's evaluation.
 // And for the event as a whole, a note of their own.
-import { Cloud, CloudLightning, CloudRain, CloudSun, Sun } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+// What's read and checked here is shared by the app (the forms) and the
+// notes function (which checks what it's sent before saving) — so no icons
+// here: those are in components/skyIcons.
 
 export type Surface = 'dry' | 'damp' | 'wet' | 'drying'
 export type Sky = 'sunny' | 'partly' | 'cloudy' | 'rain' | 'storm'
@@ -20,15 +21,18 @@ export const SURFACES: readonly { id: Surface; label: string }[] = [
   { id: 'drying', label: 'Drying' },
 ]
 
-export const SKIES: readonly { id: Sky; label: string; icon: LucideIcon }[] = [
-  { id: 'sunny', label: 'Sunny', icon: Sun },
-  { id: 'partly', label: 'Partly cloudy', icon: CloudSun },
-  { id: 'cloudy', label: 'Cloudy', icon: Cloud },
-  { id: 'rain', label: 'Rain', icon: CloudRain },
-  { id: 'storm', label: 'Storms', icon: CloudLightning },
+export const SKIES: readonly { id: Sky; label: string }[] = [
+  { id: 'sunny', label: 'Sunny' },
+  { id: 'partly', label: 'Partly cloudy' },
+  { id: 'cloudy', label: 'Cloudy' },
+  { id: 'rain', label: 'Rain' },
+  { id: 'storm', label: 'Storms' },
 ]
 
 export const MAX_CONDITIONS_NOTE = 500
+/** Temperatures a driver can record, °F: anything outside is a typo. */
+export const MIN_TEMP_F = -20
+export const MAX_TEMP_F = 200
 
 /** What a driver recorded for one session. Every field is optional. */
 export interface SessionConditions {
@@ -44,10 +48,13 @@ export interface SessionConditions {
 /** The driver's own note on the whole event's conditions. */
 export interface EventConditions {
   note: string
+  updatedAt?: string
+  /** Who saved it, when it wasn't the driver: an admin's email (#288). */
+  loggedBy?: string
 }
 
 export const surfaceLabel = (s: Surface) => SURFACES.find(x => x.id === s)!.label
-export const skyOf = (s: Sky) => SKIES.find(x => x.id === s)!
+export const skyLabel = (s: Sky) => SKIES.find(x => x.id === s)!.label
 
 /** WMO weather code (Open-Meteo's) to the app's sky. */
 export function skyFromCode(code: number): Sky {
@@ -62,7 +69,7 @@ export function skyFromCode(code: number): Sky {
 export function conditionsText(c: SessionConditions): string {
   return [
     c.surface && surfaceLabel(c.surface),
-    c.sky && skyOf(c.sky).label,
+    c.sky && skyLabel(c.sky),
     c.airF !== undefined && `${c.airF}°F`,
     c.trackF !== undefined && `track ${c.trackF}°F`,
   ].filter(Boolean).join(' · ')
@@ -73,4 +80,53 @@ export function surfaceTrend(sessions: SessionConditions[]): string | null {
   const steps: Surface[] = []
   for (const s of sessions) if (s.surface && steps[steps.length - 1] !== s.surface) steps.push(s.surface)
   return steps.length ? steps.map(surfaceLabel).join(' → ') : null
+}
+
+type Cleaned<T> = { value: T } | { error: string }
+
+function temp(v: unknown, what: string): Cleaned<number | undefined> {
+  if (v === undefined || v === null) return { value: undefined }
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < MIN_TEMP_F || v > MAX_TEMP_F) {
+    return { error: `${what} must be a temperature in °F, ${MIN_TEMP_F} to ${MAX_TEMP_F}.` }
+  }
+  return { value: Math.round(v) }
+}
+
+function note(v: unknown, what: string): Cleaned<string | undefined> {
+  if (v === undefined || v === null) return { value: undefined }
+  if (typeof v !== 'string') return { error: `${what} must be text.` }
+  const t = v.trim()
+  if (t.length > MAX_CONDITIONS_NOTE) return { error: `${what} is too long (at most ${MAX_CONDITIONS_NOTE} characters).` }
+  return { value: t || undefined }
+}
+
+/** A session's conditions as sent: only what's filled in is kept, and there must be something. */
+export function cleanSessionConditions(raw: unknown): Cleaned<SessionConditions> {
+  if (typeof raw !== 'object' || raw === null) return { error: 'Missing the conditions.' }
+  const r = raw as Record<string, unknown>
+  if (r.surface !== undefined && r.surface !== null && !SURFACES.some(s => s.id === r.surface)) return { error: 'Unknown track surface.' }
+  if (r.sky !== undefined && r.sky !== null && !SKIES.some(s => s.id === r.sky)) return { error: 'Unknown weather.' }
+  const airF = temp(r.airF, 'The air temperature')
+  if ('error' in airF) return airF
+  const trackF = temp(r.trackF, 'The track temperature')
+  if ('error' in trackF) return trackF
+  const n = note(r.note, 'The note')
+  if ('error' in n) return n
+  const value: SessionConditions = {
+    ...(r.surface ? { surface: r.surface as Surface } : {}),
+    ...(r.sky ? { sky: r.sky as Sky } : {}),
+    ...(airF.value !== undefined ? { airF: airF.value } : {}),
+    ...(trackF.value !== undefined ? { trackF: trackF.value } : {}),
+    ...(n.value ? { note: n.value } : {}),
+  }
+  if (Object.keys(value).length === 0) return { error: 'Add the track’s conditions.' }
+  return { value }
+}
+
+/** The event's conditions as sent: a note, required. */
+export function cleanEventConditions(raw: unknown): Cleaned<EventConditions> {
+  const n = note((raw as Record<string, unknown> | null)?.note, 'The note')
+  if ('error' in n) return n
+  if (!n.value) return { error: 'Add a note on the day’s conditions.' }
+  return { value: { note: n.value } }
 }

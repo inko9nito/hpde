@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Check, CircleHelp, List, Plus } from 'lucide-react'
 import { useEvents } from '../data/EventsContext'
 import { useWeather } from '../data/weather'
-import { skyOf } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
 import { useRsvps } from '../data/RsvpsContext'
 import { answerFor, myEvents, myRunGroup, needsAnswer } from '../utils/rsvp'
 import { RsvpPicker } from './RsvpPicker'
@@ -111,7 +111,7 @@ function Forecast({ event }: { event: EventConfig }) {
   const weather = useWeather(event)
   const day = weather.byDate.get(event.days[0]?.date ?? '')
   if (!day) return null
-  const Icon = skyOf(day.sky).icon
+  const Icon = SKY_ICONS[day.sky]
   const rain = day.kind === 'forecast' ? day.rainChance : undefined
   return (
     <div className="mt-2.5 flex min-w-0 items-center gap-2 text-[13px] text-gray-300" data-forecast>

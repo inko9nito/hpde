@@ -6,7 +6,8 @@ import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
 import { sessionKey } from '../utils/lapTimes'
 import { hourAt } from '../data/weather'
 import type { DayWeather } from '../data/weather'
-import { skyOf } from '../utils/conditions'
+import { skyLabel } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
 import type { SessionConditions } from '../utils/conditions'
 import type { ScheduleActivity, SessionActivity, RunGroupConfig } from '../types'
 import checkeredFlag from '../assets/checkered-flag.svg'
@@ -134,12 +135,12 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
         if (!collapsed[idx] && activity.type === 'session' && activity.sessionNumber !== undefined && activity.sessionNumber !== lastSessionNumber) {
           lastSessionNumber = activity.sessionNumber
           const hour = hourAt(weather, activity.time)
-          const Sky = hour && skyOf(hour.sky).icon
+          const Sky = hour && SKY_ICONS[hour.sky]
           sessionHeader = (
             <div className="mt-5 mb-1 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-gray-400">
               Session {activity.sessionNumber}
               {hour && Sky && (
-                <span className="flex items-center gap-1 font-medium normal-case tracking-normal text-gray-500" aria-label={`${weather!.kind === 'forecast' ? 'Forecast' : 'Nearby weather'}: ${skyOf(hour.sky).label}, ${hour.tempF}°F`}>
+                <span className="flex items-center gap-1 font-medium normal-case tracking-normal text-gray-500" aria-label={`${weather!.kind === 'forecast' ? 'Forecast' : 'Nearby weather'}: ${skyLabel(hour.sky)}, ${hour.tempF}°F`}>
                   <Sky size={14} aria-hidden="true" />
                   {hour.tempF}°F
                 </span>

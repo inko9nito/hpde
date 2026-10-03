@@ -11,7 +11,8 @@ import type { SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
 import { CORNERS, formatPsi } from '../utils/garage'
 import type { Corners, SessionPressures } from '../utils/garage'
-import { conditionsText, skyOf } from '../utils/conditions'
+import { conditionsText } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
 import type { SessionConditions } from '../utils/conditions'
 import type { RunGroupConfig } from '../types'
 
@@ -234,7 +235,7 @@ function EvaluationRow({ evaluation, title, onOpen }: { evaluation: NonNullable<
  * session's sheet; its button stretches over the row.
  */
 function ConditionsRow({ conditions, title, onOpen }: { conditions: SessionConditions; title: string; onOpen?: () => void }) {
-  const Icon = conditions.sky ? skyOf(conditions.sky).icon : Waves
+  const Icon = conditions.sky ? SKY_ICONS[conditions.sky] : Waves
   const line = conditionsText(conditions)
   return (
     <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-conditions>

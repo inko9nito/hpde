@@ -1,7 +1,8 @@
 import { ChevronRight, Plus, Waves } from 'lucide-react'
 import { daySummary } from '../data/weather'
 import type { DayWeather, WeatherStatus } from '../data/weather'
-import { skyOf, surfaceTrend } from '../utils/conditions'
+import { skyLabel, surfaceTrend } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
 import type { SessionConditions } from '../utils/conditions'
 import type { EventConfig } from '../types'
 
@@ -46,7 +47,7 @@ export function EventConditionsCard({ event, weather, conditions }: { event: Eve
       <h3 className="font-rubik text-[15px] font-semibold text-gray-900">{forecast ? 'Forecast' : 'Conditions'}</h3>
 
       {days.map(day => {
-        const Icon = skyOf(day.sky).icon
+        const Icon = SKY_ICONS[day.sky]
         return (
           <div key={day.date} className="flex items-start gap-3" data-day-weather>
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
@@ -55,7 +56,7 @@ export function EventConditionsCard({ event, weather, conditions }: { event: Eve
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900">
                 {days.length > 1 && <span className="text-gray-500">{weekday(day.date)} · </span>}
-                {daySummary(day, s => skyOf(s).label)}
+                {daySummary(day, skyLabel)}
               </p>
               <p className="mt-0.5 text-xs text-gray-500">
                 {weatherLine(day)} · {day.kind === 'forecast' ? 'Forecast near the track' : 'Nearby weather'}

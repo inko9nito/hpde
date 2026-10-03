@@ -25,6 +25,9 @@ export interface NotesLog {
   removeSession(key: string): Promise<void>
   saveEvaluation(evaluation: EventEvaluation): Promise<void>
   removeEvaluation(): Promise<void>
+  /** Saves the note on the event's conditions (#347), replacing any. */
+  saveConditions(conditions: EventConditions): Promise<void>
+  removeConditions(): Promise<void>
   reload(): void
 }
 
@@ -140,15 +143,32 @@ export function useNotesLog(eventId: string | null, driverId: string | null = nu
     })
   }, [send, mine])
 
+  const saveConditions = useCallback(async (next: EventConditions) => {
+    const saved = (await (await send(put({ conditions: next }))).json()).conditions as EventConditions
+    setLoaded(prev => ({ ...mine(prev), conditions: saved }))
+  }, [send, mine])
+
+  const removeConditions = useCallback(async () => {
+    await send({ method: 'DELETE' }, '&conditions=1')
+    setLoaded(prev => {
+      const { conditions: _gone, ...rest } = mine(prev)
+      return rest
+    })
+  }, [send, mine])
+
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
-  return { status, evaluation, conditions, sessions, byKey, saveSession, removeSession, saveEvaluation, removeEvaluation, reload }
+  return {
+    status, evaluation, conditions, sessions, byKey,
+    saveSession, removeSession, saveEvaluation, removeEvaluation, saveConditions, removeConditions, reload,
+  }
 }
 
 /** One event's notes, as the list of every event's has them (#345). */
 export interface EventNotes {
   eventId: string
   evaluation?: EventEvaluation
+  conditions?: EventConditions
   sessions: SessionNotes[]
 }
 

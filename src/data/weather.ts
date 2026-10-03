@@ -7,7 +7,12 @@ import type { EventConfig } from '../types'
 // The weather near the track on an event's days (#347), from Open-Meteo
 // (free, no key, CORS open): a forecast up to 16 days ahead, and what it
 // was once the day's past. Looked up by where the track is, so only for
-// tracks the app knows the place of.
+// tracks the app knows the place of (#440 moves that onto the track).
+//
+// Never saved: each look-up is kept for half an hour, then looked up
+// afresh — on the next page that wants it, or when the app comes back to
+// the front — so a forecast that changes from rain to clear shows clear.
+// What a driver records for a session is theirs and stays as they saved it.
 
 /** Where each track is, by track icon id (an event's `trackId`). */
 export const TRACK_LOCATIONS: Record<string, { lat: number; lon: number; tz: string }> = {
@@ -108,7 +113,10 @@ export function hourAt(day: DayWeather | undefined, time: string): HourWeather |
   return day.hours.find(x => Number(x.time.slice(0, 2)) === hour)
 }
 
-const cache = new Map<string, Promise<DayWeather[]>>()
+/** How long a look-up is used before it's looked up again. */
+export const WEATHER_MAX_AGE_MS = 30 * 60_000
+
+const cache = new Map<string, { at: number; days: Promise<DayWeather[]> }>()
 
 /** The weather on the event's days, by date. Off for a track with no known place. */
 export function useWeather(event: EventConfig | null): { status: WeatherStatus; byDate: Map<string, DayWeather> } {
@@ -118,22 +126,38 @@ export function useWeather(event: EventConfig | null): { status: WeatherStatus; 
   const url = place && dates.length ? weatherUrl(place.lat, place.lon, place.tz, dates[0], dates[dates.length - 1], today) : null
   const [loaded, setLoaded] = useState<{ url: string; days: DayWeather[] } | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  // Bumped when the app comes back to the front, to look again if it's stale.
+  const [shown, setShown] = useState(0)
+
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === 'visible') setShown(n => n + 1) }
+    document.addEventListener('visibilitychange', onShow)
+    return () => document.removeEventListener('visibilitychange', onShow)
+  }, [])
 
   useEffect(() => {
     if (!url) return
     let cancelled = false
-    if (!cache.has(url)) {
-      cache.set(url, fetch(url).then(async res => {
-        if (!res.ok) throw new Error(`weather ${res.status}`)
-        return readWeather(await res.json(), today)
-      }))
+    const cached = cache.get(url)
+    if (!cached || Date.now() - cached.at > WEATHER_MAX_AGE_MS) {
+      cache.set(url, {
+        at: Date.now(),
+        days: fetch(url).then(async res => {
+          if (!res.ok) throw new Error(`weather ${res.status}`)
+          return readWeather(await res.json(), today)
+        }),
+      })
     }
-    cache.get(url)!.then(
+    const entry = cache.get(url)!
+    entry.days.then(
       days => { if (!cancelled) setLoaded({ url, days }) },
-      () => { cache.delete(url); if (!cancelled) setFailed(url) },
+      () => {
+        if (cache.get(url) === entry) cache.delete(url)
+        if (!cancelled) setFailed(url)
+      },
     )
     return () => { cancelled = true }
-  }, [url, today])
+  }, [url, today, shown])
 
   if (!url) return { status: 'off', byDate: new Map() }
   if (loaded?.url === url) return { status: 'ready', byDate: new Map(loaded.days.map(d => [d.date, d])) }

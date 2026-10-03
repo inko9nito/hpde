@@ -21,6 +21,7 @@ import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
 import { ScheduleEditorPage, editScheduleHash, eventIdFromEditScheduleHash } from './components/ScheduleEditorPage'
 import { EditEventPage, eventIdFromEditEventHash } from './components/EditEventPage'
 import { LapTimesSheet, groupFor } from './components/LapTimesSheet'
+import { EventConditionsSheet } from './components/EventConditionsSheet'
 import type { SessionSlot, SessionView } from './components/LapTimesSheet'
 import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
@@ -278,6 +279,8 @@ export default function App() {
   const [lapSlot, setLapSlot] = useState<(SessionSlot & { view?: SessionView }) | null>(null)
   // A TDE event's report card, open in its sheet (#340).
   const [evaluationOpen, setEvaluationOpen] = useState(false)
+  // The note on the event's conditions, from Details (#347).
+  const [conditionsNoteOpen, setConditionsNoteOpen] = useState(false)
   // A fresh page each time it's opened, even while the last is still sliding away (#415).
   const [evaluationN, setEvaluationN] = useState(0)
   function openEvaluation() {
@@ -820,6 +823,7 @@ export default function App() {
                 sessions: notesLog.sessions.flatMap(s => (s.conditions ? [{ ...s, conditions: s.conditions }] : [])),
                 note: notesLog.conditions?.note,
                 onViewSessions: () => setActiveTab('schedule'),
+                onEditNote: () => setConditionsNoteOpen(true),
               } : undefined}
             />
           )}
@@ -1089,6 +1093,23 @@ export default function App() {
           showToast('Car added')
         }}
         onClosed={() => setAddingCarFor(null)}
+      />
+    )}
+    {conditionsNoteOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
+      <EventConditionsSheet
+        key={`${activeEvent.id} ${driver?.id ?? ''}`}
+        existing={notesLog.conditions}
+        onSave={async conditions => {
+          await notesLog.saveConditions(conditions)
+          setConditionsNoteOpen(false)
+          showToast('Note saved')
+        }}
+        onRemove={async () => {
+          await notesLog.removeConditions()
+          setConditionsNoteOpen(false)
+          showToast('Note removed')
+        }}
+        onClose={() => setConditionsNoteOpen(false)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
