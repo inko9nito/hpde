@@ -47,6 +47,8 @@ function installScriptableMocks(
   }
   // The widget's ground: what renderers set as its background.
   g.__background = {} as { color?: unknown; gradient?: unknown; image?: unknown }
+  // When the widget asks iOS to run it again.
+  g.__refreshAfter = null as Date | null
   g.Size = class {
     width: number; height: number
     constructor(w: number, h: number) { this.width = num(w); this.height = num(h) }
@@ -146,7 +148,7 @@ function installScriptableMocks(
     set backgroundColor(v: unknown) { g.__background.color = v }
     set backgroundGradient(v: unknown) { g.__background.gradient = v }
     set backgroundImage(v: unknown) { g.__background.image = v }
-    set refreshAfterDate(_v) {}
+    set refreshAfterDate(v: Date) { g.__refreshAfter = v }
     set url(_v) {}
     async presentMedium() {}
     async presentLarge() {}
@@ -762,6 +764,16 @@ describe('live view header and parameter chips (#291)', () => {
     await runWidget('large', empty, 'orange|15m')
     const texts = (globalThis as any).__texts as string[]
     expectStart(texts, '15m', 'Schedule coming soon')
+  })
+
+  it('checks back within a minute while the day has no schedule yet (#436)', async () => {
+    const empty = { events: [{ ...LIVE.events[0], days: [{ date: DAY, label: 'Saturday', activities: [] }] }] }
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(`${DAY}T01:11:00`))
+    await runWidget('large', empty, null)
+    expect((globalThis as any).__texts).toContain('Schedule coming soon')
+    const next = (globalThis as any).__refreshAfter as Date
+    expect(next.getTime() - Date.now()).toBe(60 * 1000)
   })
 })
 
