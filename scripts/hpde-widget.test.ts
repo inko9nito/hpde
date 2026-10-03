@@ -569,6 +569,18 @@ describe('scriptable widget loads and renders', () => {
     expect(one[1]).toEqual(flag)
   })
 
+  it('says "Tomorrow" the day before an event, not "in 1 day", on every size (#404)', async () => {
+    const at = (days: number) => ({ events: [{ ...UPCOMING_MULTI_MANIFEST.events[0], days: [{ date: isoDate(days), label: 'Monday', activities: [] }] }] })
+    for (const family of ['small', 'medium', 'large'] as const) {
+      await runWidget(family, at(1))
+      const texts = (globalThis as any).__texts as string[]
+      expect(texts).toContain('Tomorrow')
+      expect(texts).not.toContain('in 1 day')
+      await runWidget(family, at(2))
+      expect((globalThis as any).__texts).toContain('in 2 days')
+    }
+  })
+
   it("lays Large out as its designs: one event, with its badge above it", async () => {
     const one = { events: [UPCOMING_MULTI_MANIFEST.events[0]] }
     await runWidget('large', one)
