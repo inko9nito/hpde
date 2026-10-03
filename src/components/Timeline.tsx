@@ -4,6 +4,10 @@ import { ActivityCard } from './ActivityCard'
 import { TimeIndicator } from './TimeIndicator'
 import { parseMinutes, nowMinutes, findCurrentActivity } from '../utils/time'
 import { sessionKey } from '../utils/lapTimes'
+import { hourAt } from '../data/weather'
+import type { DayWeather } from '../data/weather'
+import { skyOf } from '../utils/conditions'
+import type { SessionConditions } from '../utils/conditions'
 import type { ScheduleActivity, SessionActivity, RunGroupConfig } from '../types'
 import checkeredFlag from '../assets/checkered-flag.svg'
 
@@ -19,7 +23,9 @@ interface Props {
    * an instructor's evaluation (#340); `pressures`, those with tire
    * pressures (#344).
    */
-  lapTimes?: { date: string; saved: Set<string>; evaluated?: Set<string>; pressures?: Set<string>; onOpen: (session: SessionActivity) => void }
+  lapTimes?: { date: string; saved: Set<string>; evaluated?: Set<string>; pressures?: Set<string>; conditions?: Map<string, SessionConditions>; onOpen: (session: SessionActivity) => void }
+  /** The weather near the track that day (#347): each session's heading shows its hour's. */
+  weather?: DayWeather
 }
 
 // Animates an item sliding away instead of vanishing instantly. Stays
@@ -39,7 +45,7 @@ function Collapse({ collapsed, children }: { collapsed: boolean; children: React
   )
 }
 
-export function Timeline({ activities, runGroups, isToday, selectedGroups, hidePast, lapTimes }: Props) {
+export function Timeline({ activities, runGroups, isToday, selectedGroups, hidePast, lapTimes, weather }: Props) {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const [, setTick] = useState(0)
 
@@ -127,9 +133,17 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
         let sessionHeader: React.ReactNode = null
         if (!collapsed[idx] && activity.type === 'session' && activity.sessionNumber !== undefined && activity.sessionNumber !== lastSessionNumber) {
           lastSessionNumber = activity.sessionNumber
+          const hour = hourAt(weather, activity.time)
+          const Sky = hour && skyOf(hour.sky).icon
           sessionHeader = (
-            <div className="mt-5 mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+            <div className="mt-5 mb-1 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-gray-400">
               Session {activity.sessionNumber}
+              {hour && Sky && (
+                <span className="flex items-center gap-1 font-medium normal-case tracking-normal text-gray-500" aria-label={`${weather!.kind === 'forecast' ? 'Forecast' : 'Nearby weather'}: ${skyOf(hour.sky).label}, ${hour.tempF}°F`}>
+                  <Sky size={14} aria-hidden="true" />
+                  {hour.tempF}°F
+                </span>
+              )}
             </div>
           )
         }
@@ -152,6 +166,7 @@ export function Timeline({ activities, runGroups, isToday, selectedGroups, hideP
                 hasLaps={lapTimes && activity.onTrack.some(g => lapTimes.saved.has(sessionKey(lapTimes.date, activity.time, g)))}
                 hasEvaluation={lapTimes && activity.onTrack.some(g => !!lapTimes.evaluated?.has(sessionKey(lapTimes.date, activity.time, g)))}
                 hasPressures={lapTimes && activity.onTrack.some(g => !!lapTimes.pressures?.has(sessionKey(lapTimes.date, activity.time, g)))}
+                conditions={lapTimes && activity.onTrack.map(g => lapTimes.conditions?.get(sessionKey(lapTimes.date, activity.time, g))).find(Boolean)}
               />
             )
             : <ActivityCard activity={activity} past={past} />

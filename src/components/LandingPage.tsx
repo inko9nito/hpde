@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Check, CircleHelp, List, Plus } from 'lucide-react'
 import { useEvents } from '../data/EventsContext'
+import { useWeather } from '../data/weather'
+import { skyOf } from '../utils/conditions'
 import { useRsvps } from '../data/RsvpsContext'
 import { answerFor, myEvents, myRunGroup, needsAnswer } from '../utils/rsvp'
 import { RsvpPicker } from './RsvpPicker'
@@ -87,6 +89,7 @@ function FeaturedEventCard({
               {live && <StatusBadge status="live" />}
               {(rsvp === 'going' || rsvp === 'maybe') && <RsvpBadge rsvp={rsvp} />}
             </div>
+            <Forecast event={event} />
           </div>
         </div>
       </button>
@@ -96,6 +99,27 @@ function FeaturedEventCard({
           <RsvpPicker event={event} status={live ? 'live' : 'upcoming'} variant="card" />
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * On a dark featured card, once its first day is within the forecast
+ * (#347): the weather near the track, "61–76°F · 70% rain".
+ */
+function Forecast({ event }: { event: EventConfig }) {
+  const weather = useWeather(event)
+  const day = weather.byDate.get(event.days[0]?.date ?? '')
+  if (!day) return null
+  const Icon = skyOf(day.sky).icon
+  const rain = day.kind === 'forecast' ? day.rainChance : undefined
+  return (
+    <div className="mt-2.5 flex min-w-0 items-center gap-2 text-[13px] text-gray-300" data-forecast>
+      <Icon size={18} className="shrink-0 text-gray-400" aria-hidden="true" />
+      <span className="truncate">
+        <span className="font-medium text-white">{day.kind === 'forecast' ? 'Forecast' : 'Weather'}</span>
+        {` · ${day.lowF}–${day.highF}°F${rain ? ` · ${rain}% rain` : ''}`}
+      </span>
     </div>
   )
 }

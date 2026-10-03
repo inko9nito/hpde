@@ -39,6 +39,8 @@ import { TracksTab } from './components/TracksTab'
 import { ActingBanner } from './components/ActingBanner'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useAllNotes, useNotesLog } from './data/notesLog'
+import { hourAt, useWeather } from './data/weather'
+import { sessionKey } from './utils/lapTimes'
 import { isTdeEvent } from './utils/evaluation'
 import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
 import { Toast } from './components/Toast'
@@ -475,7 +477,10 @@ export default function App() {
   const savedLapKeys = new Set(lapLog.byKey.keys())
   // …and their instructor's evaluations of it (#340).
   const notesLog = useNotesLog(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent.id : null, driver?.id ?? null)
-  const evaluatedKeys = new Set(notesLog.byKey.keys())
+  const evaluatedKeys = new Set(notesLog.sessions.filter(s => s.evaluation).map(s => s.key))
+  const conditionsByKey = new Map(notesLog.sessions.flatMap(s => (s.conditions ? [[s.key, s.conditions] as const] : [])))
+  // The weather near the track on the event's days (#347).
+  const weather = useWeather(pageEventId !== null && pageEventId === activeEvent.id ? activeEvent : null)
   // Their answers to "Did you drive?" (#235): whoever an admin is acting as's.
   const eventRsvps = ownRsvps
   // The group they drove in, for a TDE report card (#340): their answer to
@@ -497,7 +502,7 @@ export default function App() {
   const pressuresByKey = new Map(Object.values(eventSetup?.sessions ?? {}).map(p => [p.key, p]))
   const pressureKeys = new Set(pressuresByKey.keys())
   // Sessions with anything saved, the report card and the car: "My notes (3)".
-  const notesCount = new Set([...savedLapKeys, ...evaluatedKeys, ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (eventCar ? 1 : 0)
+  const notesCount = new Set([...savedLapKeys, ...notesLog.byKey.keys(), ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (eventCar ? 1 : 0)
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
@@ -755,11 +760,13 @@ export default function App() {
                 isToday={isToday}
                 selectedGroups={selectedGroups}
                 hidePast={hidePast}
+                weather={weather.byDate.get(activeDay.date)}
                 lapTimes={authStatus === 'signed-in' ? {
                   date: activeDay.date,
                   saved: savedLapKeys,
                   evaluated: evaluatedKeys,
                   pressures: pressureKeys,
+                  conditions: conditionsByKey,
                   onOpen: session => setLapSlot({
                     date: activeDay.date,
                     time: session.time,
@@ -805,7 +812,17 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'info' && <EventInfo event={activeEvent} />}
+          {activeTab === 'info' && (
+            <EventInfo
+              event={activeEvent}
+              weather={weather}
+              conditions={authStatus === 'signed-in' ? {
+                sessions: notesLog.sessions.flatMap(s => (s.conditions ? [{ ...s, conditions: s.conditions }] : [])),
+                note: notesLog.conditions?.note,
+                onViewSessions: () => setActiveTab('schedule'),
+              } : undefined}
+            />
+          )}
         </div>
       </div>
         </>)}
@@ -981,14 +998,34 @@ export default function App() {
           showToast('Lap times removed')
         }}
         onSaveEvaluation={async session => {
-          await notesLog.saveSession(session)
+          // The session's conditions stay with it (#347).
+          const kept = notesLog.byKey.get(sessionKey(session.date, session.time, session.group))?.conditions
+          await notesLog.saveSession({ ...session, ...(kept ? { conditions: kept } : {}) })
           setLapSlot(null)
           showToast('Evaluation saved')
         }}
         onRemoveEvaluation={async key => {
-          await notesLog.removeSession(key)
+          const { evaluation: _gone, key: _key, updatedAt: _at, ...rest } = notesLog.byKey.get(key)!
+          if (rest.conditions) await notesLog.saveSession(rest)
+          else await notesLog.removeSession(key)
           setLapSlot(null)
           showToast('Evaluation removed')
+        }}
+        conditions={{
+          nearby: hourAt(weather.byDate.get(lapSlot.date), lapSlot.time),
+          onSave: async session => {
+            const kept = notesLog.byKey.get(sessionKey(session.date, session.time, session.group))?.evaluation
+            await notesLog.saveSession({ ...session, ...(kept ? { evaluation: kept } : {}) })
+            setLapSlot(null)
+            showToast('Track conditions saved')
+          },
+          onRemove: async key => {
+            const { conditions: _gone, key: _key, updatedAt: _at, ...rest } = notesLog.byKey.get(key)!
+            if (rest.evaluation) await notesLog.saveSession(rest)
+            else await notesLog.removeSession(key)
+            setLapSlot(null)
+            showToast('Track conditions removed')
+          },
         }}
         pressures={garageOn ? {
           saved: key => pressuresByKey.get(key),

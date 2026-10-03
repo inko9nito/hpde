@@ -164,14 +164,14 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
       <ul className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3" aria-label="Feedback">
         {/* The whole event's: who the instructor was, and their notes (on a TDE event, the report card's). */}
         {evaluation && <Feedback label={evaluation.instructor ?? 'Instructor'} text={evaluation.notes} />}
-        {notes.sessions.map(s => (
+        {notes.sessions.flatMap(s => !s.evaluation ? [] : [(
           <Feedback
             key={s.key}
             label={`${sessionTitle(s)} · ${multiDay ? `${weekday(s.date)} ` : ''}${formatTime(s.time)} ${formatAmPm(s.time)}`}
             instructor={s.evaluation.instructor}
             text={s.evaluation.feedback}
           />
-        ))}
+        )])}
       </ul>
       ) : (
         <button

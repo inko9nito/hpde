@@ -1,6 +1,8 @@
-import { ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Disc3, Timer, Waves } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { formatTime, formatAmPm } from '../utils/time'
+import { conditionsText, skyOf } from '../utils/conditions'
+import type { SessionConditions } from '../utils/conditions'
 import type { SessionActivity, RunGroupConfig } from '../types'
 
 interface Props {
@@ -18,6 +20,8 @@ interface Props {
   hasEvaluation?: boolean
   /** Tire pressures are saved for it (#344): shows a tire. */
   hasPressures?: boolean
+  /** The track conditions they recorded for it (#347): shown under the groups. */
+  conditions?: SessionConditions
 }
 
 function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig[] {
@@ -27,7 +31,9 @@ function resolveGroups(ids: string[], configs: RunGroupConfig[]): RunGroupConfig
   })
 }
 
-export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation, hasPressures }: Props) {
+export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, hasEvaluation, hasPressures, conditions }: Props) {
+  const conditionsLine = conditions && conditionsText(conditions)
+  const ConditionsIcon = conditions?.sky ? skyOf(conditions.sky).icon : Waves
   const onTrack = resolveGroups(activity.onTrack, runGroups)
   const inClass = resolveGroups(activity.inClass ?? [], runGroups)
 
@@ -56,13 +62,19 @@ export function SessionCard({ activity, runGroups, past, onOpenLaps, hasLaps, ha
               // short of the card's edge. A divider or note below sits only
               // 12px away, not 16, so there the row keeps 4px more room. On its
               // own, the row grows to the time's height, so it stays centred.
-              className={`-mx-1.5 ${inClass.length > 0 || activity.note ? '-mb-0.5 -mt-1.5' : '-my-1.5 grow'} flex items-center gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-gray-50`}
+              className={`-mx-1.5 ${inClass.length > 0 || activity.note ? '-mb-0.5 -mt-1.5' : '-my-1.5 grow'} flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg p-1.5 text-left transition-colors hover:bg-gray-50`}
             >
               {onTrackRow}
               {hasLaps && <Timer size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-laps />}
               {hasEvaluation && <ClipboardCheck size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-evaluation />}
               {hasPressures && <Disc3 size={16} className="shrink-0 text-gray-500" aria-hidden="true" data-has-pressures />}
               <ChevronRight size={16} className="shrink-0 text-gray-300" aria-hidden="true" />
+              {conditionsLine && (
+                <span className="flex basis-full items-center gap-1.5 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-700" data-session-conditions>
+                  <ConditionsIcon size={15} className="shrink-0 text-gray-500" aria-hidden="true" />
+                  <span className="truncate">{conditionsLine}</span>
+                </span>
+              )}
             </button>
           ) : (
             <div className="flex items-center gap-3">{onTrackRow}</div>
