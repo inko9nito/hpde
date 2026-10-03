@@ -256,6 +256,32 @@ const RESIZE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 // Where a PagedSheet's got to: what's in it, fading out, the sheet growing
 // with nothing in it, then the page; and the same back.
 type Stage = 'list' | 'list out' | 'growing' | 'page' | 'page out' | 'shrinking'
+// Each stage on the way: the next, once what's moving has (or would have, by the clock).
+const STEPS: Partial<Record<Stage, [next: Stage, moving: 'list' | 'sheet' | 'page', property: string, ms: number]>> = {
+  'list out': ['growing', 'list', 'opacity', FADE_MS],
+  growing: ['page', 'sheet', 'height', RESIZE_MS],
+  'page out': ['shrinking', 'page', 'opacity', FADE_MS],
+  shrinking: ['list', 'sheet', 'height', RESIZE_MS],
+}
+
+/**
+ * `then`, once `el`'s transition of `property` is over — at once if it's
+ * not moving — or, with no way to tell, after `ms`. Returns a way to call
+ * it off.
+ */
+function afterTransition(el: HTMLElement | null, property: string, ms: number, then: () => void): () => void {
+  let live = true
+  const go = () => { if (live) then() }
+  if (!el?.getAnimations) {
+    const id = setTimeout(go, ms)
+    return () => { live = false; clearTimeout(id) }
+  }
+  // Starts the transition, if the change has one.
+  void getComputedStyle(el).getPropertyValue(property)
+  const moving = el.getAnimations().filter(a => (a as CSSTransition).transitionProperty === property)
+  Promise.all(moving.map(a => a.finished)).then(go, () => {})
+  return () => { live = false }
+}
 
 /**
  * A sheet whose rows each open a page in it (#445): what's in it fades out,
@@ -284,24 +310,36 @@ export function PagedSheet({ label, heading, busy = false, onClose, dismissRef, 
   const [stage, setStage] = useState<Stage>(() => (open ? 'page' : 'list'))
   const exited = useRef(page?.onExited)
   exited.current = page?.onExited
+  const menu = useRef<HTMLDivElement>(null)
   const first = useRef(true)
   useEffect(() => {
     if (first.current) {
       first.current = false
       if (open) return
     }
-    if (!open && stage === 'list') return
-    // One step after another, each once the last has had its time.
-    const steps: [Stage, number][] = open
-      ? [['list out', 0], ['growing', FADE_MS], ['page', FADE_MS + RESIZE_MS]]
-      : [['page out', 0], ['shrinking', FADE_MS], ['list', FADE_MS + RESIZE_MS]]
-    const ids = steps.map(([next, at]) => setTimeout(() => {
+    if (open) setStage('list out')
+    // Gone back before the list had faded out: it fades straight back in.
+    else if (stage === 'list out') {
+      setStage('list')
+      exited.current?.()
+    }
+    else if (stage !== 'list') setStage('page out')
+  }, [open])
+  // Then one step after another, each once the last is over: not on a
+  // clock, which a slow frame puts out of step, so the sheet would start
+  // resizing with the list still showing.
+  const box = useRef<HTMLDivElement>(null)
+  const pageBox = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const step = STEPS[stage]
+    if (!step) return
+    const [next, moving, property, ms] = step
+    const el = { list: menu, sheet: box, page: pageBox }[moving].current
+    return afterTransition(el, property, ms, () => {
       setStage(next)
       if (next === 'list') exited.current?.()
-    }, at))
-    return () => ids.forEach(clearTimeout)
-  }, [open])
-
+    })
+  }, [stage])
   useSheetKeys(closeRef, () => {
     if (busy) return
     if (page?.open && hasMenu) page.onBack()
@@ -309,7 +347,6 @@ export function PagedSheet({ label, heading, busy = false, onClose, dismissRef, 
   })
 
   // As tall as what's in it — or, with a page up, a page sheet.
-  const menu = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState<number | null>(null)
   useLayoutEffect(() => {
     const el = menu.current
@@ -341,6 +378,7 @@ export function PagedSheet({ label, heading, busy = false, onClose, dismissRef, 
       {...data}
     >
       <div
+        ref={box}
         className="relative overflow-hidden"
         style={{
           height: grown ? PAGE_HEIGHT : menuHeight === null ? undefined : `min(${menuHeight}px, ${PAGE_HEIGHT})`,
@@ -365,6 +403,7 @@ export function PagedSheet({ label, heading, busy = false, onClose, dismissRef, 
         )}
         {page && (
           <div
+            ref={pageBox}
             aria-hidden={!pageShown || undefined}
             inert={!pageShown || undefined}
             className="absolute inset-0 overflow-y-auto overscroll-contain bg-white"

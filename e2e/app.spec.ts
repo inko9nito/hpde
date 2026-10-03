@@ -1057,8 +1057,10 @@ function dimsIn(page: Page, selector: string) {
       const dim = document.querySelector(selector)?.previousElementSibling
       if (dim) {
         const opacity = Number(getComputedStyle(dim).opacity)
-        if (opacity < 0.9) partly = true
-        if (opacity === 1) return resolve(partly)
+        // Fading, though a frame may come before it's started, or late.
+        const fading = dim.getAnimations().length > 0
+        if (opacity < 0.9 || fading) partly = true
+        if (opacity === 1 && !fading) return resolve(partly)
       }
       requestAnimationFrame(step)
     }
