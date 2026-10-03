@@ -980,7 +980,8 @@ describe('instructor evaluation (#340)', () => {
   it('adds the whole event’s evaluation on any event: on others, just the instructor and their notes', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const add = screen.getByRole('button', { name: /^Add instructor evaluation/ })
+    // Once the notes are in.
+    const add = await screen.findByRole('button', { name: /^Add instructor evaluation/ })
     expect(add).toHaveTextContent('What your instructor said about the whole event')
     await userEvent.click(add)
     const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })

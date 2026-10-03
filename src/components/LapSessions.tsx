@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3 } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Waves } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
@@ -11,6 +11,9 @@ import type { SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
 import { CORNERS, formatPsi } from '../utils/garage'
 import type { Corners, SessionPressures } from '../utils/garage'
+import { conditionsText } from '../utils/conditions'
+import { SKY_ICONS } from './skyIcons'
+import type { SessionConditions } from '../utils/conditions'
 import type { RunGroupConfig } from '../types'
 
 // The pieces My notes (#210) lists saved laps with — the best-lap cards,
@@ -111,7 +114,7 @@ export function LapsToolbar({ keys, open, onOpen }: {
  * session's sheet. `onEdit` adds an
  * Edit button, for everything the session has.
  */
-export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, tableId }: {
+export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, onOpenConditions, tableId }: {
   session: SessionHead
   laps?: SessionLaps
   notes?: SessionNotes
@@ -127,6 +130,7 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
   onEdit?: () => void
   onOpenEvaluation?: () => void
   onOpenPressures?: () => void
+  onOpenConditions?: () => void
   /** Unique on the page. */
   tableId: string
 }) {
@@ -188,7 +192,8 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
             )}
           </div>
         )}
-        {notes && <EvaluationRow notes={notes} title={title} onOpen={onOpenEvaluation} />}
+        {notes?.conditions && <ConditionsRow conditions={notes.conditions} title={title} onOpen={onOpenConditions} />}
+        {notes?.evaluation && <EvaluationRow evaluation={notes.evaluation} title={title} onOpen={onOpenEvaluation} />}
         {pressures && <PressuresRow pressures={pressures} title={title} onOpen={onOpenPressures} />}
       </div>
     </section>
@@ -200,8 +205,8 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
  * what they said. The chevron opens it in the session's sheet; its button
  * stretches over the row.
  */
-function EvaluationRow({ notes, title, onOpen }: { notes: SessionNotes; title: string; onOpen?: () => void }) {
-  const { feedback, instructor } = notes.evaluation
+function EvaluationRow({ evaluation, title, onOpen }: { evaluation: NonNullable<SessionNotes['evaluation']>; title: string; onOpen?: () => void }) {
+  const { feedback, instructor } = evaluation
   return (
     <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-evaluation>
       <div className="flex items-center justify-between gap-3">
@@ -220,6 +225,42 @@ function EvaluationRow({ notes, title, onOpen }: { notes: SessionNotes; title: s
         )}
       </div>
       <p className={`${FIGURES_INDENT} whitespace-pre-line text-sm text-gray-900`}>{feedback}</p>
+    </div>
+  )
+}
+
+/**
+ * A session's track conditions on its card (#347): the surface, sky and
+ * temperatures in a line, and their note. The chevron opens them in the
+ * session's sheet; its button stretches over the row.
+ */
+function ConditionsRow({ conditions, title, onOpen }: { conditions: SessionConditions; title: string; onOpen?: () => void }) {
+  const Icon = conditions.sky ? SKY_ICONS[conditions.sky] : Waves
+  const line = conditionsText(conditions)
+  return (
+    <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-conditions>
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+          <Waves size={13} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">Track conditions</span>
+        </p>
+        {onOpen && (
+          <button
+            onClick={onOpen}
+            aria-label={`Open the track conditions for ${title}`}
+            className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {line && (
+        <p className={`${FIGURES_INDENT} flex items-center gap-2 text-sm font-medium text-gray-900`}>
+          <Icon size={16} className="shrink-0 text-gray-500" aria-hidden="true" />
+          {line}
+        </p>
+      )}
+      {conditions.note && <p className={`${FIGURES_INDENT} whitespace-pre-line text-sm text-gray-700`}>{conditions.note}</p>}
     </div>
   )
 }

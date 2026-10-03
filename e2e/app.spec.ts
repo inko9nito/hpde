@@ -1197,6 +1197,108 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+// Open-Meteo's answer for one day near the track (#347): rain until 11,
+// cloud until 2, then sun, warming up through the day.
+function weatherFor(date: string, daily: Record<string, unknown[]> = {}) {
+  const hours = [...Array(24).keys()]
+  return {
+    hourly: {
+      time: hours.map(h => `${date}T${String(h).padStart(2, '0')}:00`),
+      temperature_2m: hours.map(h => 58 + h),
+      precipitation: hours.map(h => (h < 11 ? 0.04 : 0)),
+      weather_code: hours.map(h => (h < 11 ? 63 : h < 14 ? 3 : 0)),
+    },
+    daily: { time: [date], temperature_2m_max: [79.4], temperature_2m_min: [58.2], precipitation_sum: [0.44], weather_code: [63], ...daily },
+  }
+}
+
+test('the weather near the track: a forecast on the next event, each session’s hour on its schedule (#347)', async ({ page }) => {
+  const soon: EventConfig = { ...alpha, id: `${isoInDays(5)}_soon`, name: 'Soon Day', days: [{ ...alpha.days[0], date: isoInDays(5) }] }
+  await stubEvents(page, [soon])
+  await page.route(/open-meteo\.com/, route => {
+    const url = new URL(route.request().url())
+    expect(url.searchParams.get('start_date')).toBe(isoInDays(5))
+    return route.fulfill({ json: weatherFor(isoInDays(5), { precipitation_probability_max: [70] }) })
+  })
+  await page.goto('/#/')
+  await expect(page.locator('[data-forecast]')).toHaveText('Forecast · 58–79°F · 70% rain')
+
+  await page.getByRole('button', { name: /Soon Day/ }).click()
+  // Session 1's first start, 8:00: rain, 66°F.
+  await expect(page.getByLabel('Forecast: Rain, 66°F')).toBeVisible()
+  await page.getByRole('tab', { name: 'Details' }).click()
+  const card = page.getByRole('region', { name: 'Conditions' })
+  await expect(card.getByRole('heading', { name: 'Forecast' })).toBeVisible()
+  await expect(card).toContainText('Rain in the morning, sunny in the afternoon')
+  await expect(card).toContainText('58–79°F · 70% chance of rain · Forecast near the track')
+})
+
+test('a driver records each session’s track conditions, starting from the nearby weather, and a note on the day (#347)', async ({ page }) => {
+  await stubEvents(page, [alpha])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [alpha.id]: { status: 'going', runGroup: 'blue' } } } }))
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  await page.route(/open-meteo\.com/, route => route.fulfill({ json: weatherFor(alpha.days[0].date) }))
+  let notes: { conditions?: object; sessions: object[] } = { sessions: [] }
+  const puts: Record<string, unknown>[] = []
+  await page.route(/\/api\/notes(\?|$)/, async route => {
+    const req = route.request()
+    if (req.method() === 'PUT') {
+      const body = req.postDataJSON()
+      puts.push(body)
+      if (body.conditions) {
+        notes = { ...notes, conditions: body.conditions }
+        return route.fulfill({ json: { conditions: body.conditions } })
+      }
+      const saved = { ...body.session, key: `${body.session.date} ${body.session.time} ${body.session.group}` }
+      notes = { ...notes, sessions: [saved] }
+      return route.fulfill({ json: { session: saved } })
+    }
+    return route.fulfill({ json: notes })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
+  const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Track conditions/ }).click()
+  // 8:30 rounds to 9:00: rain, 67°F near the track.
+  await expect(sheet.getByRole('button', { name: 'Rain' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByLabel('Air')).toHaveValue('67')
+  await sheet.getByRole('button', { name: 'Wet' }).click()
+  await sheet.getByLabel('Air').fill('65')
+  await sheet.getByLabel('Notes').fill('Standing water at Turn 2.')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await sheet.getByRole('button', { name: 'Save conditions' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('Track conditions saved')
+  expect(puts[0]).toEqual({ session: {
+    date: alpha.days[0].date, time: '08:30', group: 'blue', sessionNumber: 1,
+    conditions: { surface: 'wet', sky: 'rain', airF: 65, note: 'Standing water at Turn 2.' },
+  } })
+  await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (track conditions)' })).toContainText('Wet · Rain · 65°F')
+
+  // Details: the day's weather, how the surface went, and a note on the day.
+  await page.getByRole('tab', { name: 'Details' }).click()
+  const card = page.getByRole('region', { name: 'Conditions' })
+  await expect(card).toContainText('Rain in the morning, sunny in the afternoon')
+  await expect(card).toContainText('58–79°F · 0.44 in of rain · Nearby weather')
+  await expect(card).toContainText('Wet')
+  await expect(card).toContainText('Across 1 recorded session')
+  await card.getByRole('button', { name: 'Add a note on the day’s conditions' }).click()
+  const noteSheet = page.getByRole('dialog', { name: 'Note on the day’s conditions' })
+  await noteSheet.getByLabel('Your note').fill('Wet morning, grippy after lunch.')
+  await noteSheet.getByRole('button', { name: 'Save note' }).click()
+  await expect(noteSheet).toBeHidden()
+  expect(puts[1]).toEqual({ conditions: { note: 'Wet morning, grippy after lunch.' } })
+  await expect(card).toContainText('Wet morning, grippy after lunch.')
+
+  // My notes: the session's conditions on its card.
+  await page.getByRole('tab', { name: /My notes/ }).click()
+  await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' }).locator('[data-session-conditions]')).toContainText('Wet · Rain · 65°FStanding water at Turn 2.')
+})
+
 test('a driver adds their car and its photo in the Garage, logs a brake job, adds it to an event and logs tire pressures (#344)', async ({ page }) => {
   await stubEvents(page, [alpha])
   await signInAsAdmin(page)

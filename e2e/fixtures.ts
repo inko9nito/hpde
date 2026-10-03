@@ -17,6 +17,9 @@ export const test = base.extend<{ pageErrors: string[]; homeScreenBanner: boolea
   // Chromium runs see the same page; its own tests turn this on.
   homeScreenBanner: [false, { option: true }],
   page: async ({ page, homeScreenBanner }, use) => {
+    // No weather near the track (#347) unless a test stubs some: never the
+    // real Open-Meteo, whose answers change from run to run.
+    await page.route(/open-meteo\.com/, route => route.fulfill({ status: 503, body: 'No weather in tests' }))
     if (!homeScreenBanner) {
       await page.addInitScript(() => localStorage.setItem('hpde:homeScreenBannerDismissed', 'e2e'))
     }

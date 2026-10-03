@@ -1,11 +1,15 @@
 import { useId, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Timer, Waves } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import { Sheet } from './Sheet'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { TirePressuresForm, pressuresText } from './TirePressuresForm'
+import { ConditionsForm } from './ConditionsForm'
+import { conditionsText } from '../utils/conditions'
+import type { SessionConditions } from '../utils/conditions'
+import type { HourWeather } from '../data/weather'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
@@ -27,9 +31,10 @@ export interface SessionSlot {
 
 /**
  * What the sheet shows: what can be added to the session (#205), its laps,
- * its instructor evaluation (#340) or its tire pressures (#344).
+ * its instructor evaluation (#340), its tire pressures (#344) or its
+ * track conditions (#347).
  */
-export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures'
+export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures' | 'conditions'
 
 interface Props {
   slot: SessionSlot
@@ -55,6 +60,12 @@ interface Props {
   onRemove: (key: string) => Promise<void>
   onSaveEvaluation: (session: Omit<SessionNotes, 'key' | 'updatedAt'>) => Promise<void>
   onRemoveEvaluation: (key: string) => Promise<void>
+  /** The session's track conditions (#347), and the weather near the track at its hour. */
+  conditions?: {
+    nearby?: HourWeather
+    onSave: (session: Omit<SessionNotes, 'key' | 'updatedAt'> & { conditions: SessionConditions }) => Promise<void>
+    onRemove: (key: string) => Promise<void>
+  }
   /**
    * The session's tire pressures (#344), from the garage — only the
    * driver's own, so none for another driver's.
@@ -85,7 +96,7 @@ export function shortDate(iso: string): string {
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
-  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, pressures, onClose,
+  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, conditions, pressures, onClose,
 }: Props) {
   const [view, setView] = useState<SessionView>(startView)
   // With more than one group on track, start from the one that already has
@@ -261,11 +272,21 @@ export function LapTimesSheet({
           <MenuRow
             icon={ClipboardCheck}
             title="Instructor evaluation"
-            detail={notes ? notes.evaluation.feedback : 'Add what your instructor told you after this session'}
-            saved={!!notes}
+            detail={notes?.evaluation ? notes.evaluation.feedback : 'Add what your instructor told you after this session'}
+            saved={!!notes?.evaluation}
             disabled={group === null}
             onClick={() => setView('evaluation')}
           />
+          {conditions && (
+            <MenuRow
+              icon={Waves}
+              title="Track conditions"
+              detail={notes?.conditions ? conditionsText(notes.conditions) || notes.conditions.note || '' : 'The surface, weather and temperature'}
+              saved={!!notes?.conditions}
+              disabled={group === null}
+              onClick={() => setView('conditions')}
+            />
+          )}
           {pressures && (
             <MenuRow
               icon={Disc3}
@@ -443,6 +464,19 @@ export function LapTimesSheet({
             date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, evaluation,
           })}
           onRemove={() => onRemoveEvaluation(key)}
+        />
+      )}
+
+      {view === 'conditions' && conditions && group !== null && key !== null && !waiting && (
+        <ConditionsForm
+          key={`${key} ${driver?.id ?? ''}`}
+          existing={notes?.conditions}
+          nearby={conditions.nearby}
+          onBusyChange={setEvaluationBusy}
+          onSave={c => conditions.onSave({
+            date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, conditions: c,
+          })}
+          onRemove={() => conditions.onRemove(key)}
         />
       )}
 

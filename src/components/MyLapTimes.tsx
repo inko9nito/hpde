@@ -215,6 +215,7 @@ export function MyLapTimes({
               onEdit={() => onEdit(session, 'menu')}
               onOpenEvaluation={() => onEdit(session, 'evaluation')}
               onOpenPressures={() => onEdit(session, 'pressures')}
+              onOpenConditions={() => onEdit(session, 'conditions')}
               tableId={`laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`}
             />
           ))}
