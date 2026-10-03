@@ -118,8 +118,8 @@ function Accordion({ icon, title, children }: {
   )
 }
 
-/** `closeHref`: where ✕ goes — the tab it was opened from. */
-export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {}) {
+/** `closeHref`: where ✕ goes — the tab it was opened from; `onClose`, how (back to it, #429). */
+export function WidgetSetupPage({ closeHref = '#/', onClose }: { closeHref?: string; onClose?: () => void } = {}) {
   const [preview, setPreview] = useState<PreviewId>('medium')
   const [showScript, setShowScript] = useState(false)
   const [scriptCopied, copyScript] = useCopy()
@@ -135,6 +135,10 @@ export function WidgetSetupPage({ closeHref = '#/' }: { closeHref?: string } = {
           {/* A sheet's ✕, as on iOS (#415): a gray circle. */}
           <a
             href={closeHref}
+            onClick={onClose && (e => {
+              e.preventDefault()
+              onClose()
+            })}
             aria-label="Close"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600 transition-colors hover:bg-gray-200"
           >

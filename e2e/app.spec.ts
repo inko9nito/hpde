@@ -1463,6 +1463,72 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   await expect(page.getByText('Private', { exact: true })).toHaveCount(0)
 })
 
+test('Back returns through history: a swipe back from the Garage after deleting a car is More, not the car (#429)', async ({ page }) => {
+  await stubEvents(page, [alpha])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const garage = {
+    cars: [
+      { id: 'c1', year: 2018, make: 'Porsche', model: 'Panamera 4S', nickname: 'Beluga' },
+      { id: 'c2', year: 2019, make: 'Test', model: 'Test' },
+    ],
+    events: {},
+  }
+  await page.route(/\/api\/garage(\?|$)/, route => {
+    const req = route.request()
+    if (req.method() === 'DELETE') {
+      const id = new URL(req.url()).searchParams.get('car')
+      garage.cars = garage.cars.filter(c => c.id !== id)
+      return route.fulfill({ json: {} })
+    }
+    return route.fulfill({ json: garage })
+  })
+  const heading = (name: string) => page.getByRole('heading', { level: 1, name, exact: true })
+  const cards = page.getByRole('list', { name: 'Cars' }).getByRole('link')
+  const pageOf = (name: string) => page.locator('.fixed.inset-0', { has: heading(name) })
+
+  await page.goto('/#/more')
+  await page.getByRole('link', { name: /^Garage/ }).click()
+  await expect(heading('Garage')).toBeInViewport()
+
+  // Back from a car's page is a step back: the browser's back from the
+  // Garage then is More, not the car again.
+  await cards.filter({ hasText: 'Beluga' }).click()
+  await expect(heading('Beluga')).toBeInViewport()
+  await pageOf('Beluga').getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/garage$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(heading('More')).toBeInViewport()
+
+  // Deleted from its page: back in the Garage, and back from there, More.
+  await page.getByRole('link', { name: /^Garage/ }).click()
+  await cards.filter({ hasText: 'Test Test' }).click()
+  const carPage = pageOf('Test Test')
+  await expect(heading('Test Test')).toBeInViewport()
+  await carPage.getByRole('button', { name: 'More actions' }).click()
+  await carPage.getByRole('menuitem', { name: 'Delete' }).click()
+  await page.getByRole('alertdialog', { name: /^Delete “.*Test Test”\?$/ }).getByRole('button', { name: 'Delete' }).click()
+  await expect(page.getByRole('status')).toHaveText('Car deleted')
+  await expect(page).toHaveURL(/#\/garage$/)
+  await expect(cards).toHaveCount(1)
+  await page.goBack()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(heading('More')).toBeInViewport()
+  await expect(page.getByText('This car isn’t in your garage')).toHaveCount(0)
+
+  // A link straight to a car: Back to the Garage takes its place, so back
+  // from the Garage doesn't open the car again.
+  await page.goto('/#/garage/c1')
+  await expect(heading('Beluga')).toBeInViewport()
+  await pageOf('Beluga').getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/garage$/)
+  await page.goBack()
+  await expect(page).not.toHaveURL(/#\/garage\/c1$/)
+})
+
 test('a track page slides in over the event from My notes, listing the layout’s events, which open over it (#274)', async ({ page }) => {
   // An earlier event on the same layout as Alpha.
   const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }

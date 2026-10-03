@@ -10,6 +10,7 @@ import { EventInfo } from './components/EventInfo'
 import { Toggle } from './components/Toggle'
 import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
+import { goBackTo, hashChanged, loadHashHistory, replaceWith } from './utils/hashHistory'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
@@ -85,6 +86,7 @@ function defaultDay(event: EventConfig): DaySchedule {
  */
 function useHashRoute() {
   const [route, setRoute] = useState(() => ({ hash: window.location.hash, swiped: false }))
+  const [nav] = useState(loadHashHistory)
   useEffect(() => {
     // A history move fires popstate, then hashchange. Safari holds what's
     // on screen until its swipe has finished, then shows the page as it
@@ -95,6 +97,7 @@ function useHashRoute() {
       swiped = e.hasUAVisualTransition === true
     }
     const onHashChange = () => {
+      hashChanged(nav)
       // The page underneath keeps its place: back from an event's page,
       // the list is where you left it (#389). Only a tab switch starts at
       // the top (App).
@@ -112,7 +115,20 @@ function useHashRoute() {
     if (window.location.hash === next) return
     window.location.hash = next
   }
-  return [route.hash, setHash, route.swiped] as const
+  // Back (or Cancel, or ✕) to the page under this one: back through
+  // history when it's the page before, so a swipe back from there doesn't
+  // return to the one just left (#429).
+  function goBack(target: string) {
+    if (window.location.hash === target) return
+    if (goBackTo(nav, target) === 'replaced') setRoute({ hash: target, swiped: false })
+  }
+  // A redirect: in this entry's place, so Back doesn't land on it again.
+  function replaceHash(next: string) {
+    if (window.location.hash === next) return
+    replaceWith(nav, next)
+    setRoute({ hash: next, swiped: false })
+  }
+  return [route.hash, setHash, route.swiped, goBack, replaceHash] as const
 }
 
 const EVENT_HASH_PREFIX = '#/event/'
@@ -237,7 +253,7 @@ function isEmptyHash(hash: string): boolean {
 }
 
 export default function App() {
-  const [hash, setHash, swiped] = useHashRoute()
+  const [hash, setHash, swiped, goBack, replaceHash] = useHashRoute()
   const { status: authStatus, user, actingAs, testAccount } = useAuth()
   const { events: EVENTS, allEvents: ALL_EVENTS, loaded: eventsLoaded, isStored } = useEvents()
   const ownRsvps = useRsvps()
@@ -522,12 +538,12 @@ export default function App() {
   }
 
   function goHome() {
-    setHash(LANDING_HASH)
+    goBack(LANDING_HASH)
   }
 
   // Back from a pushed page: to the tab it was opened from.
   function backToTab() {
-    setHash(HOME_TAB_HASH[homeTab])
+    goBack(HOME_TAB_HASH[homeTab])
   }
 
   // From a track page, one of its events, for its sessions: My notes (or,
@@ -558,7 +574,7 @@ export default function App() {
     }
     if (isEmptyHash(hash)) {
       const { live } = partitionEvents(EVENTS)
-      setHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
+      replaceHash(live.length > 0 ? eventHash(live[0].id) : LANDING_HASH)
     }
     // ALL_EVENTS too: events arrive from the store after load, so a
     // direct link to one only resolves once the fetch lands.
@@ -568,7 +584,7 @@ export default function App() {
   // event page's slide-in.
   function backToEvent(eventId: string) {
     skipPushEnterAnimationRef.current = true
-    setHash(eventHash(eventId))
+    goBack(eventHash(eventId))
   }
 
 
@@ -627,7 +643,7 @@ export default function App() {
       >
         <ArchivedCarsPage
           events={ALL_EVENTS}
-          onBack={() => setHash(MORE_PAGE_HASH.garage)}
+          onBack={() => goBack(MORE_PAGE_HASH.garage)}
           onOpenCar={id => {
             setCarFromArchived(id)
             setHash(carHash(id))
@@ -660,9 +676,9 @@ export default function App() {
           notesCount={notesCount}
           onRunGroup={id => setSelectedGroups([id])}
           onBack={
-            trackUnderEvent !== null ? () => setHash(trackHash(trackUnderEvent))
-              : carUnderEvent !== null ? () => setHash(carHash(carUnderEvent))
-              : moreUnderEvent !== null ? () => setHash(moreUnderEvent)
+            trackUnderEvent !== null ? () => goBack(trackHash(trackUnderEvent))
+              : carUnderEvent !== null ? () => goBack(carHash(carUnderEvent))
+              : moreUnderEvent !== null ? () => goBack(moreUnderEvent)
               : backToTab
           }
           onDeleted={() => {
@@ -812,13 +828,13 @@ export default function App() {
           carId={shownCarId}
           events={ALL_EVENTS}
           // Back to the event it was opened from, the archived cars, or the Garage.
-          onBack={() => setHash(eventUnderCar !== null ? eventHash(eventUnderCar) : carFromArchived === shownCarId ? ARCHIVED_HASH : MORE_PAGE_HASH.garage)}
+          onBack={() => goBack(eventUnderCar !== null ? eventHash(eventUnderCar) : carFromArchived === shownCarId ? ARCHIVED_HASH : MORE_PAGE_HASH.garage)}
           // One of its events opens over it, on My notes, where its car is —
           // or, the one it was opened from, back to it.
           onOpenEvent={event => {
             if (event.id === eventUnderCar) {
               setActiveTab('notes')
-              setHash(eventHash(event.id))
+              goBack(eventHash(event.id))
               return
             }
             setUnderCar(null)
@@ -874,7 +890,9 @@ export default function App() {
           <NewEventPage
             onClose={goHome}
             onCreated={event => {
-              switchEvent(event)
+              // In the form's place: Back from the event doesn't open it again (#429).
+              selectEvent(event)
+              replaceHash(eventHash(event.id))
               // Already in place under this page, so sliding it back down
               // reveals the new event — rather than that sliding in too.
               skipPushEnterAnimationRef.current = true
@@ -885,34 +903,35 @@ export default function App() {
         ) : shownOverlay.kind === 'edit-event' ? (
           <EditEventPage
             eventId={shownOverlay.eventId}
-            onClose={() => setHash(eventHash(shownOverlay.eventId))}
+            onClose={() => goBack(eventHash(shownOverlay.eventId))}
             onSaved={() => {
-              setHash(eventHash(shownOverlay.eventId))
+              goBack(eventHash(shownOverlay.eventId))
               showToast('Details saved')
             }}
           />
         ) : shownOverlay.kind === 'edit-schedule' ? (
           <ScheduleEditorPage
             eventId={shownOverlay.eventId}
-            onClose={() => setHash(eventHash(shownOverlay.eventId))}
+            onClose={() => goBack(eventHash(shownOverlay.eventId))}
             onSaved={() => {
               setActiveTab('schedule')
-              setHash(eventHash(shownOverlay.eventId))
+              goBack(eventHash(shownOverlay.eventId))
               showToast('Schedule saved')
             }}
           />
         ) : shownOverlay.kind === 'join-car' ? (
           <JoinCarPage
             token={shownOverlay.token}
-            onClose={() => setHash(HOME_TAB_HASH[homeTab])}
+            onClose={() => goBack(HOME_TAB_HASH[homeTab])}
             // Its page, over the Garage.
             onJoined={(carId, joined) => {
               if (joined) showToast('Added to your garage')
-              setHash(carHash(carId))
+              // In the invite's place: Back from the car is the Garage, not the invite again.
+              replaceHash(carHash(carId))
             }}
           />
         ) : (
-          <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} />
+          <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} onClose={() => goBack(HOME_TAB_HASH[homeTab])} />
         )}
       </PushPage>
     )}
@@ -922,7 +941,7 @@ export default function App() {
           id: share.eventId,
           name: ALL_EVENTS.find(e => e.id === share.eventId)?.name,
         }}
-        onClose={() => setHash(share.eventId === undefined ? HOME_TAB_HASH[homeTab] : eventHash(share.eventId))}
+        onClose={() => goBack(share.eventId === undefined ? HOME_TAB_HASH[homeTab] : eventHash(share.eventId))}
       />
     )}
     {lapSlot && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
