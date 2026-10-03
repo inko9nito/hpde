@@ -283,11 +283,11 @@ async function sheetGone() {
   })
 }
 
-// Back on the session's list once what was picked from it has slid back
-// out (#445) — on Save, Remove or Cancel.
+// Back on the session's list once what was picked from it has slid down
+// (#445) — on Save, Remove or Cancel.
 async function backOnList() {
   await waitFor(() => expect(document.querySelector('[data-lap-page]')).toBeNull())
-  const list = screen.getByRole('dialog', { name: /^\d/ })
+  const list = await screen.findByRole('dialog', { name: /^\d/ })
   expect(within(list).getByRole('navigation', { name: 'Session info' })).toBeInTheDocument()
   return list
 }
@@ -298,13 +298,13 @@ async function closeList() {
   await sheetGone()
 }
 
-// In the session's sheet, opens one of the things it can have: a page,
-// named for it and the session, pushed over the list as the sheet grows
-// (#388, #445).
+// In the session's sheet, opens one of the things it can have: a page
+// sheet, named for it and the session, once the list has slid away (#388,
+// #445).
 async function openInSheet(what: 'Lap times' | 'Instructor feedback') {
-  const nav = await within(screen.getByRole('dialog')).findByRole('navigation', { name: 'Session info' })
+  const nav = await within(await screen.findByRole('dialog')).findByRole('navigation', { name: 'Session info' })
   await userEvent.click(within(nav).getByRole('button', { name: new RegExp(`^${what}`) }))
-  return screen.getByRole('dialog', { name: new RegExp(`^${what}, `) })
+  return screen.findByRole('dialog', { name: new RegExp(`^${what}, `) })
 }
 
 // An event's figures on a track page, by label.
@@ -2124,7 +2124,7 @@ describe('the garage (#344)', () => {
     // Pressures after the track's conditions: they're set before the session (#388).
     expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Track conditions', 'Tire pressures', 'Instructor feedback', 'Lap times'])
     await userEvent.click(within(nav).getByRole('button', { name: /^Tire pressures/ }))
-    const page = screen.getByRole('dialog', { name: 'Tire pressures, 11:45 AM · Blue' })
+    const page = await screen.findByRole('dialog', { name: 'Tire pressures, 11:45 AM · Blue' })
     expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Tire pressures')
     expect(within(page).getByRole('button', { name: 'Save' })).toBeDisabled()
     for (const [corner, psi] of [['Front left', '30'], ['Front right', '30'], ['Rear left', '28.5'], ['Rear right', '28.5']]) {

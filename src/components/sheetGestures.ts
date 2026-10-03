@@ -8,9 +8,6 @@ import type { RefObject } from 'react'
 //    — drags it, and lets go of it past a third of its height, or with a
 //    flick, to close it; short of that it springs back up. Never while
 //    it's busy, or its Cancel (data-sheet-cancel) is disabled: saving;
-//  - a sheet with a page pushed over what's in it (#445) is dragged the
-//    same way, but let go past the same point it goes back a page, as its
-//    Cancel does, rather than closing;
 //  - nothing scrolls the page behind it: not a finger on the dimmed page,
 //    nor one that runs past the end of what's in the sheet. What's in it
 //    still scrolls, and its text boxes are left alone.
@@ -55,22 +52,19 @@ const inField = (el: Element | null) => !!el?.closest('input, textarea, select, 
  * (`backdrop`, if it has one) and the sheet itself (`panel`). `onClose` once
  * it's been dragged away — after sliding the rest of the way down itself,
  * or, with `slideOut` false, straight away, for a page that slides itself
- * out (PushPage). Never while `busy`; none at all unless `enabled`. Given
- * `back` (a page pushed in it, #445), dragged away it springs back up as
- * `back` takes the page off, instead of closing.
+ * out (PushPage). Never while `busy`; none at all unless `enabled`.
  */
-export function useSheetGestures({ root, panel, backdrop, onClose, back, busy = false, enabled = true, slideOut = true }: {
+export function useSheetGestures({ root, panel, backdrop, onClose, busy = false, enabled = true, slideOut = true }: {
   root: RefObject<HTMLElement | null>
   panel: RefObject<HTMLElement | null>
   backdrop?: RefObject<HTMLElement | null>
   onClose: () => void
-  back?: () => void
   busy?: boolean
   enabled?: boolean
   slideOut?: boolean
 }) {
-  const latest = useRef({ onClose, back, busy })
-  latest.current = { onClose, back, busy }
+  const latest = useRef({ onClose, busy })
+  latest.current = { onClose, busy }
 
   useEffect(() => {
     const overlay = root.current
@@ -158,14 +152,7 @@ export function useSheetGestures({ root, panel, backdrop, onClose, back, busy = 
       if (mode === 'drag') {
         // A finger that stopped before letting go isn't a flick.
         const flicked = e.timeStamp - lastT < 100 && velocity > FLICK_PX_PER_MS && offset > 0
-        const away = e.type === 'touchend' && (offset > sheet.offsetHeight * DISMISS_FRACTION || flicked)
-        const back = latest.current.back
-        if (away && back) {
-          // Back a page: up it springs, as it shrinks back down to what
-          // was under the page (#445).
-          place(0, true)
-          back()
-        } else if (away) {
+        if (e.type === 'touchend' && (offset > sheet.offsetHeight * DISMISS_FRACTION || flicked)) {
           closing = true
           if (slideOut) {
             place(sheet.offsetHeight, true)
