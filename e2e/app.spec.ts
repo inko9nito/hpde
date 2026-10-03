@@ -1001,21 +1001,24 @@ async function slidAway(page: Page, selector: string, act: () => Promise<unknown
 }
 
 // Whether what `selector` finds, once there, rises into place from lower
-// down: seen lower than where it settles at some point on the way — not
-// necessarily on its first frame, which WebKit can paint before its rise
-// starts.
+// down: seen lower than where it settles on the way, or with its rise from
+// the bottom of the screen running (CSS's sheet-up, src/index.css) — WebKit
+// doesn't report where a CSS animation has got to, only Chromium does.
 function risesInto(page: Page, selector: string) {
   return page.evaluate(selector => new Promise<boolean>(resolve => {
     let lowest = -Infinity
+    let rising = false
     let last: number | undefined
     let still = 0
     const step = () => {
-      const top = document.querySelector(selector)?.getBoundingClientRect().top
-      if (top !== undefined) {
+      const el = document.querySelector(selector)
+      if (el) {
+        const top = el.getBoundingClientRect().top
         lowest = Math.max(lowest, top)
+        rising ||= el.getAnimations().some(a => (a as CSSAnimation).animationName === 'sheet-up' && a.playState === 'running')
         still = top === last ? still + 1 : 0
         last = top
-        if (still > 10) return resolve(lowest > top + 20)
+        if (still > 10) return resolve(rising || lowest > top + 20)
       }
       requestAnimationFrame(step)
     }
