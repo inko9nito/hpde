@@ -1048,6 +1048,24 @@ async function closeSessionList(page: Page) {
   await expect(list).toHaveCount(0)
 }
 
+// Whether the page behind a sheet that `selector` finds dims as it rises,
+// rather than all at once (#445): seen part dimmed, then fully.
+function dimsIn(page: Page, selector: string) {
+  return page.evaluate(selector => new Promise<boolean>(resolve => {
+    let partly = false
+    const step = () => {
+      const dim = document.querySelector(selector)?.previousElementSibling
+      if (dim) {
+        const opacity = Number(getComputedStyle(dim).opacity)
+        if (opacity < 0.9) partly = true
+        if (opacity === 1) return resolve(partly)
+      }
+      requestAnimationFrame(step)
+    }
+    step()
+  }), selector)
+}
+
 // While `act` runs, and until it's settled: whether the session's sheet
 // (#445) grew or shrank with the list or the page in it showing, rather
 // than fading one out, resizing, then fading the other in.
@@ -1089,8 +1107,10 @@ test('a session’s list fades out, the sheet grows into a page sheet, and what�
   await page.goto(`/#/event/${alpha.id}`)
   const list = '[data-lap-sheet] [role="dialog"]'
   const opened = risesInto(page, list)
+  const dimmed = dimsIn(page, list)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   expect(await opened).toBe(true)
+  expect(await dimmed).toBe(true)
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue', exact: true })
   await expect.poll(async () => (await menu.boundingBox())!.y).toBeGreaterThan(200)
   const listTop = (await menu.boundingBox())!.y

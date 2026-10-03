@@ -72,12 +72,21 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
     sheet.style.transition = `transform ${ease}`
     sheet.style.transform = 'translateY(100%)'
     if (dim) {
+      // Still dimming, it brightens from where it's got to.
+      dim.style.opacity = getComputedStyle(dim).opacity
+      dim.getAnimations?.().forEach(a => a.cancel())
+      void dim.offsetHeight
       dim.style.transition = `opacity ${ease}`
       dim.style.opacity = '0'
     }
     timer.current = setTimeout(done, SETTLE_MS)
   }
   if (dismissRef) dismissRef.current = dismiss
+  // The page dims behind it as it rises, not all at once (#445).
+  useLayoutEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    backdrop.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: SETTLE_MS, easing: SETTLE_EASE })
+  }, [])
   // The page behind it doesn't scroll, with a mouse wheel either.
   useHtmlClass('bottom-sheet-open', true)
 
