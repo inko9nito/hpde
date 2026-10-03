@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import type { EventEvaluation, SessionNotes } from '../utils/evaluation'
+import type { EventConditions } from '../utils/conditions'
 
 // The signed-in driver's notes for one event (#340), from the notes
 // function: each session's instructor feedback, and a TDE event's report
@@ -14,6 +15,8 @@ export interface NotesLog {
   status: NotesStatus
   /** The event's report card, if one's saved. */
   evaluation?: EventEvaluation
+  /** Their note on the whole event's conditions (#347). */
+  conditions?: EventConditions
   /** In schedule order. */
   sessions: SessionNotes[]
   byKey: Map<string, SessionNotes>
@@ -22,12 +25,16 @@ export interface NotesLog {
   removeSession(key: string): Promise<void>
   saveEvaluation(evaluation: EventEvaluation): Promise<void>
   removeEvaluation(): Promise<void>
+  /** Saves the note on the event's conditions (#347), replacing any. */
+  saveConditions(conditions: EventConditions): Promise<void>
+  removeConditions(): Promise<void>
   reload(): void
 }
 
 interface Loaded {
   url: string
   evaluation?: EventEvaluation
+  conditions?: EventConditions
   sessions: SessionNotes[]
 }
 
@@ -71,6 +78,7 @@ export function useNotesLog(eventId: string | null, driverId: string | null = nu
           setLoaded({
             url,
             ...(body?.evaluation ? { evaluation: body.evaluation } : {}),
+            ...(body?.conditions ? { conditions: body.conditions } : {}),
             sessions: Array.isArray(body?.sessions) ? inOrder(body.sessions) : [],
           })
         }
@@ -88,6 +96,7 @@ export function useNotesLog(eventId: string | null, driverId: string | null = nu
   const sessions = useMemo(() => (current ? loaded!.sessions : []), [current, loaded])
   const byKey = useMemo(() => new Map(sessions.map(s => [s.key, s])), [sessions])
   const evaluation = current ? loaded!.evaluation : undefined
+  const conditions = current ? loaded!.conditions : undefined
   const status: NotesStatus = !active ? 'off' : current ? 'ready' : failed ? 'error' : 'loading'
 
   const mine = useCallback((prev: Loaded | null): Loaded => (prev?.url === url ? prev : { url, sessions: [] }), [url])
@@ -134,15 +143,32 @@ export function useNotesLog(eventId: string | null, driverId: string | null = nu
     })
   }, [send, mine])
 
+  const saveConditions = useCallback(async (next: EventConditions) => {
+    const saved = (await (await send(put({ conditions: next }))).json()).conditions as EventConditions
+    setLoaded(prev => ({ ...mine(prev), conditions: saved }))
+  }, [send, mine])
+
+  const removeConditions = useCallback(async () => {
+    await send({ method: 'DELETE' }, '&conditions=1')
+    setLoaded(prev => {
+      const { conditions: _gone, ...rest } = mine(prev)
+      return rest
+    })
+  }, [send, mine])
+
   const reload = useCallback(() => setAttempt(a => a + 1), [])
 
-  return { status, evaluation, sessions, byKey, saveSession, removeSession, saveEvaluation, removeEvaluation, reload }
+  return {
+    status, evaluation, conditions, sessions, byKey,
+    saveSession, removeSession, saveEvaluation, removeEvaluation, saveConditions, removeConditions, reload,
+  }
 }
 
 /** One event's notes, as the list of every event's has them (#345). */
 export interface EventNotes {
   eventId: string
   evaluation?: EventEvaluation
+  conditions?: EventConditions
   sessions: SessionNotes[]
 }
 

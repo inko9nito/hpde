@@ -3,10 +3,15 @@ import { Calendar, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximiz
 import type { LucideIcon } from 'lucide-react'
 import { MapViewer } from './MapViewer'
 import { formatDateRangeWithWeekday } from '../utils/time'
+import { EventConditionsCard } from './EventConditionsCard'
+import type { EventConditionsProps } from './EventConditionsCard'
 import type { EventConfig } from '../types'
 
 interface Props {
   event: EventConfig
+  /** The weather near the track, and the driver's own conditions (#347). */
+  weather?: EventConditionsProps['weather']
+  conditions?: EventConditionsProps['conditions']
 }
 
 function linkDisplay(url: string): string {
@@ -49,7 +54,7 @@ function Row({ icon: Icon, label, subtitle, children }: RowProps) {
   )
 }
 
-export function EventInfo({ event }: Props) {
+export function EventInfo({ event, weather, conditions }: Props) {
   const [mapExpanded, setMapExpanded] = useState(false)
 
   const dates = formatDateRangeWithWeekday(event.days)
@@ -64,6 +69,7 @@ export function EventInfo({ event }: Props) {
 
   return (
     <>
+      {weather && <EventConditionsCard event={event} weather={weather} conditions={conditions} />}
       <div className="pl-1">
         {dates && <Row icon={Calendar} label="Dates">{dates}</Row>}
         {event.organizer && <Row icon={Users} label="Organizer">{event.organizer}</Row>}

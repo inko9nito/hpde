@@ -9,6 +9,7 @@
 // What's read and checked here is shared by the app (the forms) and the
 // notes function (which checks what it's sent before saving).
 import type { EventConfig } from '../types'
+import type { SessionConditions } from './conditions'
 
 /** A session's instructor feedback. */
 export interface SessionEvaluation {
@@ -16,7 +17,7 @@ export interface SessionEvaluation {
   instructor?: string
 }
 
-/** One session's notes: for now, its instructor evaluation. */
+/** One session's notes: its instructor evaluation and its track conditions (#347). */
 export interface SessionNotes {
   /** `${date} ${time} ${group}` — the same key as the session's laps (sessionKey). */
   key: string
@@ -24,7 +25,9 @@ export interface SessionNotes {
   time: string
   group: string
   sessionNumber?: number
-  evaluation: SessionEvaluation
+  evaluation?: SessionEvaluation
+  /** The track conditions they recorded (#347). */
+  conditions?: SessionConditions
   updatedAt?: string
   /** Who saved them, when it wasn't the driver: an admin's email (#288). */
   loggedBy?: string

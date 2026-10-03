@@ -3,24 +3,31 @@ import { ensureCopied, isSampleDriver, openStores, whoseRecords } from '../lib/d
 import type { DriverStores, StoreDeps } from '../lib/driverStore.mts'
 import { cleanEventEvaluation, cleanSessionEvaluation } from '../../src/utils/evaluation.ts'
 import type { EventEvaluation, SessionNotes } from '../../src/utils/evaluation.ts'
+import { cleanEventConditions, cleanSessionConditions } from '../../src/utils/conditions.ts'
+import type { EventConditions } from '../../src/utils/conditions.ts'
 import { DATE, GROUP, TIME, sessionKey } from '../../src/utils/lapTimes.ts'
 import { SAMPLE_REPORT_CARDS } from '../../src/data/fixtures/sampleReportCards.ts'
 
 // A signed-in driver's notes on an event (#340), private to them, as their
 // laps are (laps.mts): every request needs their sign-in and only reaches
 // their own — or, for an admin, the driver named by `driver=<user id>`
-// (#288). For now the notes are their instructor's evaluations: each
-// session's feedback, and a TDE event's report card for the whole event.
+// (#288). The notes are their instructor's evaluations — each session's
+// feedback, and a TDE event's report card for the whole event — and the
+// track conditions they recorded (#347): each session's, and a note on the
+// whole event's.
 // The sample laps' driver (#310) gets their two report cards from the same
 // sheet, once (#350; see ensureOwnReportCards).
 //   GET                               every event's notes: { events: [{ eventId,
 //                                     evaluation?, sessions }] } — for the
 //                                     Instructor evaluations page (#345)
-//   GET    ?event=                    the event's notes: { evaluation?, sessions }
-//   PUT    ?event=  {session}         saves one session's notes (replacing any)
+//   GET    ?event=                    the event's notes: { evaluation?, conditions?, sessions }
+//   PUT    ?event=  {session}         saves one session's notes (replacing any):
+//                                     its evaluation, its conditions, or both
 //   PUT    ?event=  {evaluation}      saves the event's report card (replacing any)
+//   PUT    ?event=  {conditions}      saves the note on the event's conditions (replacing any)
 //   DELETE ?event=&session=<key>      removes one session's notes
 //   DELETE ?event=&evaluation=1       removes the report card
+//   DELETE ?event=&conditions=1       removes the note on the event's conditions
 //
 // Kept in Netlify Blobs, one record per driver per event, keyed
 // `<user id>/<event id>`. A deploy preview gets a store of its own, which
@@ -42,6 +49,7 @@ const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/
 interface EventNotes {
   eventId: string
   evaluation?: EventEvaluation
+  conditions?: EventConditions
   sessions: Record<string, SessionNotes>
 }
 
@@ -79,7 +87,10 @@ function inOrder(record: EventNotes | null): SessionNotes[] {
   return Object.values(record?.sessions ?? {}).sort((a, b) => a.key.localeCompare(b.key))
 }
 
-/** A session's notes as sent: which session (checked as its laps are), and its evaluation. */
+/**
+ * A session's notes as sent: which session (checked as its laps are), and
+ * its evaluation, its conditions (#347), or both.
+ */
 function cleanSession(raw: unknown): { session: Omit<SessionNotes, 'updatedAt' | 'loggedBy'> } | { error: string } {
   const r = (raw ?? {}) as Record<string, unknown>
   if (typeof r.date !== 'string' || !DATE.test(r.date)) return { error: 'Missing the session’s day.' }
@@ -87,14 +98,18 @@ function cleanSession(raw: unknown): { session: Omit<SessionNotes, 'updatedAt' |
   if (typeof r.group !== 'string' || !GROUP.test(r.group)) return { error: 'Missing the session’s run group.' }
   const n = r.sessionNumber
   if (n !== undefined && (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 999)) return { error: 'Bad session number.' }
-  const evaluation = cleanSessionEvaluation(r.evaluation)
-  if ('error' in evaluation) return evaluation
+  if (r.evaluation == null && r.conditions == null) return { error: 'Add the instructor’s feedback.' }
+  const evaluation = r.evaluation == null ? undefined : cleanSessionEvaluation(r.evaluation)
+  if (evaluation && 'error' in evaluation) return evaluation
+  const conditions = r.conditions == null ? undefined : cleanSessionConditions(r.conditions)
+  if (conditions && 'error' in conditions) return conditions
   return {
     session: {
       key: sessionKey(r.date, r.time, r.group),
       date: r.date, time: r.time, group: r.group,
       ...(n !== undefined ? { sessionNumber: n } : {}),
-      evaluation: evaluation.value,
+      ...(evaluation ? { evaluation: evaluation.value } : {}),
+      ...(conditions ? { conditions: conditions.value } : {}),
     },
   }
 }
@@ -120,7 +135,12 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     const records = await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' }) as Promise<EventNotes | null>))
     const events = records.flatMap(record => {
       if (!record) return []
-      return [{ eventId: record.eventId, ...(record.evaluation ? { evaluation: record.evaluation } : {}), sessions: inOrder(record) }]
+      return [{
+        eventId: record.eventId,
+        ...(record.evaluation ? { evaluation: record.evaluation } : {}),
+        ...(record.conditions ? { conditions: record.conditions } : {}),
+        sessions: inOrder(record),
+      }]
     })
     return json(200, { events })
   }
@@ -134,12 +154,16 @@ export default async function handler(req: Request, context: unknown, deps: Deps
   const record = (await store.get(key, { type: 'json' })) as EventNotes | null
 
   if (req.method === 'GET') {
-    return json(200, { ...(record?.evaluation ? { evaluation: record.evaluation } : {}), sessions: inOrder(record) })
+    return json(200, {
+      ...(record?.evaluation ? { evaluation: record.evaluation } : {}),
+      ...(record?.conditions ? { conditions: record.conditions } : {}),
+      sessions: inOrder(record),
+    })
   }
 
   // Saves what's left, or with nothing left, removes the record.
   const put = async (next: EventNotes) => {
-    if (!next.evaluation && Object.keys(next.sessions).length === 0) await store.delete(key)
+    if (!next.evaluation && !next.conditions && Object.keys(next.sessions).length === 0) await store.delete(key)
     else await store.setJSON(key, next)
   }
   const current: EventNotes = { eventId, sessions: {}, ...record }
@@ -154,6 +178,12 @@ export default async function handler(req: Request, context: unknown, deps: Deps
       const { evaluation: _gone, ...rest } = current
       await put(rest)
       return json(200, { deleted: 'evaluation' })
+    }
+    if (params.get('conditions')) {
+      if (!current.conditions) return json(404, { error: 'No conditions saved for this event.' })
+      const { conditions: _gone, ...rest } = current
+      await put(rest)
+      return json(200, { deleted: 'conditions' })
     }
     const session = params.get('session') ?? ''
     if (!current.sessions[session]) return json(404, { error: 'No notes saved for that session.' })
@@ -175,6 +205,14 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     const evaluation: EventEvaluation = { ...cleaned.value, ...stamp }
     await put({ ...current, evaluation })
     return json(200, { evaluation })
+  }
+
+  if (body?.conditions !== undefined) {
+    const cleaned = cleanEventConditions(body.conditions)
+    if ('error' in cleaned) return json(400, { error: cleaned.error })
+    const conditions: EventConditions = { ...cleaned.value, ...stamp }
+    await put({ ...current, conditions })
+    return json(200, { conditions })
   }
 
   const cleaned = cleanSession(body?.session)

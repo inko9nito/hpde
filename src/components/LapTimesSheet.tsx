@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Disc3, Timer, Waves } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
@@ -11,6 +11,10 @@ import type { Dismiss } from './Sheet'
 import { PushPage } from './PushPage'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { TirePressuresForm, pressuresText } from './TirePressuresForm'
+import { ConditionsForm } from './ConditionsForm'
+import { conditionsText } from '../utils/conditions'
+import type { SessionConditions } from '../utils/conditions'
+import type { HourWeather } from '../data/weather'
 import { formatTime, formatAmPm } from '../utils/time'
 import { IOS_SPRING_MS } from '../utils/iosSpring'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
@@ -33,15 +37,17 @@ export interface SessionSlot {
 
 /**
  * What the sheet shows: what can be added to the session (#205), its laps,
- * its instructor evaluation (#340) or its tire pressures (#344).
+ * its instructor evaluation (#340), its tire pressures (#344) or its
+ * track conditions (#347).
  */
-export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures'
+export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures' | 'conditions'
 
 /** What each is called: its row in the menu, and its toolbar's title (#388). */
 const VIEW_TITLE: Record<Exclude<SessionView, 'menu'>, string> = {
   laps: 'Lap times',
   evaluation: 'Instructor feedback',
   pressures: 'Tire pressures',
+  conditions: 'Track conditions',
 }
 
 interface Props {
@@ -68,6 +74,12 @@ interface Props {
   onRemove: (key: string) => Promise<void>
   onSaveEvaluation: (session: Omit<SessionNotes, 'key' | 'updatedAt'>) => Promise<void>
   onRemoveEvaluation: (key: string) => Promise<void>
+  /** The session's track conditions (#347), and the weather near the track at its hour. */
+  conditions?: {
+    nearby?: HourWeather
+    onSave: (session: Omit<SessionNotes, 'key' | 'updatedAt'> & { conditions: SessionConditions }) => Promise<void>
+    onRemove: (key: string) => Promise<void>
+  }
   /**
    * The session's tire pressures (#344), from the garage — only the
    * driver's own, so none for another driver's.
@@ -100,7 +112,7 @@ export function shortDate(iso: string): string {
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
-  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, pressures, onClose,
+  loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, conditions, pressures, onClose,
 }: Props) {
   // What's up: the list (a sheet from the bottom), or one of what's on it,
   // in a page sheet (#388) — sliding up as the list slides down.
@@ -317,7 +329,16 @@ export function LapTimesSheet({
 
       {!waiting && (
         <nav aria-label="Session info" className="mt-4 flex flex-col gap-2">
-          {/* In the order the day goes: pressures before and after, what the instructor said, then the timing sheet. */}
+          {/* In the order the day goes: the track as they went out, pressures before and after, what the instructor said, then the timing sheet. */}
+          {conditions && (
+            <MenuRow
+              icon={Waves}
+              title={VIEW_TITLE.conditions}
+              detail={notes?.conditions && (conditionsText(notes.conditions) || notes.conditions.note)}
+              disabled={group === null}
+              onClick={() => openPage('conditions')}
+            />
+          )}
           {pressures && (
             <MenuRow
               icon={Disc3}
@@ -330,7 +351,7 @@ export function LapTimesSheet({
           <MenuRow
             icon={ClipboardCheck}
             title={VIEW_TITLE.evaluation}
-            detail={notes?.evaluation.feedback}
+            detail={notes?.evaluation?.feedback}
             disabled={group === null}
             onClick={() => openPage('evaluation')}
           />
@@ -530,6 +551,24 @@ export function LapTimesSheet({
           }}
           onRemove={async () => {
             await onRemoveEvaluation(key)
+            finish()
+          }}
+        />
+      )}
+
+      {page === 'conditions' && conditions && group !== null && key !== null && !waiting && (
+        <ConditionsForm
+          toolbar={toolbar}
+          key={`${key} ${driver?.id ?? ''}`}
+          existing={notes?.conditions}
+          nearby={conditions.nearby}
+          onBusyChange={setEvaluationBusy}
+          onSave={async c => {
+            await conditions.onSave({ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber, conditions: c })
+            finish()
+          }}
+          onRemove={async () => {
+            await conditions.onRemove(key)
             finish()
           }}
         />

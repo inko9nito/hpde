@@ -947,7 +947,7 @@ describe('instructor evaluation (#340)', () => {
     // The sheet lists what the session can have (#205).
     const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
     // In the order the day goes, and nothing under one till it has something (#388).
-    expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Instructor feedback', 'Lap times'])
+    expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Track conditions', 'Instructor feedback', 'Lap times'])
     const page = await openInSheet('Instructor feedback')
     // Its name heads it, between Cancel and Save, with the session under it (#388).
     expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Instructor feedback')
@@ -1000,7 +1000,7 @@ describe('instructor evaluation (#340)', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Edit Session 2' }))
     const nav = within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })
     expect(within(nav).getAllByRole('button').map(b => b.textContent))
-      .toEqual(['Instructor feedbackEyes up through Big Bend.', 'Lap times2 laps · best 1:38.91'])
+      .toEqual(['Track conditions', 'Instructor feedbackEyes up through Big Bend.', 'Lap times2 laps · best 1:38.91'])
     // No dot for what's saved: what's under it says so (#388).
     expect(nav.querySelector('.bg-green-500')).toBeNull()
     // And back from one of them, once it's slid down: Done on saved laps,
@@ -1022,7 +1022,8 @@ describe('instructor evaluation (#340)', () => {
   it('adds the whole event’s evaluation on any event: on others, just the instructor and their notes', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const add = screen.getByRole('button', { name: /^Add instructor evaluation/ })
+    // Once the notes are in.
+    const add = await screen.findByRole('button', { name: /^Add instructor evaluation/ })
     expect(add).toHaveTextContent('What your instructor said about the whole event')
     await userEvent.click(add)
     const sheet = screen.getByRole('dialog', { name: 'Instructor evaluation' })
@@ -2095,8 +2096,8 @@ describe('the garage (#344)', () => {
     await tapSession('Lap times: 11:45 AM, Blue', null)
     const sheet = screen.getByRole('dialog', { name: '11:45 AM · Blue' })
     const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
-    // Pressures first: they're set before the session (#388).
-    expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Tire pressures', 'Instructor feedback', 'Lap times'])
+    // Pressures after the track's conditions: they're set before the session (#388).
+    expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Track conditions', 'Tire pressures', 'Instructor feedback', 'Lap times'])
     await userEvent.click(within(nav).getByRole('button', { name: /^Tire pressures/ }))
     const page = screen.getByRole('dialog', { name: 'Tire pressures, 11:45 AM · Blue' })
     expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Tire pressures')
