@@ -23,7 +23,9 @@
 /* The page under a pushed page stays put while it's open (#321,
    src/components/PushPage.tsx). Its scroll position is kept. */
 html.push-page-open,
-html.push-page-open body {
+html.push-page-open body,
+html.bottom-sheet-open,
+html.bottom-sheet-open body {
   overflow: hidden;
 }
 

@@ -471,6 +471,82 @@ test('Share and the iOS widget slide up from the bottom, from the More tab (#278
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
 })
 
+// A real finger's drag, through Chromium's DevTools protocol: the browser
+// scrolls for it, or doesn't, as it would on a phone.
+async function touchDrag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, steps = 12) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] })
+  for (let i = 1; i <= steps; i++) {
+    const x = from.x + ((to.x - from.x) * i) / steps
+    const y = from.y + ((to.y - from.y) * i) / steps
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] })
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
+test('a sheet holds the page still behind it, and drags down by its handle to close (#432, #387)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Real touch drags need Chromium’s DevTools protocol')
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  // Short enough that the events list scrolls.
+  await page.setViewportSize({ width: 412, height: 560 })
+  await page.goto('/#/')
+  await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
+  const scrollY = () => page.evaluate(() => window.scrollY)
+  // Without a sheet, the same drag scrolls the page.
+  await touchDrag(page, { x: 200, y: 450 }, { x: 200, y: 150 })
+  await expect.poll(scrollY).toBeGreaterThan(0)
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(scrollY).toBe(0)
+
+  await page.getByRole('button', { name: 'Account: admin@example.com' }).click()
+  const menu = page.getByRole('dialog', { name: 'Account' })
+  await expect(menu).toBeVisible()
+  // Wait for it to finish rising.
+  await page.waitForTimeout(300)
+  // A drag on the dimmed page, then one on the sheet: neither scrolls what's behind it (#432).
+  await touchDrag(page, { x: 200, y: 150 }, { x: 200, y: 20 })
+  await touchDrag(page, { x: 200, y: 520 }, { x: 200, y: 300 })
+  await page.waitForTimeout(300)
+  expect(await scrollY()).toBe(0)
+  await expect(menu).toBeVisible()
+
+  // Pulled down a little by its handle, it springs back (#387).
+  const handle = (await menu.locator('[data-sheet-handle]').boundingBox())!
+  const grab = { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 }
+  const top = (await menu.boundingBox())!.y
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 30 }, 30)
+  await expect.poll(async () => (await menu.boundingBox())!.y).toBe(top)
+  // Pulled most of the way, it goes.
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 260 })
+  await expect(menu).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+  expect(await page.evaluate(() => document.documentElement.classList.contains('bottom-sheet-open'))).toBe(false)
+})
+
+test('a page sheet with Cancel drags down by its toolbar to close, as Cancel does (#387)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Real touch drags need Chromium’s DevTools protocol')
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/')
+  await page.getByRole('button', { name: 'Account: admin@example.com' }).click()
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: 'Edit profile' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit profile' })
+  const sheet = edit.getByRole('heading', { level: 1, name: 'Edit profile' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  const title = (await edit.getByRole('heading', { level: 1, name: 'Edit profile' }).boundingBox())!
+  const grab = { x: title.x + title.width / 2, y: title.y + title.height / 2 }
+  // A short pull springs back…
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 40 }, 30)
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  await expect(edit).toBeVisible()
+  // …a long one closes it, and it slides away.
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 400 })
+  await expect(edit).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+})
+
 test('the account menu slides up from the picture, and Edit profile is a page sheet (#416)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)

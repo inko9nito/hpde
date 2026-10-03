@@ -883,8 +883,14 @@ export default function App() {
         instant={swiped}
         whiteHeader={overlayWhiteTop}
         from="bottom"
-        // A sheet, the iOS widget page too, closed with ✕ (#415).
+        // A sheet, the iOS widget page too, closed with ✕ (#415) — or
+        // dragged down, as its Cancel or ✕ closes it (#387).
         sheet
+        onDismiss={() => {
+          if (shownOverlay.kind === 'new-event') goHome()
+          else if (shownOverlay.kind === 'edit-event' || shownOverlay.kind === 'edit-schedule') goBack(eventHash(shownOverlay.eventId))
+          else goBack(HOME_TAB_HASH[homeTab])
+        }}
       >
         {shownOverlay.kind === 'new-event' ? (
           <NewEventPage

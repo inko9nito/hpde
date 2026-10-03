@@ -201,7 +201,7 @@ export function CarFormPage({ car, onSaved, onClosed }: {
   const title = car ? 'Edit car' : 'Add a car'
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
-    <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
+    <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
       <div role="dialog" aria-label={title} aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-gray-50" data-car-form>
         <PageHeader

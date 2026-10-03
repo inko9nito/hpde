@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, RefObject } from 'react'
 import { IOS_SPRING_EASING, IOS_SPRING_MS } from '../utils/iosSpring'
+import { useSheetGestures } from './sheetGestures'
 
 // What's under a page pushed from the right slides a little way left, and
 // darkens, as the page covers it — iOS's parallax (#367), measured off the
@@ -199,8 +200,8 @@ function useLockDocumentScroll(locked: boolean) {
 
 const htmlClassCounts = new Map<string, number>()
 
-/** `className` on <html> while any page asks for it. */
-function useHtmlClass(className: string, on: boolean) {
+/** `className` on <html> while any page (or sheet) asks for it. */
+export function useHtmlClass(className: string, on: boolean) {
   useLayoutEffect(() => {
     if (!on) return
     const count = htmlClassCounts.get(className) ?? 0
@@ -260,6 +261,11 @@ interface Props {
    * corners, and what's under it shrinks back into a dimmed card on black.
    */
   sheet?: boolean
+  /**
+   * A sheet's way to close, as its Cancel or ✕ does: given one, it drags
+   * down to close, as on iOS (#387) — never while its Cancel is disabled.
+   */
+  onDismiss?: () => void
 }
 
 /**
@@ -269,7 +275,7 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, instant = false, whiteHeader = true, from = 'right', raised = false, sheet = false }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, instant = false, whiteHeader = true, from = 'right', raised = false, sheet = false, onDismiss }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
   // frame never paints and the transition doesn't fire. The exceptions
@@ -321,6 +327,11 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   useHtmlClass('page-sheet-up', isSheet && inPosition)
   const underSheet = useUnderSheet(self)
   const receded = !isSheet && underSheet === 'up'
+  // Dragged down to close (#387), once it's up and until it's closing; it
+  // then slides the rest of the way out along its own spring.
+  const pageRef = useRef<HTMLDivElement | null>(null)
+  const noDismiss = () => {}
+  useSheetGestures({ root: pageRef, panel: pageRef, onClose: onDismiss ?? noDismiss, enabled: isSheet && !!onDismiss && open && inPosition, slideOut: false })
 
   useEffect(() => {
     if (isFirstRun.current) {
@@ -380,6 +391,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
     <div
       ref={el => {
         self.el = el
+        pageRef.current = el
         if (scrollRef) scrollRef.current = el
       }}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
