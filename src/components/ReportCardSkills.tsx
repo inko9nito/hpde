@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useWidth } from './LapTrendChart'
+import { GroupBadge } from './GroupBadge'
 import { cardOf } from '../utils/evaluation'
 import type { EventEvaluation, TdeCard, TdeSkill } from '../utils/evaluation'
+import type { RunGroupConfig } from '../types'
 
 // How the driver's TDE report cards have come along (#345), on the
 // Instructor evaluations page — one run group's card at a time, since each
-// has its own skills (#350) — in two cards:
+// has its own skills (#350), its group's badge on each (#401) — in two cards:
 //   - an overview: the skills most improved since their first report card,
 //     and the ones that need the most work on their latest;
 //   - the skills wheel: a spoke for each core skill, and each card's scores
@@ -101,11 +103,15 @@ function signed(n: number): string {
 
 const CARD = 'rounded-2xl border border-gray-200 bg-white p-4'
 
-function CardHead({ title, meta }: { title: string; meta?: string }) {
+/** A card's title, after the badge of the run group whose report card it's of (#401), so it's plain which one. */
+function CardHead({ title, group, meta }: { title: string; group: RunGroupConfig; meta?: string }) {
   return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="text-[13px] font-semibold text-gray-500">{title}</h2>
-      {meta && <span className="text-xs text-gray-400">{meta}</span>}
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="flex min-w-0 items-center gap-2 text-[13px] font-semibold text-gray-500">
+        <GroupBadge group={group} size="sm" />
+        <span className="truncate">{title}</span>
+      </h2>
+      {meta && <span className="shrink-0 text-xs text-gray-400">{meta}</span>}
     </div>
   )
 }
@@ -138,14 +144,19 @@ function MoveList({ title, caption, moves, value, empty }: {
 }
 
 /** The overview (#345): the skills most improved since the first report card of this kind, and those that need the most work. */
-export function SkillOverview({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
+export function SkillOverview({ points, kind, group }: {
+  points: ReportCardPoint[]
+  kind: TdeCard
+  /** The card's run group, as the app colors it. */
+  group: RunGroupConfig
+}) {
   const { cards } = scoredCards(points, kind)
   if (!cards.length) return null
   const { improved, needsWork } = skillMoves(cards, kind)
   const [first, latest] = [cards[0], cards[cards.length - 1]]
   return (
-    <section aria-label="Report card overview" className={CARD}>
-      <CardHead title={`${kind.group} report cards`} meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
+    <section aria-label={`${kind.group} report card overview`} className={CARD}>
+      <CardHead title="Report cards" group={group} meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
       <div className="grid grid-cols-2 gap-4">
         <MoveList
           title="Most improved"
@@ -289,7 +300,12 @@ const LABEL_GAP = 12
  * shown, just the newest). Tap a skill's name for its score at each event,
  * listed under the wheel, newest first.
  */
-export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
+export function SkillsWheel({ points, kind, group }: {
+  points: ReportCardPoint[]
+  kind: TdeCard
+  /** The card's run group, as the app colors it. */
+  group: RunGroupConfig
+}) {
   const [ref, measured] = useWidth()
   const width = measured || 300
   const { cards, skills } = scoredCards(points, kind)
@@ -330,8 +346,8 @@ export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind:
   const history = pickedSkill ? skillHistory(pickedSkill.id, cards) : []
 
   return (
-    <section aria-label="Skills wheel" className={CARD}>
-      <CardHead title="Skills wheel" meta="0% at the middle, 100% at the rim" />
+    <section aria-label={`${kind.group} skills wheel`} className={CARD}>
+      <CardHead title="Skills wheel" group={group} meta="0% middle, 100% rim" />
       {n > 1 && (
         <div className="-mx-4 mb-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex w-max gap-1.5 pb-0.5" role="group" aria-label="Report cards shown">

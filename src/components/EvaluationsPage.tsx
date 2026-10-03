@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, ClipboardCheck, Plus } from 'lucide-react'
 import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
@@ -9,12 +9,14 @@ import { DateBlock } from './DateBlock'
 import { sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
-import { ReportCardSwitch } from './ReportCardSwitch'
+import { FilterMenu } from './FilterMenu'
+import type { FilterOption } from './FilterMenu'
+import { groupNamed } from './EventEvaluationCard'
 import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
 import { useRsvps } from '../data/RsvpsContext'
-import { TDE_CARDS, cardOf, isTdeEvent } from '../utils/evaluation'
+import { TDE_CARDS, TDE_GROUP_NAMES, cardOf, isTdeEvent } from '../utils/evaluation'
 import type { CardId, TdeCard } from '../utils/evaluation'
 import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
@@ -76,13 +78,102 @@ export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
 }
 
 /**
- * The kinds of report card they have scores on (#350), and the one to show
- * first: their newest scored card's.
+ * The kinds of report card they have scores on (#350) — each run group's
+ * card has its own skills, so its own overview and wheel — the one with
+ * the newest scored card first.
  */
-export function reportCardKinds(points: ReportCardPoint[]): { kinds: TdeCard[]; newest: TdeCard | undefined } {
-  const kinds = TDE_CARDS.filter(kind => scoredCards(points, kind).cards.length > 0)
-  const scored = kinds.flatMap(kind => scoredCards(points, kind).cards).sort((a, b) => a.date.localeCompare(b.date))
-  return { kinds, newest: scored.length ? cardOf(scored[scored.length - 1].evaluation) : undefined }
+export function reportCardKinds(points: ReportCardPoint[]): TdeCard[] {
+  const newest = (kind: TdeCard) => scoredCards(points, kind).cards.at(-1)?.date ?? ''
+  return TDE_CARDS
+    .filter(kind => scoredCards(points, kind).cards.length > 0)
+    .sort((a, b) => newest(b).localeCompare(newest(a)))
+}
+
+/** One event on the page: its evaluations, or null for one they went to without any yet. */
+export interface Entry {
+  event: EventConfig
+  notes: EventNotes | null
+}
+
+/** Which events by their evaluations (#401): every one, the ones with any, or the ones without. */
+export type EvaluationFilter = 'all' | 'evaluated' | 'notYet'
+
+/** What the page's events — and so its report cards — are filtered by (#401). */
+export interface Filters {
+  /** An organizer, as organizerOf names it; null: every one. */
+  organizer: string | null
+  /** A run group's name, lowercased; null: every one. */
+  group: string | null
+  evaluation: EvaluationFilter
+}
+
+export const NO_FILTERS: Filters = { organizer: null, group: null, evaluation: 'all' }
+
+const TDE_ORGANIZER = 'The Drivers Edge'
+
+/** Who ran an event, by one name for each: every TDE event's is The Drivers Edge, however it's spelled, or none; '' for none set. */
+export function organizerOf(event: Pick<EventConfig, 'name' | 'organizer'>): string {
+  return isTdeEvent(event) ? TDE_ORGANIZER : event.organizer?.trim() ?? ''
+}
+
+/** The report card an event's evaluation was entered on, if it's a TDE event's and has one. */
+function reportCardOf({ event, notes }: Entry) {
+  const evaluation = notes?.evaluation
+  if (!evaluation || !isTdeEvent(event)) return undefined
+  return evaluation.card || Object.keys(evaluation.skills ?? {}).length ? cardOf(evaluation) : undefined
+}
+
+/**
+ * The run groups they were in at an event, by name: the ones of the
+ * sessions they have notes on, or else the one they said they're in — and
+ * the one whose report card the instructor filled in.
+ */
+export function entryGroups(entry: Entry, rsvps: Rsvps): string[] {
+  const { event, notes } = entry
+  const ids = notes?.sessions.length ? notes.sessions.map(s => s.group) : [myRunGroup(event, rsvps[event.id])].flatMap(id => id ? [id] : [])
+  const names = ids.map(id => groupFor(id, event.runGroups).label)
+  const card = reportCardOf(entry)
+  if (card) names.push(card.group)
+  const byKey = new Map(names.map(n => [n.trim().toLowerCase(), n.trim()]))
+  return [...byKey.values()]
+}
+
+const groupOrder = (name: string) => {
+  const i = TDE_GROUP_NAMES.findIndex(n => n.toLowerCase() === name.toLowerCase())
+  return i === -1 ? TDE_GROUP_NAMES.length : i
+}
+
+/**
+ * What each filter can pick (#401): every organizer of their events, A to
+ * Z (none set last); and the run groups they were in at the picked
+ * organizer's — or anyone's — in the palette's order.
+ */
+export function filterChoices(entries: Entry[], rsvps: Rsvps, organizer: string | null): { organizers: string[]; groups: string[] } {
+  const organizers = [...new Set(entries.map(e => organizerOf(e.event)))]
+    .sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
+  const groups = new Map<string, string>()
+  for (const entry of entries) {
+    if (organizer !== null && organizerOf(entry.event) !== organizer) continue
+    for (const name of entryGroups(entry, rsvps)) if (!groups.has(name.toLowerCase())) groups.set(name.toLowerCase(), name)
+  }
+  return {
+    organizers,
+    groups: [...groups.values()].sort((a, b) => groupOrder(a) - groupOrder(b) || a.localeCompare(b)),
+  }
+}
+
+/** The events that pass the filters (#401). */
+export function filterEntries(entries: Entry[], rsvps: Rsvps, { organizer, group, evaluation }: Filters): Entry[] {
+  return entries.filter(entry =>
+    (organizer === null || organizerOf(entry.event) === organizer)
+    && (group === null || entryGroups(entry, rsvps).some(n => n.toLowerCase() === group))
+    && (evaluation === 'all' || (evaluation === 'evaluated') === (entry.notes !== null)))
+}
+
+/** The report cards of the events shown — with a run group picked, only that group's cards (#401). */
+export function shownReportCards(entries: Entry[], group: string | null): ReportCardPoint[] {
+  const points = reportCards(entries.flatMap(({ event, notes }) => notes ? [{ event, notes }] : []))
+  return group === null ? points : points.filter(p => cardOf(p.evaluation).group.toLowerCase() === group)
 }
 
 /**
@@ -194,6 +285,35 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
   )
 }
 
+const HEADING = 'mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500'
+
+const EVALUATION_FILTERS: { id: EvaluationFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'evaluated', label: 'Evaluated' },
+  { id: 'notYet', label: 'Not yet' },
+]
+
+/** Every event, the ones evaluated, or the ones not yet (#401): a segmented control, as Events' All · My events. */
+function EvaluationToggle({ value, onChange }: { value: EvaluationFilter; onChange: (v: EvaluationFilter) => void }) {
+  return (
+    <div role="group" aria-label="Evaluation" className="flex gap-1 rounded-lg bg-gray-100 p-1">
+      {EVALUATION_FILTERS.map(o => (
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => onChange(o.id)}
+          aria-pressed={value === o.id}
+          className={`min-h-8 flex-1 rounded-md px-3 text-sm transition-colors ${
+            value === o.id ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const bar = 'animate-pulse rounded bg-gray-100'
 
 function EvaluationsSkeleton({ leaving }: { leaving: boolean }) {
@@ -241,7 +361,9 @@ interface Props {
  * went to or has an evaluation at, newest first, with what the instructors
  * said (or a button to add it), under how their TDE report cards have come
  * along — the skills most improved and needing the most work, and the
- * skills wheel. It needs a sign-in.
+ * skills wheel. Filters at the top (#401) narrow the events, and so the
+ * report cards, by organizer, run group and whether they're evaluated. It
+ * needs a sign-in.
  */
 export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEvent, onAddEvaluation }: Props) {
   const { status: authStatus } = useAuth()
@@ -259,18 +381,29 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
   }, [active, reload])
 
   const evaluated = useMemo(() => evaluatedEvents(notes.events, events), [notes.events, events])
-  const cards = useMemo(() => reportCards(evaluated), [evaluated])
-  // One run group's cards at a time (#350): the one picked, or the newest's.
-  const { kinds, newest } = useMemo(() => reportCardKinds(cards), [cards])
-  const [kindId, setKindId] = useState<CardId | null>(null)
-  const kind = kinds.find(k => k.id === kindId) ?? newest
   // Every event on the list, newest first: the ones evaluated, and the ones they went to without one yet.
-  const entries = useMemo(() => {
+  const entries = useMemo((): Entry[] => {
     const withLaps = new Set((lapSummary ?? []).map(e => e.eventId))
     const rest = unevaluatedEvents(events, rsvps, withLaps, new Set(evaluated.map(e => e.event.id)))
     return [...evaluated, ...rest.map(event => ({ event, notes: null }))]
       .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
   }, [evaluated, events, rsvps, lapSummary])
+
+  // The events by organizer, then run group, and whether they're evaluated
+  // (#401) — and so the report cards: each run group's card shown has its
+  // own overview and wheel (#350), the newest's first.
+  const [picked, setFilters] = useState<Filters>(NO_FILTERS)
+  const choices = useMemo(() => filterChoices(entries, rsvps, picked.organizer), [entries, rsvps, picked.organizer])
+  // A pick no longer among the choices — say, a run group not at the organizer now picked — is all of them.
+  const filters: Filters = {
+    organizer: picked.organizer !== null && choices.organizers.includes(picked.organizer) ? picked.organizer : null,
+    group: picked.group !== null && choices.groups.some(g => g.toLowerCase() === picked.group) ? picked.group : null,
+    evaluation: picked.evaluation,
+  }
+  const shown = filterEntries(entries, rsvps, filters)
+  const cards = shownReportCards(shown, filters.group)
+  const kinds = reportCardKinds(cards)
+  const anyCards = useMemo(() => shownReportCards(entries, null).length > 0, [entries])
 
   const loading = authStatus === 'signed-in' && (notes.status === 'loading' || !eventsLoaded || rsvpsStatus === 'loading')
   const leaving = useSkeletonFade(loading)
@@ -301,26 +434,67 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
       </div>
     )
   } else {
+    const organizerOptions: FilterOption[] = [
+      { id: null, text: 'All organizers' },
+      ...choices.organizers.map(o => ({ id: o, text: o || 'Organizer not set' })),
+    ]
+    const groupOptions: FilterOption[] = [
+      { id: null, text: 'All run groups' },
+      ...choices.groups.map(g => ({ id: g.toLowerCase(), text: g, content: <GroupBadge group={groupNamed(g, events)} size="sm" /> })),
+    ]
     body = (
       <div className="fade-in">
-        {kind && (
-          <div className="mb-8 flex flex-col gap-4">
-            {kinds.length > 1 && (
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-xs text-gray-500">Each run group’s card has its own skills.</span>
-                <ReportCardSwitch cards={kinds} value={kind.id} onChange={setKindId} events={events} />
-              </div>
-            )}
-            <SkillOverview key={`overview ${kind.id}`} points={cards} kind={kind} />
-            <SkillsWheel key={`wheel ${kind.id}`} points={cards} kind={kind} />
+        <div role="group" aria-label="Filter events" className="mb-6 flex flex-col gap-2">
+          <div className="flex min-w-0 gap-2">
+            <FilterMenu
+              label="Organizer"
+              options={organizerOptions}
+              value={filters.organizer}
+              onChange={organizer => setFilters({ ...filters, organizer, group: null })}
+            />
+            <FilterMenu label="Run group" options={groupOptions} value={filters.group} onChange={group => setFilters({ ...filters, group })} />
           </div>
+          <EvaluationToggle value={filters.evaluation} onChange={evaluation => setFilters({ ...filters, evaluation })} />
+        </div>
+        {kinds.length > 0 ? (
+          <section aria-labelledby="evaluations-cards-heading" className="mb-8">
+            <h2 id="evaluations-cards-heading" className={HEADING}>TDE report cards</h2>
+            <p className="mb-3 text-xs text-gray-500">
+              Only The Drivers Edge’s events have a report card, so only they are on the skills wheel.
+              {kinds.length > 1 && ' Each run group’s card scores its own skills, so each has its own wheel.'}
+            </p>
+            <div className="flex flex-col gap-6">
+              {kinds.map(kind => (
+                <div key={kind.id} className="flex flex-col gap-4">
+                  <SkillOverview points={cards} kind={kind} group={groupNamed(kind.group, events)} />
+                  <SkillsWheel points={cards} kind={kind} group={groupNamed(kind.group, events)} />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : anyCards && filters.evaluation !== 'notYet' && (
+          <p className="mb-6 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+            The skills wheel is only for The Drivers Edge’s report cards, and none of these events has one.
+          </p>
         )}
         <section aria-labelledby="evaluations-events-heading">
-          <h2 id="evaluations-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+          <h2 id="evaluations-events-heading" className={HEADING}>
             Events
           </h2>
+          {shown.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-8 text-center">
+              <p className="text-sm font-medium text-gray-700">No events match these filters</p>
+              <button
+                type="button"
+                onClick={() => setFilters(NO_FILTERS)}
+                className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 transition-colors hover:border-gray-400"
+              >
+                Show all events
+              </button>
+            </div>
+          )}
           <ul className="space-y-3">
-            {entries.map(({ event, notes }) => (
+            {shown.map(({ event, notes }) => (
               <li key={event.id}>
                 <EvaluationEventCard
                   event={event}
