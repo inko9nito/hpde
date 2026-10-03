@@ -10,7 +10,6 @@ import { partitionEvents } from '../utils/eventClass'
 import { DateBlock } from './DateBlock'
 import { CARD_PADDING, CARD_SHELL, EmptyRow, EventCard } from './EventCard'
 import { EventCalendar } from './EventCalendar'
-import { Footer } from './Footer'
 import { FadedTrack } from './TrackIcon'
 import { HomeHeader } from './HomeTabs'
 import { HomeScreenBanner } from './HomeScreenBanner'
@@ -293,7 +292,6 @@ export function LandingPage({ onOpenEvent }: Props) {
           <EventCalendar events={shown} onOpenEvent={onOpenEvent} />
         )}
       </div>
-      <Footer />
     </div>
   )
 }

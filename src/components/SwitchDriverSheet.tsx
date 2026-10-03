@@ -26,8 +26,8 @@ function useChoices(active: boolean): { choices: { driver: Driver | null; label:
 }
 
 /**
- * Admins only: Switch driver (#396), from the menu — the one place to
- * pick it (#399) — who to act as, everywhere, until they switch back: themselves
+ * Admins only: Switch driver (#396), from the account menu (#416) — the
+ * one place to pick it (#399) — who to act as, everywhere, until they switch back: themselves
  * ("Me"), the test account, or another driver, to see their laps, notes,
  * answers and garage and to log them for them. Picking one closes it.
  */

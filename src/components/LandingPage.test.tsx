@@ -126,63 +126,55 @@ describe('live and upcoming cards (#276)', () => {
   })
 })
 
-describe('landing menu and footer (#273)', () => {
+describe('the More tab: Share, the iOS widget and the build date (#395, #416)', () => {
   beforeEach(() => {
     localStorage.clear()
-    window.location.hash = '#/'
+    window.location.hash = '#/more'
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(JSON.stringify({ events: [twoDay] }), { headers: { 'Content-Type': 'application/json' } }),
     ))
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('opens Share and the iOS widget from the menu sheet', async () => {
+  it('opens Share and the iOS widget from tiles, after the pages it lists', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    const sheet = screen.getByRole('dialog', { name: 'Menu' })
-    expect(within(sheet).getAllByRole('link').map(l => l.textContent)).toEqual(['Share', 'Get iOS widget'])
+    const tiles = screen.getByRole('list', { name: 'More' })
+    expect(within(tiles).getAllByRole('link').map(l => l.textContent)).toEqual(['Instructor evaluations', 'Garage', 'Share', 'iOS widget'])
+    // The menu that held them beside the account button is gone.
+    expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument()
 
-    await userEvent.click(within(sheet).getByRole('link', { name: 'Share' }))
+    await userEvent.click(within(tiles).getByRole('link', { name: 'Share' }))
     await waitFor(() => expect(window.location.hash).toBe('#/share'))
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
     const share = await screen.findByRole('dialog', { name: 'Share this app' })
     expect(within(share).getByRole('button', { name: 'Copy link' })).toHaveTextContent('https://myhpde.netlify.app/')
-    // A sheet over the landing page, which stays put underneath (#411).
-    expect(screen.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
+    // A sheet over the More tab, which stays put underneath (#411).
+    expect(screen.getByRole('heading', { level: 1, name: 'More' })).toBeInTheDocument()
+    await userEvent.click(within(share).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/more'))
 
-    window.location.hash = '#/'
-    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-    await userEvent.click(screen.getByRole('link', { name: 'Get iOS widget' }))
+    await userEvent.click(within(screen.getByRole('list', { name: 'More' })).getByRole('link', { name: 'iOS widget' }))
     await waitFor(() => expect(window.location.hash).toBe('#/widget-setup'))
     expect(await screen.findByRole('heading', { level: 1, name: 'iOS widget' })).toBeInTheDocument()
   })
 
-  it('closes the menu sheet on Escape', async () => {
+  it('shows the build date on the More tab, not under the events list', async () => {
     render(<EventsProvider><App /></EventsProvider>)
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+    expect(screen.getByText(/^build /)).toBeInTheDocument()
+
+    window.location.hash = '#/'
+    expect(await screen.findByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
+    await screen.findByRole('button', { name: /Two Day Event/ })
+    expect(screen.queryByText(/^build /)).not.toBeInTheDocument()
   })
 
   it('still switches between list and calendar', async () => {
+    window.location.hash = '#/'
     render(<EventsProvider><App /></EventsProvider>)
     await screen.findByRole('button', { name: /Two Day Event/ })
     await userEvent.click(screen.getByRole('button', { name: 'Calendar view' }))
     expect(screen.queryByRole('heading', { name: 'Past' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'List view' }))
     expect(screen.getByRole('heading', { name: 'Past' })).toBeInTheDocument()
-  })
-
-  it('shows the footer — just the build date — on the landing page only', async () => {
-    render(<EventsProvider><App /></EventsProvider>)
-    expect(screen.getByText(/^build /)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Share' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'iOS widget' })).not.toBeInTheDocument()
-
-    await userEvent.click(await screen.findByRole('button', { name: /Two Day Event/ }))
-    await waitFor(() => expect(window.location.hash).toBe(`#/event/${twoDay.id}`))
-    const eventPage = screen.getByRole('heading', { level: 1, name: twoDay.name }).closest('.fixed') as HTMLElement
-    expect(within(eventPage).queryByText(/^build /)).not.toBeInTheDocument()
   })
 })

@@ -733,7 +733,7 @@ describe('lap times (#210)', () => {
 })
 
 
-// Switch driver (#396): from the menu, the one place to pick it (#399),
+// Switch driver (#396): from the account menu (#416), the one place to pick it (#399),
 // then back to the page it was picked from; back to "Me" is the banner's
 // Switch back, on every page.
 async function switchDriver(name: string) {
@@ -744,8 +744,8 @@ async function switchDriver(name: string) {
   }
   const back = window.location.hash
   window.location.hash = '#/'
-  await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-  await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+  await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+  await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
   const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
   await userEvent.click(await within(sheet).findByRole('radio', { name }))
   expect(screen.queryByRole('dialog', { name: 'Switch driver' })).not.toBeInTheDocument()
@@ -758,7 +758,7 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   })
   beforeEach(() => { roles = ['admin'] })
 
-  it('switches driver only from the menu: no picker on the event, its "…" menu, the schedule or the sheet (#399)', async () => {
+  it('switches driver only from the account menu: no picker on the event, its "…" menu, the schedule or the sheet (#399)', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }))
     expect(screen.queryByRole('menuitem', { name: /^Switch driver/ })).not.toBeInTheDocument()
@@ -852,12 +852,12 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     await waitFor(() => expect(earlier()).toHaveLength(2))
     expect(String(earlier()[1][0])).not.toContain('driver=')
   })
-  it('switches driver from the menu, for every page, with a banner saying who until switched back (#396)', async () => {
+  it('switches driver from the account menu, for every page, with a banner saying who until switched back (#396)', async () => {
     window.location.hash = '#/'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
     expect(screen.queryByRole('region', { name: 'Acting as' })).not.toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
     const sheet = screen.getByRole('dialog', { name: 'Switch driver' })
     await waitFor(() => expect(within(sheet).getAllByRole('radio').map(r => [r.textContent, r.getAttribute('aria-checked')]))
       .toEqual([['Me', 'true'], ['Test account', 'false'], ['Jason', 'false']]))
@@ -881,8 +881,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
   it('on the test account, says so in the banner (#309, #396)', async () => {
     window.location.hash = '#/'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Menu' }))
-    await userEvent.click(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('button', { name: /^Switch driver/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Account: / }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Account' })).getByRole('button', { name: /^Switch driver/ }))
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Switch driver' })).getByRole('radio', { name: 'Test account' }))
     expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('On the test account')
     expect(screen.getByRole('button', { name: 'Account: v@example.com, on the test account' })).toBeInTheDocument()
@@ -1540,7 +1540,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(lapCalls('GET')).toHaveLength(0)
   })
 
-  it('switches tabs from the tab bar; More lists Instructor evaluations and the Garage, which opens over it', async () => {
+  it('switches tabs from the tab bar; More lists Instructor evaluations, the Garage — which opens over it — Share and the iOS widget', async () => {
     openAt('#/')
     expect(await screen.findByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
@@ -1550,7 +1550,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(window.location.hash).toBe('#/more')
     expect(screen.getByRole('heading', { level: 1, name: 'More' })).toBeInTheDocument()
     const items = within(screen.getByRole('list', { name: 'More' })).getAllByRole('link')
-    expect(items.map(a => a.getAttribute('href'))).toEqual(['#/evaluations', '#/garage'])
+    expect(items.map(a => a.getAttribute('href'))).toEqual(['#/evaluations', '#/garage', '#/share', '#/widget-setup'])
 
     await userEvent.click(items[1])
     expect(window.location.hash).toBe('#/garage')

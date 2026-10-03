@@ -5,7 +5,7 @@ import type { IdentityUser } from './identity'
 const HOUR = 3_600_000
 
 function user(token: IdentityUser['token']): IdentityUser {
-  return { id: 'u1', email: 'a@example.com', token, jwt: async () => '' }
+  return { id: 'u1', email: 'a@example.com', token, jwt: async () => '', update: async () => { throw new Error('Not used here') } }
 }
 
 function save(id: string, token: unknown) {
