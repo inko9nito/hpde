@@ -758,7 +758,7 @@ export default function App() {
           )}
 
           {activeTab === 'notes' && authStatus !== 'signed-in' && (
-            <SignInPrompt reason="keep private notes for each event" />
+            <SignInPrompt reason="keep notes for each event" />
           )}
 
           {activeTab === 'notes' && authStatus === 'signed-in' && (

@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Camera, Lock } from 'lucide-react'
+import { Camera } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { inputClass } from './SessionEvaluationForm'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
-import { MAX_NAME, MAX_TORQUE, cleanCar, carName, isShared } from '../utils/garage'
+import { MAX_NAME, MAX_TORQUE, cleanCar, carName } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { shrinkPhoto } from '../utils/photo'
 
@@ -199,8 +199,6 @@ export function CarFormPage({ car, onSaved, onClosed }: {
   }
 
   const title = car ? 'Edit car' : 'Add a car'
-  // Shared with other drivers (#398): taking it out leaves it with them.
-  const shared = !!car && isShared(car)
   // Over whatever page it's opened from — a car's page scrolls, so not in it.
   return createPortal(
     <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
@@ -264,13 +262,6 @@ export function CarFormPage({ car, onSaved, onClosed }: {
           </section>
 
           {failure && <p role="alert" className="-mt-2 px-1 text-xs text-red-700">{failure}</p>}
-
-          <div className="flex flex-col items-center gap-3">
-            <p className="flex items-center gap-1 text-[11px] text-gray-400">
-              <Lock size={11} aria-hidden="true" />
-              {shared ? 'Only its drivers and admins can see this car.' : 'Only you and admins can see your garage.'}
-            </p>
-          </div>
         </div>
       </div>
     </PushPage>,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Lock } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { TrackIcon } from './TrackIcon'
 import { useEvents } from '../data/EventsContext'
@@ -128,10 +128,6 @@ export function DriveAtSheet({ car, garage, onSave, onClose }: {
             {busy ? 'Saving…' : chosen.length > 1 ? `Add to ${chosen.length} events` : 'Add to event'}
           </button>
         )}
-        <p className="flex items-center gap-1 text-[11px] text-gray-400">
-          <Lock size={11} aria-hidden="true" />
-          Only you and admins can see your garage.
-        </p>
       </div>
     </Sheet>
   )

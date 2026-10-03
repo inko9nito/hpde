@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Lock } from 'lucide-react'
 import { FormPage } from './NewEventPage'
 import { Notice } from './Notice'
 import { SignInPrompt } from './SignInPrompt'
@@ -58,7 +57,7 @@ export function JoinCarPage({ token, onClose, onJoined }: {
   if (authStatus !== 'signed-in') {
     content = authStatus === 'loading'
       ? <div className="h-40 animate-pulse rounded-2xl border border-gray-200 bg-white" aria-busy="true" aria-label="Loading" />
-      : <SignInPrompt reason="add this car to your garage" privacyNote={false} />
+      : <SignInPrompt reason="add this car to your garage" />
   } else if (failure) {
     content = <Notice title={failure} detail="Ask them to share the car again, for a new link." />
   } else if (!invite) {
@@ -95,10 +94,6 @@ export function JoinCarPage({ token, onClose, onJoined }: {
             <button onClick={join} disabled={joining} className={`${big} bg-gray-900 text-white hover:bg-gray-700`}>{joining ? 'Accepting…' : 'Accept'}</button>
           </>)}
         </div>
-        <p className="flex items-center justify-center gap-1 text-[11px] text-gray-400">
-          <Lock size={11} aria-hidden="true" />
-          Only its drivers and admins can see this car.
-        </p>
       </div>
     )
   }

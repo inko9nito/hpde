@@ -1,5 +1,4 @@
 import { useId, useState } from 'react'
-import { Lock } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { SuggestInput } from './SuggestInput'
 import { inputClass } from './SessionEvaluationForm'
@@ -180,10 +179,6 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
             </button>
           </div>
         )}
-        <p className="flex items-center gap-1 text-[11px] text-gray-400">
-          <Lock size={11} aria-hidden="true" />
-          Only you and admins can see your garage.
-        </p>
       </div>
     </Sheet>
   )

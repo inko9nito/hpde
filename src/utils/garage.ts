@@ -444,6 +444,30 @@ export function consumablesOn(car: Car, day?: string): PartOn[] {
   return CONSUMABLES.flatMap(p => (latest.has(p.id) ? [latest.get(p.id)!] : []))
 }
 
+/**
+ * How many of `events` a consumable put on on `date` has been used at
+ * (#418): those whose first day is on or after it, and before `until`,
+ * when it was replaced — one changed on an event's first day was on for
+ * it, as consumablesOn has it.
+ */
+export function eventsSince(date: string, events: EventConfig[], until?: string): number {
+  return events.filter(e => eventStart(e) >= date && (until === undefined || eventStart(e) < until)).length
+}
+
+/**
+ * When the part a log entry put on was next changed — the day it came
+ * off — or undefined while it's still on. On the same day, the one logged
+ * later replaced it.
+ */
+export function replacedOn(car: Car, entry: LogEntry, part: ConsumableId): string | undefined {
+  const log = car.log ?? []
+  const i = log.findIndex(e => e.id === entry.id)
+  return log
+    .filter((e, j) => e.parts.some(p => p.part === part) && (e.date > entry.date || (e.date === entry.date && j > i)))
+    .map(e => e.date)
+    .sort()[0]
+}
+
 /** Everything a consumable's been, across every car, most used first — for the form's suggestions. */
 export function partOptions(part: ConsumableId, garage: Garage): string[] {
   const counts = new Map<string, number>()

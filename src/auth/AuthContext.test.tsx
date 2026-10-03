@@ -91,7 +91,7 @@ describe('sign-in (#223)', () => {
     renderApp()
     await screen.findAllByRole('button', { name: 'Account: driver@example.com' })
     widget.logout()
-    await waitFor(() => expect(screen.getByText(/Sign in to keep private notes/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Sign in to keep notes/)).toBeInTheDocument())
   })
 })
 

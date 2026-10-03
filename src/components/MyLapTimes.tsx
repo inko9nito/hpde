@@ -80,7 +80,7 @@ export function MyLapTimes({
     </div>
   )
 
-  // Expand all and Private: at the top until there are sessions to list,
+  // Expand all: at the top until there are sessions to list,
   // then just over them, by the cards it opens (#361).
   const toolbar = (
     <LapsToolbar

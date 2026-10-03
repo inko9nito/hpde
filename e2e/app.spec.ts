@@ -994,8 +994,8 @@ test('an admin logs another driver’s lap times, switched to from the menu (#28
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   await expect(page.getByLabel('Driver')).toHaveCount(0)
-  // Worded as he'd see it (#364): only the banner says it's his.
-  await expect(sheet).toContainText('Only you and admins can see your lap times.')
+  // Only the banner says it's his (#364), and nothing says who can see it (#414).
+  await expect(sheet).not.toContainText('admins can see')
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await sheet.getByRole('button', { name: 'Save lap times' }).click()
@@ -1345,6 +1345,16 @@ test('a driver shares their car from its page, with a link to send or a code to 
   const sheet = page.getByRole('dialog', { name: 'Share this car' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText(`/#/join-car/${token}`)
   await expectShareSheet(page, sheet)
+  // What sharing a car means, between the title and the code (#426).
+  const about = sheet.locator('[data-share-car-about]')
+  await expect(about).toHaveText('Send this link to someone else who drives it. Once they open it and join, you both keep up its details, photo and change log, and each of you adds it to your own events.')
+  const [titleBox, aboutBox, qrBox] = await Promise.all([
+    sheet.getByRole('heading', { level: 2 }).boundingBox(),
+    about.boundingBox(),
+    sheet.getByRole('img', { name: 'Code to scan for the link' }).boundingBox(),
+  ])
+  expect(aboutBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height)
+  expect(aboutBox!.y + aboutBox!.height).toBeLessThanOrEqual(qrBox!.y)
   await expect(sheet).toContainText('Works once, until Oct 16, 2026.')
   expect(invited).toBe(1)
 })
@@ -1427,7 +1437,8 @@ test('a driver joins a shared car from its link, and its page says who drove it 
   await carPage.getByRole('button', { name: 'More actions' }).click()
   await carPage.getByRole('menuitem', { name: 'Edit' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit car' })
-  await expect(edit).toContainText('Only its drivers and admins can see this car.')
+  // Nothing says who can see it (#414).
+  await expect(edit).not.toContainText('admins can see')
   await edit.getByRole('button', { name: 'Cancel' }).click()
   await expect(edit).toBeHidden()
 
