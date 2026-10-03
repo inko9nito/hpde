@@ -43,9 +43,11 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
     const done = then ?? (() => latestClose.current())
     if (leaving.current) return
     leaving.current = true
-    // On its way out: gone to a screen reader, and to taps.
+    // On its way out: gone to a screen reader. Taps stop at the dimmed page
+    // till it's gone, as on iOS — not through to what's under it, which
+    // its closing (going back, say) would then undo.
     root.current?.setAttribute('aria-hidden', 'true')
-    root.current?.setAttribute('inert', '')
+    if (panel.current) panel.current.style.pointerEvents = 'none'
     const sheet = panel.current
     const dim = backdrop.current
     if (!sheet || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return done()

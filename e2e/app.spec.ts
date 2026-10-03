@@ -459,6 +459,8 @@ test('Share and the iOS widget slide up from the bottom, from the More tab (#278
   const sheet = page.getByRole('dialog', { name: 'Share this app' })
   await expectShareSheet(page, sheet)
   await sheet.getByRole('button', { name: 'Close' }).click()
+  // It slides down and away (#388), taps stopping at it till it's gone.
+  await expect(page.locator('[data-sheet-handle]')).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
   // The iOS widget, as a page sheet with ✕ (#415).
   const slide = await trackSlide(page, () => links.getByRole('link', { name: 'iOS widget' }).click(), 'iOS widget')
