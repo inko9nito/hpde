@@ -96,7 +96,7 @@ export function EditProfilePage({ onClosed }: {
   }
 
   return createPortal(
-    <PushPage open={open} onExited={onClosed} raised from="bottom" sheet>
+    <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
       <div role="dialog" aria-label="Edit profile" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-gray-50" data-edit-profile>
         <PageHeader

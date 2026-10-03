@@ -330,3 +330,69 @@ describe('a page sheet (#415)', () => {
     expect(getByTestId('page').querySelector('[data-sheet-dim]')).toBeNull()
   })
 })
+
+describe('a page sheet dragged down to close (#387)', () => {
+  // A finger pulling down `by` px from `el`, then letting go.
+  function pull(el: Element, by: number, end = true) {
+    fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 200 }] })
+    for (let i = 1; i <= 4; i++) {
+      const move = new Event('touchmove', { bubbles: true, cancelable: true })
+      Object.assign(move, { touches: [{ clientX: 100, clientY: 200 + (by * i) / 4 }] })
+      el.dispatchEvent(move)
+    }
+    if (end) fireEvent.touchEnd(el, { touches: [] })
+  }
+
+  function Sheet({ open = true, onDismiss, saving = false }: { open?: boolean; onDismiss: () => void; saving?: boolean }) {
+    return (
+      <PushPage open={open} skipEnterAnimation from="bottom" sheet onDismiss={onDismiss}>
+        <div data-sheet-grab><button data-sheet-cancel disabled={saving}>Cancel</button></div>
+        <p>The form</p>
+      </PushPage>
+    )
+  }
+
+  it('follows the finger over its own place, then closes as its Cancel does, sliding out from there', () => {
+    const onDismiss = vi.fn()
+    const { container, getByText } = render(<Sheet onDismiss={onDismiss} />)
+    const page = container.lastElementChild as HTMLElement
+    expect(page.style.transform).toBe('translateY(0)')
+    pull(getByText('The form'), 120, false)
+    expect(page.style.transform).toBe('translateY(0) translateY(112px)')
+    expect(page.style.transition).toBe('none')
+    fireEvent.touchEnd(page, { touches: [] })
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    // Its own spring again, for PushPage's slide out.
+    expect(page.style.transition).toContain(`transform ${IOS_SPRING_MS}ms`)
+  })
+
+  it('drags by its toolbar however far it’s scrolled', () => {
+    const onDismiss = vi.fn()
+    const { container, getByText } = render(<Sheet onDismiss={onDismiss} />)
+    const page = container.lastElementChild as HTMLElement
+    // Its own scroller, as Tailwind's overflow-y-auto makes it in a browser.
+    page.style.overflowY = 'auto'
+    Object.defineProperty(page, 'scrollHeight', { value: 2000 })
+    Object.defineProperty(page, 'clientHeight', { value: 600 })
+    page.scrollTop = 300
+    // Scrolled down, a pull on what's in it scrolls it back up…
+    pull(getByText('The form'), 120)
+    expect(onDismiss).not.toHaveBeenCalled()
+    // …and one on its toolbar drags it.
+    pull(getByText('Cancel').parentElement!, 120)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('doesn’t drag while saving, nor without a way to close', () => {
+    const onDismiss = vi.fn()
+    const { container, getByText, unmount } = render(<Sheet onDismiss={onDismiss} saving />)
+    pull(getByText('The form'), 120)
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect((container.lastElementChild as HTMLElement).style.transform).toBe('translateY(0)')
+    unmount()
+
+    const plain = render(<PushPage open skipEnterAnimation from="bottom" sheet><p>No way to close</p></PushPage>)
+    pull(plain.getByText('No way to close'), 120)
+    expect((plain.container.lastElementChild as HTMLElement).style.transform).toBe('translateY(0)')
+  })
+})

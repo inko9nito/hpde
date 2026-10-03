@@ -525,6 +525,28 @@ test('a sheet holds the page still behind it, and drags down by its handle to cl
   expect(await page.evaluate(() => document.documentElement.classList.contains('bottom-sheet-open'))).toBe(false)
 })
 
+test('a page sheet with Cancel drags down by its toolbar to close, as Cancel does (#387)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Real touch drags need Chromium’s DevTools protocol')
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  await page.goto('/#/')
+  await page.getByRole('button', { name: 'Account: admin@example.com' }).click()
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: 'Edit profile' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit profile' })
+  const sheet = edit.getByRole('heading', { level: 1, name: 'Edit profile' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  const title = (await edit.getByRole('heading', { level: 1, name: 'Edit profile' }).boundingBox())!
+  const grab = { x: title.x + title.width / 2, y: title.y + title.height / 2 }
+  // A short pull springs back…
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 40 }, 30)
+  await expect.poll(async () => (await sheet.boundingBox())?.y).toBe(18)
+  await expect(edit).toBeVisible()
+  // …a long one closes it, and it slides away.
+  await touchDrag(page, grab, { x: grab.x, y: grab.y + 400 })
+  await expect(edit).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInViewport()
+})
+
 test('the account menu slides up from the picture, and Edit profile is a page sheet (#416)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)

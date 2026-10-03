@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 
-// A bottom sheet, held by its handle (#387) and in front of the page
-// (#432), as an iOS sheet is:
-//  - a finger pulling it down — on its handle or heading, or on what's in
-//    it once that's scrolled to the top — drags it, and lets go of it
-//    past a third of its height, or with a flick, to close it; short of
-//    that it springs back up;
+// A sheet from the bottom — or a page sheet with Cancel or ✕ — held by its
+// handle (#387) and in front of the page (#432), as an iOS sheet is:
+//  - a finger pulling it down — on its handle or toolbar (anything marked
+//    data-sheet-grab), or on what's in it once that's scrolled to the top
+//    — drags it, and lets go of it past a third of its height, or with a
+//    flick, to close it; short of that it springs back up. Never while
+//    it's busy, or its Cancel (data-sheet-cancel) is disabled: saving;
 //  - nothing scrolls the page behind it: not a finger on the dimmed page,
 //    nor one that runs past the end of what's in the sheet. What's in it
 //    still scrolls, and its text boxes are left alone.
@@ -48,15 +49,19 @@ const inField = (el: Element | null) => !!el?.closest('input, textarea, select, 
 
 /**
  * The sheet's gestures, on its overlay (`root`): the dimmed page
- * (`backdrop`) and the sheet itself (`panel`). `onClose` once it's been
- * dragged away and has slid the rest of the way down; never while `busy`.
+ * (`backdrop`, if it has one) and the sheet itself (`panel`). `onClose` once
+ * it's been dragged away — after sliding the rest of the way down itself,
+ * or, with `slideOut` false, straight away, for a page that slides itself
+ * out (PushPage). Never while `busy`; none at all unless `enabled`.
  */
-export function useSheetGestures({ root, panel, backdrop, onClose, busy = false }: {
+export function useSheetGestures({ root, panel, backdrop, onClose, busy = false, enabled = true, slideOut = true }: {
   root: RefObject<HTMLElement | null>
   panel: RefObject<HTMLElement | null>
-  backdrop: RefObject<HTMLElement | null>
+  backdrop?: RefObject<HTMLElement | null>
   onClose: () => void
   busy?: boolean
+  enabled?: boolean
+  slideOut?: boolean
 }) {
   const latest = useRef({ onClose, busy })
   latest.current = { onClose, busy }
@@ -64,8 +69,9 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
   useEffect(() => {
     const overlay = root.current
     const sheet = panel.current
-    if (!overlay || !sheet) return
-    const dim = backdrop.current
+    if (!enabled || !overlay || !sheet) return
+    const dim = backdrop?.current ?? null
+    const isBusy = () => latest.current.busy || !!sheet.querySelector('[data-sheet-cancel]:disabled')
 
     // What the finger on it is doing, decided on its first move: dragging
     // the sheet, scrolling what's in the sheet (or using a text box), or
@@ -79,14 +85,18 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
     let velocity = 0
     let closing = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    // Its own transform and transition (a page sheet's, from PushPage),
+    // as they were before the drag: the drag goes on top, and they're put
+    // back after.
+    let rest = { transform: '', transition: '' }
 
     // The sheet `y` px down from where it rests, and the page dimmed less the further it is.
     const place = (y: number, settle: boolean) => {
-      const transition = settle ? `${SETTLE_MS}ms ${SETTLE_EASE}` : 'none'
-      sheet.style.transition = settle ? `transform ${transition}` : 'none'
-      sheet.style.transform = y > 0 ? `translateY(${y}px)` : ''
+      const ease = `${SETTLE_MS}ms ${SETTLE_EASE}`
+      sheet.style.transition = !settle ? 'none' : rest.transition || `transform ${ease}`
+      sheet.style.transform = y > 0 ? `${rest.transform} translateY(${y}px)`.trim() : rest.transform
       if (dim) {
-        dim.style.transition = settle ? `opacity ${transition}` : 'none'
+        dim.style.transition = settle ? `opacity ${ease}` : 'none'
         dim.style.opacity = y > 0 ? String(Math.max(0, 1 - y / Math.max(1, sheet.offsetHeight))) : ''
       }
     }
@@ -103,6 +113,7 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
       lastT = e.timeStamp
       velocity = 0
       offset = 0
+      rest = { transform: sheet.style.transform, transition: sheet.style.transition }
       mode = 'deciding'
     }
 
@@ -112,7 +123,8 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
       const axis: Axis = Math.abs(dy) >= Math.abs(dx) ? 'y' : 'x'
       const delta = axis === 'y' ? dy : dx
       const scroller = scrollerOf(target, sheet, axis)
-      if (axis === 'y' && dy > 0 && (!scroller || scroller.scrollTop <= 0)) return latest.current.busy ? 'block' : 'drag'
+      const grab = axis === 'y' && dy > 0 && (!!target.closest('[data-sheet-grab]') || !scroller || scroller.scrollTop <= 0)
+      if (grab) return isBusy() ? 'block' : 'drag'
       return scroller && canScroll(scroller, axis, delta) ? 'native' : 'block'
     }
 
@@ -142,8 +154,14 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
         const flicked = e.timeStamp - lastT < 100 && velocity > FLICK_PX_PER_MS && offset > 0
         if (e.type === 'touchend' && (offset > sheet.offsetHeight * DISMISS_FRACTION || flicked)) {
           closing = true
-          place(sheet.offsetHeight, true)
-          timer = setTimeout(() => latest.current.onClose(), SETTLE_MS)
+          if (slideOut) {
+            place(sheet.offsetHeight, true)
+            timer = setTimeout(() => latest.current.onClose(), SETTLE_MS)
+          } else {
+            // It slides itself out from here, along its own spring.
+            sheet.style.transition = rest.transition
+            latest.current.onClose()
+          }
         } else if (offset > 0) {
           place(0, true)
         }
@@ -162,5 +180,5 @@ export function useSheetGestures({ root, panel, backdrop, onClose, busy = false 
       overlay.removeEventListener('touchcancel', onEnd)
       clearTimeout(timer)
     }
-  }, [root, panel, backdrop])
+  }, [root, panel, backdrop, enabled, slideOut])
 }

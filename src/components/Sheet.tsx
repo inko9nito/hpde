@@ -37,7 +37,7 @@ export function BottomSheet({ label, busy = false, onClose, className, children,
         className={`sheet-up relative w-full max-w-lg overscroll-contain rounded-t-2xl bg-white pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl ${className}`}
       >
         {/* The handle: a taller strip than the pill shows, for a thumb. */}
-        <div className="flex h-5 shrink-0 items-center justify-center" data-sheet-handle aria-hidden="true">
+        <div className="flex h-5 shrink-0 items-center justify-center" data-sheet-handle data-sheet-grab aria-hidden="true">
           <div className="h-1 w-9 rounded-full bg-gray-300" />
         </div>
         {children}
@@ -81,9 +81,11 @@ export function Sheet({ label, heading, centerHeading = false, busy = false, onC
 
   return (
     <BottomSheet label={label} busy={busy} onClose={onClose} className="flex max-h-[92dvh] flex-col overflow-y-auto px-4 [&>*]:shrink-0" {...data}>
-      <div className={centerHeading
-        ? 'grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-3 pt-1'
-        : 'flex items-start justify-between gap-3 pt-1'}
+      <div
+        className={centerHeading
+          ? 'grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-3 pt-1'
+          : 'flex items-start justify-between gap-3 pt-1'}
+        data-sheet-grab
       >
         {/* As wide as ✕, so the heading is in the middle of the sheet. */}
         {centerHeading && <span aria-hidden="true" />}
