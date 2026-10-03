@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Lock } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3 } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
@@ -14,7 +14,7 @@ import type { Corners, SessionPressures } from '../utils/garage'
 import type { RunGroupConfig } from '../types'
 
 // The pieces My notes (#210) lists saved laps with — the best-lap cards,
-// the Expand all / Private bar, a session's card and the loading skeleton
+// the Expand all bar, a session's card and the loading skeleton
 // — some of which a track page (#274) shares.
 
 /** Which session: its day, start time and run group. */
@@ -78,7 +78,7 @@ export function useOpenSessions() {
 
 /**
  * Above the laps: Expand all / Collapse all, once there are laps to open
- * (`keys`), and the Private tag.
+ * (`keys`).
  */
 export function LapsToolbar({ keys, open, onOpen }: {
   keys: string[]
@@ -99,24 +99,7 @@ export function LapsToolbar({ keys, open, onOpen }: {
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
-      <PrivateTag />
     </div>
-  )
-}
-
-/**
- * "Private", with who can see the laps on hover — worded for the driver,
- * as they'd see it, whoever's looking (#364); `what` is what's private, if
- * not lap times.
- */
-export function PrivateTag({ what = 'lap times' }: { what?: string }) {
-  return (
-    <span
-      className="flex shrink-0 items-center gap-1"
-      title={`Only you and admins can see your ${what}`}
-    >
-      <Lock size={12} className="text-red-500" aria-hidden="true" /> Private
-    </span>
   )
 }
 

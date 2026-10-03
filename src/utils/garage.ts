@@ -444,6 +444,15 @@ export function consumablesOn(car: Car, day?: string): PartOn[] {
   return CONSUMABLES.flatMap(p => (latest.has(p.id) ? [latest.get(p.id)!] : []))
 }
 
+/**
+ * How many of `events` a consumable put on on `date` has been used at
+ * (#418): those whose first day is on or after it — one changed on an
+ * event's first day was on for it, as consumablesOn has it.
+ */
+export function eventsSince(date: string, events: EventConfig[]): number {
+  return events.filter(e => eventStart(e) >= date).length
+}
+
 /** Everything a consumable's been, across every car, most used first — for the form's suggestions. */
 export function partOptions(part: ConsumableId, garage: Garage): string[] {
   const counts = new Map<string, number>()

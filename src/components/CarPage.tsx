@@ -14,7 +14,7 @@ import { GroupBadge } from './GroupBadge'
 import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, formatDay, isShared, logNewestFirst, othersText } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import type { EventConfig } from '../types'
@@ -196,11 +196,13 @@ function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
 
 /**
  * Setup (#410): what the car is fitted with now — its lug nut torque, its
- * maintenance (the consumables last changed) and, to come, its
- * modifications (#390).
+ * maintenance (the consumables last changed, each with how many events
+ * it's been used at, #418) and, to come, its modifications (#390).
  */
-function SetupPanel({ car, onOpenEntry, onLog }: {
+function SetupPanel({ car, driven, onOpenEntry, onLog }: {
   car: Car
+  /** The events it's been driven at, by any of its drivers: not those still to come. */
+  driven: EventConfig[]
   onOpenEntry: (entry: LogEntry) => void
   /** None for a car out of the garage. */
   onLog?: () => void
@@ -226,6 +228,8 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
             {on.map(c => {
               // The change that put it on.
               const entry = log.find(e => e.date === c.date && e.parts.some(p => p.part === c.part))
+              // None yet: no count, as on the Garage's cards (#424).
+              const used = eventsSince(c.date, driven)
               return (
                 <li key={c.part} className="border-b border-gray-100 last:border-b-0">
                   <button
@@ -235,7 +239,10 @@ function SetupPanel({ car, onOpenEntry, onLog }: {
                     <span className="w-[6.5rem] shrink-0 text-sm text-gray-500">{consumableLabel(c.part)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] text-gray-900">{c.what ?? 'Changed'}</span>
-                      <span className="block text-[13px] text-gray-500">Since {formatDay(c.date)}</span>
+                      <span className="block text-[13px] text-gray-500">
+                        Since {formatDay(c.date)}
+                        {used > 0 && <span data-events-used> · {used === 1 ? '1 event' : `${used} events`}</span>}
+                      </span>
                     </span>
                     <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
                   </button>
@@ -492,6 +499,9 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
 
   // And its other drivers', on a shared car (#398).
   const outings = carOutings(car, garage, events, rsvps)
+  // Those it's been driven at — one going on now, too — for how many each
+  // consumable's been used at (#418).
+  const driven = outings.filter(o => classifyEvent(o.event) !== 'upcoming').map(o => o.event)
   const subtitle = carSubtitle(car)
 
   return (
@@ -537,7 +547,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
       >
         {tab === 'setup' && (
-          <SetupPanel car={car} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />
+          <SetupPanel car={car} driven={driven} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />
         )}
         {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />}
         {tab === 'events' && (

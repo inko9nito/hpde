@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  carEvents, carName, carOutings, carTitle, cleanCar, driverLabel, isShared, othersText, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, formatDay, logNewestFirst, partOptions, shopOptions,
+  carEvents, carName, carOutings, carTitle, cleanCar, driverLabel, isShared, othersText, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, eventsSince, formatDay, logNewestFirst, partOptions, shopOptions,
 } from './garage'
 import type { Car, Garage } from './garage'
 import type { EventConfig } from '../types'
@@ -32,6 +32,14 @@ describe('garage (#344)', () => {
 
   it('lists the events a car went to, newest first', () => {
     expect(carEvents('c', garage, events).map(e => e.id)).toEqual(['sept', 'may', 'march'])
+  })
+
+  it('counts the events a consumable has been used at since it went on (#418)', () => {
+    expect(eventsSince('2026-02-20', events)).toBe(3)
+    expect(eventsSince('2026-04-15', events)).toBe(2)
+    // Changed on an event's first day: on for it.
+    expect(eventsSince('2026-09-11', events)).toBe(1)
+    expect(eventsSince('2026-09-12', events)).toBe(0)
   })
 
   it('lists the log newest first', () => {

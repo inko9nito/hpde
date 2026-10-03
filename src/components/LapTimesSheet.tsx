@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Lock, Timer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
@@ -456,14 +456,6 @@ export function LapTimesSheet({
           onRemove={() => pressures.onRemove(key)}
         />
       )}
-
-      <p className={`${view === 'laps' ? 'mt-3' : 'mt-5'} flex items-center justify-center gap-1 text-[11px] text-gray-400`}>
-        <Lock size={11} aria-hidden="true" />
-        {view === 'laps'
-          ? 'Only you and admins can see your lap times.'
-          : view === 'pressures' ? 'Only you and admins can see your garage.'
-          : 'Only you and admins can see your notes.'}
-      </p>
     </Sheet>
   )
 }

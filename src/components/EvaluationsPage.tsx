@@ -6,7 +6,7 @@ import { GroupBadge } from './GroupBadge'
 import { groupFor } from './LapTimesSheet'
 import { CARD_FRAME, CARD_SHELL } from './EventCard'
 import { DateBlock } from './DateBlock'
-import { PrivateTag, sessionTitle, useSkeletonFade } from './LapSessions'
+import { sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 import { ReportCardSwitch } from './ReportCardSwitch'
@@ -241,7 +241,7 @@ interface Props {
  * went to or has an evaluation at, newest first, with what the instructors
  * said (or a button to add it), under how their TDE report cards have come
  * along — the skills most improved and needing the most work, and the
- * skills wheel. Private: it needs a sign-in.
+ * skills wheel. It needs a sign-in.
  */
 export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEvent, onAddEvaluation }: Props) {
   const { status: authStatus } = useAuth()
@@ -277,7 +277,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
 
   let body
   if (authStatus !== 'signed-in') {
-    body = <SignInPrompt reason="see your instructor evaluations" privacyNote={false} />
+    body = <SignInPrompt reason="see your instructor evaluations" />
   } else if (loading || leaving) {
     body = <EvaluationsSkeleton leaving={leaving} />
   } else if (notes.status === 'error') {
@@ -303,9 +303,6 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
   } else {
     body = (
       <div className="fade-in">
-        <div className="mb-3 flex min-h-[20px] items-center justify-end px-1 text-xs text-gray-500">
-          <PrivateTag what="evaluations" />
-        </div>
         {kind && (
           <div className="mb-8 flex flex-col gap-4">
             {kinds.length > 1 && (

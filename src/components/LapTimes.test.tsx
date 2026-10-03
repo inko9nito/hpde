@@ -411,7 +411,8 @@ describe('lap times (#210)', () => {
     expect(rows(card)[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
     await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
     expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
-    expect(screen.getByText('Private')).toBeInTheDocument()
+    // No Private tag: what's theirs is theirs without saying so (#414).
+    expect(screen.queryByText('Private')).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:44')
     // Only admins pick a driver (#288).
     expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument()
@@ -777,8 +778,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     await switchDriver('Jason')
     await tapSession('Lap times: 11:45 AM, Blue')
     const sheet = screen.getByRole('dialog')
-    // Worded as he'd see it (#364): only the banner says it's his.
-    expect(sheet).toHaveTextContent('Only you and admins can see your lap times.')
+    // Only the banner says it's his (#364), and nothing says who can see it (#414).
+    expect(sheet).not.toHaveTextContent('admins can see')
     const box = await within(sheet).findByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save lap times' }))
@@ -827,7 +828,7 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     // Worded as he'd see it (#364): only the banner says whose.
     expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('Acting as Jason')
     expect(screen.getByText('On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.')).toBeInTheDocument()
-    expect(screen.getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
+    expect(screen.queryByText('Private')).not.toBeInTheDocument()
 
     // Picked again, they're fetched afresh.
     jasonSaved = [blue2(84_000)]
@@ -1269,7 +1270,7 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(lapDay.querySelector('[data-all-time-best]')).toBeNull()
     expect(within(page).queryByRole('table')).not.toBeInTheDocument()
     expect(within(page).queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument()
-    expect(within(page).getByText('Private')).toBeInTheDocument()
+    expect(within(page).queryByText('Private')).not.toBeInTheDocument()
     expect(document.title).toBe('MSRC 1.7 CW')
 
     // A chart of each event's best and average, oldest to newest, in the
@@ -1452,7 +1453,7 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:24.42')
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
     expect(String(url)).toContain(`driver=${JASON}`)
-    expect(within(page).getByText('Private')).toHaveAttribute('title', 'Only you and admins can see your lap times')
+    expect(within(page).queryByText('Private')).not.toBeInTheDocument()
 
     await userEvent.click(await card('Lap Day'))
     expect(screen.getByRole('region', { name: 'Acting as' })).toHaveTextContent('Acting as Jason')
@@ -1591,7 +1592,7 @@ describe('the garage (#344)', () => {
     openWithGarage('#/garage')
     expect(await screen.findByText('Sign in to manage your cars')).toBeInTheDocument()
     // Just that: no line under it.
-    expect(screen.queryByText('Only you and admins can see what you save.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/admins can see/)).not.toBeInTheDocument()
     expect(garageCalls('GET')).toHaveLength(0)
   })
 
@@ -1640,6 +1641,19 @@ describe('the garage (#344)', () => {
     expect(within(cars).getByText('2 events')).toHaveAttribute('data-events-badge')
     // No Private by the Garage's title (#424).
     expect(screen.queryByText('Private')).not.toBeInTheDocument()
+  })
+
+  it('says how many events each consumable on a car has been used at, none still to come (#418)', async () => {
+    const may: EventConfig = { ...sameLayout, id: '2026-05-02_may', name: 'May', days: [{ ...event.days[0], date: '2026-05-02' }] }
+    const coming: EventConfig = { ...sameLayout, id: '2099-05-02_coming', name: 'Coming', days: [{ ...event.days[0], date: '2099-05-02' }] }
+    moreEvents = [may, coming]
+    garageData = { cars: [cayman], events: Object.fromEntries([otherWay, sameLayout, event, may, coming].map(e => [e.id, { carId: 'cayman' }])) }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    const on = await within(page).findByRole('region', { name: 'Maintenance' })
+    // Tires on Apr 15: May since. Front pads on Feb 20: Lap Day and May —
+    // not the two before it, nor the one to come.
+    await waitFor(() => expect(on).toHaveTextContent('TiresYokohama A052Since Apr 15, 2026 · 1 eventFront padsHawk DTC-60Since Feb 20, 2026 · 2 events'))
   })
 
   it('a car’s page has its setup — what’s on it — and its change history; a job is logged, edited and removed (#410)', async () => {
@@ -2271,7 +2285,7 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     expect(await within(el).findByText('Sign in to see your instructor evaluations')).toBeInTheDocument()
-    expect(within(el).queryByText('Only you and admins can see what you save.')).not.toBeInTheDocument()
+    expect(within(el).queryByText(/admins can see/)).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('api/notes'))).toHaveLength(0)
   })
 })

@@ -73,7 +73,7 @@ export function GaragePage({ events, onBack, onToast }: {
       <SubPageHeader title="Garage" onBack={onBack} />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
-          <SignInPrompt reason="manage your cars" privacyNote={false} />
+          <SignInPrompt reason="manage your cars" />
         ) : garage.status === 'loading' || garage.status === 'off' ? (
           <div className="fade-in flex flex-col gap-3" aria-busy="true" aria-label="Loading your garage">
             <div className="aspect-[16/11] animate-pulse rounded-2xl border border-gray-200 bg-white" />

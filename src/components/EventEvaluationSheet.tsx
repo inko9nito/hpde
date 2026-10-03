@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Lock } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
@@ -425,10 +424,6 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
             </button>
           </div>
         )}
-        <p className="flex items-center gap-1 text-[11px] text-gray-400">
-          <Lock size={11} aria-hidden="true" />
-          Only you and admins can see your notes.
-        </p>
       </div>
       </div>
       </div>
