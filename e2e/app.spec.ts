@@ -931,8 +931,9 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await expect(menu).toBeVisible()
   // It opens on what the session can have (#205).
   await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
-  // Once the list has slid down, it slides up as a page sheet (#388, #445).
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445).
   const sheet = page.getByRole('dialog', { name: /^Lap times, / })
+  await fadedIn(sheet)
   // A sheet along the bottom of the screen, as wide as the phone at most.
   const viewport = page.viewportSize()!
   await expect.poll(async () => {
@@ -1033,6 +1034,12 @@ function risesInto(page: Page, selector: string) {
   }), selector)
 }
 
+// Once the sheet has grown up into a page sheet and what's picked from a
+// session's list has faded in (#445).
+async function fadedIn(sheet: Locator) {
+  await expect(sheet.locator('[data-sheet-page]')).toHaveCSS('opacity', '1')
+}
+
 // Saved: back on the session's list (#445), which ✕ closes.
 async function closeSessionList(page: Page) {
   const list = page.locator('[data-lap-sheet] [role="dialog"]')
@@ -1041,22 +1048,39 @@ async function closeSessionList(page: Page) {
   await expect(list).toHaveCount(0)
 }
 
-// Whether what `selector` finds is gone before `heading`'s page shows up,
-// while `act` runs: one layer, then the next (#445).
-function goneBefore(page: Page, selector: string, heading: string, act: () => Promise<void>) {
-  const watch = page.evaluate(([selector, heading]) => new Promise<boolean>(resolve => {
+// While `act` runs, and until it's settled: whether the session's sheet
+// (#445) grew or shrank with the list or the page in it showing, rather
+// than fading one out, resizing, then fading the other in.
+function watchSheet(page: Page, act: () => Promise<void>) {
+  const watch = page.evaluate(() => new Promise<{ resizedShowing: boolean; resized: boolean }>(resolve => {
+    let resizedShowing = false
+    let resized = false
+    let still = 0
+    let last = ''
+    let lastTop: number | undefined
+    const shown = (el: Element | null) => !!el && Number(getComputedStyle(el).opacity) > 0.2
     const step = () => {
-      const gone = !document.querySelector(selector)
-      const shown = [...document.querySelectorAll('h1')].some(h => h.textContent === heading)
-      if (shown) return resolve(gone)
+      const sheet = document.querySelector('[data-lap-sheet] [role="dialog"]')
+      if (!sheet) return resolve({ resizedShowing, resized })
+      const top = Math.round(sheet.getBoundingClientRect().top)
+      const showing = shown(sheet.querySelector('[data-sheet-list]')) || shown(sheet.querySelector('[data-sheet-page]'))
+      if (lastTop !== undefined && top !== lastTop) {
+        resized = true
+        if (showing) resizedShowing = true
+      }
+      lastTop = top
+      const at = `${top},${showing}`
+      still = at === last ? still + 1 : 0
+      last = at
+      if (still > 20) return resolve({ resizedShowing, resized })
       requestAnimationFrame(step)
     }
-    step()
-  }), [selector, heading] as const)
+    requestAnimationFrame(step)
+  }))
   return act().then(() => watch)
 }
 
-test('a session’s sheet slides down, then what’s picked slides up over it; Cancel or a drag down takes it down, then the sheet back up (#388, #445)', async ({ page, browserName }) => {
+test('a session’s list fades out, the sheet grows into a page sheet, and what’s picked fades in; Cancel or a drag down does the same back (#388, #445)', async ({ page, browserName }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
@@ -1068,34 +1092,41 @@ test('a session’s sheet slides down, then what’s picked slides up over it; C
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   expect(await opened).toBe(true)
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue', exact: true })
+  await expect.poll(async () => (await menu.boundingBox())!.y).toBeGreaterThan(200)
+  const listTop = (await menu.boundingBox())!.y
 
-  // Picked: the list slides down first, then its page slides up.
-  const up = trackSlide(page, () => Promise.resolve(), 'Instructor feedback')
-  expect(await goneBefore(page, list, 'Instructor feedback', () => menu.getByRole('button', { name: /^Instructor feedback/ }).click())).toBe(true)
-  expect(await up).toEqual({ fromBelow: true, fromSide: false })
+  // Picked: the list fades out, the sheet grows up into a page sheet, all
+  // the way to the bottom of the screen, and the page fades in; one sheet
+  // throughout, never resizing with either showing.
+  const up = await watchSheet(page, () => menu.getByRole('button', { name: /^Instructor feedback/ }).click())
+  expect(up).toEqual({ resized: true, resizedShowing: false })
   const sheet = page.getByRole('dialog', { name: 'Instructor feedback, 8:30 AM · Blue' })
-  await expect(menu).toHaveCount(0)
-  // A page sheet, all the way to the bottom of the screen.
+  await expect(sheet).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(1)
   const box = (await sheet.boundingBox())!
+  expect(box.y).toBeLessThan(40)
   expect(Math.round(box.y + box.height)).toBeGreaterThanOrEqual(page.viewportSize()!.height)
+  // What's under it shrinks back into a card on black.
+  await expect(page.locator('html')).toHaveClass(/page-sheet-up/)
 
-  // Cancel: it slides down, then the list back up.
-  const back = risesInto(page, list)
-  expect(await slidAway(page, '[data-lap-page]', () => sheet.getByRole('button', { name: 'Cancel' }).click())).toBe(true)
-  expect(await back).toBe(true)
-  await expect(menu).toBeVisible()
+  // Cancel: the same, back — never closing on the way.
+  const back = await watchSheet(page, () => sheet.getByRole('button', { name: 'Cancel' }).click())
+  expect(back).toEqual({ resized: true, resizedShowing: false })
+  await expect(menu.getByRole('navigation', { name: 'Session info' })).toBeVisible()
+  await expect.poll(async () => (await menu.boundingBox())!.y).toBe(listTop)
+  await expect(page.locator('html')).not.toHaveClass(/page-sheet-up/)
 
   if (browserName === 'chromium') {
-    // A drag down by its toolbar does what Cancel does — and the page under
-    // it isn't pulled to refresh (#445).
+    // A drag down by its toolbar does what Cancel does: back to the list,
+    // and the page under it isn't pulled to refresh (#445).
     await page.evaluate(() => { (window as unknown as { kept: boolean }).kept = true })
     await menu.getByRole('button', { name: /^Instructor feedback/ }).click()
-    const title = sheet.getByRole('heading', { level: 1 })
     await expect.poll(async () => (await sheet.boundingBox())?.y).toBeLessThan(40)
-    const at = (await title.boundingBox())!
-    const grab = { x: at.x + at.width / 2, y: at.y + at.height / 2 }
+    const title = (await sheet.getByRole('heading', { level: 1 }).boundingBox())!
+    const grab = { x: title.x + title.width / 2, y: title.y + title.height / 2 }
     await touchDrag(page, grab, { x: grab.x, y: grab.y + 400 })
     await expect(menu.getByRole('navigation', { name: 'Session info' })).toBeVisible()
+    await expect.poll(async () => (await menu.boundingBox())!.y).toBe(listTop)
     await page.waitForTimeout(800)
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true)
   }
@@ -1131,8 +1162,9 @@ test('saving lap times at a past event answers "I drove", in the session’s gro
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const menu = page.getByRole('dialog', { name: /8:30 AM · Blue/ })
   await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
-  // Once the list has slid down, it slides up as a page sheet (#388, #445).
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445).
   const sheet = page.getByRole('dialog', { name: /^Lap times, / })
+  await fadedIn(sheet)
   await sheet.getByLabel('Lap times or timestamps').fill(['1:52', '1:46'].join('\n'))
   await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('Lap times saved')
@@ -1231,8 +1263,9 @@ test('an admin logs another driver’s lap times, switched to from the account m
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
-  // Once the list has slid down, it slides up as a page sheet (#388, #445).
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445).
   const sheet = page.getByRole('dialog', { name: /^Lap times, / })
+  await fadedIn(sheet)
   await expect(page.getByLabel('Driver')).toHaveCount(0)
   // Only the banner says it's his (#364), and nothing says who can see it (#414).
   await expect(sheet).not.toContainText('admins can see')
@@ -1293,8 +1326,9 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor feedback/ }).click()
-  // Once the list has slid down, it slides up as a page sheet (#388, #445).
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445).
   const sheet = page.getByRole('dialog', { name: /^Instructor feedback, / })
+  await fadedIn(sheet)
   await sheet.getByLabel('What they said').fill('Unwind the wheel sooner and use all of the exit curb.')
   await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(sheet).toBeHidden()
@@ -1402,8 +1436,9 @@ test('a driver records each session’s track conditions, starting from the near
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
   await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Track conditions/ }).click()
-  // Once the list has slid down, it slides up as a page sheet (#388, #445).
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445).
   const sheet = page.getByRole('dialog', { name: /^Track conditions, / })
+  await fadedIn(sheet)
   // 8:30 rounds to 9:00: rain, 67°F near the track.
   await expect(sheet.getByRole('button', { name: 'Rain' })).toHaveAttribute('aria-pressed', 'true')
   await expect(sheet.getByLabel('Air')).toHaveValue('67')
@@ -1622,9 +1657,10 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await page.getByRole('tab', { name: 'Schedule' }).click()
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  // Once the list has slid down, it slides up as a page sheet (#388, #445): measured once it's up.
-  await trackSlide(page, () => menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Tire pressures/ }).click(), 'Tire pressures')
+  // Out fades the list, the sheet grows into a page sheet, and in it fades (#445): measured once it's in.
+  await menu.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Tire pressures/ }).click()
   const sheet = page.getByRole('dialog', { name: /^Tire pressures, / })
+  await fadedIn(sheet)
   for (const corner of ['Front left', 'Front right', 'Rear left', 'Rear right']) {
     await sheet.getByLabel(`${corner}, before the session`).fill('30')
     await sheet.getByLabel(`${corner}, after the session`).fill('36.5')

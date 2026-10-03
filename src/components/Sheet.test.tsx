@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
-import { Sheet } from './Sheet'
+import { PagedSheet, Sheet } from './Sheet'
 import { PullToRefresh } from './PullToRefresh'
 import { SETTLE_MS } from './sheetGestures'
 
@@ -110,6 +110,50 @@ describe('a sheet from the bottom', () => {
     expect(drag(handle, 150)).toBe(true)
     expect(dialog.style.transform).toBe('')
     act(() => { vi.advanceTimersByTime(SETTLE_MS) })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('a sheet with a page pushed in it (#445)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  function renderPaged(onBack = vi.fn()) {
+    const onClose = vi.fn()
+    render(
+      <PagedSheet
+        label="8:30 AM"
+        heading={<h2>8:30 AM</h2>}
+        onClose={onClose}
+        page={{ label: 'Lap times, 8:30 AM', open: true, onExited: () => {}, onBack, children: <h1>Lap times</h1> }}
+      >
+        <nav aria-label="Session info">The list</nav>
+      </PagedSheet>,
+    )
+    return { onClose, onBack, dialog: screen.getByRole('dialog', { name: 'Lap times, 8:30 AM' }) }
+  }
+
+  it('is named for the page, with the list under it hidden', () => {
+    const { dialog } = renderPaged()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Lap times')
+    expect(screen.queryByRole('navigation', { name: 'Session info' })).not.toBeInTheDocument()
+    expect(dialog.querySelector('[data-sheet-page]')).toBeInTheDocument()
+  })
+
+  it('dragged down far enough, goes back a page rather than closing, as its Cancel does', () => {
+    vi.useFakeTimers()
+    const { onClose, onBack, dialog } = renderPaged()
+    drag(dialog.querySelector('[data-sheet-handle]')!, 150)
+    expect(onBack).toHaveBeenCalledTimes(1)
+    // Up it springs, as the page slides out.
+    expect(dialog.style.transform).toBe('')
+    act(() => { vi.advanceTimersByTime(SETTLE_MS) })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('goes back a page on Escape', () => {
+    const { onClose, onBack } = renderPaged()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onBack).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
   })
 })

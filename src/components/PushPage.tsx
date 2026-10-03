@@ -121,6 +121,19 @@ function useUnderSheet(page?: Pushed): UnderSheet {
   })
 }
 
+/**
+ * For a sheet from the bottom grown into a page sheet (#445): what's under
+ * it shrinks back into a dimmed card on black while it's `up`, as under a
+ * PushPage `sheet`, and back as it shrinks. `shown` until it's gone, so the
+ * page stays black around the card till it's back in place.
+ */
+export function useRecedeUnder(shown: boolean, up: boolean) {
+  const page = useRef<Pushed>({ el: null, raised: false }).current
+  useSheet(page, shown, up)
+  useHtmlClass('page-sheet-open', shown)
+  useHtmlClass('page-sheet-up', up)
+}
+
 /** Whether a sheet is up, over anything (#415): the status bar turns black over it. */
 export function useSheetUp(): boolean {
   return useUnderSheet() === 'up'
