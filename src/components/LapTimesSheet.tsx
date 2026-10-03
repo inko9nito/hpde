@@ -1,8 +1,10 @@
 import { useId, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
+import { ChevronRight, ClipboardCheck, Disc3, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
+import { PageHeader } from './PageHeader'
+import type { Toolbar } from './PageHeader'
 import { Sheet } from './Sheet'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { TirePressuresForm, pressuresText } from './TirePressuresForm'
@@ -30,6 +32,13 @@ export interface SessionSlot {
  * its instructor evaluation (#340) or its tire pressures (#344).
  */
 export type SessionView = 'menu' | 'laps' | 'evaluation' | 'pressures'
+
+/** What each is called: its row in the menu, and its toolbar's title (#388). */
+const VIEW_TITLE: Record<Exclude<SessionView, 'menu'>, string> = {
+  laps: 'Lap times',
+  evaluation: 'Instructor feedback',
+  pressures: 'Tire pressures',
+}
 
 interface Props {
   slot: SessionSlot
@@ -78,10 +87,11 @@ export function shortDate(iso: string): string {
 
 /**
  * The sheet a session you drove opens in (#210): what you can add to it
- * (#205) — its lap times and your instructor's evaluation (#340) — each
- * opening in the sheet, with the way back to the list. Lap times: paste
- * your times, check what was read, save. Opens from the bottom like an iOS
- * sheet.
+ * (#205) — its tire pressures, your instructor's feedback (#340) and its
+ * lap times, in the order the day goes — each opening in the sheet under
+ * Cancel, its name and Save (#388). Cancel goes back to the list (or
+ * closes the sheet, opened for just that one). Lap times: paste your times,
+ * check what was read, save. Opens from the bottom like an iOS sheet.
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
@@ -195,13 +205,24 @@ export function LapTimesSheet({
 
   const key = group ? sessionKey(slot.date, slot.time, group) : null
 
+  // Each one's toolbar: Cancel, what's being edited, and the session it's for.
+  const back = () => (startView === 'menu' ? setView('menu') : onClose())
+  const toolbar: Toolbar | null = view === 'menu' ? null : {
+    title: VIEW_TITLE[view],
+    subtitle: [overline, `${formatTime(slot.time)} ${formatAmPm(slot.time)}`, group && groupFor(group, runGroups).label].filter(Boolean).join(' · '),
+    onCancel: back,
+    // Across the sheet's padding, edge to edge.
+    className: '-mx-4',
+  }
+
   return (
     <Sheet
       label={title}
       busy={!!busy || evaluationBusy}
       onClose={onClose}
       data-lap-sheet
-      heading={<>
+      // Once one's picked, its toolbar is the heading.
+      heading={view !== 'menu' ? undefined : <>
         {/* Like the session's card on the schedule: its time and group. */}
         {overline && <p className="text-xs text-gray-500">{overline}</p>}
         <h2 className="mt-0.5 flex items-center gap-3">
@@ -213,11 +234,16 @@ export function LapTimesSheet({
         </h2>
       </>}
     >
+      {/* Till there's a form to save, Save waits. */}
+      {toolbar && (waiting || group === null) && (
+        <PageHeader {...toolbar} save={{ label: 'Save', disabled: true }} />
+      )}
+
       {waiting && (
         <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>
       )}
 
-      {slot.groups.length > 1 && !waiting && (
+      {slot.groups.length > 1 && (view === 'menu' || group === null) && !waiting && (
         <fieldset className="mt-4">
           <legend className="text-xs font-medium text-gray-700">
             Which group were you driving in?
@@ -237,62 +263,59 @@ export function LapTimesSheet({
         </fieldset>
       )}
 
-      {view !== 'menu' && !waiting && (
-        <button
-          onClick={() => setView('menu')}
-          disabled={!!busy || evaluationBusy}
-          className="-ml-1 mt-4 flex items-center self-start text-sm font-medium text-blue-600 hover:text-blue-700"
-        >
-          <ChevronLeft size={18} aria-hidden="true" />
-          All session info
-        </button>
-      )}
-
       {view === 'menu' && !waiting && (
         <nav aria-label="Session info" className="mt-4 flex flex-col gap-2">
-          <MenuRow
-            icon={Timer}
-            title="Lap times"
-            detail={existing ? lapsDetail(existing) : 'Paste times or timestamps from your timing sheet'}
-            saved={!!existing}
-            disabled={group === null}
-            onClick={() => setView('laps')}
-          />
-          <MenuRow
-            icon={ClipboardCheck}
-            title="Instructor evaluation"
-            detail={notes ? notes.evaluation.feedback : 'Add what your instructor told you after this session'}
-            saved={!!notes}
-            disabled={group === null}
-            onClick={() => setView('evaluation')}
-          />
+          {/* In the order the day goes: pressures before and after, what the instructor said, then the timing sheet. */}
           {pressures && (
             <MenuRow
               icon={Disc3}
-              title="Tire pressures"
-              detail={tires ? pressuresText(tires) : 'Each corner, before the session and hot after it'}
-              saved={!!tires}
+              title={VIEW_TITLE.pressures}
+              detail={tires && pressuresText(tires)}
               disabled={group === null}
               onClick={() => setView('pressures')}
             />
           )}
+          <MenuRow
+            icon={ClipboardCheck}
+            title={VIEW_TITLE.evaluation}
+            detail={notes?.evaluation.feedback}
+            disabled={group === null}
+            onClick={() => setView('evaluation')}
+          />
+          <MenuRow
+            icon={Timer}
+            title={VIEW_TITLE.laps}
+            detail={existing && lapsDetail(existing)}
+            disabled={group === null}
+            onClick={() => setView('laps')}
+          />
         </nav>
       )}
 
-      {view === 'laps' && (<>
-        {group !== null && existing && !editing && !waiting && (
+      {view === 'laps' && toolbar && group !== null && !waiting && (<>
+        {existing && !editing ? (
+          // Saved laps open read-only: Done, or Edit to change them.
+          <PageHeader
+            {...toolbar}
+            cancelLabel="Done"
+            cancelDisabled={!!busy}
+            save={{ label: 'Edit', disabled: !!busy, onClick: () => setEditing(true) }}
+          />
+        ) : (
+          // Cancel puts back what's saved, or goes back without any.
+          <PageHeader
+            {...toolbar}
+            onCancel={existing ? cancelEdit : () => { startFrom(group); toolbar.onCancel() }}
+            cancelDisabled={!!busy}
+            save={{ label: busy === 'saving' ? 'Saving…' : 'Save', disabled: !canSave, onClick: save }}
+          />
+        )}
+
+        {existing && !editing && (
           <section aria-label="Saved laps" className="mt-4 flex flex-col gap-3">
             {/* Like the session's card on My notes (#324). */}
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <LapsHeading laps={existing.laps} />
-                <button
-                  onClick={() => setEditing(true)}
-                  className="-my-2 shrink-0 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
-                >
-                  Edit
-                </button>
-              </div>
+              <LapsHeading laps={existing.laps} />
               <div className={FIGURES_INDENT}>
                 <SessionFigures laps={existing.laps} allTimeBest={allTimeBest} />
               </div>
@@ -303,7 +326,7 @@ export function LapTimesSheet({
           </section>
         )}
 
-        {group !== null && editing && !waiting && (
+        {editing && (
           <>
             <label htmlFor={textareaId} className="mt-4 text-xs font-medium text-gray-700">
               Lap times or timestamps
@@ -396,20 +419,6 @@ export function LapTimesSheet({
         {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
         <div className="mt-5 flex flex-col items-center gap-3">
-          {(editing || group === null) && !waiting && (
-            <button
-              onClick={save}
-              disabled={!canSave}
-              className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-            >
-              {busy === 'saving' ? 'Saving…' : 'Save lap times'}
-            </button>
-          )}
-          {editing && existing && (
-            <button onClick={cancelEdit} disabled={!!busy} className="text-sm text-gray-600 hover:text-gray-800">
-              Cancel
-            </button>
-          )}
           {existing && !confirmingRemove && (
             <button
               onClick={() => setConfirmingRemove(true)}
@@ -433,8 +442,9 @@ export function LapTimesSheet({
         </div>
       </>)}
 
-      {view === 'evaluation' && group !== null && key !== null && !waiting && (
+      {view === 'evaluation' && toolbar && group !== null && key !== null && !waiting && (
         <SessionEvaluationForm
+          toolbar={toolbar}
           // Fresh for each group and driver, from what they have saved.
           key={`${key} ${driver?.id ?? ''}`}
           existing={notes?.evaluation}
@@ -446,8 +456,9 @@ export function LapTimesSheet({
         />
       )}
 
-      {view === 'pressures' && pressures && group !== null && key !== null && !waiting && (
+      {view === 'pressures' && toolbar && pressures && group !== null && key !== null && !waiting && (
         <TirePressuresForm
+          toolbar={toolbar}
           key={key}
           session={{ date: slot.date, time: slot.time, group, sessionNumber: slot.sessionNumber }}
           existing={tires}
@@ -466,12 +477,14 @@ function lapsDetail(laps: SessionLaps): string {
   return `${count} ${count === 1 ? 'lap' : 'laps'}${best !== undefined ? ` · best ${formatLapTime(best)}` : ''}`
 }
 
-/** One thing a session can have (#205): what it is, what's saved, and the way in. */
-function MenuRow({ icon: Icon, title, detail, saved, disabled, onClick }: {
+/**
+ * One thing a session can have (#205): what it is, what's saved under it —
+ * nothing till there is (#388) — and the way in.
+ */
+function MenuRow({ icon: Icon, title, detail, disabled, onClick }: {
   icon: LucideIcon
   title: string
-  detail: string
-  saved: boolean
+  detail?: string
   disabled: boolean
   onClick: () => void
 }) {
@@ -486,9 +499,8 @@ function MenuRow({ icon: Icon, title, detail, saved, disabled, onClick }: {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-gray-900">{title}</span>
-        <span className={`mt-0.5 block truncate text-xs ${saved ? 'text-gray-700' : 'text-gray-500'}`}>{detail}</span>
+        {detail && <span className="mt-0.5 block truncate text-xs text-gray-500">{detail}</span>}
       </span>
-      {saved && <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden="true" />}
       <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
     </button>
   )

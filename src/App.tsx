@@ -983,12 +983,12 @@ export default function App() {
         onSaveEvaluation={async session => {
           await notesLog.saveSession(session)
           setLapSlot(null)
-          showToast('Evaluation saved')
+          showToast('Feedback saved')
         }}
         onRemoveEvaluation={async key => {
           await notesLog.removeSession(key)
           setLapSlot(null)
-          showToast('Evaluation removed')
+          showToast('Feedback removed')
         }}
         pressures={garageOn ? {
           saved: key => pressuresByKey.get(key),

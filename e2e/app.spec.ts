@@ -931,6 +931,12 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
     const box = (await sheet.boundingBox())!
     return Math.round(box.y + box.height)
   }).toBe(viewport.height)
+  // Headed by Cancel, Lap times and Save, edge to edge across it (#388).
+  const toolbar = sheet.locator('[data-sheet-grab]').filter({ has: page.getByRole('heading', { name: 'Lap times' }) })
+  await expect(toolbar.getByRole('button')).toHaveText(['Cancel', 'Save'])
+  const [sheetBox, toolbarBox] = [(await sheet.boundingBox())!, (await toolbar.boundingBox())!]
+  expect(Math.round(toolbarBox.x)).toBe(Math.round(sheetBox.x))
+  expect(Math.round(toolbarBox.width)).toBe(Math.round(sheetBox.width))
 
   // Every column, top and average speed too (#298): the widest a table gets.
   await sheet.getByLabel('Lap times or timestamps').fill([
@@ -947,7 +953,7 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await expect(read.getByRole('row', { name: /^2 / })).toContainText('Clean lap')
   await expect(read.getByRole('row', { name: /^2 / }).locator('[data-speed]')).toHaveText(['103.9', '70.8'])
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
 
   await expect(sheet).toBeHidden()
   await expect(page.getByRole('status')).toHaveText('Lap times saved')
@@ -1001,7 +1007,7 @@ test('saving lap times at a past event answers "I drove", in the session’s gro
   const sheet = page.getByRole('dialog', { name: /8:30 AM · Blue/ })
   await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Lap times/ }).click()
   await sheet.getByLabel('Lap times or timestamps').fill(['1:52', '1:46'].join('\n'))
-  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByRole('status')).toHaveText('Lap times saved')
   await expect(page.getByRole('button', { name: 'Did you drive?' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Drove Blue' })).toBeVisible()
@@ -1103,7 +1109,7 @@ test('an admin logs another driver’s lap times, switched to from the account m
   await expect(sheet).not.toContainText('admins can see')
   await sheet.getByLabel('Lap times or timestamps').fill('1:24.51, 1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await sheet.getByRole('button', { name: 'Save lap times' }).click()
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
 
   await expect(sheet).toBeHidden()
   const toast = page.getByRole('status')
@@ -1156,11 +1162,11 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await page.goto(`/#/event/${tde.id}`)
   await page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue' }).click()
   const sheet = page.getByRole('dialog', { name: '8:30 AM · Blue' })
-  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor evaluation/ }).click()
-  await sheet.getByLabel('Instructor feedback').fill('Unwind the wheel sooner and use all of the exit curb.')
-  await sheet.getByRole('button', { name: 'Save evaluation' }).click()
+  await sheet.getByRole('navigation', { name: 'Session info' }).getByRole('button', { name: /^Instructor feedback/ }).click()
+  await sheet.getByLabel('What they said').fill('Unwind the wheel sooner and use all of the exit curb.')
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(sheet).toBeHidden()
-  await expect(page.getByRole('status')).toHaveText('Evaluation saved')
+  await expect(page.getByRole('status')).toHaveText('Feedback saved')
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (evaluated)' })).toBeVisible()
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
@@ -1391,7 +1397,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   expect(fr.x).toBeGreaterThan(fl.x)
   expect(rl.y).toBeGreaterThan(fl.y)
   await noSideScroll()
-  await sheet.getByRole('button', { name: 'Save tire pressures' }).click()
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(sheet).toBeHidden()
   await expect(page.getByRole('status')).toHaveText('Tire pressures saved')
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (tire pressures)' })).toBeVisible()

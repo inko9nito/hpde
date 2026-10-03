@@ -207,12 +207,12 @@ function EvaluationRow({ notes, title, onOpen }: { notes: SessionNotes; title: s
       <div className="flex items-center justify-between gap-3">
         <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
           <ClipboardCheck size={13} className="shrink-0" aria-hidden="true" />
-          <span className="truncate">Instructor evaluation{instructor && ` · ${instructor}`}</span>
+          <span className="truncate">Instructor feedback{instructor && ` · ${instructor}`}</span>
         </p>
         {onOpen && (
           <button
             onClick={onOpen}
-            aria-label={`Open the instructor evaluation for ${title}`}
+            aria-label={`Open the instructor feedback for ${title}`}
             className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
           >
             <ChevronRight size={18} aria-hidden="true" />

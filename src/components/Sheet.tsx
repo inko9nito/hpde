@@ -50,12 +50,13 @@ export function BottomSheet({ label, busy = false, onClose, className, children,
 /**
  * A sheet that opens from the bottom like an iOS sheet (#210): a heading
  * with a close button, over whatever goes in it. Escape or a tap outside
- * closes it — neither while `busy`, saving or removing.
+ * closes it — neither while `busy`, saving or removing. Without a heading,
+ * what's in it brings its own toolbar: Cancel and Save (#388).
  */
 export function Sheet({ label, heading, centerHeading = false, busy = false, onClose, children, ...data }: {
   /** Names the dialog. */
   label: string
-  heading: ReactNode
+  heading?: ReactNode
   /** Across the middle, over a sheet laid out down its middle (#411). */
   centerHeading?: boolean
   busy?: boolean
@@ -81,7 +82,7 @@ export function Sheet({ label, heading, centerHeading = false, busy = false, onC
 
   return (
     <BottomSheet label={label} busy={busy} onClose={onClose} className="flex max-h-[92dvh] flex-col overflow-y-auto px-4 [&>*]:shrink-0" {...data}>
-      <div
+      {heading !== undefined && <div
         className={centerHeading
           ? 'grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-3 pt-1'
           : 'flex items-start justify-between gap-3 pt-1'}
@@ -99,7 +100,7 @@ export function Sheet({ label, heading, centerHeading = false, busy = false, onC
         >
           <X size={16} strokeWidth={2.5} />
         </button>
-      </div>
+      </div>}
       {children}
     </BottomSheet>
   )

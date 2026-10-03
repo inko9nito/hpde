@@ -1,5 +1,7 @@
 import { useId, useState } from 'react'
 import { inputClass } from './SessionEvaluationForm'
+import { PageHeader } from './PageHeader'
+import type { Toolbar } from './PageHeader'
 import { CORNERS, MAX_NOTE, MAX_PSI, cleanPressures, cornersText } from '../utils/garage'
 import type { CornerId, Corners, SessionPressures } from '../utils/garage'
 
@@ -34,9 +36,11 @@ export function pressuresText(p: Pick<SessionPressures, 'cold' | 'hot' | 'note'>
 /**
  * A session's tire pressures (#344), in its sheet: each corner's, before it
  * and hot after it — laid out as the car sits, fronts on top — and what was
- * changed. Save replaces what's there; Remove takes them off the session.
+ * changed, under Cancel and Save (#388). Save replaces what's there; Remove
+ * takes them off the session.
  */
-export function TirePressuresForm({ session, existing, onBusyChange, onSave, onRemove }: {
+export function TirePressuresForm({ toolbar, session, existing, onBusyChange, onSave, onRemove }: {
+  toolbar: Toolbar
   /** Which session. */
   session: Pick<SessionPressures, 'date' | 'time' | 'group' | 'sessionNumber'>
   existing?: SessionPressures
@@ -70,6 +74,15 @@ export function TirePressuresForm({ session, existing, onBusyChange, onSave, onR
 
   return (
     <>
+      <PageHeader
+        {...toolbar}
+        cancelDisabled={!!busy}
+        save={{
+          label: busy === 'saving' ? 'Saving…' : 'Save',
+          disabled: !('value' in cleaned) || !!busy,
+          onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
+        }}
+      />
       {WHEN.map(w => {
         const [draft, setDraft] = drafts[w.id]
         return (
@@ -121,13 +134,6 @@ export function TirePressuresForm({ session, existing, onBusyChange, onSave, onR
       {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        <button
-          onClick={() => 'value' in cleaned && run('saving', () => onSave(cleaned.value))}
-          disabled={!('value' in cleaned) || !!busy}
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-        >
-          {busy === 'saving' ? 'Saving…' : 'Save tire pressures'}
-        </button>
         {existing && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
             Remove from session
