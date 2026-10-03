@@ -2261,14 +2261,19 @@ function addFeaturedBadge(w, next, F, t) {
 
 const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
-// "in 9 days": a solid pill, as the designs have it.
+// "in 9 days", or "Tomorrow" the day before (#404): a solid pill, as the
+// designs have it.
+function countdownLabel(days) {
+  return days === 1 ? "Tomorrow" : `in ${days} ${pluralize(days, "day")}`
+}
+
 function addCountdownPill(row, days, bg, fg, t) {
   const pill = row.addStack()
   pill.backgroundColor = bg
   pill.cornerRadius = 100
   pill.setPadding(t.pillPadV, t.pillPadH, t.pillPadV, t.pillPadH)
   pill.centerAlignContent()
-  const label = pill.addText(`in ${days} ${pluralize(days, "day")}`)
+  const label = pill.addText(countdownLabel(days))
   label.font = rSemiboldFont(t.pillFont)
   label.textColor = fg
   label.lineLimit = 1

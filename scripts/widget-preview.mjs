@@ -852,6 +852,11 @@ const UPCOMING_LONG = {
   ],
 }
 
+// The day before an event: its pill says "Tomorrow", not "in 1 day" (#404).
+const UPCOMING_TOMORROW = {
+  events: [{ ...UPCOMING_LONG.events[0], days: [{ date: isoDate(1), label: 'Saturday', activities: [] }] }],
+}
+
 // The owner's phone first (every scenario), then the narrowest and
 // widest phones for the width-sensitive countdown layouts and the
 // tightest live view. Scenarios
@@ -864,6 +869,7 @@ const SWEEP = [
   { family: 'medium', manifest: UPCOMING_LONG, label: 'Medium — countdown (long names)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_LONG, label: 'Large — countdown (4 upcoming, long names)' },
+  { family: 'small', manifest: UPCOMING_TOMORROW, label: 'Small — countdown (tomorrow)' },
 ]
 const SCENARIOS = [
   { family: 'small', manifest: NO_EVENTS, label: 'Small — zero state' },
@@ -879,6 +885,8 @@ const SCENARIOS = [
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming: 2 + footer)' },
+  { family: 'medium', manifest: UPCOMING_TOMORROW, label: 'Medium — countdown (tomorrow)' },
+  { family: 'large', manifest: UPCOMING_TOMORROW, label: 'Large — countdown (tomorrow)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },
   // The live view's parameter chips (#291), at a fixed time.
   { family: 'large', manifest: LIVE_MANIFEST, at: `${LIVE_DAY}T10:05`, param: 'orange|15m', label: 'Large — live, filtered + 15m alerts' },
