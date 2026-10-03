@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  carEvents, carName, carOutings, carTitle, cleanCar, driverLabel, isShared, othersText, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, eventsSince, formatDay, logNewestFirst, partOptions, shopOptions,
+  carEvents, carName, carOutings, carTitle, cleanCar, driverLabel, isShared, othersText, cleanEntry, cleanPressures, cleanSetup, consumablesOn, cornersText, eventsSince, formatDay, logNewestFirst, partOptions, replacedOn, shopOptions,
 } from './garage'
 import type { Car, Garage } from './garage'
 import type { EventConfig } from '../types'
@@ -40,6 +40,20 @@ describe('garage (#344)', () => {
     // Changed on an event's first day: on for it.
     expect(eventsSince('2026-09-11', events)).toBe(1)
     expect(eventsSince('2026-09-12', events)).toBe(0)
+    // Replaced: those before it came off — one on the day it did, the new one's.
+    expect(eventsSince('2026-02-20', events, '2026-05-02')).toBe(1)
+  })
+
+  it('says when the part a log entry put on came off (#418)', () => {
+    const [hoosiers, yokohamas, fluid] = cayman.log!
+    expect(replacedOn(cayman, hoosiers, 'tires')).toBe('2026-04-15')
+    expect(replacedOn(cayman, hoosiers, 'frontPads')).toBeUndefined()
+    expect(replacedOn(cayman, yokohamas, 'tires')).toBeUndefined()
+    expect(replacedOn(cayman, fluid, 'brakeFluid')).toBeUndefined()
+    // Changed twice on one day: the one logged later replaced it.
+    const twice: Car = { ...cayman, log: [...cayman.log!, { id: '5', date: '2026-04-15', parts: [{ part: 'tires', what: 'Hoosier R7' }] }] }
+    expect(replacedOn(twice, yokohamas, 'tires')).toBe('2026-04-15')
+    expect(replacedOn(twice, twice.log![3], 'tires')).toBeUndefined()
   })
 
   it('lists the log newest first', () => {

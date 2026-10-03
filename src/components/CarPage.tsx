@@ -14,7 +14,7 @@ import { GroupBadge } from './GroupBadge'
 import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import type { EventConfig } from '../types'
@@ -278,10 +278,13 @@ function dayTitle(date: string): string {
  * month — the day in a column of its own, not the events' stacked date —
  * each part on lines of its own (what it is, what went on, where), parts
  * changed the same day split by a rule, as a schedule's sessions at the
- * same time are. Each opens its entry to change or remove.
+ * same time are — and how many events each was used at, till it was
+ * replaced (#418). Each opens its entry to change or remove.
  */
-function HistoryPanel({ car, onOpenEntry, onLog }: {
+function HistoryPanel({ car, driven, onOpenEntry, onLog }: {
   car: Car
+  /** The events it's been driven at, by any of its drivers: not those still to come. */
+  driven: EventConfig[]
   onOpenEntry: (entry: LogEntry) => void
   /** None for a car out of the garage. */
   onLog?: () => void
@@ -314,23 +317,28 @@ function HistoryPanel({ car, onOpenEntry, onLog }: {
               <li key={date} className="flex gap-3 border-b border-gray-100 pl-4 last:border-b-0">
                 <span className="w-14 shrink-0 py-3 text-[13px] tabular-nums text-gray-500">{dayTitle(date)}</span>
                 <div className="min-w-0 flex-1 divide-y divide-gray-100">
-                  {entries.flatMap(e => e.parts.map((p, j) => (
-                    <button
-                      key={`${e.id} ${p.part}`}
-                      onClick={() => onOpenEntry(e)}
-                      className="flex w-full items-start gap-3 py-3 pr-4 text-left transition-colors hover:bg-gray-50"
-                      data-history-part
-                    >
-                      <span className="min-w-0 flex-1 text-sm leading-snug">
-                        <span className="block font-semibold text-gray-900">{consumableLabel(p.part)}</span>
-                        {p.what && <span className="block text-gray-700">{p.what}</span>}
-                        {e.shop && <span className="block text-gray-500">{e.shop}</span>}
-                        {/* The job's note, once, under its last part. */}
-                        {e.note && j === e.parts.length - 1 && <span className="mt-1 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
-                      </span>
-                      <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
-                    </button>
-                  )))}
+                  {entries.flatMap(e => e.parts.map((p, j) => {
+                    // None: no count, as on Setup.
+                    const used = eventsSince(e.date, driven, replacedOn(car, e, p.part))
+                    return (
+                      <button
+                        key={`${e.id} ${p.part}`}
+                        onClick={() => onOpenEntry(e)}
+                        className="flex w-full items-start gap-3 py-3 pr-4 text-left transition-colors hover:bg-gray-50"
+                        data-history-part
+                      >
+                        <span className="min-w-0 flex-1 text-sm leading-snug">
+                          <span className="block font-semibold text-gray-900">{consumableLabel(p.part)}</span>
+                          {p.what && <span className="block text-gray-700">{p.what}</span>}
+                          {e.shop && <span className="block text-gray-500">{e.shop}</span>}
+                          {/* The job's note, once, under its last part. */}
+                          {e.note && j === e.parts.length - 1 && <span className="mt-1 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
+                        </span>
+                        {used > 0 && <span className="shrink-0 text-[13px] tabular-nums text-gray-500" data-events-used>{used === 1 ? '1 event' : `${used} events`}</span>}
+                        <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
+                      </button>
+                    )
+                  }))}
                 </div>
               </li>
             ))}
@@ -500,7 +508,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   // And its other drivers', on a shared car (#398).
   const outings = carOutings(car, garage, events, rsvps)
   // Those it's been driven at — one going on now, too — for how many each
-  // consumable's been used at (#418).
+  // consumable's been used at (#418), on Setup and History.
   const driven = outings.filter(o => classifyEvent(o.event) !== 'upcoming').map(o => o.event)
   const subtitle = carSubtitle(car)
 
@@ -549,7 +557,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         {tab === 'setup' && (
           <SetupPanel car={car} driven={driven} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />
         )}
-        {tab === 'history' && <HistoryPanel car={car} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />}
+        {tab === 'history' && <HistoryPanel car={car} driven={driven} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />}
         {tab === 'events' && (
           <EventsPanel car={car} outings={outings} onOpenEvent={onOpenEvent} onAdd={car.archived ? undefined : () => setAddingEvents(true)} />
         )}

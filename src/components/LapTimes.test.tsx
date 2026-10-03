@@ -1643,7 +1643,7 @@ describe('the garage (#344)', () => {
     expect(screen.queryByText('Private')).not.toBeInTheDocument()
   })
 
-  it('says how many events each consumable on a car has been used at, none still to come (#418)', async () => {
+  it('says how many events each consumable on a car has been used at, none still to come, and each in its history till it came off (#418)', async () => {
     const may: EventConfig = { ...sameLayout, id: '2026-05-02_may', name: 'May', days: [{ ...event.days[0], date: '2026-05-02' }] }
     const coming: EventConfig = { ...sameLayout, id: '2099-05-02_coming', name: 'Coming', days: [{ ...event.days[0], date: '2099-05-02' }] }
     moreEvents = [may, coming]
@@ -1654,6 +1654,12 @@ describe('the garage (#344)', () => {
     // Tires on Apr 15: May since. Front pads on Feb 20: Lap Day and May —
     // not the two before it, nor the one to come.
     await waitFor(() => expect(on).toHaveTextContent('TiresYokohama A052Since Apr 15, 2026 · 1 eventFront padsHawk DTC-60Since Feb 20, 2026 · 2 events'))
+
+    // History: each change, with the events it was on till it came off —
+    // the Hoosiers, Lap Day; the Yokohamas since.
+    await userEvent.click(within(page).getByRole('tab', { name: 'History' }))
+    const log = [...within(page).getByRole('group', { name: 'Change log' }).querySelectorAll<HTMLElement>('[data-history-part]')]
+    expect(log.map(b => b.textContent)).toEqual(['TiresYokohama A0521 event', 'TiresHoosier R7Speed Shop1 event', 'Front padsHawk DTC-60Speed Shop2 events'])
   })
 
   it('a car’s page has its setup — what’s on it — and its change history; a job is logged, edited and removed (#410)', async () => {
