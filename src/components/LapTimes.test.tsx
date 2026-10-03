@@ -283,11 +283,33 @@ async function sheetGone() {
   })
 }
 
-// In the session's sheet, opens one of the things it can have: a page
-// sheet, named for it and the session, as the list slides away (#388).
-async function openInSheet(what: 'Lap times' | 'Instructor feedback') {
-  const nav = within(screen.getByRole('dialog')).getByRole('navigation', { name: 'Session info' })
+// Back on the session's list once what was picked from it has slid back
+// out (#445) — on Save, Remove or Cancel.
+async function backOnList() {
+  await waitFor(() => expect(document.querySelector('[data-lap-page]')).toBeNull())
+  const list = screen.getByRole('dialog', { name: /^\d/ })
+  expect(within(list).getByRole('navigation', { name: 'Session info' })).toBeInTheDocument()
+  return list
+}
+
+// Closes the session's list with its ✕.
+async function closeList() {
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }))
+  await sheetGone()
+}
+
+// Once the sheet's page has faded in (#445).
+async function pageShown() {
+  await waitFor(() => expect(document.querySelector('[data-sheet-page]:not([aria-hidden])')).not.toBeNull())
+}
+
+// In the session's sheet, opens one of the things it can have: a page,
+// named for it and the session, faded in in place of the list as the sheet
+// grows (#388, #445).
+async function openInSheet(what: 'Lap times' | 'Instructor feedback' | 'Tire pressures') {
+  const nav = await within(screen.getByRole('dialog')).findByRole('navigation', { name: 'Session info' })
   await userEvent.click(within(nav).getByRole('button', { name: new RegExp(`^${what}`) }))
+  await pageShown()
   return screen.getByRole('dialog', { name: new RegExp(`^${what}, `) })
 }
 
@@ -400,8 +422,11 @@ describe('lap times (#210)', () => {
     expect(sheet).toHaveTextContent('Passed over lines 1, 5')
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
-    await sheetGone()
+    // Back on the list, which says what's saved now (#445).
+    const list = await backOnList()
+    expect(within(list).getByRole('button', { name: /^Lap times/ })).toHaveTextContent('Lap times2 laps · best 1:44')
     expect(screen.getByRole('status')).toHaveTextContent('Lap times saved')
+    await closeList()
 
     const [, put] = lapCalls('PUT')[0]
     expect(JSON.parse(String(put!.body)).session).toEqual({
@@ -482,7 +507,8 @@ describe('lap times (#210)', () => {
     ])
 
     // Editing brings them back as rows, speeds after the lap time.
-    await sheetGone()
+    await backOnList()
+    await closeList()
     await userEvent.click(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' }))
     const again = await openInSheet('Lap times')
     await userEvent.click(within(again).getByRole('button', { name: 'Edit' }))
@@ -575,7 +601,8 @@ describe('lap times (#210)', () => {
 
     await userEvent.click(within(sheet).getByRole('button', { name: 'Remove from session' }))
     await userEvent.click(within(sheet).getByRole('button', { name: 'Remove' }))
-    await sheetGone()
+    await backOnList()
+    await closeList()
     expect(lapCalls('DELETE')[0][0]).toContain(`session=${encodeURIComponent('2026-03-07 11:45 blue')}`)
     expect(screen.getByText('No session notes yet')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'My notes' })).toBeInTheDocument()
@@ -740,12 +767,14 @@ describe('lap times (#210)', () => {
     expect(screen.queryAllByRole('table', { name: 'Laps' })).toHaveLength(0)
   })
 
-  it('closes on Escape without saving', async () => {
+  it('goes back to the list on Escape without saving, and closes on Escape again', async () => {
     openEvent()
     await tapSession('Lap times: 11:45 AM, Blue')
     fireEvent.change(screen.getByLabelText('Lap times or timestamps'), { target: { value: '1:44' } })
     await userEvent.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await backOnList()
+    await userEvent.keyboard('{Escape}')
+    await sheetGone()
     expect(lapCalls('PUT')).toHaveLength(0)
   })
 })
@@ -801,7 +830,8 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     const box = await within(sheet).findByLabelText('Lap times or timestamps')
     fireEvent.change(box, { target: { value: '1:24.5, 1:23.9' } })
     await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
-    await sheetGone()
+    await backOnList()
+    await closeList()
     expect(screen.getByRole('status')).toHaveTextContent('Lap times saved')
 
     const [url] = lapCalls('PUT')[0]
@@ -958,8 +988,9 @@ describe('instructor evaluation (#340)', () => {
     fireEvent.change(within(page).getByLabelText('What they said'), { target: { value: 'Unwind the wheel sooner.' } })
     fireEvent.change(within(page).getByRole('textbox', { name: /^Instructor\s?Optional$/ }), { target: { value: 'John Harms' } })
     await userEvent.click(within(page).getByRole('button', { name: 'Save' }))
-    await sheetGone()
+    await backOnList()
     expect(screen.getByRole('status')).toHaveTextContent('Feedback saved')
+    await closeList()
     expect(JSON.parse(String(notesCalls('PUT')[0][1]!.body)).session).toEqual({
       date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2,
       evaluation: { feedback: 'Unwind the wheel sooner.', instructor: 'John Harms' },
@@ -2098,8 +2129,8 @@ describe('the garage (#344)', () => {
     const nav = within(sheet).getByRole('navigation', { name: 'Session info' })
     // Pressures after the track's conditions: they're set before the session (#388).
     expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['Track conditions', 'Tire pressures', 'Instructor feedback', 'Lap times'])
-    await userEvent.click(within(nav).getByRole('button', { name: /^Tire pressures/ }))
-    const page = screen.getByRole('dialog', { name: 'Tire pressures, 11:45 AM · Blue' })
+    const page = await openInSheet('Tire pressures')
+    expect(page).toHaveAccessibleName('Tire pressures, 11:45 AM · Blue')
     expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Tire pressures')
     expect(within(page).getByRole('button', { name: 'Save' })).toBeDisabled()
     for (const [corner, psi] of [['Front left', '30'], ['Front right', '30'], ['Rear left', '28.5'], ['Rear right', '28.5']]) {
@@ -2108,8 +2139,9 @@ describe('the garage (#344)', () => {
     await userEvent.type(within(page).getByLabelText('Front left, after the session'), '36.25')
     await userEvent.type(within(page).getByRole('textbox', { name: /^What you changed/ }), 'Bled the fronts.')
     await userEvent.click(within(page).getByRole('button', { name: 'Save' }))
-    await sheetGone()
+    await backOnList()
     expect(screen.getByRole('status')).toHaveTextContent('Tire pressures saved')
+    await closeList()
     // Saved with the event's car, which stays.
     expect(body(garageCalls('PUT')[0]).setup).toEqual({
       carId: 'cayman',
