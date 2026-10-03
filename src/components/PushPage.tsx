@@ -7,8 +7,8 @@ import { useSheetGestures } from './sheetGestures'
 // darkens, as the page covers it — iOS's parallax (#367), measured off the
 // same recordings as the spring: 30% as far as the page travels, and 10%
 // darker once covered.
-const COVERED_SHIFT = 'translateX(-30%)'
-const COVERED_DIM = 0.1
+export const COVERED_SHIFT = 'translateX(-30%)'
+export const COVERED_DIM = 0.1
 
 // A page with Cancel and Save is an iOS page sheet (#415): it stops a
 // little below the status bar, with rounded top corners, and what's under
@@ -119,6 +119,19 @@ function useUnderSheet(page?: Pushed): UnderSheet {
     const over = sheets.filter(sheet => sheet.page !== page)
     return over.some(sheet => sheet.up) ? 'up' : over.length > 0 ? 'shown' : 'none'
   })
+}
+
+/**
+ * For a sheet from the bottom grown into a page sheet (#445): what's under
+ * it shrinks back into a dimmed card on black while it's `up`, as under a
+ * PushPage `sheet`, and back as it shrinks. `shown` until it's gone, so the
+ * page stays black around the card till it's back in place.
+ */
+export function useRecedeUnder(shown: boolean, up: boolean) {
+  const page = useRef<Pushed>({ el: null, raised: false }).current
+  useSheet(page, shown, up)
+  useHtmlClass('page-sheet-open', shown)
+  useHtmlClass('page-sheet-up', up)
 }
 
 /** Whether a sheet is up, over anything (#415): the status bar turns black over it. */
@@ -394,6 +407,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         pageRef.current = el
         if (scrollRef) scrollRef.current = el
       }}
+      // A sheet's own drag, not a pull to refresh the page under it (#445).
+      data-page-sheet={isSheet || undefined}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         // Below the banner while an admin acts as another driver (#396);
