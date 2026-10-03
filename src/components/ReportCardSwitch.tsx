@@ -4,9 +4,9 @@ import type { EventConfig } from '../types'
 
 /**
  * Which run group's report card (#350): Green · Blue, each with its
- * group's color, as the form's Yes · No are drawn. On the form, the card
- * being filled in; on Instructor evaluations, the one the overview and the
- * skills wheel show.
+ * group's color, as the form's Yes · No are drawn, on the form: the card
+ * being filled in. (Instructor evaluations shows each group's apart, and
+ * its run group filter picks one, #401.)
  */
 export function ReportCardSwitch({ cards, value, onChange, events, label = 'Report card' }: {
   cards: readonly TdeCard[]
