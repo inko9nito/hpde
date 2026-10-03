@@ -1000,19 +1000,22 @@ async function slidAway(page: Page, selector: string, act: () => Promise<unknown
   return watch
 }
 
-// Whether what `selector` finds, once there, rises into place from lower down.
+// Whether what `selector` finds, once there, rises into place from lower
+// down: seen lower than where it settles at some point on the way — not
+// necessarily on its first frame, which WebKit can paint before its rise
+// starts.
 function risesInto(page: Page, selector: string) {
   return page.evaluate(selector => new Promise<boolean>(resolve => {
-    let first: number | undefined
+    let lowest = -Infinity
     let last: number | undefined
     let still = 0
     const step = () => {
       const top = document.querySelector(selector)?.getBoundingClientRect().top
       if (top !== undefined) {
-        first ??= top
+        lowest = Math.max(lowest, top)
         still = top === last ? still + 1 : 0
         last = top
-        if (still > 10) return resolve(first > top + 20)
+        if (still > 10) return resolve(lowest > top + 20)
       }
       requestAnimationFrame(step)
     }
