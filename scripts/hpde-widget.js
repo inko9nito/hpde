@@ -2429,13 +2429,15 @@ function groupLabel(event, groupId) {
 // Colored circle emoji per known run-group id, so a notification's title
 // reads as "🟠 Orange · in 10m" at glance instead of a generic Scriptable
 // braces alert. Ids not in this map (e.g. some future "Aqua" group) get
-// no prefix — safer than picking a wrong color.
+// no prefix — safer than picking a wrong color. There's no pink circle
+// emoji, so Pink gets a pink ticket instead (#442).
 const GROUP_EMOJI = {
   red: "🔴",
   orange: "🟠",
   yellow: "🟡",
   green: "🟢",
   blue: "🔵",
+  pink: "🎟️",
   purple: "🟣",
   black: "⚫",
   white: "⚪",
