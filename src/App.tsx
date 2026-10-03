@@ -54,7 +54,8 @@ import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
-import { useChromeColor, HEADER_CHROME_COLOR, SHEET_CHROME_COLOR } from './utils/chromeColor'
+import { useChromeColor, dimmedChromeColor, HEADER_CHROME_COLOR, PAGE_CHROME_COLOR, SHEET_CHROME_COLOR } from './utils/chromeColor'
+import { useBottomSheetOpen } from './components/Sheet'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
 
@@ -467,7 +468,10 @@ export default function App() {
   const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
   // Black over a sheet, as what's under it shrinks back on black (#415).
   const sheetUp = useSheetUp()
-  useChromeColor(sheetUp ? SHEET_CHROME_COLOR : whiteTop ? HEADER_CHROME_COLOR : null)
+  // Dimmed with the page under a sheet from the bottom (#445).
+  const bottomSheetOpen = useBottomSheetOpen()
+  const topColor = whiteTop ? HEADER_CHROME_COLOR : null
+  useChromeColor(sheetUp ? SHEET_CHROME_COLOR : bottomSheetOpen ? dimmedChromeColor(topColor ?? PAGE_CHROME_COLOR) : topColor)
   // The tabs slide a little way left under the first page pushed over them (#367).
   const underPages = useUnderPushedPages(swiped)
   const underTabBar = useUnderPushedPages(swiped, 'tab bar')

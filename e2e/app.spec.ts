@@ -1112,6 +1112,9 @@ test('a session’s list fades out, the sheet grows into a page sheet, and what�
   expect(await opened).toBe(true)
   expect(await dimmed).toBe(true)
   const menu = page.getByRole('dialog', { name: '8:30 AM · Blue', exact: true })
+  // The status bar dims with the event's white header (#445).
+  const chrome = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')?.getAttribute('content'))
+  await expect.poll(chrome).toBe('#999999')
   await expect.poll(async () => (await menu.boundingBox())!.y).toBeGreaterThan(200)
   const listTop = (await menu.boundingBox())!.y
 
@@ -1151,9 +1154,10 @@ test('a session’s list fades out, the sheet grows into a page sheet, and what�
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true)
   }
 
-  // ✕ slides it down and away.
+  // ✕ slides it down and away, and the status bar's white again.
   expect(await slidAway(page, list, () => menu.getByRole('button', { name: 'Close' }).click())).toBe(true)
   await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect.poll(chrome).toBe('#ffffff')
 })
 
 test('saving lap times at a past event answers "I drove", in the session’s group (#377)', async ({ page }) => {

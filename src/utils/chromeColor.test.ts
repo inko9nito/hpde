@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { useChromeColor } from './chromeColor'
+import { dimmedChromeColor, useChromeColor } from './chromeColor'
 
 function themeColor() {
   return document.head.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null
@@ -38,5 +38,13 @@ describe('useChromeColor (#245)', () => {
     expect(themeColor()).toBe('#ffffff')
     rerender({ color: null })
     expect(themeColor()).toBe('#f9fafb')
+  })
+})
+
+describe('dimmedChromeColor (#445)', () => {
+  it('is the colour under a sheet’s 40% black', () => {
+    expect(dimmedChromeColor('#ffffff')).toBe('#999999')
+    expect(dimmedChromeColor('#f9fafb')).toBe('#959697')
+    expect(dimmedChromeColor('#000000')).toBe('#000000')
   })
 })

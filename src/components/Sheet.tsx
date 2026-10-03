@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { MutableRefObject, ReactNode, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
@@ -9,6 +9,22 @@ import { SETTLE_EASE, SETTLE_MS, useSheetGestures } from './sheetGestures'
 const SHEET_BOTTOM = 'pb-[max(1.25rem,env(safe-area-inset-bottom))]'
 /** The handle's strip across a sheet's top. */
 const HANDLE_PX = 20
+
+// Sheets from the bottom on screen and not on their way out: the status bar
+// dims with the page under them (#445).
+const openSheets = new Set<object>()
+const openSheetListeners = new Set<() => void>()
+function openSheetsChanged() {
+  openSheetListeners.forEach(listener => listener())
+}
+
+/** Whether a sheet from the bottom is up, dimming the page under it (#445). */
+export function useBottomSheetOpen(): boolean {
+  return useSyncExternalStore(listener => {
+    openSheetListeners.add(listener)
+    return () => { openSheetListeners.delete(listener) }
+  }, () => openSheets.size > 0)
+}
 
 /**
  * Slides a sheet away (#388): down off the screen, the page under it
@@ -49,6 +65,13 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
   const latestClose = useRef(onClose)
   latestClose.current = onClose
   const leaving = useRef(false)
+  const self = useRef({}).current
+  const gone = () => { if (openSheets.delete(self)) openSheetsChanged() }
+  useLayoutEffect(() => {
+    openSheets.add(self)
+    openSheetsChanged()
+    return gone
+  }, [])
   // Gone before it's down — something else closed it: nothing more to do.
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -56,6 +79,8 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
     const done = then ?? (() => latestClose.current())
     if (leaving.current) return
     leaving.current = true
+    // The status bar brightens with the page as it goes.
+    gone()
     // On its way out: gone to a screen reader. Taps stop at the dimmed page
     // till it's gone, as on iOS — not through to what's under it, which
     // its closing (going back, say) would then undo.

@@ -14,6 +14,23 @@ export const HEADER_CHROME_COLOR = '#ffffff'
 /** Black, over a sheet: what's under it shrinks back on black (#415). */
 export const SHEET_CHROME_COLOR = '#000000'
 
+/** The page's own gray, everywhere the top edge isn't white. */
+export const PAGE_CHROME_COLOR = '#f9fafb'
+
+/** How dark a sheet from the bottom dims the page under it: 40% black. */
+export const SHEET_DIM = 0.4
+
+/**
+ * `color` (#rrggbb) under a sheet from the bottom's dimmed page (#445):
+ * Safari tints the status bar from what's at the top edge, which sees past
+ * the see-through dimming, so it's tinted the dimmed colour itself.
+ */
+export function dimmedChromeColor(color: string): string {
+  return '#' + [1, 3, 5]
+    .map(i => Math.round(parseInt(color.slice(i, i + 2), 16) * (1 - SHEET_DIM)).toString(16).padStart(2, '0'))
+    .join('')
+}
+
 function themeColorMeta(): HTMLMetaElement {
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {

@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
-import { PagedSheet, Sheet } from './Sheet'
+import { render, renderHook, screen, fireEvent, act } from '@testing-library/react'
+import { PagedSheet, Sheet, useBottomSheetOpen } from './Sheet'
 import { PullToRefresh } from './PullToRefresh'
 import { SETTLE_MS } from './sheetGestures'
 
@@ -45,6 +45,15 @@ describe('a sheet from the bottom', () => {
     expect(drag(backdrop, -120)).toBe(true)
     // And one running past the end of what's in the sheet, which doesn't scroll.
     expect(drag(screen.getByText('What’s in it'), -120)).toBe(true)
+  })
+
+  it('says it’s up, for the status bar to dim with the page, till it starts sliding away (#445)', () => {
+    const open = renderHook(() => useBottomSheetOpen())
+    expect(open.result.current).toBe(false)
+    renderSheet()
+    expect(open.result.current).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(open.result.current).toBe(false)
   })
 
   it('lets go of the page once it’s closed', () => {
