@@ -1,5 +1,7 @@
 import { useId, useState } from 'react'
 import { inputClass } from './SessionEvaluationForm'
+import { PAGE_BODY, PageHeader } from './PageHeader'
+import type { Toolbar } from './PageHeader'
 import { MAX_CONDITIONS_NOTE, SKIES, SURFACES } from '../utils/conditions'
 import type { SessionConditions, Sky, Surface } from '../utils/conditions'
 import type { HourWeather } from '../data/weather'
@@ -17,11 +19,12 @@ const chip = (on: boolean) =>
 /**
  * A session's track conditions (#347), in its sheet: the surface as they
  * drove it, the sky, the air and — if they measured it — the track
- * temperature, and a note. The sky and air start from the weather near the
- * track at the session's hour, to keep or change. Save replaces what's
- * there; Remove takes them off the session.
+ * temperature, and a note, under Cancel and Save (#388). The sky and air
+ * start from the weather near the track at the session's hour, to keep or
+ * change. Save replaces what's there; Remove takes them off the session.
  */
-export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemove }: {
+export function ConditionsForm({ toolbar, existing, nearby, onBusyChange, onSave, onRemove }: {
+  toolbar: Toolbar
   existing?: SessionConditions
   /** The weather near the track at the session's hour, if it's known. */
   nearby?: HourWeather
@@ -68,6 +71,12 @@ export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemov
 
   return (
     <>
+      <PageHeader
+        {...toolbar}
+        cancelDisabled={!!busy}
+        save={{ label: busy === 'saving' ? 'Saving…' : 'Save', disabled: empty || !!busy, onClick: () => run('saving', () => onSave(value)) }}
+      />
+      <div className={PAGE_BODY}>
       <fieldset className="mt-4">
         <legend className="text-xs font-medium text-gray-700">Track surface</legend>
         <div className="mt-1.5 grid grid-cols-4 gap-2">
@@ -147,13 +156,6 @@ export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemov
       {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        <button
-          onClick={() => run('saving', () => onSave(value))}
-          disabled={empty || !!busy}
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-        >
-          {busy === 'saving' ? 'Saving…' : 'Save conditions'}
-        </button>
         {existing && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
             Remove from session
@@ -170,6 +172,7 @@ export function ConditionsForm({ existing, nearby, onBusyChange, onSave, onRemov
             </button>
           </div>
         )}
+      </div>
       </div>
     </>
   )

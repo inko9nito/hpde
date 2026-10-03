@@ -21,7 +21,7 @@ export const DISMISS_FRACTION = 1 / 3
 export const FLICK_PX_PER_MS = 0.5
 /** How long it takes to slide the rest of the way down, or back up. */
 export const SETTLE_MS = 220
-const SETTLE_EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+export const SETTLE_EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
 
 type Axis = 'x' | 'y'
 

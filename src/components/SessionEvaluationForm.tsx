@@ -1,4 +1,6 @@
 import { useId, useState } from 'react'
+import { PAGE_BODY, PageHeader } from './PageHeader'
+import type { Toolbar } from './PageHeader'
 import { MAX_FEEDBACK, MAX_NAME } from '../utils/evaluation'
 import type { SessionEvaluation } from '../utils/evaluation'
 
@@ -6,10 +8,11 @@ export const inputClass = 'mt-1.5 w-full rounded-xl border border-gray-300 px-3 
 
 /**
  * A session's instructor feedback (#340), in the session's sheet: what
- * they said, and who said it. Saved replaces what's there; Remove takes it
- * off the session.
+ * they said, and who said it, under Cancel and Save (#388). Saved replaces
+ * what's there; Remove takes it off the session.
  */
-export function SessionEvaluationForm({ existing, onBusyChange, onSave, onRemove }: {
+export function SessionEvaluationForm({ toolbar, existing, onBusyChange, onSave, onRemove }: {
+  toolbar: Toolbar
   existing?: SessionEvaluation
   /** Saving or removing, so the sheet stays open till it's done. */
   onBusyChange?: (busy: boolean) => void
@@ -41,8 +44,21 @@ export function SessionEvaluationForm({ existing, onBusyChange, onSave, onRemove
 
   return (
     <>
+      <PageHeader
+        {...toolbar}
+        cancelDisabled={!!busy}
+        save={{
+          label: busy === 'saving' ? 'Saving…' : 'Save',
+          disabled: !canSave,
+          onClick: () => run('saving', () => onSave({
+            feedback: feedback.trim(),
+            ...(instructor.trim() ? { instructor: instructor.trim() } : {}),
+          })),
+        }}
+      />
+      <div className={PAGE_BODY}>
       <label htmlFor={feedbackId} className="mt-4 text-xs font-medium text-gray-700">
-        Instructor feedback
+        What they said
       </label>
       <textarea
         id={feedbackId}
@@ -73,16 +89,6 @@ export function SessionEvaluationForm({ existing, onBusyChange, onSave, onRemove
       {failure && <p role="alert" className="mt-3 text-xs text-red-700">{failure}</p>}
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        <button
-          onClick={() => run('saving', () => onSave({
-            feedback: feedback.trim(),
-            ...(instructor.trim() ? { instructor: instructor.trim() } : {}),
-          }))}
-          disabled={!canSave}
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
-        >
-          {busy === 'saving' ? 'Saving…' : 'Save evaluation'}
-        </button>
         {existing && !confirmingRemove && (
           <button onClick={() => setConfirmingRemove(true)} disabled={!!busy} className="text-sm text-red-600 hover:text-red-700">
             Remove from session
@@ -90,7 +96,7 @@ export function SessionEvaluationForm({ existing, onBusyChange, onSave, onRemove
         )}
         {existing && confirmingRemove && (
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-gray-700">Remove this evaluation?</span>
+            <span className="text-gray-700">Remove this feedback?</span>
             <button onClick={() => run('removing', onRemove)} disabled={!!busy} className="font-semibold text-red-600 hover:text-red-700">
               {busy === 'removing' ? 'Removing…' : 'Remove'}
             </button>
@@ -99,6 +105,7 @@ export function SessionEvaluationForm({ existing, onBusyChange, onSave, onRemove
             </button>
           </div>
         )}
+      </div>
       </div>
     </>
   )

@@ -993,41 +993,35 @@ export default function App() {
           // With laps, they drove it: "Drove", in this group or a later one's (#377).
           const rsvp = await lapLog.save(session)
           if (rsvp) eventRsvps.remember(activeEvent.id, rsvp)
-          setLapSlot(null)
           showToast('Lap times saved')
         }}
         onRemove={async key => {
           await lapLog.remove(key)
-          setLapSlot(null)
           showToast('Lap times removed')
         }}
         onSaveEvaluation={async session => {
           // The session's conditions stay with it (#347).
           const kept = notesLog.byKey.get(sessionKey(session.date, session.time, session.group))?.conditions
           await notesLog.saveSession({ ...session, ...(kept ? { conditions: kept } : {}) })
-          setLapSlot(null)
-          showToast('Evaluation saved')
+          showToast('Feedback saved')
         }}
         onRemoveEvaluation={async key => {
           const { evaluation: _gone, key: _key, updatedAt: _at, ...rest } = notesLog.byKey.get(key)!
           if (rest.conditions) await notesLog.saveSession(rest)
           else await notesLog.removeSession(key)
-          setLapSlot(null)
-          showToast('Evaluation removed')
+          showToast('Feedback removed')
         }}
         conditions={{
           nearby: hourAt(weather.byDate.get(lapSlot.date), lapSlot.time),
           onSave: async session => {
             const kept = notesLog.byKey.get(sessionKey(session.date, session.time, session.group))?.evaluation
             await notesLog.saveSession({ ...session, ...(kept ? { evaluation: kept } : {}) })
-            setLapSlot(null)
             showToast('Track conditions saved')
           },
           onRemove: async key => {
             const { conditions: _gone, key: _key, updatedAt: _at, ...rest } = notesLog.byKey.get(key)!
             if (rest.evaluation) await notesLog.saveSession(rest)
             else await notesLog.removeSession(key)
-            setLapSlot(null)
             showToast('Track conditions removed')
           },
         }}
@@ -1035,14 +1029,12 @@ export default function App() {
           saved: key => pressuresByKey.get(key),
           onSave: async pressures => {
             await garage.saveSetup(activeEvent.id, withPressures(eventSetup, pressures.key, pressures))
-            setLapSlot(null)
             showToast('Tire pressures saved')
           },
           onRemove: async key => {
             const next = withPressures(eventSetup, key, null)
             if (Object.keys(next).length) await garage.saveSetup(activeEvent.id, next)
             else await garage.removeSetup(activeEvent.id)
-            setLapSlot(null)
             showToast('Tire pressures removed')
           },
         } : undefined}

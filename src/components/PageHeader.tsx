@@ -1,6 +1,12 @@
 /** Height of the toolbar, for what sticks under it (the schedule editor's tabs). */
 export const PAGE_HEADER_PX = 56
 
+/** Under a page sheet's toolbar in a session's sheet (#388): what's on the page. */
+export const PAGE_BODY = 'mx-auto flex max-w-lg flex-col px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]'
+
+/** A form's toolbar, from what it's in: all but its Save, which the form has (#388). */
+export type Toolbar = Pick<Parameters<typeof PageHeader>[0], 'title' | 'subtitle' | 'onCancel'>
+
 /**
  * Toolbar across the top of a page that slides up (#356, #368) — New event,
  * Edit details, Edit schedule, a car's: Cancel, the page's name (and the
@@ -10,10 +16,12 @@ export const PAGE_HEADER_PX = 56
  * keep the same width, so a long event name truncates rather than
  * pushing the title off center. Its sheet drags down by it (#387).
  */
-export function PageHeader({ title, subtitle, onCancel, cancelDisabled, save }: {
+export function PageHeader({ title, subtitle, onCancel, cancelLabel = 'Cancel', cancelDisabled, save }: {
   title: string
   subtitle?: string
   onCancel: () => void
+  /** "Done" where there's nothing to cancel: saved laps, read-only (#388). */
+  cancelLabel?: string
   cancelDisabled?: boolean
   /** None where the page's own buttons do it: a shared car's Accept and Decline (#410). */
   save?: { label: string; disabled?: boolean; onClick?: () => void; form?: string }
@@ -24,7 +32,7 @@ export function PageHeader({ title, subtitle, onCancel, cancelDisabled, save }: 
       <div className="mx-auto grid max-w-lg grid-cols-[minmax(5rem,1fr)_minmax(0,max-content)_minmax(5rem,1fr)] items-center gap-2 px-2" style={{ height: PAGE_HEADER_PX }}>
         {/* Disabled while saving: the sheet doesn't drag away then either. */}
         <button onClick={onCancel} disabled={cancelDisabled} data-sheet-cancel className="justify-self-start rounded-lg px-2 py-2 text-[17px] text-blue-600 hover:text-blue-700 disabled:text-gray-300">
-          Cancel
+          {cancelLabel}
         </button>
         <div className="min-w-0 text-center">
           <h1 className="truncate text-[17px] font-semibold leading-[22px] text-gray-900">{title}</h1>
