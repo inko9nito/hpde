@@ -199,8 +199,8 @@ function useLockDocumentScroll(locked: boolean) {
 
 const htmlClassCounts = new Map<string, number>()
 
-/** `className` on <html> while any page asks for it. */
-function useHtmlClass(className: string, on: boolean) {
+/** `className` on <html> while any page (or sheet) asks for it. */
+export function useHtmlClass(className: string, on: boolean) {
   useLayoutEffect(() => {
     if (!on) return
     const count = htmlClassCounts.get(className) ?? 0
