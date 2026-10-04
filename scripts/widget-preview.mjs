@@ -815,6 +815,24 @@ const UPCOMING_MULTI = {
   ],
 }
 
+// A 3-day event and a later one-day event (#452): Large lists the
+// 3-day event once, at its first day, then the next event, with no
+// "more upcoming" footer.
+const UPCOMING_MULTI_DAY = {
+  events: [
+    { id: 'tde', name: 'TDE at MSR 3.1 CCW', organizer: 'The Drivers Edge', track: 'Motorsport Ranch - Cresson',
+      city: 'Cresson, TX', trackId: 'msrc-3-1', runGroups: [],
+      days: [
+        { date: isoDate(46), label: 'Friday', activities: [] },
+        { date: isoDate(47), label: 'Saturday', activities: [] },
+        { date: isoDate(48), label: 'Sunday', activities: [] },
+      ] },
+    { id: 'ecr', name: 'TDE at ECR 2.7 CW', organizer: 'The Drivers Edge', track: 'Eagles Canyon Raceway',
+      city: 'Decatur, TX', trackId: 'ecr-2-7', runGroups: [],
+      days: [{ date: isoDate(60), label: 'Saturday', activities: [] }] },
+  ],
+}
+
 const UPCOMING_ONE = {
   events: [
     { id: 'a', name: 'Test Event', organizer: 'Test Organizer', track: 'Test Raceway', city: 'Testville, TX',
@@ -885,6 +903,7 @@ const SCENARIOS = [
   { family: 'medium', manifest: UPCOMING_ONE, label: 'Medium — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_ONE, label: 'Large — countdown (1 upcoming)' },
   { family: 'large', manifest: UPCOMING_MULTI, label: 'Large — countdown (3 upcoming: 2 + footer)' },
+  { family: 'large', manifest: UPCOMING_MULTI_DAY, label: 'Large — countdown (a 3-day event, then another)' },
   { family: 'medium', manifest: UPCOMING_TOMORROW, label: 'Medium — countdown (tomorrow)' },
   { family: 'large', manifest: UPCOMING_TOMORROW, label: 'Large — countdown (tomorrow)' },
   { family: 'medium', manifest: RICH_MANIFEST, label: 'Medium — populated today' },

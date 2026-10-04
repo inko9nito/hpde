@@ -108,10 +108,11 @@ const FIXTURE_EVENT_IDS = new Set(["test-live"])
 // without the user having to pick a number.
 const TEST_UPCOMING_DEFAULT_DAYS = 10
 // The fixture ships 3 days (see test-live.md) purely so `test-upcoming`
-// has more than one future day to work with — spreading them a week
-// apart lets one `test-upcoming[-N]` flag exercise the countdown
-// card's 3-card stack on Large AND the "N more upcoming" footer on Medium,
-// without a separate flag for each.
+// has more than one future event to work with — each day becomes an
+// event of its own, a week apart, so one `test-upcoming[-N]` flag
+// exercises Large's two events AND its "N more upcoming" footer,
+// without a separate flag for each. (Left as one event, its days would
+// count once: the countdown lists events, not days, #452.)
 const TEST_UPCOMING_SPREAD_DAYS = 7
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 function weekdayLabel(iso) {
@@ -152,7 +153,15 @@ function rewriteFixtures(manifest, mode, upcomingDays, upcomingCount) {
       }
     }
   }
+  if (mode === "upcoming") manifest.events = manifest.events.flatMap(splitFixtureDays)
   return manifest
+}
+
+// A fixture event as one event per day, for `test-upcoming` (see
+// TEST_UPCOMING_SPREAD_DAYS); any other event as it is.
+function splitFixtureDays(event) {
+  if (!event || !FIXTURE_EVENT_IDS.has(event.id) || !Array.isArray(event.days)) return [event]
+  return event.days.map(day => ({ ...event, days: [day] }))
 }
 
 // The manifest as a widget with these parameter `flags` shows it: a
@@ -256,16 +265,20 @@ function pickToday(manifest) {
   return matches[0]
 }
 
-// Every future day across every event, soonest first, plus how many
-// there are in total — `limit` only trims how many come back in
-// `items`, so the caller can still show "N more upcoming" for the rest.
+// Every event with a day still to come, once each at its next day
+// (#452: a 3-day event is one event, as the app shows it, not three),
+// soonest first, plus how many there are in total — `limit` only trims
+// how many come back in `items`, so the caller can still show "N more
+// upcoming" for the rest.
 function pickUpcoming(manifest, limit) {
   const iso = todayIso()
   const future = []
   for (const event of manifest.events) {
+    let next = null
     for (const day of event.days) {
-      if (day.date > iso) future.push({ event, day })
+      if (day.date > iso && (!next || day.date < next.date)) next = day
     }
+    if (next) future.push({ event, day: next })
   }
   future.sort((a, b) => a.day.date.localeCompare(b.day.date))
   return { items: future.slice(0, limit), total: future.length }
