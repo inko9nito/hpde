@@ -7,7 +7,8 @@ import type { RunGroupConfig } from '../types'
 
 // How the driver's TDE report cards have come along (#345), on the
 // Instructor evaluations page — one run group's card at a time, since each
-// has its own skills (#350), its group's badge on each (#401) — in two cards:
+// has its own skills (#350): one card for the group, headed by its badge
+// (#401), with two views of its report cards:
 //   - an overview: the skills most improved since their first report card,
 //     and the ones that need the most work on their latest;
 //   - the skills wheel: a spoke for each core skill, and each card's scores
@@ -103,16 +104,44 @@ function signed(n: number): string {
 
 const CARD = 'rounded-2xl border border-gray-200 bg-white p-4'
 
-/** A card's title, after the badge of the run group whose report card it's of (#401), so it's plain which one. */
-function CardHead({ title, group, meta }: { title: string; group: RunGroupConfig; meta?: string }) {
+function SubHead({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="flex min-w-0 items-center gap-2 text-[13px] font-semibold text-gray-500">
-        <GroupBadge group={group} size="sm" />
-        <span className="truncate">{title}</span>
-      </h2>
-      {meta && <span className="shrink-0 text-xs text-gray-400">{meta}</span>}
+    <div className="mb-3 flex items-baseline justify-between gap-3">
+      <h3 className="text-[13px] font-semibold text-gray-500">{title}</h3>
+      {meta && <span className="text-xs text-gray-400">{meta}</span>}
     </div>
+  )
+}
+
+/**
+ * One run group's TDE report cards (#401): a card headed by the group's
+ * badge — and that only The Drivers Edge's events have them — over its two
+ * views of them: the overview and the skills wheel.
+ */
+export function ReportCardGroup({ points, kind, group }: {
+  points: ReportCardPoint[]
+  kind: TdeCard
+  /** The card's run group, as the app colors it. */
+  group: RunGroupConfig
+}) {
+  const { cards } = scoredCards(points, kind)
+  if (!cards.length) return null
+  return (
+    <section aria-label={`${kind.group} report cards`} className={CARD}>
+      <div className="mb-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-gray-900">
+            <GroupBadge group={group} size="sm" />
+            <span className="truncate">Report cards</span>
+          </h2>
+          <span className="shrink-0 text-xs text-gray-400">{cards.length} {cards.length === 1 ? 'event' : 'events'}</span>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">Only The Drivers Edge’s events have report cards.</p>
+      </div>
+      <SkillOverview points={points} kind={kind} />
+      <div className="my-4 border-t border-gray-100" />
+      <SkillsWheel points={points} kind={kind} />
+    </section>
   )
 }
 
@@ -144,19 +173,13 @@ function MoveList({ title, caption, moves, value, empty }: {
 }
 
 /** The overview (#345): the skills most improved since the first report card of this kind, and those that need the most work. */
-export function SkillOverview({ points, kind, group }: {
-  points: ReportCardPoint[]
-  kind: TdeCard
-  /** The card's run group, as the app colors it. */
-  group: RunGroupConfig
-}) {
+export function SkillOverview({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
   const { cards } = scoredCards(points, kind)
   if (!cards.length) return null
   const { improved, needsWork } = skillMoves(cards, kind)
   const [first, latest] = [cards[0], cards[cards.length - 1]]
   return (
-    <section aria-label={`${kind.group} report card overview`} className={CARD}>
-      <CardHead title="Report cards" group={group} meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
+    <section aria-label="Report card overview">
       <div className="grid grid-cols-2 gap-4">
         <MoveList
           title="Most improved"
@@ -300,12 +323,7 @@ const LABEL_GAP = 12
  * shown, just the newest). Tap a skill's name for its score at each event,
  * listed under the wheel, newest first.
  */
-export function SkillsWheel({ points, kind, group }: {
-  points: ReportCardPoint[]
-  kind: TdeCard
-  /** The card's run group, as the app colors it. */
-  group: RunGroupConfig
-}) {
+export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind: TdeCard }) {
   const [ref, measured] = useWidth()
   const width = measured || 300
   const { cards, skills } = scoredCards(points, kind)
@@ -346,8 +364,8 @@ export function SkillsWheel({ points, kind, group }: {
   const history = pickedSkill ? skillHistory(pickedSkill.id, cards) : []
 
   return (
-    <section aria-label={`${kind.group} skills wheel`} className={CARD}>
-      <CardHead title="Skills wheel" group={group} meta="0% middle, 100% rim" />
+    <section aria-label="Skills wheel">
+      <SubHead title="Skills wheel" meta="0% at the middle, 100% at the rim" />
       {n > 1 && (
         <div className="-mx-4 mb-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex w-max gap-1.5 pb-0.5" role="group" aria-label="Report cards shown">
@@ -431,7 +449,7 @@ export function SkillsWheel({ points, kind, group }: {
       <div aria-live="polite" className="mt-3 border-t border-gray-100 pt-3">
         {pickedSkill ? (
           <section aria-label={`${pickedSkill.label} at each event`}>
-            <h3 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h3>
+            <h4 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h4>
             <ul className="mt-1 divide-y divide-gray-100">
               {[...history].reverse().map(({ card, score, change }) => {
                 return (

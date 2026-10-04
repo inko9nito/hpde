@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NO_FILTERS, entryGroups, filterChoices, filterEntries, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
+import { NO_FILTERS, entryGroups, filterChoices, filterEntries, newestCardGroup, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
 import type { Entry } from './EvaluationsPage'
 import type { EventConfig } from '../types'
 
@@ -81,13 +81,18 @@ describe('filtering the events, and so the report cards (#401)', () => {
 
   const ids = (f: Partial<typeof NO_FILTERS>) => filterEntries(entries, rsvps, { ...NO_FILTERS, ...f }).map(e => e.event.id)
 
-  it('filters by organizer, run group and whether they’re evaluated', () => {
+  it('filters by organizer, then run group', () => {
     expect(ids({})).toEqual(['none', 'scca', 'TDE at ECR', 'blue-day', 'green-day'])
     expect(ids({ organizer: 'The Drivers Edge' })).toEqual(['TDE at ECR', 'blue-day', 'green-day'])
     expect(ids({ organizer: '' })).toEqual(['none'])
     expect(ids({ organizer: 'The Drivers Edge', group: 'blue' })).toEqual(['TDE at ECR', 'blue-day'])
-    expect(ids({ evaluation: 'evaluated' })).toEqual(['scca', 'blue-day', 'green-day'])
-    expect(ids({ evaluation: 'notYet' })).toEqual(['none', 'TDE at ECR'])
+    expect(ids({ group: 'red' })).toEqual(['scca'])
+  })
+
+  it('picks the run group of their newest report card at first, if they’ve one at the organizer’s events', () => {
+    expect(newestCardGroup(entries, rsvps, null)).toBe('blue')
+    expect(newestCardGroup(entries.filter(e => e.event !== blueDay), rsvps, 'The Drivers Edge')).toBe('green')
+    expect(newestCardGroup(entries, rsvps, 'Texas Region SCCA')).toBeNull()
   })
 
   it('charts only the shown events’ report cards — with a run group picked, only its card — newest group first', () => {
