@@ -2190,10 +2190,10 @@ describe('Instructor evaluations across events (#345)', () => {
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
   }
   const page = async () => (await screen.findByRole('heading', { level: 1, name: 'Instructor evaluations' })).closest<HTMLElement>('.fixed')!
-  // At first, only their newest report card's run group's events (#401): every one's.
+  // At first, only the events of their newest report card's organizer and run group (#401): every one.
   const allGroups = async (el: HTMLElement) => {
-    await userEvent.click(await within(el).findByRole('button', { name: /^Run group: / }))
-    await userEvent.click(within(within(el).getByRole('listbox', { name: 'Run group' })).getByRole('option', { name: 'All run groups' }))
+    await userEvent.click(await within(el).findByRole('button', { name: /^Organizer: / }))
+    await userEvent.click(within(within(el).getByRole('listbox', { name: 'Organizer' })).getByRole('option', { name: 'All organizers' }))
   }
 
   beforeEach(() => {
@@ -2262,27 +2262,28 @@ describe('Instructor evaluations across events (#345)', () => {
     expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
   })
 
-  it('shows the newest report card’s run group at first, headed by its badge, with its own skills; the run group filter picks another, or all (#350, #401)', async () => {
+  it('shows The Drivers Edge and the newest report card’s run group at first, headed by its badge, with its own skills; the run group filter picks another, or all (#350, #401)', async () => {
     const tdeDec: EventConfig = { ...tdeOct, id: '2025-12-06_tde', name: 'TDE Blue Day', days: [{ ...event.days[0], date: '2025-12-06' }] }
     moreEvents = [tdeSep, tdeOct, tdeDec]
     notesByEvent[tdeDec.id] = { evaluation: { card: 'blue', instructor: 'Brett Gabriel', skills: { flags: 95, offline: 95, exits: 80 } }, sessions: [] }
     openAt('#/evaluations')
     const el = await page()
     const filters = await within(el).findByRole('group', { name: 'Filter events' })
+    expect(within(filters).getByRole('button', { name: 'Organizer: The Drivers Edge' })).toBeInTheDocument()
     expect(within(filters).getByRole('button', { name: 'Run group: Blue' })).toBeInTheDocument()
-    const groups = () => within(el).queryAllByRole('region', { name: / report cards$/ }).map(r => r.getAttribute('aria-label'))
+    const groups = () => within(el).queryAllByRole('region', { name: /^\w+ report cards$/ }).map(r => r.getAttribute('aria-label'))
     expect(groups()).toEqual(['Blue report cards'])
-    const blue = within(el).getByRole('region', { name: 'Blue report cards' })
-    // One header for its two views: the group's badge, and that they're TDE's alone.
-    expect(within(blue).getByRole('heading', { level: 2 })).toHaveTextContent('BlueReport cards')
+    // Whose report cards, then which run group's, then its two views of them.
+    const tde = within(el).getByRole('region', { name: 'The Drivers Edge report cards' })
+    const blue = within(tde).getByRole('region', { name: 'Blue report cards' })
+    expect(within(blue).getByRole('heading', { level: 3 })).toHaveTextContent('Bluerun group')
     expect(blue).toHaveTextContent('1 event')
-    expect(blue).toHaveTextContent('Only The Drivers Edge’s events have report cards.')
     const spokes = (group: string) => within(within(within(el).getByRole('region', { name: `${group} report cards` })).getByRole('region', { name: 'Skills wheel' }))
       .getAllByRole('button', { pressed: false }).map(b => b.getAttribute('aria-label')).filter(Boolean)
     // Blue's skills, in Blue's order.
     expect(spokes('Blue')).toEqual(['Acknowledges all flags early', 'Understands and uses exit strategies', 'Able to take a corner offline'])
-    // Its events, and any other where they ran in Blue.
-    expect(within(within(el).getByRole('region', { name: 'Events' })).getAllByRole('article').map(a => a.getAttribute('aria-label'))).toEqual(['Lap Day', 'TDE Blue Day'])
+    // TDE's Blue events: not Lap Day's Blue, another organizer's.
+    expect(within(within(el).getByRole('region', { name: 'Events' })).getAllByRole('article').map(a => a.getAttribute('aria-label'))).toEqual(['TDE Blue Day'])
 
     // Green's.
     await userEvent.click(within(filters).getByRole('button', { name: 'Run group: Blue' }))

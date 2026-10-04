@@ -107,16 +107,16 @@ const CARD = 'rounded-2xl border border-gray-200 bg-white p-4'
 function SubHead({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h3 className="text-[13px] font-semibold text-gray-500">{title}</h3>
+      <h4 className="text-[13px] font-semibold text-gray-500">{title}</h4>
       {meta && <span className="text-xs text-gray-400">{meta}</span>}
     </div>
   )
 }
 
 /**
- * One run group's TDE report cards (#401): a card headed by the group's
- * badge — and that only The Drivers Edge's events have them — over its two
- * views of them: the overview and the skills wheel.
+ * One run group's TDE report cards (#401), under The Drivers Edge's: a
+ * card headed by the group, over its two views of them — the overview and
+ * the skills wheel.
  */
 export function ReportCardGroup({ points, kind, group }: {
   points: ReportCardPoint[]
@@ -128,15 +128,12 @@ export function ReportCardGroup({ points, kind, group }: {
   if (!cards.length) return null
   return (
     <section aria-label={`${kind.group} report cards`} className={CARD}>
-      <div className="mb-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-gray-900">
-            <GroupBadge group={group} size="sm" />
-            <span className="truncate">Report cards</span>
-          </h2>
-          <span className="shrink-0 text-xs text-gray-400">{cards.length} {cards.length === 1 ? 'event' : 'events'}</span>
-        </div>
-        <p className="mt-1 text-xs text-gray-500">Only The Drivers Edge’s events have report cards.</p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-gray-900">
+          <GroupBadge group={group} size="sm" />
+          <span className="truncate">run group</span>
+        </h3>
+        <span className="shrink-0 text-xs text-gray-400">{cards.length} {cards.length === 1 ? 'event' : 'events'}</span>
       </div>
       <SkillOverview points={points} kind={kind} />
       <div className="my-4 border-t border-gray-100" />
@@ -154,7 +151,7 @@ function MoveList({ title, caption, moves, value, empty }: {
 }) {
   return (
     <section aria-label={title} className="min-w-0">
-      <h3 className="text-xs font-semibold text-gray-500">{title}</h3>
+      <h4 className="text-xs font-semibold text-gray-500">{title}</h4>
       {caption && <p className="text-[11px] text-gray-400">{caption}</p>}
       {moves.length ? (
         <ol className="mt-2 flex flex-col gap-2">
@@ -449,7 +446,7 @@ export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind:
       <div aria-live="polite" className="mt-3 border-t border-gray-100 pt-3">
         {pickedSkill ? (
           <section aria-label={`${pickedSkill.label} at each event`}>
-            <h4 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h4>
+            <h5 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h5>
             <ul className="mt-1 divide-y divide-gray-100">
               {[...history].reverse().map(({ card, score, change }) => {
                 return (

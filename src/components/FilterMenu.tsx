@@ -15,12 +15,14 @@ export interface FilterOption {
  * One of a page's filters (#401): a button showing what's picked, opening a
  * menu of the options, the way RunGroupSelect picks a run group.
  */
-export function FilterMenu({ label, options, value, onChange }: {
+export function FilterMenu({ label, options, value, onChange, disabled = false }: {
   /** What it filters by, naming the menu and its button. */
   label: string
   options: readonly FilterOption[]
   value: string | null
   onChange: (id: string | null) => void
+  /** Nothing to pick yet: shown, grayed. */
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const picked = options.find(o => o.id === value) ?? options[0]
@@ -46,10 +48,11 @@ export function FilterMenu({ label, options, value, onChange }: {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`${label}: ${picked.text}`}
-        className={`flex min-h-9 max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm shadow-sm transition-colors hover:border-gray-400 ${
+        className={`flex min-h-9 max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm shadow-sm transition-colors hover:border-gray-400 disabled:opacity-50 disabled:hover:border-gray-200 ${
           picked.id === null ? 'border-gray-200' : 'border-gray-900'
         }`}
       >

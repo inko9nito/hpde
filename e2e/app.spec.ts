@@ -2126,12 +2126,28 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(vision).toContainText('Down since the event before')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // At first, the run group of their newest report card (#401): Green's.
+  // At first, the organizer and run group of their newest report card (#401): The Drivers Edge's Green.
   const filters = page.getByRole('group', { name: 'Filter events' })
+  await expect(filters.getByRole('button', { name: /^Organizer: / })).toHaveAccessibleName('Organizer: The Drivers Edge')
   await expect(filters.getByRole('button', { name: /^Run group: / })).toHaveAccessibleName('Run group: Green')
   await expect(page.getByRole('region', { name: 'Events' }).getByRole('link')).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  // Whose report cards, then which run group's, then its two views of them.
+  const tdeCards = page.getByRole('region', { name: 'The Drivers Edge report cards' })
+  const green = tdeCards.getByRole('region', { name: 'Green report cards' })
+  await expect(green.getByRole('heading', { level: 3 })).toHaveText(/Green\s*run group/)
+  await expect(green.getByRole('region', { name: 'Report card overview' })).toBeVisible()
+  await expect(green.getByRole('region', { name: 'Skills wheel' })).toBeVisible()
+  // The organizer's run groups: Green, the only one they've driven in at TDE's.
   await filters.getByRole('button', { name: /^Run group: / }).click()
-  await page.getByRole('listbox', { name: 'Run group' }).getByRole('option', { name: 'All run groups' }).click()
+  await expect(page.getByRole('listbox', { name: 'Run group' }).getByRole('option')).toHaveText(['All run groups', 'Green'])
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('listbox', { name: 'Run group' })).toBeHidden()
+  // Every organizer's: a run group is an organizer's own, so none to pick.
+  await filters.getByRole('button', { name: /^Organizer: / }).click()
+  await expect(page.getByRole('listbox', { name: 'Organizer' }).getByRole('option')).toHaveText(['All organizers', 'Other Club', 'Test Club', 'The Drivers Edge'])
+  await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'All organizers' }).click()
+  await expect(filters.getByRole('button', { name: /^Run group: / })).toBeDisabled()
+  await expect(wheel).toBeVisible()
 
   // The events, newest first; one opens on My notes, and Back comes back.
   const feedback = page.getByRole('region', { name: 'Events' })
@@ -2151,35 +2167,13 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(page).toHaveURL(/#\/evaluations$/)
   await expect(wheel).toBeVisible()
 
-  // One card for the run group, headed by its badge, over its two views — and they're TDE's alone (#401).
-  const green = page.getByRole('region', { name: 'Green report cards' })
-  await expect(green.getByRole('heading', { level: 2 })).toHaveText(/Green\s*Report cards/)
-  await expect(green).toContainText('Only The Drivers Edge’s events have report cards.')
-  await expect(green.getByRole('region', { name: 'Skills wheel' })).toBeVisible()
-
-  // Filters (#401): by organizer, then the run groups at theirs.
-  await filters.getByRole('button', { name: /^Organizer: / }).click()
-  await expect(page.getByRole('listbox', { name: 'Organizer' }).getByRole('option')).toHaveText(['All organizers', 'Other Club', 'Test Club', 'The Drivers Edge'])
-  await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'The Drivers Edge' }).click()
-  await expect(events).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
-  await expect(wheel).toBeVisible()
-  await filters.getByRole('button', { name: /^Run group: / }).click()
-  await expect(page.getByRole('listbox', { name: 'Run group' }).getByRole('option')).toHaveText(['All run groups', 'Green'])
-  await page.keyboard.press('Escape')
-  await expect(page.getByRole('listbox', { name: 'Run group' })).toBeHidden()
-  // Another organizer's: no report cards, and it says why.
+  // Another organizer's: no report cards.
   await filters.getByRole('button', { name: /^Organizer: / }).click()
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'Test Club' }).click()
   await expect(events).toHaveText([/Alpha Track Day/])
-  await expect(wheel).toBeHidden()
-  await expect(page.getByText('The skills wheel is only for The Drivers Edge’s report cards')).toBeVisible()
+  await expect(tdeCards).toBeHidden()
   await filters.getByRole('button', { name: /^Organizer: / }).click()
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'All organizers' }).click()
-  // Back to the newest card's run group.
-  await expect(filters.getByRole('button', { name: /^Run group: / })).toHaveAccessibleName('Run group: Green')
-  await expect(events).toHaveCount(3)
-  await filters.getByRole('button', { name: /^Run group: / }).click()
-  await page.getByRole('listbox', { name: 'Run group' }).getByRole('option', { name: 'All run groups' }).click()
   await expect(events).toHaveCount(5)
 
   // Adding one to Bravo opens its My notes with the form up.

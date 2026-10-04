@@ -73,8 +73,8 @@ describe('filtering the events, and so the report cards (#401)', () => {
     expect(entries.map(e => entryGroups(e, rsvps))).toEqual([[], ['Red'], ['Blue'], ['Blue'], ['Green']])
   })
 
-  it('offers each organizer, and then the run groups at the one picked', () => {
-    expect(filterChoices(entries, rsvps, null)).toEqual({ organizers: ['Texas Region SCCA', 'The Drivers Edge', ''], groups: ['Red', 'Green', 'Blue'] })
+  it('offers each organizer, and then the run groups at the one picked — its own, so none with no organizer', () => {
+    expect(filterChoices(entries, rsvps, null)).toEqual({ organizers: ['Texas Region SCCA', 'The Drivers Edge', ''], groups: [] })
     expect(filterChoices(entries, rsvps, 'The Drivers Edge').groups).toEqual(['Green', 'Blue'])
     expect(filterChoices(entries, rsvps, 'Texas Region SCCA').groups).toEqual(['Red'])
   })
@@ -86,11 +86,14 @@ describe('filtering the events, and so the report cards (#401)', () => {
     expect(ids({ organizer: 'The Drivers Edge' })).toEqual(['TDE at ECR', 'blue-day', 'green-day'])
     expect(ids({ organizer: '' })).toEqual(['none'])
     expect(ids({ organizer: 'The Drivers Edge', group: 'blue' })).toEqual(['TDE at ECR', 'blue-day'])
-    expect(ids({ group: 'red' })).toEqual(['scca'])
+    expect(ids({ organizer: 'Texas Region SCCA', group: 'red' })).toEqual(['scca'])
+    // A run group is an organizer's own: none without one.
+    expect(ids({ group: 'red' })).toEqual(ids({}))
   })
 
   it('picks the run group of their newest report card at first, if they’ve one at the organizer’s events', () => {
-    expect(newestCardGroup(entries, rsvps, null)).toBe('blue')
+    expect(newestCardGroup(entries, rsvps, 'The Drivers Edge')).toBe('blue')
+    expect(newestCardGroup(entries, rsvps, null)).toBeNull()
     expect(newestCardGroup(entries.filter(e => e.event !== blueDay), rsvps, 'The Drivers Edge')).toBe('green')
     expect(newestCardGroup(entries, rsvps, 'Texas Region SCCA')).toBeNull()
   })
