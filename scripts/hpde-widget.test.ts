@@ -631,6 +631,35 @@ describe('scriptable widget loads and renders', () => {
     expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
   })
 
+  it('lists a multi-day event once, at its first day (#452)', async () => {
+    const day = (offset: number, label: string) => ({ date: isoDate(offset), label, activities: [] })
+    const threeDays = {
+      id: 'tde-msr', name: 'TDE at MSR 3.1 CCW', organizer: 'The Drivers Edge', track: 'Motorsport Ranch - Cresson',
+      runGroups: [],
+      days: [day(46, 'Friday'), day(47, 'Saturday'), day(48, 'Sunday')],
+    }
+    await runWidget('large', { events: [threeDays, UPCOMING_MULTI_MANIFEST.events[0]] })
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts.filter(t => t === 'TDE at MSR 3.1 CCW')).toHaveLength(1)
+    expect(texts).toContain('Upcoming A')
+    expect(texts).toContain('in 46 days')
+    expect(texts).not.toContain('in 47 days')
+    expect(texts.some(t => t.includes('more upcoming'))).toBe(false)
+  })
+
+  it('splits the test fixture into an event per day with `test-upcoming`', async () => {
+    const fixture = {
+      id: 'test-live', name: 'Test Event', runGroups: [],
+      days: ['Today', 'Sunday', 'Monday'].map(label => ({ date: '2000-01-01', label, activities: [] })),
+    }
+    await runWidget('large', { events: [fixture] }, 'test-upcoming')
+    const texts = (globalThis as any).__texts as string[]
+    expect(texts.filter(t => t === 'Test Event')).toHaveLength(2)
+    expect(texts).toContain('in 10 days')
+    expect(texts).toContain('in 17 days')
+    expect(texts).toContain('1 more upcoming event')
+  })
+
   it('renders a single upcoming card plus a "more upcoming" footer on Medium', async () => {
     await expect(runWidget('medium', UPCOMING_MULTI_MANIFEST)).resolves.toBeUndefined()
   })
