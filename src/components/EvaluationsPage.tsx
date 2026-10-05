@@ -9,12 +9,14 @@ import { DateBlock } from './DateBlock'
 import { sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
-import { ReportCardSwitch } from './ReportCardSwitch'
+import { FilterMenu } from './FilterMenu'
+import type { FilterOption } from './FilterMenu'
+import { groupNamed } from './EventEvaluationCard'
 import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
 import { useRsvps } from '../data/RsvpsContext'
-import { TDE_CARDS, cardOf, isTdeEvent } from '../utils/evaluation'
+import { TDE_CARDS, TDE_GROUP_NAMES, cardOf, isTdeEvent, tdeLevel } from '../utils/evaluation'
 import type { CardId, TdeCard } from '../utils/evaluation'
 import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
@@ -76,13 +78,138 @@ export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
 }
 
 /**
- * The kinds of report card they have scores on (#350), and the one to show
- * first: their newest scored card's.
+ * The kinds of report card they have scores on (#350) — each run group's
+ * card has its own skills, so its own overview and wheel — the one with
+ * the newest scored card first.
  */
-export function reportCardKinds(points: ReportCardPoint[]): { kinds: TdeCard[]; newest: TdeCard | undefined } {
-  const kinds = TDE_CARDS.filter(kind => scoredCards(points, kind).cards.length > 0)
-  const scored = kinds.flatMap(kind => scoredCards(points, kind).cards).sort((a, b) => a.date.localeCompare(b.date))
-  return { kinds, newest: scored.length ? cardOf(scored[scored.length - 1].evaluation) : undefined }
+export function reportCardKinds(points: ReportCardPoint[]): TdeCard[] {
+  const newest = (kind: TdeCard) => scoredCards(points, kind).cards.at(-1)?.date ?? ''
+  return TDE_CARDS
+    .filter(kind => scoredCards(points, kind).cards.length > 0)
+    .sort((a, b) => newest(b).localeCompare(newest(a)))
+}
+
+/** One event on the page: its evaluations, or null for one they went to without any yet. */
+export interface Entry {
+  event: EventConfig
+  notes: EventNotes | null
+}
+
+/**
+ * What the page's events — and so its report cards — are filtered by
+ * (#401): an organizer, then one of its run groups. A run group is the
+ * organizer's own — Blue is TDE's second level, but SCCA's first — so it's
+ * only picked with an organizer.
+ */
+export interface Filters {
+  /** An organizer, as organizerOf names it; null: every one. */
+  organizer: string | null
+  /** One of the organizer's run groups, by its name lowercased; null: every one. */
+  group: string | null
+}
+
+export const NO_FILTERS: Filters = { organizer: null, group: null }
+
+export const TDE_ORGANIZER = 'The Drivers Edge'
+
+/** Who ran an event, by one name for each: every TDE event's is The Drivers Edge, however it's spelled, or none; '' for none set. */
+export function organizerOf(event: Pick<EventConfig, 'name' | 'organizer'>): string {
+  return isTdeEvent(event) ? TDE_ORGANIZER : event.organizer?.trim() ?? ''
+}
+
+/** The report card an event's evaluation was entered on, if it's a TDE event's and has one. */
+function reportCardOf({ event, notes }: Entry) {
+  const evaluation = notes?.evaluation
+  if (!evaluation || !isTdeEvent(event)) return undefined
+  return evaluation.card || Object.keys(evaluation.skills ?? {}).length ? cardOf(evaluation) : undefined
+}
+
+/** A run group they were in at an event, by name; and at one of TDE's levels, the group they ran in it as (#401). */
+export interface RanIn {
+  group: string
+  /** Purple, Orange and Pink each take in drivers of two groups: the one they're counted under. */
+  as?: string
+}
+
+/**
+ * The run groups they were in at an event: the ones of the sessions they
+ * have notes on, or else the one they said they're in. At a TDE event, its
+ * report card's group says which they ran as (#401) — and with none, at
+ * one of TDE's levels (Purple, Orange, Pink), the group of their newest
+ * report card by then (in `entries`).
+ */
+export function ranIn(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): RanIn[] {
+  const { event, notes } = entry
+  const ids = notes?.sessions.length ? notes.sessions.map(s => s.group) : [myRunGroup(event, rsvps[event.id])].flatMap(id => id ? [id] : [])
+  const names = [...new Map(ids.map(id => groupFor(id, event.runGroups).label.trim()).map(n => [n.toLowerCase(), n])).values()]
+  const card = reportCardOf(entry)
+  if (card) return names.length ? names.map(n => n.toLowerCase() === card.group.toLowerCase() ? { group: n } : { group: n, as: card.group }) : [{ group: card.group }]
+  const level = isTdeEvent(event) ? levelBy(entries, startDate(event)) : undefined
+  return names.map(n => level && tdeLevel(n) ? { group: n, as: level } : { group: n })
+}
+
+/** The run groups an event counts under (#401): the ones they ran as. */
+export function entryGroups(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): string[] {
+  const names = ranIn(entry, rsvps, entries).map(r => r.as ?? r.group)
+  return [...new Map(names.map(n => [n.toLowerCase(), n])).values()]
+}
+
+/** The run group of their newest TDE report card on or before a day. */
+function levelBy(entries: Entry[], date: string): string | undefined {
+  const cards = entries.flatMap(e => {
+    const card = startDate(e.event) <= date ? reportCardOf(e) : undefined
+    return card ? [{ date: startDate(e.event), group: card.group }] : []
+  })
+  return cards.sort((a, b) => b.date.localeCompare(a.date))[0]?.group
+}
+
+const groupOrder = (name: string) => {
+  const i = TDE_GROUP_NAMES.findIndex(n => n.toLowerCase() === name.toLowerCase())
+  return i === -1 ? TDE_GROUP_NAMES.length : i
+}
+
+/**
+ * What each filter can pick (#401): every organizer of their events, A to
+ * Z (none set last); and the run groups they were in at the picked
+ * organizer's, in the palette's order — none with no organizer picked.
+ */
+export function filterChoices(entries: Entry[], rsvps: Rsvps, organizer: string | null): { organizers: string[]; groups: string[] } {
+  const organizers = [...new Set(entries.map(e => organizerOf(e.event)))]
+    .sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
+  const groups = new Map<string, string>()
+  for (const entry of entries) {
+    if (organizer === null || organizerOf(entry.event) !== organizer) continue
+    for (const name of entryGroups(entry, rsvps, entries)) if (!groups.has(name.toLowerCase())) groups.set(name.toLowerCase(), name)
+  }
+  return {
+    organizers,
+    groups: [...groups.values()].sort((a, b) => groupOrder(a) - groupOrder(b) || a.localeCompare(b)),
+  }
+}
+
+/** The events that pass the filters (#401); a run group only with its organizer. */
+export function filterEntries(entries: Entry[], rsvps: Rsvps, { organizer, group }: Filters): Entry[] {
+  return entries.filter(entry =>
+    (organizer === null || organizerOf(entry.event) === organizer)
+    && (organizer === null || group === null || entryGroups(entry, rsvps, entries).some(n => n.toLowerCase() === group)))
+}
+
+/**
+ * The run group picked at first (#401): the one of their newest report
+ * card at the organizer's events (lowercased), so its card is the one
+ * shown; none if they've no report card there, or no organizer's picked.
+ */
+export function newestCardGroup(entries: Entry[], rsvps: Rsvps, organizer: string | null): string | null {
+  if (organizer === null) return null
+  const points = shownReportCards(filterEntries(entries, rsvps, { organizer, group: null }), null)
+  const kind = reportCardKinds(points)[0]
+  return kind ? kind.group.toLowerCase() : null
+}
+
+/** The report cards of the events shown — with a run group picked, only that group's cards (#401). */
+export function shownReportCards(entries: Entry[], group: string | null): ReportCardPoint[] {
+  const points = reportCards(entries.flatMap(({ event, notes }) => notes ? [{ event, notes }] : []))
+  return group === null ? points : points.filter(p => cardOf(p.evaluation).group.toLowerCase() === group)
 }
 
 /**
@@ -126,16 +253,15 @@ function Feedback({ label, instructor, text }: {
  * session, in schedule order — so it can all be read here. An event they
  * went to with nothing yet has a button to add the instructor's evaluation.
  */
-function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
+function EvaluationEventCard({ event, notes, ran, onOpen, onAdd }: {
   event: EventConfig
   /** Null: none yet. */
   notes: EventNotes | null
-  /** The group they said they're in, for an event evaluated as a whole. */
-  runGroup: string | null
+  /** The run groups they were in there, and at one of TDE's levels, the group they ran as (#401). */
+  ran: RanIn[]
   onOpen: () => void
   onAdd: () => void
 }) {
-  const groups = notes?.sessions.length ? [...new Set(notes.sessions.map(s => s.group))] : runGroup ? [runGroup] : []
   const tde = isTdeEvent(event)
   const evaluation = notes?.evaluation
   const multiDay = event.days.length > 1
@@ -154,7 +280,13 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{event.name}</div>
           <div className="mt-1 flex min-w-0 items-center gap-2">
-            {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
+            {ran.map(r => (
+              <span key={r.group} className="flex shrink-0 items-center gap-1.5">
+                <GroupBadge group={groupNamed(r.group, [event])} size="sm" />
+                {/* Purple, say, which takes in Green and new Blue drivers: which they were. */}
+                {r.as && <span className="text-sm text-gray-500">as {r.as}</span>}
+              </span>
+            ))}
             {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
           </div>
         </div>
@@ -193,6 +325,8 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
     </article>
   )
 }
+
+const HEADING = 'mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500'
 
 const bar = 'animate-pulse rounded bg-gray-100'
 
@@ -241,7 +375,8 @@ interface Props {
  * went to or has an evaluation at, newest first, with what the instructors
  * said (or a button to add it), under how their TDE report cards have come
  * along — the skills most improved and needing the most work, and the
- * skills wheel. It needs a sign-in.
+ * skills wheel. Filters at the top (#401) narrow the events, and so the
+ * report cards, by organizer and run group. It needs a sign-in.
  */
 export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEvent, onAddEvaluation }: Props) {
   const { status: authStatus } = useAuth()
@@ -259,18 +394,48 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
   }, [active, reload])
 
   const evaluated = useMemo(() => evaluatedEvents(notes.events, events), [notes.events, events])
-  const cards = useMemo(() => reportCards(evaluated), [evaluated])
-  // One run group's cards at a time (#350): the one picked, or the newest's.
-  const { kinds, newest } = useMemo(() => reportCardKinds(cards), [cards])
-  const [kindId, setKindId] = useState<CardId | null>(null)
-  const kind = kinds.find(k => k.id === kindId) ?? newest
   // Every event on the list, newest first: the ones evaluated, and the ones they went to without one yet.
-  const entries = useMemo(() => {
+  const entries = useMemo((): Entry[] => {
     const withLaps = new Set((lapSummary ?? []).map(e => e.eventId))
     const rest = unevaluatedEvents(events, rsvps, withLaps, new Set(evaluated.map(e => e.event.id)))
     return [...evaluated, ...rest.map(event => ({ event, notes: null }))]
       .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
   }, [evaluated, events, rsvps, lapSummary])
+
+  // The events by organizer, then one of its run groups (#401) — and so
+  // the report cards: each run group's card shown has its own overview and
+  // wheel (#350), the newest's first. Until they pick, the organizer and
+  // run group of their newest report card (undefined till then): The
+  // Drivers Edge's, the only ones with report cards.
+  const [picked, setFilters] = useState<{ organizer?: string | null; group?: string | null }>({})
+  const anyCards = useMemo(() => shownReportCards(entries, null).length > 0, [entries])
+  const pickedOrganizer = picked.organizer === undefined ? (anyCards ? TDE_ORGANIZER : null) : picked.organizer
+  const choices = useMemo(() => filterChoices(entries, rsvps, pickedOrganizer), [entries, rsvps, pickedOrganizer])
+  const organizer = pickedOrganizer !== null && choices.organizers.includes(pickedOrganizer) ? pickedOrganizer : null
+  const group = picked.group === undefined ? newestCardGroup(entries, rsvps, organizer) : picked.group
+  // A pick no longer among the choices — say, a run group not at the organizer now picked — is all of them.
+  const filters: Filters = {
+    organizer,
+    group: group !== null && choices.groups.some(g => g.toLowerCase() === group) ? group : null,
+  }
+  const shown = filterEntries(entries, rsvps, filters)
+  const cards = shownReportCards(shown, filters.group)
+  const kinds = reportCardKinds(cards)
+  // What TDE's levels shown here are (#401): the events at one counted
+  // under the group picked, as the level takes in drivers of two groups —
+  // or, picked itself, that it does.
+  const levelNotes = [...new Set(shown.flatMap(entry => ranIn(entry, rsvps, entries)
+    .filter(r => r.as ? r.as.toLowerCase() === filters.group : r.group.toLowerCase() === filters.group)
+    .flatMap(r => tdeLevel(r.group) ? [r.group] : [])))]
+    .map(name => {
+      const level = tdeLevel(name)!
+      const what = `${level.name} is TDE’s Level ${level.level}, for ${level.takes} drivers together.`
+      return level.name.toLowerCase() === filters.group
+        ? `${what} Add a report card to count these events under your own group.`
+        : `Includes your ${level.name} events, where you ran as ${choices.groups.find(g => g.toLowerCase() === filters.group)}. ${what}`
+    })
+  // The organizer's events, for its run groups' colors.
+  const organizerEvents = organizer === null ? events : events.filter(e => organizerOf(e) === organizer)
 
   const loading = authStatus === 'signed-in' && (notes.status === 'loading' || !eventsLoaded || rsvpsStatus === 'loading')
   const leaving = useSkeletonFade(loading)
@@ -301,31 +466,67 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
       </div>
     )
   } else {
+    const organizerOptions: FilterOption[] = [
+      { id: null, text: 'All organizers' },
+      ...choices.organizers.map(o => ({ id: o, text: o || 'Organizer not set' })),
+    ]
+    const groupOptions: FilterOption[] = [
+      { id: null, text: 'All run groups' },
+      ...choices.groups.map(g => ({ id: g.toLowerCase(), text: g, content: <GroupBadge group={groupNamed(g, organizerEvents)} size="sm" /> })),
+    ]
     body = (
       <div className="fade-in">
-        {kind && (
-          <div className="mb-8 flex flex-col gap-4">
-            {kinds.length > 1 && (
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-xs text-gray-500">Each run group’s card has its own skills.</span>
-                <ReportCardSwitch cards={kinds} value={kind.id} onChange={setKindId} events={events} />
-              </div>
+        <div role="group" aria-label="Filter events" className="mb-6 flex min-w-0 gap-2">
+          <FilterMenu label="Organizer" options={organizerOptions} value={filters.organizer} onChange={o => setFilters({ organizer: o })} />
+          {/* An organizer's own run groups: none to pick till there's an organizer. */}
+          <FilterMenu
+            label="Run group"
+            options={groupOptions}
+            value={filters.group}
+            onChange={g => setFilters({ ...filters, group: g })}
+            disabled={organizer === null}
+          />
+        </div>
+        {/* Whose they are (#401), on the page and not just in the filters: the organizer, then its run group. */}
+        {organizer !== null && (
+          <header aria-label="Showing" className="mb-6">
+            <p className="font-rubik text-xl font-bold leading-tight text-gray-900">{organizer || 'Organizer not set'}</p>
+            {filters.group !== null && (
+              <p className="mt-1.5 flex items-center gap-2 text-sm text-gray-500">
+                <GroupBadge group={groupNamed(choices.groups.find(g => g.toLowerCase() === filters.group)!, organizerEvents)} size="sm" />
+                run group
+              </p>
             )}
-            <SkillOverview key={`overview ${kind.id}`} points={cards} kind={kind} />
-            <SkillsWheel key={`wheel ${kind.id}`} points={cards} kind={kind} />
-          </div>
+            {levelNotes.map(note => <p key={note} className="mt-2 text-xs text-gray-500">{note}</p>)}
+          </header>
+        )}
+        {/* The run group's report cards — what's come along since the first, and the skills wheel — as Events has its events. */}
+        {kinds.length > 0 && (
+          <section aria-labelledby="evaluations-cards-heading" className="mb-8">
+            <h2 id="evaluations-cards-heading" className={HEADING}>Report cards</h2>
+            {filters.group !== null ? (
+              <div className="flex flex-col gap-4">
+                <SkillOverview points={cards} kind={kinds[0]} />
+                <SkillsWheel points={cards} kind={kinds[0]} />
+              </div>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+                {organizer === null ? `Pick ${TDE_ORGANIZER} and a run group` : 'Pick a run group'} to see its report cards and skills wheel.
+              </p>
+            )}
+          </section>
         )}
         <section aria-labelledby="evaluations-events-heading">
-          <h2 id="evaluations-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+          <h2 id="evaluations-events-heading" className={HEADING}>
             Events
           </h2>
           <ul className="space-y-3">
-            {entries.map(({ event, notes }) => (
+            {shown.map(({ event, notes }) => (
               <li key={event.id}>
                 <EvaluationEventCard
                   event={event}
                   notes={notes}
-                  runGroup={myRunGroup(event, rsvps[event.id])}
+                  ran={ranIn({ event, notes }, rsvps, entries)}
                   onOpen={() => onOpenEvent(event)}
                   onAdd={() => onAddEvaluation(event)}
                 />
