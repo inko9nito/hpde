@@ -2216,7 +2216,7 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     const overview = await within(el).findByRole('region', { name: 'Report card overview' })
-    expect(within(overview).getByText('2 events')).toBeInTheDocument()
+    expect(within(overview).getByText('2 report cards')).toBeInTheDocument()
     const items = (name: string) => within(within(overview).getByRole('region', { name })).getAllByRole('listitem').map(li => li.textContent)
     // Only what went up: vision stayed at 70, and pace is on one card.
     expect(items('Most improved')).toEqual(['Flags+15'])
@@ -2271,9 +2271,13 @@ describe('Instructor evaluations across events (#345)', () => {
     const filters = await within(el).findByRole('group', { name: 'Filter events' })
     expect(within(filters).getByRole('button', { name: 'Organizer: The Drivers Edge' })).toBeInTheDocument()
     expect(within(filters).getByRole('button', { name: 'Run group: Blue' })).toBeInTheDocument()
-    // The run group's two views, a card each, under the filters that say whose.
-    const overview = within(el).getByRole('region', { name: 'Report card overview' })
-    expect(overview).toHaveTextContent('Report cards1 event')
+    // Whose, on the page: the organizer, then the run group.
+    expect(within(el).getByRole('banner', { name: 'Showing' })).toHaveTextContent('The Drivers EdgeBluerun group')
+    // Its report cards' two views, a card each, under Report cards as the events are under Events.
+    const section = within(el).getByRole('region', { name: 'Report cards' })
+    const overview = within(section).getByRole('region', { name: 'Report card overview' })
+    expect(overview).toHaveTextContent('At a glance1 report card')
+    expect(within(section).getByRole('region', { name: 'Skills wheel' })).toBeInTheDocument()
     const spokes = () => within(within(el).getByRole('region', { name: 'Skills wheel' })).getAllByRole('button', { pressed: false })
       .map(b => b.getAttribute('aria-label')).filter(Boolean)
     // Blue's skills, in Blue's order.
@@ -2285,13 +2289,14 @@ describe('Instructor evaluations across events (#345)', () => {
     await userEvent.click(within(filters).getByRole('button', { name: 'Run group: Blue' }))
     await userEvent.click(within(within(el).getByRole('listbox', { name: 'Run group' })).getByRole('option', { name: 'Green' }))
     expect(spokes()).toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
-    expect(within(el).getByRole('region', { name: 'Report card overview' })).toHaveTextContent('Report cards2 events')
+    expect(within(el).getByRole('region', { name: 'Report card overview' })).toHaveTextContent('At a glance2 report cards')
 
     // Every run group's: report cards are a run group's, so it asks for one.
     await userEvent.click(within(filters).getByRole('button', { name: 'Run group: Green' }))
     await userEvent.click(within(within(el).getByRole('listbox', { name: 'Run group' })).getByRole('option', { name: 'All run groups' }))
     expect(within(el).queryByRole('region', { name: 'Skills wheel' })).not.toBeInTheDocument()
     expect(within(el).getByText('Pick a run group to see its report cards and skills wheel.')).toBeInTheDocument()
+    expect(within(el).getByRole('banner', { name: 'Showing' })).toHaveTextContent(/^The Drivers Edge$/)
   })
 
   it('lists every event with an evaluation, TDE or not, newest first, with what the instructors said; one opens on My notes and Back returns here', async () => {

@@ -73,6 +73,22 @@ describe('filtering the events, and so the report cards (#401)', () => {
     expect(entries.map(e => entryGroups(e, rsvps))).toEqual([[], ['Red'], ['Blue'], ['Blue'], ['Green']])
   })
 
+  it('counts a TDE level group — Purple, Orange, Pink — as the group of their report card by then', () => {
+    const purple = (id: string, date: string, evaluation?: object): Entry => ({
+      event: ev(id, date, 'The Drivers Edge', ['Purple', 'Orange']),
+      notes: evaluation ? { eventId: id, evaluation, sessions: [] } : null,
+    })
+    const early = purple('early', '2025-01-01')
+    const later = purple('later', '2026-05-30')
+    const carded = purple('carded', '2026-06-06', { card: 'blue', skills: { flags: 90 } })
+    const all = [...entries, early, later, carded]
+    const going = { ...rsvps, early: { status: 'going' as const, runGroup: 'purple' }, later: { status: 'going' as const, runGroup: 'purple' }, carded: { status: 'going' as const, runGroup: 'purple' } }
+    // Before any report card, Purple; after their Blue one (Oct 4), Blue; with a card of its own, that card's group.
+    expect([early, later, carded].map(e => entryGroups(e, going, all))).toEqual([['Purple'], ['Blue'], ['Blue']])
+    expect(filterChoices(all, going, 'The Drivers Edge').groups).toEqual(['Green', 'Blue', 'Purple'])
+    expect(filterEntries(all, going, { organizer: 'The Drivers Edge', group: 'blue' }).map(e => e.event.id)).toEqual(['TDE at ECR', 'blue-day', 'later', 'carded'])
+  })
+
   it('offers each organizer, and then the run groups at the one picked — its own, so none with no organizer', () => {
     expect(filterChoices(entries, rsvps, null)).toEqual({ organizers: ['Texas Region SCCA', 'The Drivers Edge', ''], groups: [] })
     expect(filterChoices(entries, rsvps, 'The Drivers Edge').groups).toEqual(['Green', 'Blue'])

@@ -2131,9 +2131,12 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(filters.getByRole('button', { name: /^Organizer: / })).toHaveAccessibleName('Organizer: The Drivers Edge')
   await expect(filters.getByRole('button', { name: /^Run group: / })).toHaveAccessibleName('Run group: Green')
   await expect(page.getByRole('region', { name: 'Events' }).getByRole('link')).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
-  // The filters say whose; under them, the run group's two views, a card each.
-  await expect(overview.getByRole('heading', { level: 2 })).toHaveText('Report cards')
-  await expect(wheel.getByRole('heading', { level: 2 })).toHaveText('Skills wheel')
+  // Whose, on the page as well as in the filters; then the run group's two views, a card each, under Report cards.
+  await expect(page.getByRole('banner', { name: 'Showing' })).toHaveText(/The Drivers Edge\s*Green\s*run group/)
+  const reportCards = page.getByRole('region', { name: 'Report cards' })
+  await expect(reportCards.getByRole('heading', { level: 2 })).toHaveText('Report cards')
+  await expect(reportCards.getByRole('region', { name: 'Report card overview' }).getByRole('heading', { level: 3 })).toHaveText('At a glance')
+  await expect(reportCards.getByRole('region', { name: 'Skills wheel' }).getByRole('heading', { level: 3 })).toHaveText('Skills wheel')
   // The organizer's run groups: Green, the only one they've driven in at TDE's.
   await filters.getByRole('button', { name: /^Run group: / }).click()
   await expect(page.getByRole('listbox', { name: 'Run group' }).getByRole('option')).toHaveText(['All run groups', 'Green'])

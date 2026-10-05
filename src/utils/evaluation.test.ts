@@ -47,6 +47,8 @@ describe('each run group’s report card (#350)', () => {
     expect(cardForGroup('Blue')?.id).toBe('blue')
     expect(cardForGroup('Blue PT Solo')?.id).toBe('blue')
     expect(cardForGroup('green')?.id).toBe('green')
+    // Blue's card is Blue/Purple's (#401).
+    expect(cardForGroup('Purple')?.id).toBe('blue')
     expect(cardForGroup('Orange')).toBeUndefined()
     expect(cardForGroup('Bluebonnet')).toBeUndefined()
     expect(cardForGroup(null)).toBeUndefined()

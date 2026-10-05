@@ -104,7 +104,7 @@ const CARD = 'rounded-2xl border border-gray-200 bg-white p-4'
 function CardHead({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="text-[13px] font-semibold text-gray-500">{title}</h2>
+      <h3 className="text-[13px] font-semibold text-gray-500">{title}</h3>
       {meta && <span className="text-xs text-gray-400">{meta}</span>}
     </div>
   )
@@ -119,7 +119,7 @@ function MoveList({ title, caption, moves, value, empty }: {
 }) {
   return (
     <section aria-label={title} className="min-w-0">
-      <h3 className="text-xs font-semibold text-gray-500">{title}</h3>
+      <h4 className="text-xs font-semibold text-gray-500">{title}</h4>
       {caption && <p className="text-[11px] text-gray-400">{caption}</p>}
       {moves.length ? (
         <ol className="mt-2 flex flex-col gap-2">
@@ -145,7 +145,7 @@ export function SkillOverview({ points, kind }: { points: ReportCardPoint[]; kin
   const [first, latest] = [cards[0], cards[cards.length - 1]]
   return (
     <section aria-label="Report card overview" className={CARD}>
-      <CardHead title="Report cards" meta={`${cards.length} ${cards.length === 1 ? 'event' : 'events'}`} />
+      <CardHead title="At a glance" meta={`${cards.length} ${cards.length === 1 ? 'report card' : 'report cards'}`} />
       <div className="grid grid-cols-2 gap-4">
         <MoveList
           title="Most improved"
@@ -415,7 +415,7 @@ export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind:
       <div aria-live="polite" className="mt-3 border-t border-gray-100 pt-3">
         {pickedSkill ? (
           <section aria-label={`${pickedSkill.label} at each event`}>
-            <h3 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h3>
+            <h4 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h4>
             <ul className="mt-1 divide-y divide-gray-100">
               {[...history].reverse().map(({ card, score, change }) => {
                 return (

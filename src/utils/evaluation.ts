@@ -52,6 +52,8 @@ export interface TdeCard {
   id: CardId
   /** The run group whose card it is. */
   group: string
+  /** Other run groups it's the card for: Blue's is "Blue/Purple" (#401). */
+  alsoFor?: readonly string[]
   skills: readonly TdeSkill[]
   /** What it calls the percentage of the time the car's aids stepped in. */
   carAidsLabel: string
@@ -98,6 +100,7 @@ export const TDE_CARDS: readonly TdeCard[] = [
   {
     id: 'blue',
     group: 'Blue',
+    alsoFor: ['Purple'],
     skills: [
       { id: 'flags', label: 'Acknowledges all flags early', short: 'Flags' },
       { id: 'passing', label: 'Proper passing & traffic management', short: 'Passing' },
@@ -125,10 +128,10 @@ export function cardOf(evaluation: Pick<EventEvaluation, 'card'>): TdeCard {
   return cardById(evaluation.card)
 }
 
-/** The card for a run group by its name ("Blue", "Blue PT Solo"), if the app has that group's. */
+/** The card for a run group by its name ("Blue", "Blue PT Solo", "Purple"), if the app has that group's. */
 export function cardForGroup(name: string | null | undefined): TdeCard | undefined {
   if (!name) return undefined
-  return TDE_CARDS.find(c => new RegExp(`\\b${c.group}\\b`, 'i').test(name))
+  return TDE_CARDS.find(c => [c.group, ...c.alsoFor ?? []].some(g => new RegExp(`\\b${g}\\b`, 'i').test(name)))
 }
 
 /** Where the report card recommends the driver run next: a run group's name for each. */
@@ -209,6 +212,16 @@ export interface EventEvaluation {
 export function isTdeEvent(event: Pick<EventConfig, 'name' | 'organizer'>): boolean {
   return /driver'?s'?\s*edge/i.test(event.organizer ?? '') || /^TDE\b/.test(event.name)
 }
+
+/**
+ * TDE's three levels (#401), which some of its events run instead of the
+ * four groups the report cards are for, each taking in drivers of two:
+ * Purple (1) is Green and new Blue drivers, full-time instructed; Orange
+ * (2) is Yellow and part-time instructed Blue; Pink (3) is solo-approved
+ * Yellow and Red. A driver's level at one of those events is the group of
+ * their report card.
+ */
+export const TDE_LEVEL_GROUPS = ['Purple', 'Orange', 'Pink']
 
 /** The run groups a report card can recommend, beyond the event's own — in the palette's order. */
 export const TDE_GROUP_NAMES = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Pink', 'Purple']

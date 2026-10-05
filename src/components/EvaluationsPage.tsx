@@ -16,7 +16,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
 import { useRsvps } from '../data/RsvpsContext'
-import { TDE_CARDS, TDE_GROUP_NAMES, cardOf, isTdeEvent } from '../utils/evaluation'
+import { TDE_CARDS, TDE_GROUP_NAMES, TDE_LEVEL_GROUPS, cardOf, isTdeEvent } from '../utils/evaluation'
 import type { CardId, TdeCard } from '../utils/evaluation'
 import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
@@ -126,17 +126,32 @@ function reportCardOf({ event, notes }: Entry) {
 
 /**
  * The run groups they were in at an event, by name: the ones of the
- * sessions they have notes on, or else the one they said they're in — and
- * the one whose report card the instructor filled in.
+ * sessions they have notes on, or else the one they said they're in. At a
+ * TDE event, their level (#401): the group whose report card the
+ * instructor filled in; or, for one of TDE's levels (Purple, Orange, Pink),
+ * the group of their newest report card by then (in `entries`), if any.
  */
-export function entryGroups(entry: Entry, rsvps: Rsvps): string[] {
+export function entryGroups(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): string[] {
   const { event, notes } = entry
-  const ids = notes?.sessions.length ? notes.sessions.map(s => s.group) : [myRunGroup(event, rsvps[event.id])].flatMap(id => id ? [id] : [])
-  const names = ids.map(id => groupFor(id, event.runGroups).label)
   const card = reportCardOf(entry)
-  if (card) names.push(card.group)
-  const byKey = new Map(names.map(n => [n.trim().toLowerCase(), n.trim()]))
+  if (card) return [card.group]
+  const ids = notes?.sessions.length ? notes.sessions.map(s => s.group) : [myRunGroup(event, rsvps[event.id])].flatMap(id => id ? [id] : [])
+  let names = ids.map(id => groupFor(id, event.runGroups).label.trim())
+  if (isTdeEvent(event)) {
+    const level = levelBy(entries, startDate(event))
+    if (level) names = names.map(n => TDE_LEVEL_GROUPS.some(l => l.toLowerCase() === n.toLowerCase()) ? level : n)
+  }
+  const byKey = new Map(names.map(n => [n.toLowerCase(), n]))
   return [...byKey.values()]
+}
+
+/** The run group of their newest TDE report card on or before a day. */
+function levelBy(entries: Entry[], date: string): string | undefined {
+  const cards = entries.flatMap(e => {
+    const card = startDate(e.event) <= date ? reportCardOf(e) : undefined
+    return card ? [{ date: startDate(e.event), group: card.group }] : []
+  })
+  return cards.sort((a, b) => b.date.localeCompare(a.date))[0]?.group
 }
 
 const groupOrder = (name: string) => {
@@ -155,7 +170,7 @@ export function filterChoices(entries: Entry[], rsvps: Rsvps, organizer: string 
   const groups = new Map<string, string>()
   for (const entry of entries) {
     if (organizer === null || organizerOf(entry.event) !== organizer) continue
-    for (const name of entryGroups(entry, rsvps)) if (!groups.has(name.toLowerCase())) groups.set(name.toLowerCase(), name)
+    for (const name of entryGroups(entry, rsvps, entries)) if (!groups.has(name.toLowerCase())) groups.set(name.toLowerCase(), name)
   }
   return {
     organizers,
@@ -167,7 +182,7 @@ export function filterChoices(entries: Entry[], rsvps: Rsvps, organizer: string 
 export function filterEntries(entries: Entry[], rsvps: Rsvps, { organizer, group }: Filters): Entry[] {
   return entries.filter(entry =>
     (organizer === null || organizerOf(entry.event) === organizer)
-    && (organizer === null || group === null || entryGroups(entry, rsvps).some(n => n.toLowerCase() === group)))
+    && (organizer === null || group === null || entryGroups(entry, rsvps, entries).some(n => n.toLowerCase() === group)))
 }
 
 /**
@@ -448,16 +463,33 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
             disabled={organizer === null}
           />
         </div>
-        {/* The run group's (#401) — the filters above say whose — its report cards' two views, each a card of its own. */}
-        {filters.group !== null && kinds.length > 0 ? (
-          <div className="mb-8 flex flex-col gap-4">
-            <SkillOverview points={cards} kind={kinds[0]} />
-            <SkillsWheel points={cards} kind={kinds[0]} />
-          </div>
-        ) : kinds.length > 0 && (
-          <p className="mb-6 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
-            {organizer === null ? `Pick ${TDE_ORGANIZER} and a run group` : 'Pick a run group'} to see its report cards and skills wheel.
-          </p>
+        {/* Whose they are (#401), on the page and not just in the filters: the organizer, then its run group. */}
+        {organizer !== null && (
+          <header aria-label="Showing" className="mb-6">
+            <p className="font-rubik text-xl font-bold leading-tight text-gray-900">{organizer || 'Organizer not set'}</p>
+            {filters.group !== null && (
+              <p className="mt-1.5 flex items-center gap-2 text-sm text-gray-500">
+                <GroupBadge group={groupNamed(choices.groups.find(g => g.toLowerCase() === filters.group)!, organizerEvents)} size="sm" />
+                run group
+              </p>
+            )}
+          </header>
+        )}
+        {/* The run group's report cards — what's come along since the first, and the skills wheel — as Events has its events. */}
+        {kinds.length > 0 && (
+          <section aria-labelledby="evaluations-cards-heading" className="mb-8">
+            <h2 id="evaluations-cards-heading" className={HEADING}>Report cards</h2>
+            {filters.group !== null ? (
+              <div className="flex flex-col gap-4">
+                <SkillOverview points={cards} kind={kinds[0]} />
+                <SkillsWheel points={cards} kind={kinds[0]} />
+              </div>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+                {organizer === null ? `Pick ${TDE_ORGANIZER} and a run group` : 'Pick a run group'} to see its report cards and skills wheel.
+              </p>
+            )}
+          </section>
         )}
         <section aria-labelledby="evaluations-events-heading">
           <h2 id="evaluations-events-heading" className={HEADING}>
