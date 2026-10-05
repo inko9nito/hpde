@@ -121,9 +121,40 @@ function useUnderSheet(page?: Pushed): UnderSheet {
   })
 }
 
-/** Whether a sheet is up, over anything (#415): the status bar turns black over it. */
+/**
+ * For a sheet from the bottom grown into a page sheet (#445): what's under
+ * it shrinks back into a dimmed card on black while it's `up`, as under a
+ * PushPage `sheet`, and back as it shrinks. `shown` until it's gone, so the
+ * page stays black around the card till it's back in place.
+ */
+export function useRecedeUnder(shown: boolean, up: boolean) {
+  const page = useRef<Pushed>({ el: null, raised: false }).current
+  useSheet(page, shown, up)
+  useHtmlClass('page-sheet-open', shown)
+  useHtmlClass('page-sheet-up', up)
+}
+
+// How long what's under a sheet takes to grow back up under the status bar
+// once the sheet starts going: 97% of the way along iOS's spring.
+const BACK_UNDER_STATUS_BAR_MS = 300
+
+/**
+ * Whether a sheet is up, over anything (#415): the status bar turns black
+ * over it. Still up for a moment once it starts going, till what's under it
+ * has grown back up under the status bar — not gray over black (#445).
+ */
 export function useSheetUp(): boolean {
-  return useUnderSheet() === 'up'
+  const up = useUnderSheet() === 'up'
+  const [held, setHeld] = useState(up)
+  useEffect(() => {
+    if (up) {
+      setHeld(true)
+      return
+    }
+    const id = setTimeout(() => setHeld(false), BACK_UNDER_STATUS_BAR_MS)
+    return () => clearTimeout(id)
+  }, [up])
+  return up || held
 }
 
 /** Whether a page is pushed over `page` — or, without one, over the tabs. */
@@ -394,6 +425,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         pageRef.current = el
         if (scrollRef) scrollRef.current = el
       }}
+      // A sheet's own drag, not a pull to refresh the page under it (#445).
+      data-page-sheet={isSheet || undefined}
       className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         // Below the banner while an admin acts as another driver (#396);

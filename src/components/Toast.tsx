@@ -36,10 +36,11 @@ export function Toast({ toast, onDone, durationMs = 3000, bottomInset = 0 }: Pro
   }, [toast?.id])
 
   return (
+    // Over a sheet too: a session's stays up after a save (#445).
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
       style={bottomInset ? { bottom: bottomInset } : undefined}
     >
       {toast && (

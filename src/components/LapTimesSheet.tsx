@@ -1,14 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useId, useMemo, useRef, useState } from 'react'
 import { ChevronRight, ClipboardCheck, Disc3, Timer, Waves } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import { PAGE_BODY, PageHeader } from './PageHeader'
 import type { Toolbar } from './PageHeader'
-import { Sheet } from './Sheet'
+import { PagedSheet } from './Sheet'
 import type { Dismiss } from './Sheet'
-import { PushPage } from './PushPage'
 import { SessionEvaluationForm } from './SessionEvaluationForm'
 import { TirePressuresForm, pressuresText } from './TirePressuresForm'
 import { ConditionsForm } from './ConditionsForm'
@@ -16,7 +14,6 @@ import { conditionsText } from '../utils/conditions'
 import type { SessionConditions } from '../utils/conditions'
 import type { HourWeather } from '../data/weather'
 import { formatTime, formatAmPm } from '../utils/time'
-import { IOS_SPRING_MS } from '../utils/iosSpring'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
 import type { ReadAs, SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
@@ -104,24 +101,22 @@ export function shortDate(iso: string): string {
 /**
  * The sheet a session you drove opens in (#210): what you can add to it
  * (#205) — its tire pressures, your instructor's feedback (#340) and its
- * lap times, in the order the day goes. Each slides up as a page sheet
- * with Cancel, its name and Save across its top (#356, #415), as the sheet
- * slides down (#388); Cancel slides it back down and the sheet back up (or
- * closes it, opened for just that one), and Save closes both. Lap times:
- * paste your times, check what was read, save.
+ * lap times, in the order the day goes. Picked, the list fades out, the
+ * sheet grows up into a page sheet (#415, #445) and it fades in, with
+ * Cancel, its name and Save across its top (#356, #388); Cancel, Save or a
+ * drag down fades it out, the sheet back down, and the list back in (or
+ * closes the sheet, opened for just that one). Lap times: paste your
+ * times, check what was read, save.
  */
 export function LapTimesSheet({
   slot, view: startView = 'menu', runGroups, showDate, saved, savedNotes, allTimeBest, track, onOpenTrack, driver = null,
   loading = false, onSave, onRemove, onSaveEvaluation, onRemoveEvaluation, conditions, pressures, onClose,
 }: Props) {
-  // What's up: the list (a sheet from the bottom), or one of what's on it,
-  // in a page sheet (#388) — sliding up as the list slides down.
-  const [menuShown, setMenuShown] = useState(startView === 'menu')
+  // What's in it: the list, or one of what's on it in its place (#445)
+  // — or, opened for just that one, only that.
   const [page, setPage] = useState<Exclude<SessionView, 'menu'> | null>(startView === 'menu' ? null : startView)
   const [pageOpen, setPageOpen] = useState(page !== null)
-  const menuDismiss = useRef<Dismiss | null>(null)
-  // Saved or removed: once the page is down, the sheet's done.
-  const finished = useRef(false)
+  const sheetDismiss = useRef<Dismiss | null>(null)
   // With more than one group on track, start from the one that already has
   // laps or notes; failing that, ask — saved under the wrong group, they'd
   // be lost.
@@ -232,49 +227,34 @@ export function LapTimesSheet({
   const key = group ? sessionKey(slot.date, slot.time, group) : null
   const pageBusy = !!busy || evaluationBusy
 
-  // One of them picked: its page comes up as the list goes down.
+  // One of them picked: out fades the list, up the sheet grows, in it fades (#445).
+  const closed = useRef(false)
   function openPage(next: Exclude<SessionView, 'menu'>) {
+    closed.current = false
     setPage(next)
     setPageOpen(true)
-    menuDismiss.current?.(() => setMenuShown(false))
   }
-  // Its Cancel, Escape, or dragged down.
+  // Its Cancel, Escape, or dragged down: back to the list —
+  // or, opened for just that one, down goes the sheet.
   function cancelPage() {
-    if (!pageBusy) setPageOpen(false)
+    if (pageBusy) return
+    if (startView !== 'menu') sheetDismiss.current?.()
+    else setPageOpen(false)
   }
-  // Saved or removed: down it goes, and the sheet with it.
+  // Saved or removed: the same, to the list showing what's saved now.
   function finish() {
-    finished.current = true
-    setPageOpen(false)
+    if (startView !== 'menu') sheetDismiss.current?.()
+    else setPageOpen(false)
   }
-  // Once it's down: back to the list, with nothing typed kept — or done.
-  const closed = useRef(false)
+  // Once the list is back: nothing typed kept.
   function pageClosed() {
     if (closed.current) return
     closed.current = true
-    if (finished.current || startView !== 'menu') return onClose()
     setPage(null)
     startFrom(group)
-    setMenuShown(true)
+    setBusy(null)
+    setEvaluationBusy(false)
   }
-  useEffect(() => {
-    if (pageOpen) {
-      closed.current = false
-      return
-    }
-    if (page === null) return
-    // Should its slide's end not be heard, it's down by now anyway.
-    const id = setTimeout(pageClosed, IOS_SPRING_MS + 100)
-    return () => clearTimeout(id)
-  }, [pageOpen])
-  const cancelRef = useRef(cancelPage)
-  cancelRef.current = cancelPage
-  useEffect(() => {
-    if (!pageOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelRef.current() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [pageOpen])
 
   // Its toolbar: Cancel, what's being edited, and the session it's for.
   const toolbar: Toolbar | null = page === null ? null : {
@@ -283,26 +263,8 @@ export function LapTimesSheet({
     onCancel: cancelPage,
   }
 
-  return (
-    <>
-    {menuShown && (
-    <Sheet
-      label={title}
-      onClose={onClose}
-      dismissRef={menuDismiss}
-      data-lap-sheet
-      heading={<>
-        {/* Like the session's card on the schedule: its time and group. */}
-        {overline && <p className="text-xs text-gray-500">{overline}</p>}
-        <h2 className="mt-0.5 flex items-center gap-3">
-          <span className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
-            {formatTime(slot.time)}
-            <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(slot.time)}</span>
-          </span>
-          {group !== null && <GroupBadge group={groupFor(group, runGroups)} size="sm" />}
-        </h2>
-      </>}
-    >
+  // What's on the list, in the order the day goes.
+  const menu = startView !== 'menu' ? undefined : (<>
       {waiting && (
         <p className="mt-4 text-sm text-gray-400" aria-busy="true">Loading your notes…</p>
       )}
@@ -364,20 +326,11 @@ export function LapTimesSheet({
           />
         </nav>
       )}
-    </Sheet>
-    )}
+  </>)
 
-    {page !== null && toolbar && createPortal(
-      <PushPage open={pageOpen} onExited={pageClosed} onDismiss={cancelPage} raised from="bottom" sheet>
-      {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      <div
-        role="dialog"
-        aria-label={`${VIEW_TITLE[page]}, ${title}`}
-        aria-hidden={!pageOpen || undefined}
-        inert={!pageOpen || undefined}
-        className="min-h-full bg-white"
-        data-lap-page
-      >
+  // One of them, in its place.
+  const pageView = page !== null && toolbar && (
+    <div className="min-h-full bg-white" data-lap-page>
       {/* Till there's a form to save, Save waits. */}
       {(waiting || group === null) && <>
         <PageHeader {...toolbar} save={{ label: 'Save', disabled: true }} />
@@ -591,11 +544,37 @@ export function LapTimesSheet({
           }}
         />
       )}
-      </div>
-      </PushPage>,
-      document.body,
-    )}
-    </>
+    </div>
+  )
+
+  return (
+    <PagedSheet
+      label={title}
+      busy={pageBusy}
+      onClose={onClose}
+      dismissRef={sheetDismiss}
+      data-lap-sheet
+      heading={<>
+        {/* Like the session's card on the schedule: its time and group. */}
+        {overline && <p className="text-xs text-gray-500">{overline}</p>}
+        <h2 className="mt-0.5 flex items-center gap-3">
+          <span className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
+            {formatTime(slot.time)}
+            <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(slot.time)}</span>
+          </span>
+          {group !== null && <GroupBadge group={groupFor(group, runGroups)} size="sm" />}
+        </h2>
+      </>}
+      page={page === null || !pageView ? null : {
+        label: `${VIEW_TITLE[page]}, ${title}`,
+        open: pageOpen,
+        onExited: pageClosed,
+        onBack: cancelPage,
+        children: pageView,
+      }}
+    >
+      {menu}
+    </PagedSheet>
   )
 }
 

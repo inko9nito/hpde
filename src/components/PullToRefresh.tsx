@@ -33,9 +33,10 @@ export function PullToRefresh({ children, disabled, scrollContainerRef }: Props)
 
     const onTouchStart = (e: TouchEvent) => {
       if (getScrollTop() !== 0) return
-      // A drag in a dialog (e.g. panning the zoomed track map, #259) is the
-      // dialog's, not a pull on the page behind it.
-      if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
+      // A drag in a dialog (e.g. panning the zoomed track map, #259), or on
+      // a page sheet (dragging it down to close it, #445), is its own, not
+      // a pull on the page behind it.
+      if (e.target instanceof Element && e.target.closest('[aria-modal="true"], [data-page-sheet]')) return
       startY.current = e.touches[0].clientY
     }
 
