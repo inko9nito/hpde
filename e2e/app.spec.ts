@@ -2040,10 +2040,15 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const jul = tde('jul', 'TDE at MSRC', '2025-07-19')
   const sep = tde('sep', 'TDE at MSRC 2.0', '2025-09-13')
   const oct = tde('oct', 'TDE at Eagles Canyon Raceway', '2025-10-04')
-  await stubEvents(page, [...TEST_EVENTS, jul, sep, oct])
+  // One of TDE's levels, which takes in Green and new Blue drivers (#401): no evaluation yet, but they drove it.
+  const purple: EventConfig = {
+    ...tde('purple', 'TDE Purple Day', '2025-11-08'),
+    runGroups: [{ id: 'purple', label: 'Purple', bgClass: 'bg-purple-500', textClass: 'text-white' }],
+  }
+  await stubEvents(page, [...TEST_EVENTS, jul, sep, oct, purple])
   await signInAsAdmin(page)
   const bravo = TEST_EVENTS.find(e => e.name === 'Bravo HPDE')!
-  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [bravo.id]: { status: 'going' } } } }))
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [bravo.id]: { status: 'going' }, [purple.id]: { status: 'going', runGroup: 'purple' } } } }))
   await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
   }))
@@ -2130,7 +2135,10 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const filters = page.getByRole('group', { name: 'Filter events' })
   await expect(filters.getByRole('button', { name: /^Organizer: / })).toHaveAccessibleName('Organizer: The Drivers Edge')
   await expect(filters.getByRole('button', { name: /^Run group: / })).toHaveAccessibleName('Run group: Green')
-  await expect(page.getByRole('region', { name: 'Events' }).getByRole('link')).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  await expect(page.getByRole('region', { name: 'Events' }).getByRole('link')).toHaveText([/TDE Purple Day/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  // The Purple event's among them, as Green: their level by then, and the page says what Purple is.
+  await expect(page.getByRole('article', { name: 'TDE Purple Day' }).getByRole('link')).toContainText(/Purple\s*as Green/)
+  await expect(page.getByRole('banner', { name: 'Showing' })).toContainText('Includes your Purple events, where you ran as Green. Purple is TDE’s Level 1, for Green and new Blue drivers together.')
   // Whose, on the page as well as in the filters; then the run group's two views, a card each, under Report cards.
   await expect(page.getByRole('banner', { name: 'Showing' })).toHaveText(/The Drivers Edge\s*Green\s*run group/)
   const reportCards = page.getByRole('region', { name: 'Report cards' })
@@ -2155,14 +2163,14 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   const feedback = page.getByRole('region', { name: 'Events' })
   const events = feedback.getByRole('link')
   // Bravo has no evaluation, but they drove it: it's there to add one to.
-  await expect(events).toHaveText([/Alpha Track Day/, /Bravo HPDE/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
+  await expect(events).toHaveText([/Alpha Track Day/, /Bravo HPDE/, /TDE Purple Day/, /TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
   await expect(feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ })).toBeVisible()
   const alphaCard = feedback.getByRole('article', { name: 'Alpha Track Day' })
   await expect(alphaCard.getByRole('listitem')).toHaveText([
     /^Sam Ortiz\s*Good day\. Carry more speed/,
     /Session 1 · 8:30 AM.*Sam Ortiz.*Unwind the wheel sooner/,
   ])
-  await events.nth(2).click()
+  await events.nth(3).click()
   await expect(page).toHaveURL(new RegExp(`#/event/${oct.id}$`))
   await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
   await page.getByRole('button', { name: 'Back' }).last().click()
@@ -2176,7 +2184,7 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(page.getByText(/to see its report cards/)).toBeHidden()
   await filters.getByRole('button', { name: /^Organizer: / }).click()
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'All organizers' }).click()
-  await expect(events).toHaveCount(5)
+  await expect(events).toHaveCount(6)
 
   // Adding one to Bravo opens its My notes with the form up.
   await feedback.getByRole('article', { name: 'Bravo HPDE' }).getByRole('button', { name: /^Add instructor evaluation/ }).click()

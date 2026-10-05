@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NO_FILTERS, entryGroups, filterChoices, filterEntries, newestCardGroup, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
+import { NO_FILTERS, entryGroups, ranIn, filterChoices, filterEntries, newestCardGroup, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
 import type { Entry } from './EvaluationsPage'
 import type { EventConfig } from '../types'
 
@@ -85,6 +85,8 @@ describe('filtering the events, and so the report cards (#401)', () => {
     const going = { ...rsvps, early: { status: 'going' as const, runGroup: 'purple' }, later: { status: 'going' as const, runGroup: 'purple' }, carded: { status: 'going' as const, runGroup: 'purple' } }
     // Before any report card, Purple; after their Blue one (Oct 4), Blue; with a card of its own, that card's group.
     expect([early, later, carded].map(e => entryGroups(e, going, all))).toEqual([['Purple'], ['Blue'], ['Blue']])
+    // Which they ran as, beside the group they were in.
+    expect([early, later, carded].map(e => ranIn(e, going, all))).toEqual([[{ group: 'Purple' }], [{ group: 'Purple', as: 'Blue' }], [{ group: 'Purple', as: 'Blue' }]])
     expect(filterChoices(all, going, 'The Drivers Edge').groups).toEqual(['Green', 'Blue', 'Purple'])
     expect(filterEntries(all, going, { organizer: 'The Drivers Edge', group: 'blue' }).map(e => e.event.id)).toEqual(['TDE at ECR', 'blue-day', 'later', 'carded'])
   })

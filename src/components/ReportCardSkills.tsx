@@ -101,10 +101,11 @@ function signed(n: number): string {
 
 const CARD = 'rounded-2xl border border-gray-200 bg-white p-4'
 
+/** A card's title, over it in the page's space rather than in it (#401). */
 function CardHead({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h3 className="text-[13px] font-semibold text-gray-500">{title}</h3>
+    <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+      <h3 className="text-[15px] font-semibold text-gray-900">{title}</h3>
       {meta && <span className="text-xs text-gray-400">{meta}</span>}
     </div>
   )
@@ -118,11 +119,14 @@ function MoveList({ title, caption, moves, value, empty }: {
   empty: string
 }) {
   return (
-    <section aria-label={title} className="min-w-0">
-      <h4 className="text-xs font-semibold text-gray-500">{title}</h4>
-      {caption && <p className="text-[11px] text-gray-400">{caption}</p>}
+    <section aria-label={title} className="min-w-0 p-4">
+      {/* Its headline, over a rule, then its list. */}
+      <div className="border-b border-gray-100 pb-2">
+        <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+        <p className="text-xs text-gray-400">{caption ?? '\u00a0'}</p>
+      </div>
       {moves.length ? (
-        <ol className="mt-2 flex flex-col gap-2">
+        <ol className="mt-3 flex flex-col gap-2">
           {moves.map(m => (
             <li key={m.skill.id} className="flex items-baseline justify-between gap-2 text-sm" title={m.skill.label}>
               <span className="min-w-0 truncate text-gray-900">{m.skill.short}</span>
@@ -131,7 +135,7 @@ function MoveList({ title, caption, moves, value, empty }: {
           ))}
         </ol>
       ) : (
-        <p className="mt-2 text-xs text-gray-400">{empty}</p>
+        <p className="mt-3 text-xs text-gray-400">{empty}</p>
       )}
     </section>
   )
@@ -144,9 +148,10 @@ export function SkillOverview({ points, kind }: { points: ReportCardPoint[]; kin
   const { improved, needsWork } = skillMoves(cards, kind)
   const [first, latest] = [cards[0], cards[cards.length - 1]]
   return (
-    <section aria-label="Report card overview" className={CARD}>
+    <section aria-label="Report card overview">
       <CardHead title="At a glance" meta={`${cards.length} ${cards.length === 1 ? 'report card' : 'report cards'}`} />
-      <div className="grid grid-cols-2 gap-4">
+      {/* Two columns, a rule between them. */}
+      <div className="grid grid-cols-2 divide-x divide-gray-100 rounded-2xl border border-gray-200 bg-white">
         <MoveList
           title="Most improved"
           caption={cards.length > 1 ? `Since ${day(first.date)}` : undefined}
@@ -330,126 +335,128 @@ export function SkillsWheel({ points, kind }: { points: ReportCardPoint[]; kind:
   const history = pickedSkill ? skillHistory(pickedSkill.id, cards) : []
 
   return (
-    <section aria-label="Skills wheel" className={CARD}>
+    <section aria-label="Skills wheel">
       <CardHead title="Skills wheel" meta="0% at the middle, 100% at the rim" />
-      {n > 1 && (
-        <div className="-mx-4 mb-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex w-max gap-1.5 pb-0.5" role="group" aria-label="Report cards shown">
-            <button
-              type="button"
-              aria-pressed={allShown}
-              onClick={() => setPicks(new Set(allShown ? [cards[n - 1].key] : cards.map(c => c.key)))}
-              className={chip(allShown)}
-            >
-              All
-            </button>
-            {[...cards].reverse().map(c => {
-              const on = shown.has(c.key)
-              return (
-                <button key={c.key} type="button" aria-pressed={on} title={c.title} onClick={() => toggle(c.key)} className={chip(on)}>
-                  {on && <CardKey look={looks.get(c.key)} onDark />}
-                  {day(c.date)}
-                  {/* The year, where it isn't the newest card's. */}
-                  {c.date.slice(0, 4) !== cards[n - 1].date.slice(0, 4) && <span className="font-normal opacity-60">’{c.date.slice(2, 4)}</span>}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      {shown.size > 1 && (
-        <p className="text-[11px] text-gray-400">
-          Newer events are darker{shown.size > SHAPES.length ? `; the ${SHAPES.length} newest shown have a marker each` : ''}.
-        </p>
-      )}
-      <div ref={ref} className="relative" style={{ height }}>
-        <svg width={width} height={height} className="block" aria-hidden="true">
-          {RINGS.map(v => (
-            <polygon key={v} points={skills.map((_, i) => at(i, v).join(',')).join(' ')} fill="none" stroke={RING} strokeWidth={1} />
-          ))}
-          {skills.map((s, i) => {
-            const [x2, y2] = at(i, 100)
-            return <line key={s.id} x1={cx} y1={cy} x2={x2} y2={y2} stroke={i === pickedIndex ? '#9ca3af' : RING} strokeWidth={1} />
-          })}
-          {drawn.map(c => {
-            const style = looks.get(c.key)!
-            const pts = skills.flatMap((s, i) => {
-              const v = scoreOf(c, s.id)
-              return v === undefined ? [] : [at(i, v).join(',')]
-            })
-            return (
-              <g key={c.key} data-card={c.key}>
-                <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeLinejoin="round" />
-                {style.shape && skills.map((s, i) => {
-                  const v = scoreOf(c, s.id)
-                  if (v === undefined) return null
-                  const [x, y] = at(i, v)
-                  return <Marker key={s.id} shape={style.shape!} x={x} y={y} r={i === pickedIndex ? 4.5 : 3.25} color={style.stroke} />
-                })}
-              </g>
-            )
-          })}
-        </svg>
-        {skills.map((s, i) => {
-          const [x, y] = [cx + (R + LABEL_GAP) * Math.cos(angle(i)), cy + (R + LABEL_GAP) * Math.sin(angle(i))]
-          const shift = Math.abs(x - cx) < 8 ? '-50%' : x > cx ? '0%' : '-100%'
-          const on = s.id === picked
-          return (
-            <button
-              key={s.id}
-              type="button"
-              aria-pressed={on}
-              aria-label={s.label}
-              data-spoke={s.id}
-              onClick={() => setPicked(on ? null : s.id)}
-              className={`absolute whitespace-nowrap rounded-md px-1.5 py-1 text-[11px] leading-none transition-colors hover:text-gray-900 ${
-                on ? 'bg-gray-900 font-semibold text-white hover:text-white' : 'text-gray-500'
-              }`}
-              style={{ left: x, top: y, transform: `translate(${shift}, -50%)` }}
-            >
-              {s.short}
-            </button>
-          )
-        })}
-      </div>
-      <div aria-live="polite" className="mt-3 border-t border-gray-100 pt-3">
-        {pickedSkill ? (
-          <section aria-label={`${pickedSkill.label} at each event`}>
-            <h4 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h4>
-            <ul className="mt-1 divide-y divide-gray-100">
-              {[...history].reverse().map(({ card, score, change }) => {
+      <div className={CARD}>
+        {n > 1 && (
+          <div className="-mx-4 mb-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex w-max gap-1.5 pb-0.5" role="group" aria-label="Report cards shown">
+              <button
+                type="button"
+                aria-pressed={allShown}
+                onClick={() => setPicks(new Set(allShown ? [cards[n - 1].key] : cards.map(c => c.key)))}
+                className={chip(allShown)}
+              >
+                All
+              </button>
+              {[...cards].reverse().map(c => {
+                const on = shown.has(c.key)
                 return (
-                  <li key={card.key} className="py-2.5" data-skill-score={card.key}>
-                    <div className="flex items-center gap-3">
-                      <CardKey look={looks.get(card.key)} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-900">{fullDay(card.date)}</p>
-                        <p className="truncate text-xs text-gray-500">{card.title}</p>
-                      </div>
-                      {change !== undefined && <Change change={change} />}
-                      <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900">{score}%</span>
-                    </div>
-                    <ScoreBar score={score} change={change} />
-                  </li>
+                  <button key={c.key} type="button" aria-pressed={on} title={c.title} onClick={() => toggle(c.key)} className={chip(on)}>
+                    {on && <CardKey look={looks.get(c.key)} onDark />}
+                    {day(c.date)}
+                    {/* The year, where it isn't the newest card's. */}
+                    {c.date.slice(0, 4) !== cards[n - 1].date.slice(0, 4) && <span className="font-normal opacity-60">’{c.date.slice(2, 4)}</span>}
+                  </button>
                 )
               })}
-            </ul>
-            {history.some(h => h.change) && (
-              <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
-                {history.some(h => (h.change ?? 0) > 0) && (
-                  <span className="flex items-center gap-1.5"><Swatch pattern={GAIN} /> Up since the event before</span>
-                )}
-                {history.some(h => (h.change ?? 0) < 0) && (
-                  <span className="flex items-center gap-1.5"><Swatch pattern={LOSS} /> Down since the event before</span>
-                )}
-              </p>
-            )}
-          </section>
-        ) : (
-          <p className="text-xs text-gray-400">
-            {n > 1 ? 'Tap a skill for its score at each event.' : `Tap a skill for its score. Add another ${kind.group} report card to see how it changes.`}
+            </div>
+          </div>
+        )}
+        {shown.size > 1 && (
+          <p className="text-[11px] text-gray-400">
+            Newer events are darker{shown.size > SHAPES.length ? `; the ${SHAPES.length} newest shown have a marker each` : ''}.
           </p>
         )}
+        <div ref={ref} className="relative" style={{ height }}>
+          <svg width={width} height={height} className="block" aria-hidden="true">
+            {RINGS.map(v => (
+              <polygon key={v} points={skills.map((_, i) => at(i, v).join(',')).join(' ')} fill="none" stroke={RING} strokeWidth={1} />
+            ))}
+            {skills.map((s, i) => {
+              const [x2, y2] = at(i, 100)
+              return <line key={s.id} x1={cx} y1={cy} x2={x2} y2={y2} stroke={i === pickedIndex ? '#9ca3af' : RING} strokeWidth={1} />
+            })}
+            {drawn.map(c => {
+              const style = looks.get(c.key)!
+              const pts = skills.flatMap((s, i) => {
+                const v = scoreOf(c, s.id)
+                return v === undefined ? [] : [at(i, v).join(',')]
+              })
+              return (
+                <g key={c.key} data-card={c.key}>
+                  <polygon points={pts.join(' ')} fill={style.fill} stroke={style.stroke} strokeWidth={style.width} strokeLinejoin="round" />
+                  {style.shape && skills.map((s, i) => {
+                    const v = scoreOf(c, s.id)
+                    if (v === undefined) return null
+                    const [x, y] = at(i, v)
+                    return <Marker key={s.id} shape={style.shape!} x={x} y={y} r={i === pickedIndex ? 4.5 : 3.25} color={style.stroke} />
+                  })}
+                </g>
+              )
+            })}
+          </svg>
+          {skills.map((s, i) => {
+            const [x, y] = [cx + (R + LABEL_GAP) * Math.cos(angle(i)), cy + (R + LABEL_GAP) * Math.sin(angle(i))]
+            const shift = Math.abs(x - cx) < 8 ? '-50%' : x > cx ? '0%' : '-100%'
+            const on = s.id === picked
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={on}
+                aria-label={s.label}
+                data-spoke={s.id}
+                onClick={() => setPicked(on ? null : s.id)}
+                className={`absolute whitespace-nowrap rounded-md px-1.5 py-1 text-[11px] leading-none transition-colors hover:text-gray-900 ${
+                  on ? 'bg-gray-900 font-semibold text-white hover:text-white' : 'text-gray-500'
+                }`}
+                style={{ left: x, top: y, transform: `translate(${shift}, -50%)` }}
+              >
+                {s.short}
+              </button>
+            )
+          })}
+        </div>
+        <div aria-live="polite" className="mt-3 border-t border-gray-100 pt-3">
+          {pickedSkill ? (
+            <section aria-label={`${pickedSkill.label} at each event`}>
+              <h4 className="text-sm font-semibold text-gray-900">{pickedSkill.label}</h4>
+              <ul className="mt-1 divide-y divide-gray-100">
+                {[...history].reverse().map(({ card, score, change }) => {
+                  return (
+                    <li key={card.key} className="py-2.5" data-skill-score={card.key}>
+                      <div className="flex items-center gap-3">
+                        <CardKey look={looks.get(card.key)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900">{fullDay(card.date)}</p>
+                          <p className="truncate text-xs text-gray-500">{card.title}</p>
+                        </div>
+                        {change !== undefined && <Change change={change} />}
+                        <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900">{score}%</span>
+                      </div>
+                      <ScoreBar score={score} change={change} />
+                    </li>
+                  )
+                })}
+              </ul>
+              {history.some(h => h.change) && (
+                <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                  {history.some(h => (h.change ?? 0) > 0) && (
+                    <span className="flex items-center gap-1.5"><Swatch pattern={GAIN} /> Up since the event before</span>
+                  )}
+                  {history.some(h => (h.change ?? 0) < 0) && (
+                    <span className="flex items-center gap-1.5"><Swatch pattern={LOSS} /> Down since the event before</span>
+                  )}
+                </p>
+              )}
+            </section>
+          ) : (
+            <p className="text-xs text-gray-400">
+              {n > 1 ? 'Tap a skill for its score at each event.' : `Tap a skill for its score. Add another ${kind.group} report card to see how it changes.`}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   )

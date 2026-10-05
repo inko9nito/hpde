@@ -221,7 +221,16 @@ export function isTdeEvent(event: Pick<EventConfig, 'name' | 'organizer'>): bool
  * Yellow and Red. A driver's level at one of those events is the group of
  * their report card.
  */
-export const TDE_LEVEL_GROUPS = ['Purple', 'Orange', 'Pink']
+export const TDE_LEVEL_GROUPS = [
+  { name: 'Purple', level: 1, takes: 'Green and new Blue' },
+  { name: 'Orange', level: 2, takes: 'Yellow and part-time Blue' },
+  { name: 'Pink', level: 3, takes: 'solo Yellow and Red' },
+] as const
+
+/** One of TDE's levels by a run group's name, if it's one. */
+export function tdeLevel(name: string): typeof TDE_LEVEL_GROUPS[number] | undefined {
+  return TDE_LEVEL_GROUPS.find(l => l.name.toLowerCase() === name.trim().toLowerCase())
+}
 
 /** The run groups a report card can recommend, beyond the event's own — in the palette's order. */
 export const TDE_GROUP_NAMES = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Pink', 'Purple']

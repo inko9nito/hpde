@@ -16,7 +16,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useAllNotes } from '../data/notesLog'
 import type { EventNotes } from '../data/notesLog'
 import { useRsvps } from '../data/RsvpsContext'
-import { TDE_CARDS, TDE_GROUP_NAMES, TDE_LEVEL_GROUPS, cardOf, isTdeEvent } from '../utils/evaluation'
+import { TDE_CARDS, TDE_GROUP_NAMES, cardOf, isTdeEvent, tdeLevel } from '../utils/evaluation'
 import type { CardId, TdeCard } from '../utils/evaluation'
 import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
@@ -124,25 +124,34 @@ function reportCardOf({ event, notes }: Entry) {
   return evaluation.card || Object.keys(evaluation.skills ?? {}).length ? cardOf(evaluation) : undefined
 }
 
+/** A run group they were in at an event, by name; and at one of TDE's levels, the group they ran in it as (#401). */
+export interface RanIn {
+  group: string
+  /** Purple, Orange and Pink each take in drivers of two groups: the one they're counted under. */
+  as?: string
+}
+
 /**
- * The run groups they were in at an event, by name: the ones of the
- * sessions they have notes on, or else the one they said they're in. At a
- * TDE event, their level (#401): the group whose report card the
- * instructor filled in; or, for one of TDE's levels (Purple, Orange, Pink),
- * the group of their newest report card by then (in `entries`), if any.
+ * The run groups they were in at an event: the ones of the sessions they
+ * have notes on, or else the one they said they're in. At a TDE event, its
+ * report card's group says which they ran as (#401) — and with none, at
+ * one of TDE's levels (Purple, Orange, Pink), the group of their newest
+ * report card by then (in `entries`).
  */
-export function entryGroups(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): string[] {
+export function ranIn(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): RanIn[] {
   const { event, notes } = entry
-  const card = reportCardOf(entry)
-  if (card) return [card.group]
   const ids = notes?.sessions.length ? notes.sessions.map(s => s.group) : [myRunGroup(event, rsvps[event.id])].flatMap(id => id ? [id] : [])
-  let names = ids.map(id => groupFor(id, event.runGroups).label.trim())
-  if (isTdeEvent(event)) {
-    const level = levelBy(entries, startDate(event))
-    if (level) names = names.map(n => TDE_LEVEL_GROUPS.some(l => l.toLowerCase() === n.toLowerCase()) ? level : n)
-  }
-  const byKey = new Map(names.map(n => [n.toLowerCase(), n]))
-  return [...byKey.values()]
+  const names = [...new Map(ids.map(id => groupFor(id, event.runGroups).label.trim()).map(n => [n.toLowerCase(), n])).values()]
+  const card = reportCardOf(entry)
+  if (card) return names.length ? names.map(n => n.toLowerCase() === card.group.toLowerCase() ? { group: n } : { group: n, as: card.group }) : [{ group: card.group }]
+  const level = isTdeEvent(event) ? levelBy(entries, startDate(event)) : undefined
+  return names.map(n => level && tdeLevel(n) ? { group: n, as: level } : { group: n })
+}
+
+/** The run groups an event counts under (#401): the ones they ran as. */
+export function entryGroups(entry: Entry, rsvps: Rsvps, entries: Entry[] = [entry]): string[] {
+  const names = ranIn(entry, rsvps, entries).map(r => r.as ?? r.group)
+  return [...new Map(names.map(n => [n.toLowerCase(), n])).values()]
 }
 
 /** The run group of their newest TDE report card on or before a day. */
@@ -244,18 +253,15 @@ function Feedback({ label, instructor, text }: {
  * session, in schedule order — so it can all be read here. An event they
  * went to with nothing yet has a button to add the instructor's evaluation.
  */
-function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
+function EvaluationEventCard({ event, notes, ran, onOpen, onAdd }: {
   event: EventConfig
   /** Null: none yet. */
   notes: EventNotes | null
-  /** The group they said they're in, for an event evaluated as a whole. */
-  runGroup: string | null
+  /** The run groups they were in there, and at one of TDE's levels, the group they ran as (#401). */
+  ran: RanIn[]
   onOpen: () => void
   onAdd: () => void
 }) {
-  const groups = notes?.sessions.length ? [...new Set(notes.sessions.map(s => s.group))] : runGroup ? [runGroup] : []
-  // With neither, the run group whose report card the instructor filled in (#401).
-  const card = groups.length ? undefined : reportCardOf({ event, notes })
   const tde = isTdeEvent(event)
   const evaluation = notes?.evaluation
   const multiDay = event.days.length > 1
@@ -274,8 +280,13 @@ function EvaluationEventCard({ event, notes, runGroup, onOpen, onAdd }: {
         <div className="min-w-0 flex-1">
           <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{event.name}</div>
           <div className="mt-1 flex min-w-0 items-center gap-2">
-            {groups.map(id => <GroupBadge key={id} group={groupFor(id, event.runGroups)} size="sm" />)}
-            {card && <GroupBadge group={groupNamed(card.group, [event])} size="sm" />}
+            {ran.map(r => (
+              <span key={r.group} className="flex shrink-0 items-center gap-1.5">
+                <GroupBadge group={groupNamed(r.group, [event])} size="sm" />
+                {/* Purple, say, which takes in Green and new Blue drivers: which they were. */}
+                {r.as && <span className="text-sm text-gray-500">as {r.as}</span>}
+              </span>
+            ))}
             {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
           </div>
         </div>
@@ -410,6 +421,19 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
   const shown = filterEntries(entries, rsvps, filters)
   const cards = shownReportCards(shown, filters.group)
   const kinds = reportCardKinds(cards)
+  // What TDE's levels shown here are (#401): the events at one counted
+  // under the group picked, as the level takes in drivers of two groups —
+  // or, picked itself, that it does.
+  const levelNotes = [...new Set(shown.flatMap(entry => ranIn(entry, rsvps, entries)
+    .filter(r => r.as ? r.as.toLowerCase() === filters.group : r.group.toLowerCase() === filters.group)
+    .flatMap(r => tdeLevel(r.group) ? [r.group] : [])))]
+    .map(name => {
+      const level = tdeLevel(name)!
+      const what = `${level.name} is TDE’s Level ${level.level}, for ${level.takes} drivers together.`
+      return level.name.toLowerCase() === filters.group
+        ? `${what} Add a report card to count these events under your own group.`
+        : `Includes your ${level.name} events, where you ran as ${choices.groups.find(g => g.toLowerCase() === filters.group)}. ${what}`
+    })
   // The organizer's events, for its run groups' colors.
   const organizerEvents = organizer === null ? events : events.filter(e => organizerOf(e) === organizer)
 
@@ -473,6 +497,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
                 run group
               </p>
             )}
+            {levelNotes.map(note => <p key={note} className="mt-2 text-xs text-gray-500">{note}</p>)}
           </header>
         )}
         {/* The run group's report cards — what's come along since the first, and the skills wheel — as Events has its events. */}
@@ -501,7 +526,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
                 <EvaluationEventCard
                   event={event}
                   notes={notes}
-                  runGroup={myRunGroup(event, rsvps[event.id])}
+                  ran={ranIn({ event, notes }, rsvps, entries)}
                   onOpen={() => onOpenEvent(event)}
                   onAdd={() => onAddEvaluation(event)}
                 />
