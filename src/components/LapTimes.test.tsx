@@ -2216,7 +2216,7 @@ describe('Instructor evaluations across events (#345)', () => {
     openAt('#/evaluations')
     const el = await page()
     const overview = await within(el).findByRole('region', { name: 'Report card overview' })
-    expect(within(el).getByRole('region', { name: 'Green report cards' })).toHaveTextContent('2 events')
+    expect(within(overview).getByText('2 events')).toBeInTheDocument()
     const items = (name: string) => within(within(overview).getByRole('region', { name })).getAllByRole('listitem').map(li => li.textContent)
     // Only what went up: vision stayed at 70, and pace is on one card.
     expect(items('Most improved')).toEqual(['Flags+15'])
@@ -2262,7 +2262,7 @@ describe('Instructor evaluations across events (#345)', () => {
     expect(within(wheel).queryByRole('region', { name: 'Calls out all flags at each event' })).not.toBeInTheDocument()
   })
 
-  it('shows The Drivers Edge and the newest report card’s run group at first, headed by its badge, with its own skills; the run group filter picks another, or all (#350, #401)', async () => {
+  it('shows The Drivers Edge and the newest report card’s run group at first, its two views each a card; the run group filter picks another (#350, #401)', async () => {
     const tdeDec: EventConfig = { ...tdeOct, id: '2025-12-06_tde', name: 'TDE Blue Day', days: [{ ...event.days[0], date: '2025-12-06' }] }
     moreEvents = [tdeSep, tdeOct, tdeDec]
     notesByEvent[tdeDec.id] = { evaluation: { card: 'blue', instructor: 'Brett Gabriel', skills: { flags: 95, offline: 95, exits: 80 } }, sessions: [] }
@@ -2271,31 +2271,27 @@ describe('Instructor evaluations across events (#345)', () => {
     const filters = await within(el).findByRole('group', { name: 'Filter events' })
     expect(within(filters).getByRole('button', { name: 'Organizer: The Drivers Edge' })).toBeInTheDocument()
     expect(within(filters).getByRole('button', { name: 'Run group: Blue' })).toBeInTheDocument()
-    const groups = () => within(el).queryAllByRole('region', { name: /^\w+ report cards$/ }).map(r => r.getAttribute('aria-label'))
-    expect(groups()).toEqual(['Blue report cards'])
-    // Whose report cards, then which run group's, then its two views of them.
-    const tde = within(el).getByRole('region', { name: 'The Drivers Edge report cards' })
-    const blue = within(tde).getByRole('region', { name: 'Blue report cards' })
-    expect(within(blue).getByRole('heading', { level: 3 })).toHaveTextContent('Bluerun group')
-    expect(blue).toHaveTextContent('1 event')
-    const spokes = (group: string) => within(within(within(el).getByRole('region', { name: `${group} report cards` })).getByRole('region', { name: 'Skills wheel' }))
-      .getAllByRole('button', { pressed: false }).map(b => b.getAttribute('aria-label')).filter(Boolean)
+    // The run group's two views, a card each, under the filters that say whose.
+    const overview = within(el).getByRole('region', { name: 'Report card overview' })
+    expect(overview).toHaveTextContent('Report cards1 event')
+    const spokes = () => within(within(el).getByRole('region', { name: 'Skills wheel' })).getAllByRole('button', { pressed: false })
+      .map(b => b.getAttribute('aria-label')).filter(Boolean)
     // Blue's skills, in Blue's order.
-    expect(spokes('Blue')).toEqual(['Acknowledges all flags early', 'Understands and uses exit strategies', 'Able to take a corner offline'])
+    expect(spokes()).toEqual(['Acknowledges all flags early', 'Understands and uses exit strategies', 'Able to take a corner offline'])
     // TDE's Blue events: not Lap Day's Blue, another organizer's.
     expect(within(within(el).getByRole('region', { name: 'Events' })).getAllByRole('article').map(a => a.getAttribute('aria-label'))).toEqual(['TDE Blue Day'])
 
     // Green's.
     await userEvent.click(within(filters).getByRole('button', { name: 'Run group: Blue' }))
     await userEvent.click(within(within(el).getByRole('listbox', { name: 'Run group' })).getByRole('option', { name: 'Green' }))
-    expect(groups()).toEqual(['Green report cards'])
-    expect(spokes('Green')).toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
-    expect(within(el).getByRole('region', { name: 'Green report cards' })).toHaveTextContent('2 events')
+    expect(spokes()).toEqual(['Calls out all flags', 'Looks ahead', 'Pace with group'])
+    expect(within(el).getByRole('region', { name: 'Report card overview' })).toHaveTextContent('Report cards2 events')
 
-    // Every group's, the newest's first, each on its own.
+    // Every run group's: report cards are a run group's, so it asks for one.
     await userEvent.click(within(filters).getByRole('button', { name: 'Run group: Green' }))
     await userEvent.click(within(within(el).getByRole('listbox', { name: 'Run group' })).getByRole('option', { name: 'All run groups' }))
-    expect(groups()).toEqual(['Blue report cards', 'Green report cards'])
+    expect(within(el).queryByRole('region', { name: 'Skills wheel' })).not.toBeInTheDocument()
+    expect(within(el).getByText('Pick a run group to see its report cards and skills wheel.')).toBeInTheDocument()
   })
 
   it('lists every event with an evaluation, TDE or not, newest first, with what the instructors said; one opens on My notes and Back returns here', async () => {

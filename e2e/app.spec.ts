@@ -2080,10 +2080,10 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
     .toHaveText([/Vision\s*60%/, /Car control\s*75%/, /Inputs\s*80%/])
 
   const wheel = page.getByRole('region', { name: 'Skills wheel' })
-  // Every skill's name is on the run group's card, clear of its edges and of the others.
+  // Every skill's name is on the card, clear of its edges and of the others.
   const names = wheel.locator('[data-spoke]')
   await expect(names).toHaveCount(9)
-  const frame = (await page.getByRole('region', { name: 'Green report cards' }).boundingBox())!
+  const frame = (await wheel.boundingBox())!
   const boxes = await names.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON() as DOMRect))
   for (const b of boxes) {
     expect(b.left).toBeGreaterThanOrEqual(frame.x)
@@ -2131,12 +2131,9 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(filters.getByRole('button', { name: /^Organizer: / })).toHaveAccessibleName('Organizer: The Drivers Edge')
   await expect(filters.getByRole('button', { name: /^Run group: / })).toHaveAccessibleName('Run group: Green')
   await expect(page.getByRole('region', { name: 'Events' }).getByRole('link')).toHaveText([/TDE at Eagles Canyon Raceway/, /TDE at MSRC 2\.0/, /TDE at MSRC/])
-  // Whose report cards, then which run group's, then its two views of them.
-  const tdeCards = page.getByRole('region', { name: 'The Drivers Edge report cards' })
-  const green = tdeCards.getByRole('region', { name: 'Green report cards' })
-  await expect(green.getByRole('heading', { level: 3 })).toHaveText(/Green\s*run group/)
-  await expect(green.getByRole('region', { name: 'Report card overview' })).toBeVisible()
-  await expect(green.getByRole('region', { name: 'Skills wheel' })).toBeVisible()
+  // The filters say whose; under them, the run group's two views, a card each.
+  await expect(overview.getByRole('heading', { level: 2 })).toHaveText('Report cards')
+  await expect(wheel.getByRole('heading', { level: 2 })).toHaveText('Skills wheel')
   // The organizer's run groups: Green, the only one they've driven in at TDE's.
   await filters.getByRole('button', { name: /^Run group: / }).click()
   await expect(page.getByRole('listbox', { name: 'Run group' }).getByRole('option')).toHaveText(['All run groups', 'Green'])
@@ -2147,7 +2144,9 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(page.getByRole('listbox', { name: 'Organizer' }).getByRole('option')).toHaveText(['All organizers', 'Other Club', 'Test Club', 'The Drivers Edge'])
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'All organizers' }).click()
   await expect(filters.getByRole('button', { name: /^Run group: / })).toBeDisabled()
-  await expect(wheel).toBeVisible()
+  // Report cards are a run group's: it asks for one.
+  await expect(wheel).toBeHidden()
+  await expect(page.getByText('Pick The Drivers Edge and a run group to see its report cards and skills wheel.')).toBeVisible()
 
   // The events, newest first; one opens on My notes, and Back comes back.
   const feedback = page.getByRole('region', { name: 'Events' })
@@ -2165,13 +2164,13 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(page.getByRole('region', { name: 'Instructor evaluation' })).toContainText('John Harms')
   await page.getByRole('button', { name: 'Back' }).last().click()
   await expect(page).toHaveURL(/#\/evaluations$/)
-  await expect(wheel).toBeVisible()
+  await expect(feedback).toBeVisible()
 
   // Another organizer's: no report cards.
   await filters.getByRole('button', { name: /^Organizer: / }).click()
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'Test Club' }).click()
   await expect(events).toHaveText([/Alpha Track Day/])
-  await expect(tdeCards).toBeHidden()
+  await expect(page.getByText(/to see its report cards/)).toBeHidden()
   await filters.getByRole('button', { name: /^Organizer: / }).click()
   await page.getByRole('listbox', { name: 'Organizer' }).getByRole('option', { name: 'All organizers' }).click()
   await expect(events).toHaveCount(5)

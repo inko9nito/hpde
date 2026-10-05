@@ -7,7 +7,7 @@ import { groupFor } from './LapTimesSheet'
 import { CARD_FRAME, CARD_SHELL } from './EventCard'
 import { DateBlock } from './DateBlock'
 import { sessionTitle, useSkeletonFade } from './LapSessions'
-import { ReportCardGroup, scoredCards } from './ReportCardSkills'
+import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
 import type { ReportCardPoint } from './ReportCardSkills'
 import { FilterMenu } from './FilterMenu'
 import type { FilterOption } from './FilterMenu'
@@ -448,16 +448,16 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
             disabled={organizer === null}
           />
         </div>
-        {/* Whose report cards, then which run group's, then its two views of them. */}
-        {kinds.length > 0 && (
-          <section aria-labelledby="evaluations-cards-heading" className="mb-8">
-            <h2 id="evaluations-cards-heading" className={HEADING}>{TDE_ORGANIZER} report cards</h2>
-            <div className="flex flex-col gap-4">
-              {kinds.map(kind => (
-                <ReportCardGroup key={kind.id} points={cards} kind={kind} group={groupNamed(kind.group, events.filter(e => organizerOf(e) === TDE_ORGANIZER))} />
-              ))}
-            </div>
-          </section>
+        {/* The run group's (#401) — the filters above say whose — its report cards' two views, each a card of its own. */}
+        {filters.group !== null && kinds.length > 0 ? (
+          <div className="mb-8 flex flex-col gap-4">
+            <SkillOverview points={cards} kind={kinds[0]} />
+            <SkillsWheel points={cards} kind={kinds[0]} />
+          </div>
+        ) : kinds.length > 0 && (
+          <p className="mb-6 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+            {organizer === null ? `Pick ${TDE_ORGANIZER} and a run group` : 'Pick a run group'} to see its report cards and skills wheel.
+          </p>
         )}
         <section aria-labelledby="evaluations-events-heading">
           <h2 id="evaluations-events-heading" className={HEADING}>
