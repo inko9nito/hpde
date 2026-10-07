@@ -1452,12 +1452,25 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('asks anyone signed out to sign in, and fetches nothing', async () => {
+  it('asks anyone signed out to sign in for their laps, lists every event on it, and fetches nothing (#385)', async () => {
     signedIn = false
+    // Even with My events picked when they were signed in.
+    localStorage.setItem('hpde:tracksFilter', '"mine"')
     window.location.hash = TRACK
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
-    expect(await within(await trackPage()).findByText('Sign in to see your lap times on this track')).toBeInTheDocument()
+    const page = await trackPage()
+    expect(await within(page).findByText('Sign in to see your lap times on this track')).toBeInTheDocument()
+    expect((await cards()).map(c => c.textContent)).toEqual([
+      expect.stringMatching(/Lap Day$/),
+      expect.stringMatching(/Earlier$/),
+    ])
+    expect(within(page).queryByRole('group', { name: 'Which events' })).not.toBeInTheDocument()
     expect(lapCalls('GET')).toHaveLength(0)
+
+    // One opens on its Schedule.
+    await userEvent.click(await card('Earlier'))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: 'Schedule', selected: true })).toBeInTheDocument()
   })
 
   it('says when there are no laps on the layout yet', async () => {
@@ -1680,13 +1693,15 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
   })
 
 
-  it('lists the tracks for anyone signed out, without lap times', async () => {
+  it('lists the tracks for anyone signed out, with every event on each and no lap times (#385)', async () => {
     signedIn = false
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCW',
-      'MSRC 1.7 CW',
+      'MSRC 1.7 CCW1 event',
+      'MSRC 1.7 CW2 events',
     ]))
+    // Nothing of theirs to pick between.
+    expect(screen.queryByRole('group', { name: 'Which events' })).not.toBeInTheDocument()
     expect(lapCalls('GET')).toHaveLength(0)
   })
 

@@ -25,9 +25,9 @@ const THUMB = 'w-24 min-[375px]:w-28 min-h-[80px]'
 const ICON = 84
 
 /**
- * How many events on a layout to count (#385): every one on it, or only
- * yours — ones you're going to or went to, or have sessions at (#320).
- * Null until your laps and answers are in, and signed out.
+ * How many events on a layout to count (#385): every one on it — always,
+ * signed out — or only yours: ones you're going to or went to, or have
+ * sessions at (#320), null until your laps and answers are in.
  */
 interface Counting {
   filter: EventsFilter
@@ -88,7 +88,7 @@ function TrackRow({ layout, count }: { layout: Layout; count: number | null }) {
 }
 
 /** A track's layouts under its name and where it is (#314). */
-function TrackSection({ group, counting }: { group: TrackGroup; counting: Counting | null }) {
+function TrackSection({ group, counting }: { group: TrackGroup; counting: Counting }) {
   return (
     <section aria-label={group.name}>
       <div className="mb-2">
@@ -98,7 +98,7 @@ function TrackSection({ group, counting }: { group: TrackGroup; counting: Counti
       <ul className="space-y-4">
         {group.layouts.map(layout => (
           <li key={layout.slug}>
-            <TrackRow layout={layout} count={counting && eventCount(layout, counting)} />
+            <TrackRow layout={layout} count={eventCount(layout, counting)} />
           </li>
         ))}
       </ul>
@@ -120,9 +120,8 @@ function TrackRowSkeleton() {
 
 /**
  * The Tracks tab (#274): every track layout the events are on, grouped by
- * track (#314), with how many events are on each once they're signed in:
- * the driver's, or all of them (#385). Each opens its track page, with
- * those events.
+ * track (#314), with how many events are on each: all of them, or, signed
+ * in, the driver's (#385). Each opens its track page, with those events.
  */
 export function TracksTab({ filter, onFilter }: { filter: EventsFilter; onFilter: (f: EventsFilter) => void }) {
   const { events, loaded } = useEvents()
@@ -136,7 +135,7 @@ export function TracksTab({ filter, onFilter }: { filter: EventsFilter; onFilter
     () => (rsvpsStatus === 'loading' ? null : goingIds(events, rsvps)),
     [rsvpsStatus, events, rsvps],
   )
-  const counting = signedIn ? { filter, summary, going } : null
+  const counting: Counting = { filter: signedIn ? filter : 'all', summary, going }
 
   return (
     <div className="min-h-screen bg-gray-50">
