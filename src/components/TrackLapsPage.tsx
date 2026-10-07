@@ -6,7 +6,9 @@ import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
 import { BestChip } from './LapList'
 import { groupFor } from './LapTimesSheet'
-import { CARD_SHELL } from './EventCard'
+import { CARD_SHELL, EmptyRow } from './EventCard'
+import { EventsFilterToggle } from './EventsFilterToggle'
+import type { EventsFilter } from './EventsFilterToggle'
 import { DateBlock } from './DateBlock'
 import { StatusBadge } from './EventHeader'
 import { StatCard, plural, useSkeletonFade } from './LapSessions'
@@ -53,11 +55,13 @@ export function trackPageTitle(slug: string, events: EventConfig[]): { name: str
  * across every session, and the fastest they went there (#298). Opens the
  * event, on My notes, for its sessions — or, with none logged yet (#320),
  * on its Schedule, where they're added: Going there instead of the figures
- * when it's still to come.
+ * when it's still to come. One of the others on All (#385) has neither.
  */
-function EventLapsCard({ event, sessions, rsvp, allTimeBest, onOpen }: {
+function EventLapsCard({ event, sessions, yours, rsvp, allTimeBest, onOpen }: {
   event: EventConfig
   sessions: SessionLaps[]
+  /** Theirs: laps at it, or a yes to it. */
+  yours: boolean
   /** Their answer, for the run group they said, before they've laps. */
   rsvp?: Rsvp
   allTimeBest?: number
@@ -92,7 +96,7 @@ function EventLapsCard({ event, sessions, rsvp, allTimeBest, onOpen }: {
           {event.organizer && <span className="truncate text-sm text-gray-500">{event.organizer}</span>}
         </div>
       </div>
-      {sessions.length === 0 ? (
+      {!yours ? null : sessions.length === 0 ? (
         status === 'past' ? (
           <span className="shrink-0 text-xs text-gray-400">No laps</span>
         ) : (
@@ -161,6 +165,9 @@ interface Props {
   eventsLoaded: boolean
   /** Whose laps: another driver's, for an admin (#288); null for your own. */
   driver: Driver | null
+  /** Every event on the layout, or only theirs (#385), as on the Tracks tab. */
+  filter: EventsFilter
+  onFilter: (f: EventsFilter) => void
   /** On top, not under an event opened from it: back on top, its laps are fetched again. */
   active: boolean
   onBack: () => void
@@ -175,11 +182,13 @@ interface Props {
  * configuration and direction, as the All time best card counts them —
  * newest first, under their all-time best there: the ones they have laps
  * at, and the ones they said they're going to or went to, laps or not
- * (#320). Each event opens its own page for its sessions. It needs a
- * sign-in.
+ * (#320) — or, on All, every event on it (#385). Each event opens its own
+ * page for its sessions. The laps need a sign-in; signed out, it lists
+ * every event on it.
  */
-export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBack, onOpenEvent, onAllTracks }: Props) {
+export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFilter, active, onBack, onOpenEvent, onAllTracks }: Props) {
   const { status: authStatus } = useAuth()
+  const signedIn = authStatus === 'signed-in'
   const onLayout = useMemo(() => eventsOnLayout(slug, events), [slug, events])
   const title = trackPageTitle(slug, events)
   const eventIds = useMemo(() => (onLayout.length ? onLayout.map(e => e.id).sort() : null), [onLayout])
@@ -198,16 +207,18 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     wasActive.current = active
   }, [active, reload])
 
-  const loading = authStatus === 'signed-in'
+  const loading = signedIn
     && (laps.status === 'loading' || (laps.status === 'off' && !eventsLoaded) || (!driver && rsvpsStatus === 'loading'))
   const leaving = useSkeletonFade(loading)
 
   // Theirs, the newest first: laps at it, or a yes to it (#320).
   const sessionsOf = new Map(laps.events.filter(e => e.sessions.length).map(e => [e.eventId, e.sessions]))
-  const mine = onLayout
-    .filter(e => sessionsOf.has(e.id) || going.has(e.id))
-    .map(event => ({ event, sessions: sessionsOf.get(event.id) ?? [] }))
+  const all = onLayout
+    .map(event => ({ event, sessions: sessionsOf.get(event.id) ?? [], yours: sessionsOf.has(event.id) || going.has(event.id) }))
     .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
+  const mine = all.filter(g => g.yours)
+  // The list: theirs, or every event on it (#385).
+  const listed = filter === 'all' || !signedIn ? all : mine
   const withLaps = mine.filter(g => g.sessions.length)
   const allSessions = withLaps.flatMap(g => g.sessions)
   const best = eventBest(allSessions)
@@ -251,6 +262,36 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
     </div>
   )
 
+  // Theirs whether or not they've laps there (#320), or all of them (#385):
+  // every one to anyone signed out, with no toggle.
+  const eventsList = all.length > 0 && (
+    <section aria-labelledby="track-events-heading">
+      {/* Headed like the Events list's Past, with All or theirs across from it. */}
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 id="track-events-heading" className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
+          Events
+        </h2>
+        {signedIn && <EventsFilterToggle filter={filter} onChange={onFilter} mineLabel="Mine" />}
+      </div>
+      {listed.length === 0 ? <EmptyRow>None of yours here yet.</EmptyRow> : (
+      <ul className="space-y-3">
+        {listed.map(({ event, sessions, yours }) => (
+          <li key={event.id}>
+            <EventLapsCard
+              event={event}
+              sessions={sessions}
+              yours={yours}
+              rsvp={answers[event.id]}
+              allTimeBest={best}
+              onOpen={tab => onOpenEvent(event, tab)}
+            />
+          </li>
+        ))}
+      </ul>
+      )}
+        </section>
+  )
+
   let body
   if (eventsLoaded && !title) {
     body = (
@@ -265,8 +306,14 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
         </button>
       </div>
     )
-  } else if (authStatus !== 'signed-in') {
-    body = <SignInPrompt reason="see your lap times on this track" />
+  } else if (!signedIn) {
+    // Your laps need a sign-in; the events on it don't (#385).
+    body = (
+      <>
+        <div className="mb-8"><SignInPrompt reason="see your lap times on this track" /></div>
+        {authStatus !== 'loading' && eventsList}
+      </>
+    )
   } else if (loading || leaving) {
     body = <TrackSkeleton leaving={leaving} label="Loading your lap times" />
   } else if (laps.status === 'error') {
@@ -310,28 +357,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, active, onBa
           </StatCard>
           )}
         </div>
-        {/* Theirs whether or not they've laps there (#320). */}
-        {mine.length > 0 && (
-        <section aria-labelledby="track-events-heading">
-          {/* Headed like the Events list's Past. */}
-          <h2 id="track-events-heading" className="mb-2 font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
-            Events
-          </h2>
-          <ul className="space-y-3">
-            {mine.map(({ event, sessions }) => (
-              <li key={event.id}>
-                <EventLapsCard
-                  event={event}
-                  sessions={sessions}
-                  rsvp={answers[event.id]}
-                  allTimeBest={best}
-                  onOpen={tab => onOpenEvent(event, tab)}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-        )}
+        {eventsList}
       </div>
     )
   }

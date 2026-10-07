@@ -37,6 +37,7 @@ import { inviteFromHash } from './components/ShareCarSheet'
 import type { HomeTab } from './components/HomeTabs'
 import { EvaluationsPage, latestCard } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
+import type { EventsFilter } from './components/EventsFilterToggle'
 import { ActingBanner } from './components/ActingBanner'
 import { useLapLog, useLapSummary } from './data/lapLog'
 import { useAllNotes, useNotesLog } from './data/notesLog'
@@ -266,6 +267,8 @@ export default function App() {
   const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
+  // All the events at a track, or the driver's (#385): theirs to start with; the same on the Tracks tab and a track's page.
+  const [tracksFilter, setTracksFilter] = useLocalStorage<EventsFilter>('hpde:tracksFilter', 'mine')
   // Active tab on the event page. Persisted so pull-to-refresh — which
   // reloads the page — comes back on the tab you were reading. Switching
   // events deliberately resets it to Schedule (see switchEvent): the tab
@@ -608,7 +611,7 @@ export default function App() {
       {/* Room at the bottom for the tab bar. */}
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
-        {homeTab === 'tracks' && <TracksTab />}
+        {homeTab === 'tracks' && <TracksTab filter={tracksFilter} onFilter={setTracksFilter} />}
         {homeTab === 'more' && <MoreTab />}
       </div>
     </PullToRefresh>
@@ -887,6 +890,8 @@ export default function App() {
           events={ALL_EVENTS}
           eventsLoaded={eventsLoaded}
           driver={driver}
+          filter={tracksFilter}
+          onFilter={setTracksFilter}
           active={trackSlug !== null}
           onBack={() => {
             if (trackOverEventId !== null) backToEvent(trackOverEventId)

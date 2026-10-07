@@ -211,10 +211,22 @@ export function useTrackLaps(eventIds: string[] | null, driverId: string | null 
  * until it arrives, or if it can't be had. `driverId` as for useLapLog.
  */
 export function useLapSummary(active: boolean, driverId: string | null = null): EventBest[] | null {
+  return useLapSummaryStatus(active, driverId).events
+}
+
+/**
+ * The same, saying whether it's still on its way or couldn't be had — for
+ * the Tracks tab, which lists only the driver's tracks on My tracks (#385).
+ */
+export function useLapSummaryStatus(active: boolean, driverId: string | null = null): {
+  status: LapLogStatus
+  events: EventBest[] | null
+} {
   const { status: authStatus, authedFetch } = useAuth()
   const who = useDriverId(driverId)
   const signedIn = authStatus === 'signed-in'
   const [loaded, setLoaded] = useState<{ url: string; events: EventBest[] } | null>(null)
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const url = `${LAPS_URL}${driverQuery(who, '?')}`
 
   useEffect(() => {
@@ -224,14 +236,17 @@ export function useLapSummary(active: boolean, driverId: string | null = null): 
     }
     if (!active) return
     let cancelled = false
+    setFailedUrl(null)
     ;(async () => {
       try {
         const res = await authedFetch(url)
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`${res.status}`)
         const body = await res.json()
-        if (!cancelled && Array.isArray(body?.events)) setLoaded({ url, events: body.events })
+        if (!Array.isArray(body?.events)) throw new Error('No events')
+        if (!cancelled) setLoaded({ url, events: body.events })
       } catch {
         // Only the across-events best goes missing; this event's laps still show.
+        if (!cancelled) setFailedUrl(url)
       }
     })()
     return () => {
@@ -240,5 +255,10 @@ export function useLapSummary(active: boolean, driverId: string | null = null): 
   }, [signedIn, active, url, authedFetch])
 
   // Another driver's bests never show here.
-  return signedIn && loaded?.url === url ? loaded.events : null
+  const current = signedIn && loaded?.url === url
+  const status: LapLogStatus = !signedIn || !active ? 'off'
+    : current ? 'ready'
+    : failedUrl === url ? 'error'
+    : 'loading'
+  return { status, events: current ? loaded!.events : null }
 }

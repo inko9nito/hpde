@@ -2054,7 +2054,9 @@ test('an admin switches to the test account from the account menu, sees its laps
   await page.goto('/#/tracks')
   const alphaTrack = page.getByRole('list', { name: 'Tracks' }).getByRole('link', { name: /^MSRC 2\.0 CW/ })
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No events yet')
+  // None of theirs on it, so it's not among theirs (#385).
+  await expect(page.getByText('No tracks of yours yet.')).toBeVisible()
+  await expect(alphaTrack).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Account: admin@example.com' }).click()
   await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: /^Switch driver/ }).click()
@@ -2096,7 +2098,7 @@ test('an admin switches to the test account from the account menu, sees its laps
   await banner.getByRole('button', { name: 'Switch back' }).click()
   await expect(banner).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No events yet')
+  await expect(alphaTrack).toHaveCount(0)
 })
 
 test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (#274), the Garage from More (#345)', async ({ page }) => {
@@ -2122,7 +2124,8 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
   // The one coming up first, then the rest.
   const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
-  await expect(tracks).toHaveText([/^Charlie Raceway/, /^MSRC 2\.0 CW/, /^ECR/])
+  // Each with how many events are on it, signed out too (#385).
+  await expect(tracks).toHaveText([/^Charlie Raceway\s*1 event/, /^MSRC 2\.0 CW\s*\d+ events?/, /^ECR\s*\d+ events?/])
   // Each track's shape is on a panel wider than it's tall, flush with the
   // card's left, top and bottom (inside its 1px border) — not an event
   // card's square tile.
@@ -2137,8 +2140,10 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
 
   const slide = await trackSlide(page, () => tracks.nth(1).click(), 'MSRC 2.0 CW')
   expect(slide).toEqual({ fromBelow: false, fromSide: true })
-  // Signed out here, so it asks to sign in.
+  // Signed out here, so it asks to sign in for the laps — and lists the
+  // events on it, every one (#385).
   await expect(page.getByText('Sign in to see your lap times on this track')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Events' }).getByRole('link').first()).toContainText(alpha.name)
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/tracks$/)
   await expect(page.getByRole('heading', { level: 1, name: 'MSRC 2.0 CW' })).toHaveCount(0)

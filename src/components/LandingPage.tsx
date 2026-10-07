@@ -17,6 +17,8 @@ import { HomeHeader } from './HomeTabs'
 import { HomeScreenBanner } from './HomeScreenBanner'
 import { StatusBadge } from './EventHeader'
 import { GroupBadge } from './GroupBadge'
+import { EventsFilterToggle } from './EventsFilterToggle'
+import type { EventsFilter } from './EventsFilterToggle'
 import type { EventConfig, RunGroupConfig } from '../types'
 
 interface Props {
@@ -138,33 +140,6 @@ function RsvpBadge({ rsvp }: { rsvp: 'going' | 'maybe' }) {
   )
 }
 
-type EventsFilter = 'all' | 'mine'
-
-/** Every event, or only theirs (#235) — signed in. */
-function FilterToggle({ filter, onChange }: { filter: EventsFilter; onChange: (f: EventsFilter) => void }) {
-  const options: { id: EventsFilter; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'mine', label: 'My events' },
-  ]
-  return (
-    <div role="group" aria-label="Which events" className="inline-flex gap-1 rounded-lg bg-gray-100 p-1">
-      {options.map(o => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          aria-pressed={filter === o.id}
-          className={`rounded-md px-3 font-rubik text-sm transition-colors ${
-            filter === o.id ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-          style={{ minHeight: 36 }}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // Its hover pill ends at the cards' right edge, not past it (#273).
 function AddEventLink() {
   return (
@@ -254,7 +229,7 @@ export function LandingPage({ onOpenEvent }: Props) {
                   <CalendarIcon size={18} />
                 </button>
               </div>
-              {rsvpsReady && <FilterToggle filter={filter} onChange={setFilter} />}
+              {rsvpsReady && <EventsFilterToggle filter={filter} onChange={setFilter} />}
             </div>
             {isAdmin && <AddEventLink />}
           </div>
