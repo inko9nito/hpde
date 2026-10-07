@@ -12,6 +12,7 @@ import { PullToRefresh } from './components/PullToRefresh'
 import { Legend } from './components/Legend'
 import { goBackTo, hashChanged, loadHashHistory, replaceWith } from './utils/hashHistory'
 import { WidgetSetupPage } from './components/WidgetSetupPage'
+import { AboutPage, ABOUT_HASH } from './components/AboutPage'
 import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
 import { PushPage, useSheetUp, useUnderPushedPages } from './components/PushPage'
@@ -152,11 +153,12 @@ function eventIdFromHash(hash: string): string | null {
 }
 
 /** A page that slides up from the bottom over the landing or event page
- *  (#273, #278): New event, the iOS widget setup, or an event's Edit
- *  details or Edit schedule (#368). */
+ *  (#273, #278): New event, the iOS widget setup, About (#455), or an
+ *  event's Edit details or Edit schedule (#368). */
 type Overlay =
   | { kind: 'new-event' }
   | { kind: 'widget' }
+  | { kind: 'about' }
   // An invite to share a car (#398).
   | { kind: 'join-car'; token: string }
   | { kind: 'edit-event' | 'edit-schedule'; eventId: string }
@@ -174,6 +176,7 @@ function overlayFromHash(hash: string): Overlay | null {
   // '#/widget-script' is the old name for the widget page (pre-#213) —
   // keep it working in case anyone bookmarked or shared it.
   if (hash === '#/widget-setup' || hash === '#/widget-script') return { kind: 'widget' }
+  if (hash === ABOUT_HASH) return { kind: 'about' }
   const editEventId = eventIdFromEditEventHash(hash)
   if (editEventId !== null) return { kind: 'edit-event', eventId: editEventId }
   const editScheduleId = eventIdFromEditScheduleHash(hash)
@@ -466,8 +469,8 @@ export default function App() {
   // the page has slid in, not while it's still on its way.
   const [pushEntered, setPushEntered] = useState(false)
   // Pages that slide up with a white toolbar across their top (#368) keep
-  // it white; the iOS widget page is gray to the top.
-  const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget'
+  // it white; the iOS widget page and About are gray to the top.
+  const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget' && shownOverlay.kind !== 'about'
   const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
   // Black over a sheet, as what's under it shrinks back on black (#415).
   const sheetUp = useSheetUp()
@@ -913,7 +916,7 @@ export default function App() {
         instant={swiped}
         whiteHeader={overlayWhiteTop}
         from="bottom"
-        // A sheet, the iOS widget page too, closed with ✕ (#415) — or
+        // A sheet, the iOS widget page and About too, closed with ✕ (#415) — or
         // dragged down, as its Cancel or ✕ closes it (#387).
         sheet
         onDismiss={() => {
@@ -966,6 +969,8 @@ export default function App() {
               replaceHash(carHash(carId))
             }}
           />
+        ) : shownOverlay.kind === 'about' ? (
+          <AboutPage closeHref={HOME_TAB_HASH[homeTab]} onClose={() => goBack(HOME_TAB_HASH[homeTab])} />
         ) : (
           <WidgetSetupPage closeHref={HOME_TAB_HASH[homeTab]} onClose={() => goBack(HOME_TAB_HASH[homeTab])} />
         )}
