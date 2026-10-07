@@ -2054,7 +2054,9 @@ test('an admin switches to the test account from the account menu, sees its laps
   await page.goto('/#/tracks')
   const alphaTrack = page.getByRole('list', { name: 'Tracks' }).getByRole('link', { name: /^MSRC 2\.0 CW/ })
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No events yet')
+  // None of theirs on it, so it's not among theirs (#385).
+  await expect(page.getByText('No tracks of yours yet.')).toBeVisible()
+  await expect(alphaTrack).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Account: admin@example.com' }).click()
   await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: /^Switch driver/ }).click()
@@ -2096,7 +2098,7 @@ test('an admin switches to the test account from the account menu, sees its laps
   await banner.getByRole('button', { name: 'Switch back' }).click()
   await expect(banner).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Account: admin@example.com' })).toBeVisible()
-  await expect(alphaTrack).toContainText('No events yet')
+  await expect(alphaTrack).toHaveCount(0)
 })
 
 test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (#274), the Garage from More (#345)', async ({ page }) => {

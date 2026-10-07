@@ -271,7 +271,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
         <h2 id="track-events-heading" className="font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
           Events
         </h2>
-        {signedIn && <EventsFilterToggle filter={filter} onChange={onFilter} />}
+        {signedIn && <EventsFilterToggle filter={filter} onChange={onFilter} mineLabel="Mine" />}
       </div>
       {listed.length === 0 ? <EmptyRow>None of yours here yet.</EmptyRow> : (
       <ul className="space-y-3">

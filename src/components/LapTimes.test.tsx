@@ -53,7 +53,8 @@ const SHEET_ROWS = [
 // Earlier events: one on the same layout, one run the other way round.
 const sameLayout: EventConfig = { ...event, id: '2026-02-07_earlier', name: 'Earlier', days: [{ ...event.days[0], date: '2026-02-07' }] }
 const otherWay: EventConfig = { ...sameLayout, id: '2026-01-10_ccw', name: 'CCW', direction: 'Counter-clockwise' }
-let summary: { eventId: string; best?: number; sessions: number }[] = []
+// 'down': the laps function can't give it (#385).
+let summary: { eventId: string; best?: number; sessions: number }[] | 'down' = []
 // The driver's answers to "are you going?" (#235), and events beyond the three above.
 let rsvps: Rsvps = {}
 // Jason's, for an admin who switched to him (#362).
@@ -235,7 +236,7 @@ const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       const at = (id: string) => (id === event.id ? (forJason ? jasonSaved : saved) : forJason ? [] : elsewhere[id] ?? [])
       return json({ events: ids.filter(id => at(id).length).map(id => ({ eventId: id, sessions: at(id) })) })
     }
-    if (!params.has('event')) return json({ events: forJason ? [] : summary })
+    if (!params.has('event')) return summary === 'down' ? json({ error: 'Blobs is down.' }, 503) : json({ events: forJason ? [] : summary })
     // The other events' laps, as a track page sees them.
     if (params.get('event') !== event.id && !init?.method) {
       return json({ sessions: forJason ? [] : elsewhere[params.get('event')!] ?? [] })
@@ -1454,7 +1455,7 @@ describe('a track page: the events on one layout (#274)', () => {
 
   it('asks anyone signed out to sign in for their laps, lists every event on it, and fetches nothing (#385)', async () => {
     signedIn = false
-    // Even with My events picked when they were signed in.
+    // Even with Mine picked when they were signed in.
     localStorage.setItem('hpde:tracksFilter', '"mine"')
     window.location.hash = TRACK
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
@@ -1521,7 +1522,7 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(within(page).queryByRole('group', { name: 'All time best' })).not.toBeInTheDocument()
   })
 
-  it('lists every event on the layout on All, theirs on My events, and remembers which (#385)', async () => {
+  it('lists every event on the layout on All, theirs on Mine, and remembers which (#385)', async () => {
     // Laps at Lap Day only; one to come that they've not answered.
     elsewhere = {}
     const coming: EventConfig = { ...event, id: '2099-05-02_coming', name: 'Coming Up', days: [{ ...event.days[0], date: '2099-05-02' }] }
@@ -1532,7 +1533,7 @@ describe('a track page: the events on one layout (#274)', () => {
     // Theirs to start with.
     await waitFor(async () => expect((await cards()).map(c => c.textContent)).toEqual([expect.stringContaining('Lap Day')]))
     const page = await trackPage()
-    expect(within(page).getByRole('button', { name: 'My events' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(page).getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true')
 
     // All: every event on it, newest first — not the one run the other way.
     // Theirs keeps its figures; the others have none, nor a No laps or Going.
@@ -1636,13 +1637,26 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(within(track).getAllByRole('link')).toHaveLength(2)
   })
 
-  it('says so on a layout you have no events at', async () => {
+  it('leaves out a layout you have no events at, and says so when that’s all of them (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCWNo events yet',
-      'MSRC 1.7 CW1 event',
-    ]))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW1 event']))
+    expect(screen.getAllByRole('region')).toHaveLength(1)
+  })
+
+  it('says when none are yours, or yours couldn’t be had (#385)', async () => {
+    summary = []
+    window.location.hash = '#/tracks'
+    const view = render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
+    expect(await screen.findByText('No tracks of yours yet.')).toBeInTheDocument()
+    view.unmount()
+
+    summary = 'down'
+    openAt('#/tracks')
+    expect(await screen.findByText('Couldn’t load your tracks.')).toBeInTheDocument()
+    // All still has them.
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which tracks' })).getByRole('button', { name: 'All' }))
+    expect(tracks()).toHaveLength(2)
   })
 
   it('counts the events you said you’re going to as well as the ones with sessions, each once (#320)', async () => {
@@ -1651,21 +1665,15 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     rsvps = { [event.id]: { status: 'going' }, [sameLayout.id]: { status: 'going' }, [otherWay.id]: { status: 'not-going' } }
     window.location.hash = '#/tracks'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCWNo events yet',
-      'MSRC 1.7 CW2 events',
-    ]))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW2 events']))
   })
 
-  it('counts every event on each layout on All, and starts on My events (#385)', async () => {
+  it('lists every layout and counts every event on each on All, and starts on Mine (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCWNo events yet',
-      'MSRC 1.7 CW1 event',
-    ]))
-    const toggle = screen.getByRole('group', { name: 'Which events' })
-    expect(within(toggle).getByRole('button', { name: 'My events' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW1 event']))
+    const toggle = screen.getByRole('group', { name: 'Which tracks' })
+    expect(within(toggle).getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true')
 
     await userEvent.click(within(toggle).getByRole('button', { name: 'All' }))
     expect(tracks().map(t => t.textContent)).toEqual([
@@ -1701,7 +1709,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
       'MSRC 1.7 CW2 events',
     ]))
     // Nothing of theirs to pick between.
-    expect(screen.queryByRole('group', { name: 'Which events' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Which tracks' })).not.toBeInTheDocument()
     expect(lapCalls('GET')).toHaveLength(0)
   })
 
