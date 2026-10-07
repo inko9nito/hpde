@@ -1508,6 +1508,54 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(within(page).queryByRole('group', { name: 'All time best' })).not.toBeInTheDocument()
   })
 
+  it('lists every event on the layout on All, theirs on My events, and remembers which (#385)', async () => {
+    // Laps at Lap Day only; one to come that they've not answered.
+    elsewhere = {}
+    const coming: EventConfig = { ...event, id: '2099-05-02_coming', name: 'Coming Up', days: [{ ...event.days[0], date: '2099-05-02' }] }
+    moreEvents = [coming]
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+
+    // Theirs to start with.
+    await waitFor(async () => expect((await cards()).map(c => c.textContent)).toEqual([expect.stringContaining('Lap Day')]))
+    const page = await trackPage()
+    expect(within(page).getByRole('button', { name: 'My events' })).toHaveAttribute('aria-pressed', 'true')
+
+    // All: every event on it, newest first — not the one run the other way.
+    // Theirs keeps its figures; the others have none, nor a No laps or Going.
+    await userEvent.click(within(page).getByRole('button', { name: 'All' }))
+    expect((await cards()).map(c => c.textContent)).toEqual([
+      expect.stringMatching(/Coming Up$/),
+      expect.stringContaining('Lap Day'),
+      expect.stringMatching(/Earlier$/),
+    ])
+    expect(figures(await card('Lap Day'), 'Event figures')).toEqual({ Best: '1:39.1', Avg: '1:39.260' })
+    // The best is still only theirs.
+    expect(within(page).getByRole('group', { name: 'All time best' })).toHaveTextContent('1:39.1Across 1 session at 1 event')
+    expect(localStorage.getItem('hpde:tracksFilter')).toBe('"all"')
+
+    // One that isn't theirs opens on its Schedule.
+    await userEvent.click(await card('Earlier'))
+    expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
+    expect(await screen.findByRole('tab', { name: 'Schedule', selected: true })).toBeInTheDocument()
+  })
+
+  it('says when none on the layout are theirs (#385)', async () => {
+    saved = []
+    elsewhere = {}
+    window.location.hash = TRACK
+    render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
+    const page = await trackPage()
+    expect(await within(page).findByText('No lap times on MSRC 1.7 CW yet')).toBeInTheDocument()
+    const list = within(page).getByRole('region', { name: 'Events' })
+    expect(list).toHaveTextContent('None of yours here yet.')
+    await userEvent.click(within(list).getByRole('button', { name: 'All' }))
+    expect(within(list).getAllByRole('link').map(c => c.textContent)).toEqual([
+      expect.stringContaining('Lap Day'),
+      expect.stringContaining('Earlier'),
+    ])
+  })
+
   it('says when no event is on the track it names', async () => {
     window.location.hash = '#/track/nowhere'
     render(<AuthProvider><EventsProvider><App /></EventsProvider></AuthProvider>)
@@ -1594,6 +1642,29 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
       'MSRC 1.7 CCWNo events yet',
       'MSRC 1.7 CW2 events',
     ]))
+  })
+
+  it('counts every event on each layout on All, and starts on My events (#385)', async () => {
+    summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
+    openAt('#/tracks')
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
+      'MSRC 1.7 CCWNo events yet',
+      'MSRC 1.7 CW1 event',
+    ]))
+    const toggle = screen.getByRole('group', { name: 'Which events' })
+    expect(within(toggle).getByRole('button', { name: 'My events' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(within(toggle).getByRole('button', { name: 'All' }))
+    expect(tracks().map(t => t.textContent)).toEqual([
+      'MSRC 1.7 CCW1 event',
+      'MSRC 1.7 CW2 events',
+    ])
+    // The track page opens on All too.
+    await userEvent.click(tracks()[1])
+    const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
+    const list = await within(page).findByRole('region', { name: 'Events' })
+    expect(within(list).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(list).getAllByRole('link')).toHaveLength(2)
   })
 
   it('opens a track’s page, and goes back to the list', async () => {
