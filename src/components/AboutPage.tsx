@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
-import { CalendarClock, ChevronDown, ClipboardCheck, Disc3, Lock, Smartphone, Timer } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Lock, Smartphone, Timer } from 'lucide-react'
 import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
+import { ScoreBar } from './ReportCardSkills'
 import { SheetCloseLink } from './SheetCloseLink'
 import widgetLarge from '../assets/widget-large.png'
 import type { RunGroupConfig } from '../types'
@@ -130,7 +131,7 @@ function TrendSketch() {
   const path = (pts: number[]) => pts.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' ')
   return (
     <div>
-      <div className="mb-1 flex gap-3 text-[11px] text-gray-500">
+      <div className="mb-0.5 flex gap-3 text-[10px] text-gray-500">
         <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 rounded bg-gray-900" />Best</span>
         <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 rounded bg-[#8b93a1]" />Average</span>
       </div>
@@ -185,119 +186,155 @@ function LapsGlimpse() {
         </>
       }
     >
-      <Pop className="left-[2%] right-[2%] top-[42%] p-3">
-        <p className="text-[13px] font-semibold text-gray-500">All time best</p>
-        <p className="font-mono text-2xl font-bold tabular-nums text-gray-900">1:38.91</p>
-        <p className="mb-2 text-xs text-gray-400">Across 14 sessions at 5 events</p>
-        <div className="border-t border-gray-100 pt-2"><TrendSketch /></div>
+      {/* A track page's All time best, off the phone's right edge. */}
+      <Pop className="right-0 top-[40%] w-[62%] p-2.5">
+        <p className="text-[11px] font-semibold text-gray-500">All time best</p>
+        <p className="font-mono text-lg font-bold leading-tight tabular-nums text-gray-900">1:38.91</p>
+        <div className="mt-1.5 border-t border-gray-100 pt-1.5"><TrendSketch /></div>
       </Pop>
     </PhoneMock>
   )
 }
 
-/** The skills wheel's rings and two report cards on it, for the phone's screen. */
-function WheelSketch() {
+/**
+ * The skills wheel as the Instructor evaluations page draws it: a spoke per
+ * skill, rings every 20%, and each report card a shape on it, newer darker
+ * — the newest black and shaded. The skills' names are gray bars here: the
+ * report card is The Drivers Edge's, and its skills are theirs to show.
+ */
+function WheelSketch({ labels = true, picked }: { labels?: boolean; picked?: number }) {
   const spokes = 9
-  const point = (i: number, r: number) => {
-    const a = (i / spokes) * 2 * Math.PI - Math.PI / 2
-    return `${50 + Math.cos(a) * r},${50 + Math.sin(a) * r}`
+  const [c, R] = [100, labels ? 62 : 90]
+  const at = (i: number, pct: number): [number, number] => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / spokes
+    return [c + Math.cos(a) * (pct / 100) * R, c + Math.sin(a) * (pct / 100) * R]
   }
-  const ring = (r: number) => Array.from({ length: spokes }, (_, i) => point(i, r)).join(' ')
-  const card = (scores: number[]) => scores.map((sc, i) => point(i, sc * 0.42)).join(' ')
+  const ring = (pct: number) => Array.from({ length: spokes }, (_, i) => at(i, pct).join(',')).join(' ')
+  const cards = [
+    { scores: [50, 45, 55, 40, 50, 45, 40, 35, 45], stroke: '#8b93a1', width: 1.75, fill: 'none', shape: 'triangle' },
+    { scores: [60, 55, 60, 50, 60, 55, 50, 45, 55], stroke: '#4b5563', width: 1.75, fill: 'none', shape: 'square' },
+    { scores: [80, 70, 75, 65, 75, 70, 60, 65, 70], stroke: '#111827', width: 2, fill: 'rgba(17, 24, 39, 0.07)', shape: 'circle' },
+  ]
   return (
-    <svg viewBox="0 0 100 100" className="mx-auto w-[86%]">
-      {[20, 40, 60, 80, 100].map(r => <polygon key={r} points={ring(r * 0.42)} fill="none" stroke="#eceef1" />)}
-      <polygon points={card([60, 50, 55, 50, 60, 55, 50, 45, 55])} fill="none" stroke="#8b93a1" strokeWidth={1.2} />
-      <polygon points={card([75, 70, 80, 70, 75, 65, 60, 65, 70])} fill="rgba(17, 24, 39, 0.07)" stroke="#111827" strokeWidth={1.5} />
+    <svg viewBox="0 0 200 200" className="block w-full">
+      {[20, 40, 60, 80, 100].map(pct => <polygon key={pct} points={ring(pct)} fill="none" stroke="#eceef1" />)}
+      {Array.from({ length: spokes }, (_, i) => {
+        const [x, y] = at(i, 100)
+        return <line key={i} x1={c} y1={c} x2={x} y2={y} stroke={i === picked ? '#9ca3af' : '#eceef1'} />
+      })}
+      {cards.map(card => (
+        <g key={card.stroke}>
+          <polygon points={card.scores.map((v, i) => at(i, v).join(',')).join(' ')} fill={card.fill} stroke={card.stroke} strokeWidth={card.width} strokeLinejoin="round" />
+          {card.scores.map((v, i) => {
+            const [x, y] = at(i, v)
+            const paint = { fill: card.stroke, stroke: '#fff', strokeWidth: 1.25 }
+            return card.shape === 'circle' ? <circle key={i} cx={x} cy={y} r={3.25} {...paint} />
+              : card.shape === 'square' ? <rect key={i} x={x - 2.75} y={y - 2.75} width={5.5} height={5.5} {...paint} />
+              : <polygon key={i} points={`${x},${y - 3.7} ${x + 3.7},${y + 2.8} ${x - 3.7},${y + 2.8}`} {...paint} />
+          })}
+        </g>
+      ))}
+      {labels && Array.from({ length: spokes }, (_, i) => {
+        const a = -Math.PI / 2 + (i * 2 * Math.PI) / spokes
+        const [x, y] = [c + Math.cos(a) * (R + 13), c + Math.sin(a) * (R + 13)]
+        const w = i === picked ? 30 : 22
+        const left = Math.abs(x - c) < 8 ? x - w / 2 : x > c ? x - 3 : x - w + 3
+        return <rect key={i} x={left} y={y - (i === picked ? 5 : 2.5)} width={w} height={i === picked ? 10 : 5} rx={i === picked ? 3 : 2.5} fill={i === picked ? '#111827' : '#d1d5db'} />
+      })}
     </svg>
   )
 }
 
-/** Instructor evaluations: the skills wheel, and the report cards at a glance over it. */
+/**
+ * Instructor evaluations: the skills wheel popping out of the page, and
+ * under it on the page, as there, a skill's score at each event — its gain
+ * since the event before hatched green on the end of its bar.
+ */
 function EvaluationGlimpse() {
+  const rows = [['Sep 12, 2026', 80, 10], ['Jul 19, 2026', 70, 10], ['Jun 7, 2026', 60, undefined]] as const
   return (
     <PhoneMock
       screen={
         <>
           <ScreenHead title="Instructor evaluations" />
-          <div className="mx-3 mt-2 rounded-md border border-gray-100 bg-white p-2"><WheelSketch /></div>
-          <div className="mx-3 mt-1.5 rounded-md border border-gray-100 bg-white p-2">
-            <p className="text-[8px] font-semibold text-gray-900">TDE at MSRC 1.7 CW</p>
-            <p className="mt-1 text-[7px] leading-snug text-gray-500">Brake a little later into 5, and look up through the esses.</p>
+          <div className="mx-3 mt-2 rounded-md border border-gray-100 bg-white p-2"><WheelSketch labels={false} /></div>
+          <div className="mx-3 mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+            <span className="block h-1.5 w-16 rounded-full bg-gray-900" />
+            {rows.map(([date, score, change]) => (
+              <div key={date} className="border-b border-gray-100 py-1.5 last:border-b-0">
+                <div className="flex items-center gap-1.5 text-[7px]">
+                  <span className="flex-1 text-gray-900">{date}</span>
+                  {change !== undefined && <span className="font-medium text-emerald-700">+{change}</span>}
+                  <span className="font-semibold text-gray-900">{score}%</span>
+                </div>
+                <div className="-mt-1 origin-left scale-y-75"><ScoreBar score={score} change={change} /></div>
+              </div>
+            ))}
           </div>
         </>
       }
     >
-      <Pop className="left-[2%] right-[2%] top-[56%] grid grid-cols-2 divide-x divide-gray-100">
-        {([
-          ['Most improved', 'Since Jun 7', [['Vision', '+20'], ['Inputs', '+15'], ['References', '+10']]],
-          ['Needs work', 'On Sep 12', [['Passing', '50%'], ['Pace', '55%'], ['Awareness', '60%']]],
-        ] as const).map(([title, caption, rows]) => (
-          <div key={title} className="min-w-0 p-3">
-            <div className="border-b border-gray-100 pb-1.5">
-              <p className="text-[13px] font-semibold text-gray-900">{title}</p>
-              <p className="text-[11px] text-gray-400">{caption}</p>
-            </div>
-            <ol className="mt-2 flex flex-col gap-1.5">
-              {rows.map(([skill, value]) => (
-                <li key={skill} className="flex items-baseline justify-between gap-2 text-[13px]">
-                  <span className="truncate text-gray-900">{skill}</span>
-                  <span className="font-semibold tabular-nums text-gray-900">{value}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        ))}
+      <Pop className="left-0 top-[4%] w-[56%] p-1.5">
+        <WheelSketch picked={0} />
       </Pop>
     </PhoneMock>
   )
 }
 
-/** A car's page, what's on it, and a session's tire pressures over it as My notes shows them. */
+/**
+ * An event's My notes, the car you brought on top, and its sheet over it:
+ * the car, its lug nut torque, and what was on it at that event, from its
+ * change log.
+ */
 function GarageGlimpse() {
   return (
     <PhoneMock
       screen={
         <>
-          <div className="mx-3 mt-2 grid h-20 place-items-center rounded-lg bg-gray-200 text-gray-400">
-            <CarIcon size={34} />
-          </div>
-          <ScreenHead title="2019 Mustang GT" tabs={['Setup', 'History', 'Events']} />
-          <ul className="mx-3 mt-2 divide-y divide-gray-100 rounded-md border border-gray-100 bg-white px-2 text-[7px]">
-            {[['Tires', 'Hoosier R7', 'Aug 30'], ['Front pads', 'Carbotech XP12', 'Jul 12'], ['Brake fluid', 'Castrol SRF', 'Jul 12'], ['Engine oil', 'Motul 300V', 'Jun 2']].map(([part, what, since]) => (
-              <li key={part} className="flex gap-2 py-1.5">
-                <span className="w-12 shrink-0 text-gray-500">{part}</span>
-                <span className="min-w-0">
-                  <span className="block truncate text-gray-900">{what}</span>
-                  <span className="block text-gray-400">Since {since}</span>
-                </span>
-              </li>
+          <ScreenHead title="TDE at MSRC 1.7 CW" tabs={['Schedule', 'Details', 'My notes']} active={2} />
+          <div className="px-3 pt-2">
+            <div className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1.5">
+              <CarIcon size={11} className="text-gray-500" />
+              <span className="flex-1 truncate text-[8px] font-semibold text-gray-900">2019 Mustang GT</span>
+              <ChevronRight size={8} className="text-gray-400" />
+            </div>
+            {['10:30 AM', '11:15 AM', '1:50 PM'].map(time => (
+              <div key={time} className="mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+                <p className="mb-1.5 text-[8px] font-semibold text-gray-900">{time} · Orange</p>
+                <div className="flex flex-col gap-1">
+                  {['85%', '70%', '78%'].map((w, i) => <span key={i} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </>
       }
     >
-      <Pop className="left-[4%] right-[16%] top-[62%] p-3">
-        <p className="mb-1.5 flex items-center gap-1.5 text-xs text-gray-500">
-          <Disc3 size={13} />
-          Tire pressures · psi
-        </p>
-        <table className="text-sm">
-          <thead>
-            <tr>
-              <th />
-              {['FL', 'FR', 'RL', 'RR'].map(c => <th key={c} className="px-2 text-right text-[11px] font-medium text-gray-400">{c}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {([['Before', [30, 30, 28, 28]], ['After', [36, 37, 34, 35]]] as const).map(([label, psi]) => (
-              <tr key={label}>
-                <th className="pr-2 text-left text-xs font-normal text-gray-500">{label}</th>
-                {psi.map((v, i) => <td key={i} className="px-2 text-right font-mono tabular-nums text-gray-900">{v}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Pop className="right-0 top-[16%] w-[64%] p-2.5">
+        <p className="text-[14px] font-bold text-gray-900">Your car</p>
+        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-gray-200 p-1.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-500"><CarIcon size={16} /></span>
+          <span className="flex-1 truncate text-[12px] font-semibold text-gray-900">2019 Mustang GT</span>
+          <ChevronRight size={14} className="text-gray-400" />
+        </div>
+        <dl className="mt-1 text-[12px]">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-100 py-1">
+            <dt className="text-[11px] font-medium text-gray-500">Lug nut torque</dt>
+            <dd className="text-gray-900">150 ft·lb</dd>
+          </div>
+        </dl>
+        <p className="mt-1.5 text-[11px] font-semibold text-gray-900">At this event</p>
+        <dl className="text-[12px]">
+          {[['Tires', 'Hoosier R7', 'Aug 30'], ['Front pads', 'Carbotech XP12', 'Jul 12']].map(([part, what, since]) => (
+            <div key={part} className="flex items-center justify-between gap-2 border-b border-gray-100 py-1 last:border-b-0">
+              <dt className="shrink-0 text-[11px] font-medium text-gray-500">{part}</dt>
+              <dd className="min-w-0 text-right">
+                <span className="block truncate text-gray-900">{what}</span>
+                <span className="block text-[10px] text-gray-500">since {since}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
       </Pop>
     </PhoneMock>
   )
@@ -322,8 +359,9 @@ function Alert({ className, when, body }: { className: string; when: string; bod
 
 /**
  * The widget on a phone's Home Screen, and an alert it sent popping up over
- * the phone: the Large widget as the setup page shows it (10:05 on the TDE
- * event's Saturday), and Orange's alert for its 9:55 class.
+ * the top of the phone, clear of it: the Large widget as the setup page
+ * shows it (10:05 on the TDE event's Saturday), and Orange's alert for its
+ * 9:55 class.
  */
 function WidgetGlimpse() {
   return (
@@ -331,15 +369,15 @@ function WidgetGlimpse() {
       dark
       wide
       screen={
-        <div className="px-3 pt-12">
-          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top" />
-          <div className="mt-2.5 grid grid-cols-4 gap-2.5">
-            {Array.from({ length: 8 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/20" />)}
+        <div className="flex h-[calc(100%-6px)] flex-col px-3 pb-3 pt-5">
+          <div className="grid grid-cols-4 gap-2.5">
+            {Array.from({ length: 12 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/20" />)}
           </div>
+          <img src={widgetLarge} alt="" width={364} className="mt-auto aspect-[1095/960] w-full rounded-[16px] object-cover object-top" />
         </div>
       }
     >
-      <Alert className="left-[2%] right-[2%] top-[-2%]" when="20m ago" body="Classroom at 9:55 AM" />
+      <Alert className="left-0 right-0 top-[-3%]" when="20m ago" body="Classroom at 9:55 AM" />
     </PhoneMock>
   )
 }
@@ -437,7 +475,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="garage"
           Icon={GarageIcon}
           title="Know what’s on your car."
-          text="Log tires, pads and fluids as you change them, and tire pressures for each session. Share the car with whoever else drives it."
+          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and what was on it. Share the car with whoever else drives it."
         >
           <GarageGlimpse />
         </Feature>
