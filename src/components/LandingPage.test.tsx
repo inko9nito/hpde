@@ -166,7 +166,7 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     await userEvent.click(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getByRole('link', { name: 'About' }))
     await waitFor(() => expect(window.location.hash).toBe('#/about'))
     expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
-    expect(screen.getByText('Your track days, in one place.')).toBeInTheDocument()
+    expect(screen.getByText('Your track days, in one place')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
       'See what’s on track now.',
       'Paste your laps. See your best.',

@@ -1,43 +1,44 @@
 import type { ReactNode } from 'react'
-import { ChevronRight, Lock, Timer } from 'lucide-react'
-import { CarIcon } from './CarIcons'
+import { BatteryFull, CalendarClock, ChevronRight, ClipboardCheck, Lock, Signal, Smartphone, Timer, Wifi } from 'lucide-react'
+import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { SheetCloseLink } from './SheetCloseLink'
 import { TrackIcon } from './TrackIcon'
-import widgetMedium from '../assets/widget-medium.png'
-import notificationsImg from '../assets/notifications.png'
+import widgetLarge from '../assets/widget-large.png'
 import type { RunGroupConfig } from '../types'
 
 /** The About page's hash (#455). */
 export const ABOUT_HASH = '#/about'
 
-// About (#455) reads as an App Store page shows an app's features: a big
-// plain headline for each, a sentence or two under it, and a glimpse of it
-// in the app — not a list. It says what's here; it isn't selling it.
+// About (#455) reads as an App Store page shows an app's features: a plain
+// headline for each, under the icon the app gives it, a sentence or two,
+// and a glimpse of it in the app — not a list. It says what's here; it
+// isn't selling it.
 
 const RED: RunGroupConfig = { id: 'red', label: 'Red', bgClass: 'bg-runred-500', textClass: 'text-white' }
 const BLUE: RunGroupConfig = { id: 'blue', label: 'Blue', bgClass: 'bg-runblue-500', textClass: 'text-white' }
 const ORANGE: RunGroupConfig = { id: 'orange', label: 'Orange', bgClass: 'bg-runorange-500', textClass: 'text-white' }
 
-/** A glimpse of the app: a card, like a bit of a screen (dark for the Home Screen), with an emoji on its corner. */
-function Glimpse({ emoji, dark, children }: { emoji: string; dark?: boolean; children: ReactNode }) {
+/** A glimpse of the app: a white card, like a bit of a screen. */
+function Glimpse({ children }: { children: ReactNode }) {
   return (
-    <div className="relative mx-auto mt-7 w-full max-w-[300px]" aria-hidden="true">
-      <div className={`rounded-[26px] p-3 text-left shadow-[0_24px_48px_-20px_rgba(17,24,39,0.28)] ${dark ? 'bg-gray-900' : 'bg-white ring-1 ring-gray-200/80'}`}>
-        {children}
-      </div>
-      <span className="absolute -right-4 -top-6 rotate-12 select-none text-[46px] leading-none drop-shadow-md">{emoji}</span>
+    <div className="mx-auto mt-5 w-full max-w-[300px] rounded-[24px] bg-white p-3 text-left shadow-[0_20px_40px_-20px_rgba(17,24,39,0.25)] ring-1 ring-gray-200/80" aria-hidden="true">
+      {children}
     </div>
   )
 }
 
-function Feature({ id, title, text, children }: { id: string; title: string; text: string; children?: ReactNode }) {
+/** A Lucide icon, or the app's car icon (#417), which takes its props. */
+type GlyphIcon = (props: { size?: number; strokeWidth?: number; className?: string; 'aria-hidden'?: 'true' }) => ReactNode
+
+function Feature({ id, Icon, title, text, children }: { id: string; Icon: GlyphIcon; title: string; text: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={`about-${id}`} className="pt-12 text-center">
-      <h2 id={`about-${id}`} className="mx-auto max-w-[320px] text-balance font-rubik text-[28px] font-bold leading-[1.1] tracking-tight text-gray-900">
+    <section aria-labelledby={`about-${id}`} className="pt-10 text-center">
+      <Icon size={24} strokeWidth={1.75} className="mx-auto text-red-600" aria-hidden="true" />
+      <h2 id={`about-${id}`} className="mx-auto mt-2 max-w-[300px] text-balance font-rubik text-[22px] font-bold leading-tight tracking-tight text-gray-900">
         {title}
       </h2>
-      <p className="mx-auto mt-3 max-w-[330px] text-[15px] leading-relaxed text-gray-500">{text}</p>
+      <p className="mx-auto mt-2 max-w-[330px] text-[15px] leading-normal text-gray-500">{text}</p>
       {children}
     </section>
   )
@@ -177,13 +178,74 @@ function GarageGlimpse() {
   )
 }
 
-/** The widget and its alerts, as the iOS widget page shows them. */
-function WidgetGlimpse() {
+/** A phone, its bottom fading out under what it shows at the top: its
+ *  status bar over the wallpaper, then `children`. */
+function Phone({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <>
-      <img src={widgetMedium} alt="" width={364} className="h-auto w-full" />
-      <img src={notificationsImg} alt="" width={364} className="mt-3 h-auto w-full" />
-    </>
+    <figure className="min-w-0">
+      <div className="rounded-t-[26px] bg-gray-900 p-1 pb-0 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]">
+        <div className="relative aspect-[9/14] overflow-hidden rounded-t-[22px] bg-gradient-to-b from-slate-500 via-slate-700 to-slate-900">
+          <div className="absolute left-1/2 top-[5px] h-[9px] w-[30%] -translate-x-1/2 rounded-full bg-black" />
+          <div className="flex items-center justify-between px-3 pt-[5px] text-white">
+            <span className="text-[8px] font-semibold leading-[9px]">10:05</span>
+            <span className="flex items-center gap-0.5">
+              <Signal size={8} strokeWidth={3} />
+              <Wifi size={8} strokeWidth={3} />
+              <BatteryFull size={10} strokeWidth={2.5} />
+            </span>
+          </div>
+          {children}
+        </div>
+      </div>
+      <figcaption className="mt-1 text-[11px] text-gray-400">{label}</figcaption>
+    </figure>
+  )
+}
+
+/** An alert the widget scheduled, as the Lock Screen lists it. */
+function Alert({ title, body, when }: { title: string; body: string; when: string }) {
+  return (
+    <div className="flex gap-1.5 rounded-[10px] bg-white/80 p-1.5 text-left text-gray-900 backdrop-blur">
+      {/* Scriptable's icon: the widget's alerts come from it. */}
+      <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] bg-slate-800 font-mono text-[7px] font-bold text-white">{'{ }'}</span>
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="flex items-baseline justify-between gap-1">
+          <span className="truncate text-[8px] font-semibold">{title}</span>
+          <span className="shrink-0 text-[7px] text-gray-500">{when}</span>
+        </div>
+        <p className="line-clamp-2 text-[8px]">{body}</p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The widget on the Home Screen and its alerts on the Lock Screen, at the
+ * same moment of the same day: the Large widget as the setup page shows it
+ * (10:05 on the TDE event's Saturday), and the alerts the widget scheduled
+ * for Orange that morning, as `npm run widget:showcase` renders them.
+ */
+function HomeScreenGlimpse() {
+  return (
+    <div className="mx-auto mt-5 grid w-full max-w-[340px] grid-cols-2 gap-3" aria-hidden="true">
+      <Phone label="Home Screen">
+        <img src={widgetLarge} alt="" width={364} className="mx-auto mt-3 h-auto w-[88%] rounded-[12%/11%] bg-white" />
+        <div className="mx-auto mt-2.5 grid w-[88%] grid-cols-4 gap-[9%]">
+          {[0, 1, 2, 3].map(i => <span key={i} className="aspect-square rounded-[24%] bg-white/25" />)}
+        </div>
+      </Phone>
+      <Phone label="Lock Screen">
+        <div className="mt-2 text-center text-white">
+          <Lock size={9} strokeWidth={2.5} className="mx-auto" />
+          <p className="mt-1 text-[8px] font-medium">Saturday, September 12</p>
+          <p className="font-rubik text-[38px] font-semibold leading-none tracking-tight">10:05</p>
+        </div>
+        <div className="mt-5 flex flex-col gap-1 px-1.5">
+          <Alert title="🟠 Orange · in 10m" body="Classroom at 9:55 AM" when="20m ago" />
+          <Alert title="🟠 Orange · in 10m" body="On track at 9:30 AM · Classroom follows at 9:55 AM." when="45m ago" />
+        </div>
+      </Phone>
+    </div>
   )
 }
 
@@ -214,64 +276,70 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           <SheetCloseLink href={closeHref} onClose={onClose} />
         </div>
 
-        <div className="pt-6 text-center">
-          <img src="/apple-touch-icon.png" alt="" width={72} height={72} className="mx-auto h-[72px] w-[72px] rounded-[17px] shadow-lg" />
-          <p className="mt-3 text-[13px] font-semibold text-gray-500">HPDE Events</p>
-          <p className="mx-auto mt-1 max-w-[320px] text-balance font-rubik text-[28px] font-bold leading-[1.1] tracking-tight text-gray-900">
-            Your track days, in one place.
-          </p>
-          <p className="mx-auto mt-3 max-w-[330px] text-[15px] leading-relaxed text-gray-500">
-            The day’s schedule for every driver at an HPDE event. Sign in, and it keeps your laps, your
-            instructor’s notes and your car too.
-          </p>
+        <div className="mt-4 flex items-center gap-3.5">
+          <img src="/apple-touch-icon.png" alt="" width={56} height={56} className="h-14 w-14 shrink-0 rounded-[13px]" />
+          <div className="min-w-0">
+            <p className="font-rubik text-lg font-bold leading-tight text-gray-900">HPDE Events</p>
+            <p className="text-[15px] text-gray-500">Your track days, in one place</p>
+          </div>
         </div>
+        <p className="mt-4 text-[15px] leading-normal text-gray-600">
+          The day’s schedule for every driver at an HPDE event. Sign in, and it keeps your laps, your
+          instructor’s notes and your car too.
+        </p>
 
         <Feature
           id="schedule"
+          Icon={CalendarClock}
           title="See what’s on track now."
           text="Each event’s schedule follows the day and counts down to what’s next. Pick your run group and your sessions stand out."
         >
-          <Glimpse emoji="🏁"><ScheduleGlimpse /></Glimpse>
+          <Glimpse><ScheduleGlimpse /></Glimpse>
         </Feature>
 
         <Feature
           id="laps"
+          Icon={Timer}
           title="Paste your laps. See your best."
           text="Paste a session’s times from the timing sheet or your video. The Tracks tab shows how you’ve come along at each track."
         >
-          <Glimpse emoji="⏱️"><LapsGlimpse /></Glimpse>
+          <Glimpse><LapsGlimpse /></Glimpse>
         </Feature>
 
         <Feature
           id="evaluations"
+          Icon={ClipboardCheck}
           title="Keep what your instructor said."
           text="Note what they told you after each session, or fill in the report card. Then see which skills have come along most."
         >
-          <Glimpse emoji="📋"><EvaluationGlimpse /></Glimpse>
+          <Glimpse><EvaluationGlimpse /></Glimpse>
         </Feature>
 
         <Feature
           id="garage"
+          Icon={GarageIcon}
           title="Know what’s on your car."
           text="Log tires, pads and fluids as you change them, and tire pressures for each session. Share the car with whoever else drives it."
         >
-          <Glimpse emoji="🔧"><GarageGlimpse /></Glimpse>
+          <Glimpse><GarageGlimpse /></Glimpse>
         </Feature>
 
         <Feature
           id="widget"
+          Icon={Smartphone}
           title="On your Home Screen."
-          text="The iOS widget counts down to your next event and alerts you before your sessions. Set it up under More → iOS widget."
+          text="The iOS widget shows what’s next on your Home Screen, and alerts you before your sessions. Set it up under More → iOS widget."
         >
-          <Glimpse emoji="🔔" dark><WidgetGlimpse /></Glimpse>
+          <HomeScreenGlimpse />
         </Feature>
 
         <Feature
           id="private"
+          Icon={Lock}
           title="Open schedules. Private notes."
           text="Anyone can see the schedules, with no account. Your laps, notes and garage are only for you and the site’s admins."
         >
-          <Glimpse emoji="🔒"><SignInGlimpse /></Glimpse>
+          <Glimpse><SignInGlimpse /></Glimpse>
         </Feature>
       </div>
     </div>
