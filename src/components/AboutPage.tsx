@@ -526,7 +526,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="garage"
           Icon={GarageIcon}
           title="Your car’s setup, event by event."
-          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and how it was set up. Share the car with whoever else drives it."
+          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and how it was set up. Share the car with whoever else drives it, and you both see and add to the same history, so nothing’s entered twice."
         >
           <GarageGlimpse />
         </Feature>
