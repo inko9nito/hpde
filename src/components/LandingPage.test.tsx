@@ -160,20 +160,23 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     expect(await screen.findByRole('heading', { level: 1, name: 'iOS widget' })).toBeInTheDocument()
   })
 
-  it('About says what the app is for, then each group of features, and closes back to More (#455)', async () => {
+  it('About says what the app is for, then a headline for each feature, and closes back to More (#455)', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     await userEvent.click(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getByRole('link', { name: 'About' }))
     await waitFor(() => expect(window.location.hash).toBe('#/about'))
     expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
-    expect(screen.getByText(/^For drivers at HPDE/)).toBeInTheDocument()
-    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent))
-      .toEqual(['Events', 'Lap times', 'Instructor evaluations', 'Garage', 'On your iPhone'])
-    // The features that need a sign-in say so.
-    for (const name of ['Lap times', 'Instructor evaluations', 'Garage']) {
-      expect(within(screen.getByRole('region', { name })).getByText('Signed in')).toBeInTheDocument()
-    }
-    expect(within(screen.getByRole('region', { name: 'Events' })).queryByText('Signed in')).not.toBeInTheDocument()
+    expect(screen.getByText('Your track days, in one place.')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
+      'See what’s on track now.',
+      'Paste your laps. See your best.',
+      'Keep what your instructor said.',
+      'Know what’s on your car.',
+      'On your Home Screen.',
+      'Open schedules. Private notes.',
+    ])
+    // Who sees what, plainly.
+    expect(within(screen.getByRole('region', { name: 'Open schedules. Private notes.' })).getByText(/only for you and the site’s admins/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('link', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))

@@ -483,7 +483,7 @@ test('About slides up from the top of the More tab\'s list, as a page sheet with
   const about = page.getByRole('heading', { level: 1, name: 'About' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
   await expect.poll(async () => (await about.boundingBox())?.y).toBe(18)
   await expect(about).toHaveCSS('border-top-left-radius', '12px')
-  await expect(page.getByRole('heading', { level: 2, name: 'Garage' })).toBeAttached()
+  await expect(page.getByRole('heading', { level: 2, name: 'Know what’s on your car.' })).toBeAttached()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page).toHaveURL(/#\/more$/)

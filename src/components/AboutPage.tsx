@@ -1,157 +1,278 @@
 import type { ReactNode } from 'react'
-import { CalendarDays, ClipboardCheck, Smartphone, Timer, UserRound } from 'lucide-react'
-import { GarageIcon } from './CarIcons'
+import { ChevronRight, Lock, Timer } from 'lucide-react'
+import { CarIcon } from './CarIcons'
+import { GroupBadge } from './GroupBadge'
 import { SheetCloseLink } from './SheetCloseLink'
+import { TrackIcon } from './TrackIcon'
+import widgetMedium from '../assets/widget-medium.png'
+import notificationsImg from '../assets/notifications.png'
+import type { RunGroupConfig } from '../types'
 
 /** The About page's hash (#455). */
 export const ABOUT_HASH = '#/about'
 
-/** An icon a feature leads with: a Lucide icon, or a car icon (#417) that takes its props. */
-type FeatureIcon = (props: { size?: number; strokeWidth?: number; 'aria-hidden'?: 'true' }) => ReactNode
+// About (#455) reads as an App Store page shows an app's features: a big
+// plain headline for each, a sentence or two under it, and a glimpse of it
+// in the app — not a list. It says what's here; it isn't selling it.
 
-// What the app does, a group of features at a time, each headed by what it's
-// for — as an App Store page lists an app's features (#455), but plainly:
-// it's to say what's here, not to sell it.
-const FEATURES: readonly {
-  id: string
-  Icon: FeatureIcon
-  name: string
-  title: string
-  signIn?: boolean
-  points: readonly string[]
-}[] = [
-  {
-    id: 'events',
-    Icon: CalendarDays,
-    name: 'Events',
-    title: 'Know what’s on track now',
-    points: [
-      'Each event’s schedule, with a line at the time it is now and a countdown to what’s next.',
-      'Pick your run group and your sessions stand out; badges show who’s on track and who’s in class.',
-      'Each event’s dates, organizer, track map and the weather at the track.',
-      'Upcoming events as a list or a calendar. Say which ones you’re going to, and share one with a link or a code to scan.',
-    ],
-  },
-  {
-    id: 'laps',
-    Icon: Timer,
-    name: 'Lap times',
-    title: 'Log your laps after each session',
-    signIn: true,
-    points: [
-      'Tap a session and paste its times: a list, rows from a timing sheet, or timestamps from your video.',
-      'Each session’s best and average, and your all-time best on that layout.',
-      'The Tracks tab lists the layouts you’ve driven, with a chart of your laps there from event to event.',
-    ],
-  },
-  {
-    id: 'evaluations',
-    Icon: ClipboardCheck,
-    name: 'Instructor evaluations',
-    title: 'Keep what your instructor said',
-    signIn: true,
-    points: [
-      'Notes on each session, and on the event as a whole.',
-      'On The Drivers Edge (TDE) events, their report card: a score for each skill, and the run group they recommend.',
-      'More → Instructor evaluations has every event’s together, with the skills that have improved most and those that need work.',
-    ],
-  },
-  {
-    id: 'garage',
-    Icon: GarageIcon,
-    name: 'Garage',
-    title: 'Keep a record of your car',
-    signIn: true,
-    points: [
-      'Your cars, with a dated log of tires, pads, rotors and fluids.',
-      'Which car you brought to each event, and what was on it then.',
-      'Tire pressures before and after each session.',
-      'Share a car with someone else who drives it, so you both keep it up to date.',
-    ],
-  },
-  {
-    id: 'iphone',
-    Icon: Smartphone,
-    name: 'On your iPhone',
-    title: 'Check it between runs',
-    points: [
-      'In Safari, Share → Add to Home Screen opens it full screen, as an app.',
-      'The iOS widget shows the day’s schedule on your Home Screen, and alerts you before your sessions. More → iOS widget sets it up.',
-    ],
-  },
-]
+const RED: RunGroupConfig = { id: 'red', label: 'Red', bgClass: 'bg-runred-500', textClass: 'text-white' }
+const BLUE: RunGroupConfig = { id: 'blue', label: 'Blue', bgClass: 'bg-runblue-500', textClass: 'text-white' }
+const ORANGE: RunGroupConfig = { id: 'orange', label: 'Orange', bgClass: 'bg-runorange-500', textClass: 'text-white' }
 
-function Feature({ id, Icon, name, title, signIn, points }: (typeof FEATURES)[number]) {
+/** A glimpse of the app: a card, like a bit of a screen (dark for the Home Screen), with an emoji on its corner. */
+function Glimpse({ emoji, dark, children }: { emoji: string; dark?: boolean; children: ReactNode }) {
   return (
-    <section aria-labelledby={`about-${id}`} className="rounded-2xl border border-gray-200 bg-white p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-gray-900 text-white">
-          <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <h2 id={`about-${id}`} className="font-rubik text-xs font-semibold uppercase tracking-wider text-gray-500">{name}</h2>
-            {signIn && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                <UserRound size={11} strokeWidth={2.25} aria-hidden="true" />
-                Signed in
-              </span>
-            )}
-          </div>
-          <p className="font-rubik text-[17px] font-semibold leading-snug text-gray-900">{title}</p>
-        </div>
+    <div className="relative mx-auto mt-7 w-full max-w-[300px]" aria-hidden="true">
+      <div className={`rounded-[26px] p-3 text-left shadow-[0_24px_48px_-20px_rgba(17,24,39,0.28)] ${dark ? 'bg-gray-900' : 'bg-white ring-1 ring-gray-200/80'}`}>
+        {children}
       </div>
-      <ul className="space-y-2 text-[15px] leading-snug text-gray-600">
-        {points.map(point => (
-          <li key={point} className="flex gap-2.5">
-            <span className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-gray-400" aria-hidden="true" />
-            <span>{point}</span>
-          </li>
-        ))}
-      </ul>
+      <span className="absolute -right-4 -top-6 rotate-12 select-none text-[46px] leading-none drop-shadow-md">{emoji}</span>
+    </div>
+  )
+}
+
+function Feature({ id, title, text, children }: { id: string; title: string; text: string; children?: ReactNode }) {
+  return (
+    <section aria-labelledby={`about-${id}`} className="pt-12 text-center">
+      <h2 id={`about-${id}`} className="mx-auto max-w-[320px] text-balance font-rubik text-[28px] font-bold leading-[1.1] tracking-tight text-gray-900">
+        {title}
+      </h2>
+      <p className="mx-auto mt-3 max-w-[330px] text-[15px] leading-relaxed text-gray-500">{text}</p>
+      {children}
     </section>
   )
 }
 
+/** Two sessions, with the time now between them, as the Schedule tab has them. */
+function ScheduleGlimpse() {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 opacity-50">
+        <span className="w-12 font-mono text-[15px] font-semibold text-gray-900">9:30</span>
+        <span className="text-[11px] text-gray-900">On track</span>
+        <span className="flex gap-1"><GroupBadge group={RED} size="sm" /><GroupBadge group={BLUE} size="sm" /></span>
+      </div>
+      <div className="relative my-5">
+        <div className="flex items-center">
+          <div className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+          <div className="h-0.5 flex-1 bg-blue-500" />
+        </div>
+        <span className="absolute -top-4 left-3 font-mono text-[11px] font-semibold text-blue-500">10:12</span>
+        <span className="absolute -top-4 right-0 text-[11px] text-gray-400">Next in <span className="font-semibold">18 min</span></span>
+      </div>
+      <div className="flex flex-col gap-2.5 rounded-xl border border-gray-200 p-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="w-12 font-mono text-[15px] font-semibold text-gray-900">10:30</span>
+          <span className="text-[11px] text-gray-900">On track</span>
+          <GroupBadge group={ORANGE} size="sm" />
+        </div>
+        <div className="border-t border-gray-100" />
+        <div className="flex items-center gap-3">
+          <span className="w-12" />
+          <span className="text-[11px] text-gray-900">In class</span>
+          <GroupBadge group={RED} size="sm" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** A session's laps: its best in the black chip the app marks it with. */
+function LapsGlimpse() {
+  const laps = [['1', '1:40.07'], ['2', '1:39.12'], ['3', '1:38.91'], ['4', '1:39.40']]
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2.5">
+        <TrackIcon trackId="msrc-1-7" size={22} padding={6} radius="rounded-xl" tone="dark" />
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-gray-900">10:30 AM · Orange</p>
+          <p className="text-[11px] text-gray-400">MSRC 1.7 CW</p>
+        </div>
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-gray-50 px-3 py-2">
+          <p className="text-[11px] font-semibold text-gray-500">Best</p>
+          <p className="font-mono text-lg font-bold tabular-nums text-gray-900">1:38.91</p>
+        </div>
+        <div className="rounded-xl bg-gray-50 px-3 py-2">
+          <p className="text-[11px] font-semibold text-gray-500">Average</p>
+          <p className="font-mono text-lg font-bold tabular-nums text-gray-900">1:39.38</p>
+        </div>
+      </div>
+      <ul className="divide-y divide-gray-100 px-1 text-[13px]">
+        {laps.map(([n, time]) => (
+          <li key={n} className="flex items-center justify-between py-1.5">
+            <span className="text-gray-400">Lap {n}</span>
+            {time === '1:38.91' ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-gray-900 px-1.5 py-0.5 font-mono font-bold tabular-nums text-white">
+                <Timer size={12} strokeWidth={2.5} />
+                {time}
+              </span>
+            ) : (
+              <span className="font-mono tabular-nums text-gray-900">{time}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** An instructor's note, and a skill that's come along. */
+function EvaluationGlimpse() {
+  return (
+    <div>
+      <div className="rounded-2xl rounded-tl-md bg-gray-100 px-3.5 py-2.5">
+        <p className="text-[13px] leading-snug text-gray-800">
+          Brake a little later into 5, and look up through the esses.
+        </p>
+        <p className="mt-1 text-[11px] text-gray-400">Dave · session 2</p>
+      </div>
+      <p className="mb-2 mt-4 px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Most improved</p>
+      {[['Vision', 50, 80], ['Braking', 55, 75]].map(([skill, from, to]) => (
+        <div key={skill} className="mb-2 px-1 last:mb-0">
+          <div className="mb-1 flex justify-between text-[12px]">
+            <span className="font-medium text-gray-900">{skill}</span>
+            <span className="font-semibold text-emerald-600">+{Number(to) - Number(from)}%</span>
+          </div>
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="absolute inset-y-0 left-0 bg-emerald-200" style={{ width: `${to}%` }} />
+            <div className="absolute inset-y-0 left-0 bg-gray-900" style={{ width: `${from}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** A car, what's on it, and a session's tire pressures as the car sits. */
+function GarageGlimpse() {
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-900 text-white">
+          <CarIcon size={22} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-gray-900">2019 Mustang GT</p>
+          <p className="text-[11px] text-gray-400">Last out Sep 11</p>
+        </div>
+        <ChevronRight size={16} className="text-gray-300" />
+      </div>
+      <div className="mb-3 divide-y divide-gray-100 rounded-xl bg-gray-50 px-3 text-[12px]">
+        {[['Tires', 'Hoosier R7', 'Aug 30'], ['Front pads', 'Carbotech XP12', 'Jul 12']].map(([what, brand, date]) => (
+          <div key={what} className="flex items-center justify-between gap-2 py-2">
+            <span className="text-gray-500">{what}</span>
+            <span className="truncate text-gray-900">{brand} <span className="text-gray-400">· {date}</span></span>
+          </div>
+        ))}
+      </div>
+      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Tire pressures · cold → hot</p>
+      <div className="mx-auto grid w-40 grid-cols-2 gap-x-10 gap-y-2 text-center font-mono text-[12px] tabular-nums">
+        {['32 → 38', '32 → 39', '30 → 36', '30 → 37'].map(p => (
+          <span key={p} className="rounded-md border border-gray-200 py-1 text-gray-900">{p}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The widget and its alerts, as the iOS widget page shows them. */
+function WidgetGlimpse() {
+  return (
+    <>
+      <img src={widgetMedium} alt="" width={364} className="h-auto w-full" />
+      <img src={notificationsImg} alt="" width={364} className="mt-3 h-auto w-full" />
+    </>
+  )
+}
+
+/** Signing in, as a signed-out page asks for it. */
+function SignInGlimpse() {
+  return (
+    <div className="px-4 py-6 text-center">
+      <Lock size={20} className="mx-auto text-gray-400" />
+      <p className="mt-2 text-sm font-medium text-gray-700">Sign in to keep your laps</p>
+      <span className="mt-4 inline-block rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white">Sign in with Google</span>
+    </div>
+  )
+}
+
 /**
- * About (#455): what the app is for, then its features a group at a time.
- * A page sheet closed with ✕, as the iOS widget page beside it on the More
- * tab is (#415). `closeHref`: where ✕ goes — the tab it was opened from;
+ * About (#455): what the app is for, then its features one at a time. A page
+ * sheet closed with ✕, as the iOS widget page beside it on the More tab is
+ * (#415). `closeHref`: where ✕ goes — the tab it was opened from;
  * `onClose`, how (back to it, #429).
  */
 export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; onClose?: () => void } = {}) {
   return (
     // As tall as the sheet it's on, at least (#415).
     <div className="min-h-full bg-gray-50">
-      <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(3rem+env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-gray-900">About</h1>
           <SheetCloseLink href={closeHref} onClose={onClose} />
         </div>
 
-        <div className="mb-6 flex items-center gap-3.5">
-          <img src="/apple-touch-icon.png" alt="" width={56} height={56} className="h-14 w-14 shrink-0 rounded-[13px] border border-gray-200" />
-          <div className="min-w-0">
-            <p className="font-rubik text-xl font-bold leading-tight text-gray-900">HPDE Events</p>
-            <p className="text-[15px] text-gray-500">Track days, from the schedule to your lap times</p>
-          </div>
-        </div>
-
-        <div className="mb-6 space-y-3 text-[15px] leading-relaxed text-gray-700">
-          <p>
-            For drivers at HPDE (high performance driver education) track days. It shows each event’s
-            schedule as the day goes, so you can see what’s next at a glance between runs.
+        <div className="pt-6 text-center">
+          <img src="/apple-touch-icon.png" alt="" width={72} height={72} className="mx-auto h-[72px] w-[72px] rounded-[17px] shadow-lg" />
+          <p className="mt-3 text-[13px] font-semibold text-gray-500">HPDE Events</p>
+          <p className="mx-auto mt-1 max-w-[320px] text-balance font-rubik text-[28px] font-bold leading-[1.1] tracking-tight text-gray-900">
+            Your track days, in one place.
           </p>
-          <p>
-            Sign in with Google and it also keeps your own record of every event: your lap times, what
-            your instructor said, and your car. Only you and the site’s admins can see it. The schedules
-            are open to everyone, with no account needed.
+          <p className="mx-auto mt-3 max-w-[330px] text-[15px] leading-relaxed text-gray-500">
+            The day’s schedule for every driver at an HPDE event. Sign in, and it keeps your laps, your
+            instructor’s notes and your car too.
           </p>
         </div>
 
-        <div className="space-y-3">
-          {FEATURES.map(feature => <Feature key={feature.id} {...feature} />)}
-        </div>
+        <Feature
+          id="schedule"
+          title="See what’s on track now."
+          text="Each event’s schedule follows the day and counts down to what’s next. Pick your run group and your sessions stand out."
+        >
+          <Glimpse emoji="🏁"><ScheduleGlimpse /></Glimpse>
+        </Feature>
+
+        <Feature
+          id="laps"
+          title="Paste your laps. See your best."
+          text="Paste a session’s times from the timing sheet or your video. The Tracks tab shows how you’ve come along at each track."
+        >
+          <Glimpse emoji="⏱️"><LapsGlimpse /></Glimpse>
+        </Feature>
+
+        <Feature
+          id="evaluations"
+          title="Keep what your instructor said."
+          text="Note what they told you after each session, or fill in the report card. Then see which skills have come along most."
+        >
+          <Glimpse emoji="📋"><EvaluationGlimpse /></Glimpse>
+        </Feature>
+
+        <Feature
+          id="garage"
+          title="Know what’s on your car."
+          text="Log tires, pads and fluids as you change them, and tire pressures for each session. Share the car with whoever else drives it."
+        >
+          <Glimpse emoji="🔧"><GarageGlimpse /></Glimpse>
+        </Feature>
+
+        <Feature
+          id="widget"
+          title="On your Home Screen."
+          text="The iOS widget counts down to your next event and alerts you before your sessions. Set it up under More → iOS widget."
+        >
+          <Glimpse emoji="🔔" dark><WidgetGlimpse /></Glimpse>
+        </Feature>
+
+        <Feature
+          id="private"
+          title="Open schedules. Private notes."
+          text="Anyone can see the schedules, with no account. Your laps, notes and garage are only for you and the site’s admins."
+        >
+          <Glimpse emoji="🔒"><SignInGlimpse /></Glimpse>
+        </Feature>
       </div>
     </div>
   )
