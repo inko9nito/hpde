@@ -173,11 +173,11 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
       'Paste your laps. See your best.',
       'See how you’re improving.',
       'Your car’s setup, event by event.',
+      'Share a car, and its history.',
       'What’s next, without opening the app.',
-      'Share an event with anyone.',
     ])
-    // Who sees what, plainly.
-    expect(within(screen.getByRole('region', { name: 'Share an event with anyone.' })).getByText(/stay private to your account/)).toBeInTheDocument()
+    // Sharing a car is sharing its history, not entering it twice.
+    expect(within(screen.getByRole('region', { name: 'Share a car, and its history.' })).getByText(/same change log/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('link', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))

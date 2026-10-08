@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Copy, Share, Smartphone, Timer } from 'lucide-react'
-import QRCode from 'qrcode'
+import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Smartphone, Timer, UserPlus } from 'lucide-react'
+import { Avatar, AvatarStack } from './Avatar'
 import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { ScoreBar } from './ReportCardSkills'
 import { SheetCloseLink } from './SheetCloseLink'
-import { eventShareUrl } from './ShareSheet'
+import { TrackIcon } from './TrackIcon'
 import widgetLarge from '../assets/widget-large.png'
 import type { RunGroupConfig } from '../types'
 
@@ -35,7 +34,7 @@ const SATURDAY: [time: string, onTrack: string, inClass?: string][] = [
 /** A card popping out over the phone's frame, with more of the app in it than the screen shows; place it with `className`. */
 function Pop({ className, children }: { className: string; children: ReactNode }) {
   return (
-    <div className={`absolute rounded-2xl bg-white text-left shadow-[0_18px_36px_-12px_rgba(17,24,39,0.35)] ring-1 ring-gray-200/70 ${className}`}>
+    <div className={`absolute rounded-2xl bg-white text-left shadow-[0_18px_36px_-12px_rgba(17,24,39,0.35)] ring-1 ring-gray-200/70 ${className}`} data-pop>
       {children}
     </div>
   )
@@ -43,12 +42,14 @@ function Pop({ className, children }: { className: string; children: ReactNode }
 
 /**
  * A phone, drawn plainly, with a sketch of a page of the app on `screen`,
- * and at most one Pop over it (`children`) for the part that matters.
+ * and at most one Pop over it (`children`) for the part that matters. A
+ * Pop never lines up with the phone's edges: each of its edges is well
+ * inside the phone or well outside it, so it reads as over the phone.
  */
 function PhoneMock({ screen, dark, wide, children }: { screen: ReactNode; dark?: boolean; wide?: boolean; children?: ReactNode }) {
   return (
-    <div className="relative mx-auto mt-8 h-[330px] w-full max-w-[320px] text-left" aria-hidden="true">
-      <div className={`absolute inset-y-0 left-1/2 ${wide ? 'w-[206px]' : 'w-[188px]'} -translate-x-1/2 rounded-[34px] bg-white p-[7px] shadow-[0_24px_48px_-24px_rgba(17,24,39,0.35)] ring-1 ring-gray-200`}>
+    <div className="relative mx-auto mt-8 h-[330px] w-full max-w-[320px] text-left" aria-hidden="true" data-phone-mock>
+      <div className={`absolute inset-y-0 left-1/2 ${wide ? 'w-[206px]' : 'w-[188px]'} -translate-x-1/2 rounded-[34px] bg-white p-[7px] shadow-[0_24px_48px_-24px_rgba(17,24,39,0.35)] ring-1 ring-gray-200`} data-phone>
         <div className={`h-full overflow-hidden rounded-[27px] ${dark ? 'bg-gradient-to-b from-slate-500 to-slate-800' : 'bg-gray-50'}`}>
           <div className={`mx-auto mt-2 h-1.5 w-9 rounded-full ${dark ? 'bg-white/25' : 'bg-gray-900/10'}`} />
           {screen}
@@ -110,7 +111,8 @@ function ScheduleScreen() {
 function ScheduleGlimpse() {
   return (
     <PhoneMock screen={<ScheduleScreen />}>
-      <Pop className="right-0 top-[47%] w-[80%] p-2.5">
+      {/* From 20px outside the phone's left edge to past its right. */}
+      <Pop className="left-[calc(50%-114px)] right-0 top-[47%] p-2.5">
         {/* The run group picker, Orange picked. */}
         <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1 shadow-sm">
           <GroupBadge group={ORANGE} size="sm" />
@@ -309,7 +311,7 @@ function EvaluationGlimpse() {
         </>
       }
     >
-      <Pop className="right-0 top-[3%] w-[54%] p-1.5">
+      <Pop className="right-0 top-[8%] w-[54%] p-1.5">
         <WheelSketch picked={0} />
       </Pop>
     </PhoneMock>
@@ -409,11 +411,12 @@ function WidgetGlimpse() {
       dark
       wide
       screen={
-        <div className="flex h-[calc(100%-6px)] flex-col px-3 pb-3 pt-5">
-          <div className="grid grid-cols-4 gap-2.5">
-            {Array.from({ length: 12 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/20" />)}
+        // Under the speaker (mt-2 and h-1.5: 14px), the same 12px round the widget on three sides.
+        <div className="flex h-[calc(100%-14px)] flex-col justify-end px-3 pb-3">
+          <div className="mb-3 grid grid-cols-4 gap-x-4 px-2">
+            {Array.from({ length: 4 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/20" />)}
           </div>
-          <img src={widgetLarge} alt="" width={364} className="mt-auto aspect-[1095/960] w-full rounded-[16px] object-cover object-top" />
+          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top" />
         </div>
       }
     >
@@ -422,30 +425,76 @@ function WidgetGlimpse() {
   )
 }
 
-/** A code to scan for `url`, as the share sheet draws it. */
-function useQrCode(url: string): string | null {
-  const [qr, setQr] = useState<string | null>(null)
-  useEffect(() => {
-    QRCode.toDataURL(url, { margin: 1, width: 240 }).then(setQr, () => setQr(null))
-  }, [url])
-  return qr
-}
+const PURPLE_GROUP: RunGroupConfig = { id: 'purple', label: 'Purple', bgClass: 'bg-runpurple-500', textClass: 'text-white' }
 
-/** The schedule, and over it the sheet that shares it: a code to scan, and the link. */
-function ShareGlimpse() {
-  const url = eventShareUrl('2026-09-11_msrc-1-7')
-  const qr = useQrCode(url)
+/**
+ * A shared car's page: both drivers' pictures up top, by the way to share
+ * it with another, and its Events — each with who drove it there, their
+ * picture on their run group's badge — one of them popping out.
+ */
+function SharedCarGlimpse() {
+  const drivers = [{ name: 'Alex', group: ORANGE }, { name: 'Sam', group: PURPLE_GROUP }]
+  const whoDrove = (size: number, small?: boolean) => (
+    // Wrapping, where the card's too narrow for both (the SE).
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {drivers.map(({ name, group }) => (
+        <span key={name} className="inline-flex items-center">
+          <Avatar name={name} size={size} className="relative z-[1] ring-2 ring-white" />
+          {small
+            ? <span className={`-ml-1 h-2 w-6 rounded-full ${group.bgClass}`} />
+            : <GroupBadge group={group} size="sm" className="-ml-1.5 pl-3" />}
+        </span>
+      ))}
+    </span>
+  )
   return (
-    <PhoneMock screen={<ScheduleScreen />}>
-      <Pop className="right-0 top-[18%] w-[58%] p-3 text-center">
-        <p className="text-[13px] font-bold text-gray-900">Share this event</p>
-        {qr
-          ? <img src={qr} alt="" width={112} height={112} className="mx-auto mt-2 rounded-md border border-gray-200" />
-          : <div className="mx-auto mt-2 h-28 w-28 rounded-md bg-gray-100" />}
-        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 text-left">
-          <span className="min-w-0 flex-1 truncate text-[10px] text-gray-800">{url}</span>
-          <Copy size={11} className="shrink-0 text-gray-400" />
-        </div>
+    <PhoneMock
+      screen={
+        <>
+          <div className="mx-3 mt-2 grid h-16 place-items-center rounded-lg bg-gray-200 text-gray-400">
+            <CarIcon size={30} />
+          </div>
+          <div className="flex items-center justify-between px-3 pt-2">
+            <p className="text-[9px] font-semibold text-gray-900">2019 Miata</p>
+            <span className="flex items-center gap-1 text-gray-500">
+              <AvatarStack people={drivers} size={16} ring="ring-gray-50" />
+              <UserPlus size={10} strokeWidth={2.25} />
+            </span>
+          </div>
+          <div className="mx-3 mt-1.5 flex gap-2.5 border-b border-gray-200 text-[8px] text-gray-400">
+            <span>Setup</span>
+            <span>History</span>
+            <span className="-mb-px border-b border-gray-900 pb-1 font-semibold text-gray-900">Events</span>
+          </div>
+          <div className="flex flex-col gap-1.5 px-3 pt-2">
+            {[['OCT', '4'], ['SEP', '12'], ['AUG', '16'], ['JUL', '19'], ['JUN', '7']].map(([month, day]) => (
+              <div key={day} className="flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+                <span className="w-5 text-center font-rubik leading-none">
+                  <span className="block text-[6px] font-medium text-gray-500">{month}</span>
+                  <span className="block text-[10px] text-gray-900">{day}</span>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="mb-1 block h-1.5 w-16 rounded-full bg-gray-200" />
+                  {whoDrove(10, true)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      }
+    >
+      {/* From 20px outside the phone's left edge to past its right. */}
+      <Pop className="left-[calc(50%-114px)] right-0 top-[52%] flex items-center gap-3 p-3">
+        <span className="w-9 shrink-0 text-center font-rubik leading-none">
+          <span className="block text-[11px] font-medium uppercase tracking-wider text-red-600">Sep</span>
+          <span className="mt-1 block text-2xl text-gray-900">12</span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-rubik text-[14px] font-semibold leading-tight text-gray-900">TDE at MSRC 1.7 CW</span>
+          <span className="block truncate text-[13px] text-gray-500">The Drivers Edge</span>
+          <span className="mt-1.5 flex">{whoDrove(20)}</span>
+        </span>
+        <TrackIcon trackId="msrc-1-7" tone="dark" size={40} padding={0} radius="rounded-xl" />
       </Pop>
     </PhoneMock>
   )
@@ -526,9 +575,18 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="garage"
           Icon={GarageIcon}
           title="Your car’s setup, event by event."
-          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and how it was set up. Share the car with whoever else drives it, and you both see and add to the same history, so nothing’s entered twice."
+          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and how it was set up."
         >
           <GarageGlimpse />
+        </Feature>
+
+        <Feature
+          id="shared-car"
+          Icon={UserPlus}
+          title="Share a car, and its history."
+          text="Drive a car with someone else? Share it, and you both keep up the same change log and see who drove it at each event, so nothing’s entered twice."
+        >
+          <SharedCarGlimpse />
         </Feature>
 
         <Feature
@@ -538,15 +596,6 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           text="On iPhone, swipe over to the widget without unlocking, or keep it on your Home Screen. Or skip the widget and just get alerts before your run group’s sessions, as far ahead as you like. Set it up under More → iOS widget."
         >
           <WidgetGlimpse />
-        </Feature>
-
-        <Feature
-          id="share"
-          Icon={Share}
-          title="Share an event with anyone."
-          text="Send a link, or let them scan the code. Anyone can open the schedule, no account needed. Your laps, notes and car stay private to your account."
-        >
-          <ShareGlimpse />
         </Feature>
       </div>
     </div>

@@ -485,6 +485,18 @@ test('About slides up from the top of the More tab\'s list, as a page sheet with
   await expect(about).toHaveCSS('border-top-left-radius', '12px')
   await expect(page.getByRole('heading', { level: 2, name: 'Your car’s setup, event by event.' })).toBeAttached()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  // A card popping out over a phone never lines up with its edges: each is
+  // well inside the phone or well outside it.
+  const near = await about.locator('[data-phone-mock]').evaluateAll(mocks => mocks.flatMap(mock => {
+    const phone = mock.querySelector('[data-phone]')!.getBoundingClientRect()
+    return [...mock.querySelectorAll('[data-pop]')].flatMap(pop => {
+      const r = pop.getBoundingClientRect()
+      return Object.entries({ left: r.left - phone.left, right: r.right - phone.right, top: r.top - phone.top, bottom: r.bottom - phone.bottom })
+        .filter(([, gap]) => Math.abs(gap) < 12)
+        .map(([edge, gap]) => `${mock.closest('section')?.getAttribute('aria-labelledby')} ${edge} ${Math.round(gap)}px`)
+    })
+  }))
+  expect(near).toEqual([])
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page).toHaveURL(/#\/more$/)
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
