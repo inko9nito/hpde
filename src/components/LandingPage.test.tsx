@@ -167,16 +167,17 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     await waitFor(() => expect(window.location.hash).toBe('#/about'))
     expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
     expect(screen.getByText('Your track days, in one place')).toBeInTheDocument()
-    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
+    const about = screen.getByRole('heading', { level: 1, name: 'About' }).closest<HTMLElement>('.fixed')!
+    expect(within(about).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
       'See what’s on track now.',
       'Paste your laps. See your best.',
-      'Keep what your instructor said.',
-      'Know what’s on your car.',
-      'On your Home Screen.',
-      'Open schedules. Private notes.',
+      'See how you’re improving.',
+      'Your car’s setup, event by event.',
+      'What’s next, without opening the app.',
+      'Share an event with anyone.',
     ])
     // Who sees what, plainly.
-    expect(within(screen.getByRole('region', { name: 'Open schedules. Private notes.' })).getByText(/stay private to your account/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Share an event with anyone.' })).getByText(/stay private to your account/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('link', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))

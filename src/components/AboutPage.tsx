@@ -1,9 +1,12 @@
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Lock, Smartphone, Timer } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Copy, Share, Smartphone, Timer } from 'lucide-react'
+import QRCode from 'qrcode'
 import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { ScoreBar } from './ReportCardSkills'
 import { SheetCloseLink } from './SheetCloseLink'
+import { eventShareUrl } from './ShareSheet'
 import widgetLarge from '../assets/widget-large.png'
 import type { RunGroupConfig } from '../types'
 
@@ -17,6 +20,17 @@ export const ABOUT_HASH = '#/about'
 // says what's here; it isn't selling it.
 
 const ORANGE: RunGroupConfig = { id: 'orange', label: 'Orange', bgClass: 'bg-runorange-500', textClass: 'text-white' }
+
+// The run groups' colors on the TDE event's Saturday morning, on track and
+// in class at each session, as the phones' schedules show them.
+const PINK = 'bg-runpink-500'
+const PURPLE = 'bg-runpurple-500'
+const INSTRUCTORS = 'bg-zinc-900'
+const SATURDAY: [time: string, onTrack: string, inClass?: string][] = [
+  ['8:00', INSTRUCTORS, PURPLE], ['8:30', PINK], ['8:55', PURPLE, PINK], ['9:30', ORANGE.bgClass, PURPLE],
+  ['9:55', INSTRUCTORS, ORANGE.bgClass], ['10:25', PINK], ['10:50', PURPLE], ['11:15', ORANGE.bgClass, PURPLE],
+  ['12:20', INSTRUCTORS], ['12:50', PINK], ['1:15', PURPLE, PINK],
+]
 
 /** A card popping out over the phone's frame, with more of the app in it than the screen shows; place it with `className`. */
 function Pop({ className, children }: { className: string; children: ReactNode }) {
@@ -61,59 +75,61 @@ function ScreenHead({ title, tabs, active = 0 }: { title: string; tabs?: string[
   )
 }
 
-/**
- * An event's Schedule tab with Orange picked: only Orange's sessions, the
- * time now across it, and the next of them over it as the tab shows it.
- */
-function ScheduleGlimpse() {
-  const row = (time: string, past?: boolean) => (
-    <div className={`flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5 ${past ? 'opacity-50' : ''}`}>
+/** One session on a phone's schedule: its time, and its groups' colors, on track and then in class. */
+function SessionSketch({ time, groups, past }: { time: string; groups: (string | undefined)[]; past?: boolean }) {
+  return (
+    <div className={`flex items-center gap-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5 ${past ? 'opacity-60' : ''}`}>
       <span className="w-6 font-mono text-[8px] font-semibold text-gray-900">{time}</span>
-      <span className="h-2.5 w-8 rounded-full bg-runorange-500" />
+      {groups.map((bg, i) => bg && <span key={i} className={`h-2.5 w-7 rounded-full ${bg}`} />)}
     </div>
   )
+}
+
+/** An event's Schedule tab from 9:30, every group on it, the time now (11:02) across it. */
+function ScheduleScreen() {
   return (
-    <PhoneMock
-      screen={
-        <>
-          <ScreenHead title="TDE at MSRC 1.7 CW" tabs={['Schedule', 'Details', 'My notes']} />
-          <div className="px-3 pt-2">
-            {/* The run group picker, Orange picked. */}
-            <span className="mb-2 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1">
-              <span className="h-2 w-6 rounded-full bg-runorange-500" />
-              <ChevronDown size={8} className="text-gray-400" />
-            </span>
-            <div className="flex flex-col gap-1.5">
-              {row('9:30', true)}
-              {row('9:55', true)}
-              <div className="my-1 flex items-center">
-                <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                <div className="h-px flex-1 bg-blue-500" />
-              </div>
-              {row('10:30')}
-              {row('11:15')}
-              {row('12:50')}
-              {row('13:50')}
-            </div>
-          </div>
-        </>
-      }
-    >
-      <Pop className="left-[3%] right-[3%] top-[48%] p-3">
-        <div className="relative mt-4">
+    <>
+      <ScreenHead title="TDE at MSRC 1.7 CW" tabs={['Schedule', 'Details', 'My notes']} />
+      <div className="flex flex-col gap-1.5 px-3 pt-2">
+        {SATURDAY.slice(3, 7).map(([time, onTrack, inClass]) => <SessionSketch key={time} time={time} groups={[onTrack, inClass]} past />)}
+        <div className="my-0.5 flex items-center">
+          <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+          <div className="h-px flex-1 bg-blue-500" />
+        </div>
+        {SATURDAY.slice(7).map(([time, onTrack, inClass]) => <SessionSketch key={time} time={time} groups={[onTrack, inClass]} />)}
+      </div>
+    </>
+  )
+}
+
+/**
+ * The schedule, every group on it, and over it the same tab filtered to
+ * Orange, as the run group picker leaves it: the time now, and Orange's
+ * next session, at 11:15.
+ */
+function ScheduleGlimpse() {
+  return (
+    <PhoneMock screen={<ScheduleScreen />}>
+      <Pop className="right-0 top-[47%] w-[80%] p-2.5">
+        {/* The run group picker, Orange picked. */}
+        <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1 shadow-sm">
+          <GroupBadge group={ORANGE} size="sm" />
+          <ChevronDown size={14} className="text-gray-400" />
+        </span>
+        <div className="relative mt-6">
           <div className="flex items-center">
             <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
             <div className="h-0.5 flex-1 bg-blue-500" />
           </div>
-          <span className="absolute -top-5 left-4 font-mono text-xs font-semibold text-blue-500">10:12 AM</span>
-          <span className="absolute -top-5 right-0 text-xs text-gray-400">Next activity starts in <span className="font-semibold">18 min</span></span>
+          <span className="absolute -top-5 left-3 font-mono text-[10px] font-semibold text-blue-500">11:02 AM</span>
+          <span className="absolute -top-5 right-0 text-[10px] text-gray-400">Next activity starts in <span className="font-semibold">13 min</span></span>
         </div>
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <span className="flex w-[4.5rem] shrink-0 items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
-            10:30<span className="font-sans text-[10px] font-normal text-gray-400">AM</span>
+        <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
+          <span className="flex shrink-0 items-baseline gap-0.5 font-mono text-base font-semibold text-gray-900">
+            11:15<span className="font-sans text-[9px] font-normal text-gray-400">AM</span>
           </span>
-          <span className="w-14 shrink-0 text-xs text-gray-900">On track</span>
-          <GroupBadge group={ORANGE} />
+          <span className="shrink-0 text-[11px] text-gray-900">On track</span>
+          <GroupBadge group={ORANGE} size="sm" />
         </div>
       </Pop>
     </PhoneMock>
@@ -202,18 +218,18 @@ function LapsGlimpse() {
  * — the newest black and shaded. The skills' names are gray bars here: the
  * report card is The Drivers Edge's, and its skills are theirs to show.
  */
-function WheelSketch({ labels = true, picked }: { labels?: boolean; picked?: number }) {
+function WheelSketch({ picked }: { picked?: number }) {
   const spokes = 9
-  const [c, R] = [100, labels ? 62 : 90]
+  const [c, R] = [100, 62]
   const at = (i: number, pct: number): [number, number] => {
     const a = -Math.PI / 2 + (i * 2 * Math.PI) / spokes
     return [c + Math.cos(a) * (pct / 100) * R, c + Math.sin(a) * (pct / 100) * R]
   }
   const ring = (pct: number) => Array.from({ length: spokes }, (_, i) => at(i, pct).join(',')).join(' ')
   const cards = [
-    { scores: [50, 45, 55, 40, 50, 45, 40, 35, 45], stroke: '#8b93a1', width: 1.75, fill: 'none', shape: 'triangle' },
-    { scores: [60, 55, 60, 50, 60, 55, 50, 45, 55], stroke: '#4b5563', width: 1.75, fill: 'none', shape: 'square' },
-    { scores: [80, 70, 75, 65, 75, 70, 60, 65, 70], stroke: '#111827', width: 2, fill: 'rgba(17, 24, 39, 0.07)', shape: 'circle' },
+    { scores: [50, 40, 45, 30, 55, 35, 45, 30, 40], stroke: '#8b93a1', width: 1.75, fill: 'none', shape: 'triangle' },
+    { scores: [65, 45, 60, 35, 70, 50, 55, 40, 50], stroke: '#4b5563', width: 1.75, fill: 'none', shape: 'square' },
+    { scores: [80, 55, 75, 40, 90, 60, 70, 45, 65], stroke: '#111827', width: 2, fill: 'rgba(17, 24, 39, 0.07)', shape: 'circle' },
   ]
   return (
     <svg viewBox="0 0 200 200" className="block w-full">
@@ -234,7 +250,7 @@ function WheelSketch({ labels = true, picked }: { labels?: boolean; picked?: num
           })}
         </g>
       ))}
-      {labels && Array.from({ length: spokes }, (_, i) => {
+      {Array.from({ length: spokes }, (_, i) => {
         const a = -Math.PI / 2 + (i * 2 * Math.PI) / spokes
         const [x, y] = [c + Math.cos(a) * (R + 13), c + Math.sin(a) * (R + 13)]
         const w = i === picked ? 30 : 22
@@ -246,9 +262,10 @@ function WheelSketch({ labels = true, picked }: { labels?: boolean; picked?: num
 }
 
 /**
- * Instructor evaluations: the skills wheel popping out of the page, and
- * under it on the page, as there, a skill's score at each event — its gain
- * since the event before hatched green on the end of its bar.
+ * Instructor evaluations: the report cards at a glance and a skill's score
+ * at each event on the page — its gain since the event before hatched green
+ * on the end of its bar — and the skills wheel popping out over it. Skills
+ * are gray bars, as on the wheel.
  */
 function EvaluationGlimpse() {
   const rows = [['Sep 12, 2026', 80, 10], ['Jul 19, 2026', 70, 10], ['Jun 7, 2026', 60, undefined]] as const
@@ -257,7 +274,19 @@ function EvaluationGlimpse() {
       screen={
         <>
           <ScreenHead title="Instructor evaluations" />
-          <div className="mx-3 mt-2 rounded-md border border-gray-100 bg-white p-2"><WheelSketch labels={false} /></div>
+          <div className="mx-3 mt-2 grid grid-cols-2 divide-x divide-gray-100 rounded-md border border-gray-100 bg-white">
+            {([['+20', '+15', '+10'], ['50%', '55%', '60%']] as const).map((values, k) => (
+              <div key={k} className="p-1.5">
+                <span className="mb-1.5 block h-1.5 w-12 rounded-full bg-gray-300" />
+                {values.map(v => (
+                  <div key={v} className="flex items-center justify-between py-0.5">
+                    <span className="h-1 w-8 rounded-full bg-gray-200" />
+                    <span className="text-[7px] font-semibold text-gray-900">{v}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
           <div className="mx-3 mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
             <span className="block h-1.5 w-16 rounded-full bg-gray-900" />
             {rows.map(([date, score, change]) => (
@@ -271,10 +300,16 @@ function EvaluationGlimpse() {
               </div>
             ))}
           </div>
+          <div className="mx-3 mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+            <p className="text-[8px] font-semibold text-gray-900">TDE at MSRC 1.7 CW</p>
+            <div className="mt-1 flex flex-col gap-1">
+              {['90%', '75%'].map(w => <span key={w} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
+            </div>
+          </div>
         </>
       }
     >
-      <Pop className="left-0 top-[4%] w-[56%] p-1.5">
+      <Pop className="right-0 top-[3%] w-[54%] p-1.5">
         <WheelSketch picked={0} />
       </Pop>
     </PhoneMock>
@@ -295,14 +330,18 @@ function GarageGlimpse() {
           <div className="px-3 pt-2">
             <div className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1.5">
               <CarIcon size={11} className="text-gray-500" />
-              <span className="flex-1 truncate text-[8px] font-semibold text-gray-900">2019 Mustang GT</span>
+              <span className="flex-1 truncate text-[8px] font-semibold text-gray-900">2019 Miata</span>
               <ChevronRight size={8} className="text-gray-400" />
             </div>
-            {['10:30 AM', '11:15 AM', '1:50 PM'].map(time => (
+            {/* Your sessions, Orange's, their laps under them. */}
+            {['9:30', '11:15', '1:50'].map(time => (
               <div key={time} className="mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
-                <p className="mb-1.5 text-[8px] font-semibold text-gray-900">{time} · Orange</p>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="w-6 font-mono text-[8px] font-semibold text-gray-900">{time}</span>
+                  <span className="h-2.5 w-7 rounded-full bg-runorange-500" />
+                </div>
                 <div className="flex flex-col gap-1">
-                  {['85%', '70%', '78%'].map((w, i) => <span key={i} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
+                  {['85%', '70%'].map((w, i) => <span key={i} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
                 </div>
               </div>
             ))}
@@ -310,17 +349,18 @@ function GarageGlimpse() {
         </>
       }
     >
-      <Pop className="right-0 top-[16%] w-[64%] p-2.5">
+      {/* Narrow enough that Orange's color shows beside it. */}
+      <Pop className="right-0 top-[16%] w-[57%] p-2.5">
         <p className="text-[14px] font-bold text-gray-900">Your car</p>
         <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-gray-200 p-1.5">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-500"><CarIcon size={16} /></span>
-          <span className="flex-1 truncate text-[12px] font-semibold text-gray-900">2019 Mustang GT</span>
+          <span className="flex-1 truncate text-[12px] font-semibold text-gray-900">2019 Miata</span>
           <ChevronRight size={14} className="text-gray-400" />
         </div>
         <dl className="mt-1 text-[12px]">
           <div className="flex items-center justify-between gap-2 border-b border-gray-100 py-1">
             <dt className="text-[11px] font-medium text-gray-500">Lug nut torque</dt>
-            <dd className="text-gray-900">150 ft·lb</dd>
+            <dd className="text-gray-900">80 ft·lb</dd>
           </div>
         </dl>
         <p className="mt-1.5 text-[11px] font-semibold text-gray-900">At this event</p>
@@ -348,18 +388,18 @@ function Alert({ className, when, body }: { className: string; when: string; bod
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-800 font-mono text-[10px] font-bold text-white">{'{ }'}</span>
       <span className="min-w-0 flex-1 leading-tight">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-[12px] font-semibold text-gray-900">🟠 Orange · in 10m</span>
-          <span className="shrink-0 text-[10px] text-gray-400">{when}</span>
+          <span className="truncate text-[11px] font-semibold text-gray-900">🟠 Orange · in 10m</span>
+          <span className="shrink-0 text-[9px] text-gray-400">{when}</span>
         </span>
-        <span className="block truncate text-[12px] text-gray-700">{body}</span>
+        <span className="block truncate text-[11px] text-gray-700">{body}</span>
       </span>
     </Pop>
   )
 }
 
 /**
- * The widget on a phone's Home Screen, and an alert it sent popping up over
- * the top of the phone, clear of it: the Large widget as the setup page
+ * The widget on a phone's Home Screen, and an alert it sent flying in from
+ * the right, over a corner of the phone: the Large widget as the setup page
  * shows it (10:05 on the TDE event's Saturday), and Orange's alert for its
  * 9:55 class.
  */
@@ -377,26 +417,37 @@ function WidgetGlimpse() {
         </div>
       }
     >
-      <Alert className="left-0 right-0 top-[-3%]" when="20m ago" body="Classroom at 9:55 AM" />
+      <Alert className="right-0 top-[12%] w-[72%]" when="20m ago" body="Classroom at 9:55 AM" />
     </PhoneMock>
   )
 }
 
-/** Signed out, the Garage asks you to sign in; the schedules never do. */
-function SignInGlimpse() {
+/** A code to scan for `url`, as the share sheet draws it. */
+function useQrCode(url: string): string | null {
+  const [qr, setQr] = useState<string | null>(null)
+  useEffect(() => {
+    QRCode.toDataURL(url, { margin: 1, width: 240 }).then(setQr, () => setQr(null))
+  }, [url])
+  return qr
+}
+
+/** The schedule, and over it the sheet that shares it: a code to scan, and the link. */
+function ShareGlimpse() {
+  const url = eventShareUrl('2026-09-11_msrc-1-7')
+  const qr = useQrCode(url)
   return (
-    <PhoneMock
-      screen={
-        <>
-          <ScreenHead title="Garage" />
-          <div className="mx-3 mt-3 rounded-xl border border-dashed border-gray-200 bg-white px-3 py-8 text-center">
-            <Lock size={16} className="mx-auto text-gray-400" />
-            <p className="mt-1.5 text-[10px] font-medium text-gray-700">Sign in to manage your cars</p>
-            <span className="mt-3 inline-block rounded-md bg-gray-900 px-2.5 py-1.5 text-[9px] font-medium text-white">Sign in with Google</span>
-          </div>
-        </>
-      }
-    />
+    <PhoneMock screen={<ScheduleScreen />}>
+      <Pop className="right-0 top-[18%] w-[58%] p-3 text-center">
+        <p className="text-[13px] font-bold text-gray-900">Share this event</p>
+        {qr
+          ? <img src={qr} alt="" width={112} height={112} className="mx-auto mt-2 rounded-md border border-gray-200" />
+          : <div className="mx-auto mt-2 h-28 w-28 rounded-md bg-gray-100" />}
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 text-left">
+          <span className="min-w-0 flex-1 truncate text-[10px] text-gray-800">{url}</span>
+          <Copy size={11} className="shrink-0 text-gray-400" />
+        </div>
+      </Pop>
+    </PhoneMock>
   )
 }
 
@@ -448,7 +499,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="schedule"
           Icon={CalendarClock}
           title="See what’s on track now."
-          text="Each event’s schedule follows the day and counts down to what’s next. Pick your run group and your sessions stand out."
+          text="Each event’s schedule follows the day and counts down to what’s next. Filter it to your run group, or any you’re following, to see just their sessions."
         >
           <ScheduleGlimpse />
         </Feature>
@@ -465,8 +516,8 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
         <Feature
           id="evaluations"
           Icon={ClipboardCheck}
-          title="Keep what your instructor said."
-          text="Note what they told you after each session, or fill in the report card. Then see which skills have come along most."
+          title="See how you’re improving."
+          text="Keep your instructor’s notes and report cards from every event, and see each skill come along over time."
         >
           <EvaluationGlimpse />
         </Feature>
@@ -474,8 +525,8 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
         <Feature
           id="garage"
           Icon={GarageIcon}
-          title="Know what’s on your car."
-          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and what was on it. Share the car with whoever else drives it."
+          title="Your car’s setup, event by event."
+          text="Log tires, pads and fluids as you change them, and each event keeps the car you brought and how it was set up. Share the car with whoever else drives it."
         >
           <GarageGlimpse />
         </Feature>
@@ -483,19 +534,19 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
         <Feature
           id="widget"
           Icon={Smartphone}
-          title="On your Home Screen."
-          text="On an iPhone, the widget shows what’s next on your Home Screen, and alerts you before your sessions. Set it up under More → iOS widget."
+          title="What’s next, without opening the app."
+          text="On iPhone, swipe over to the widget without unlocking, or keep it on your Home Screen. Or skip the widget and just get alerts before your run group’s sessions, as far ahead as you like. Set it up under More → iOS widget."
         >
           <WidgetGlimpse />
         </Feature>
 
         <Feature
-          id="private"
-          Icon={Lock}
-          title="Open schedules. Private notes."
-          text="Anyone can see the schedules, with no account. Your laps, notes and garage stay private to your account."
+          id="share"
+          Icon={Share}
+          title="Share an event with anyone."
+          text="Send a link, or let them scan the code. Anyone can open the schedule, no account needed. Your laps, notes and car stay private to your account."
         >
-          <SignInGlimpse />
+          <ShareGlimpse />
         </Feature>
       </div>
     </div>
