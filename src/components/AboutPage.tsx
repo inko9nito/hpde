@@ -337,7 +337,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="private"
           Icon={Lock}
           title="Open schedules. Private notes."
-          text="Anyone can see the schedules, with no account. Your laps, notes and garage are only for you and the site’s admins."
+          text="Anyone can see the schedules, with no account. Your laps, notes and garage stay private to your account."
         >
           <Glimpse><SignInGlimpse /></Glimpse>
         </Feature>

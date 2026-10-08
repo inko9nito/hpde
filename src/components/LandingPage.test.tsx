@@ -176,7 +176,7 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
       'Open schedules. Private notes.',
     ])
     // Who sees what, plainly.
-    expect(within(screen.getByRole('region', { name: 'Open schedules. Private notes.' })).getByText(/only for you and the site’s admins/)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Open schedules. Private notes.' })).getByText(/stay private to your account/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('link', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))
