@@ -406,7 +406,7 @@ function WidgetGlimpse() {
               wallpaper, four to a row as wide as the widget, their
               corners about a fifth of their size. */}
           <div className="mt-5 grid grid-cols-4 gap-x-2.5 gap-y-3">
-            {Array.from({ length: 8 }, (_, i) => <span key={i} className="aspect-square rounded-[22%] bg-white/15" />)}
+            {Array.from({ length: 8 }, (_, i) => <span key={i} className="aspect-square rounded-[22%] bg-white/25" />)}
           </div>
         </div>
       }
