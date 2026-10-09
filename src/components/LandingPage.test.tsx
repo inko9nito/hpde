@@ -160,13 +160,12 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     expect(await screen.findByRole('heading', { level: 1, name: 'iOS widget' })).toBeInTheDocument()
   })
 
-  it('About says what the app is for, then a headline for each feature, and closes back to More (#455)', async () => {
+  it('About has a headline for each feature, under its title, and closes back to More (#455)', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     await userEvent.click(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getByRole('link', { name: 'About' }))
     await waitFor(() => expect(window.location.hash).toBe('#/about'))
     expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
-    expect(screen.getByText('Your track days, in one place')).toBeInTheDocument()
     const about = screen.getByRole('heading', { level: 1, name: 'About' }).closest<HTMLElement>('.fixed')!
     expect(within(about).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
       'See where you need to be.',

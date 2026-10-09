@@ -3,7 +3,7 @@ import { CalendarClock, ChevronRight, ClipboardCheck, Smartphone, Timer, UserPlu
 import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { ScoreBar } from './ReportCardSkills'
-import { SheetCloseLink } from './SheetCloseLink'
+import { SheetTitle } from './SheetCloseLink'
 import { TrackIcon } from './TrackIcon'
 import widgetLarge from '../assets/widget-large.png'
 import type { RunGroupConfig } from '../types'
@@ -527,7 +527,7 @@ type GlyphIcon = (props: { size?: number; strokeWidth?: number; className?: stri
 
 function Feature({ id, Icon, title, text, children }: { id: string; Icon: GlyphIcon; title: string; text: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={`about-${id}`} className="pt-16 text-center">
+    <section aria-labelledby={`about-${id}`} className="pt-16 text-center first-of-type:pt-10">
       <Icon size={24} strokeWidth={1.75} className="mx-auto text-red-600" aria-hidden="true" />
       <h2 id={`about-${id}`} className="mx-auto mt-2 max-w-[300px] text-balance font-rubik text-[22px] font-bold leading-tight tracking-tight text-gray-900">
         {title}
@@ -539,9 +539,8 @@ function Feature({ id, Icon, title, text, children }: { id: string; Icon: GlyphI
 }
 
 /**
- * About (#455): what the app is for, then its features one at a time. A page
- * sheet closed with ✕, as the iOS widget page beside it on the More tab is
- * (#415). `closeHref`: where ✕ goes — the tab it was opened from;
+ * About (#455): the app's features, one at a time. A page sheet closed with
+ * ✕, as the iOS widget page beside it on the More tab is (#415). `closeHref`: where ✕ goes — the tab it was opened from;
  * `onClose`, how (back to it, #429).
  */
 export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; onClose?: () => void } = {}) {
@@ -549,22 +548,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
     // As tall as the sheet it's on, at least (#415).
     <div className="min-h-full bg-gray-50">
       <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(4rem+env(safe-area-inset-bottom))]">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-gray-900">About</h1>
-          <SheetCloseLink href={closeHref} onClose={onClose} />
-        </div>
-
-        <div className="mt-4 flex items-center gap-3.5">
-          <img src="/apple-touch-icon.png" alt="" width={56} height={56} className="h-14 w-14 shrink-0 rounded-[13px]" />
-          <div className="min-w-0">
-            <p className="font-rubik text-lg font-bold leading-tight text-gray-900">HPDE Events</p>
-            <p className="text-[15px] text-gray-500">Your track days, in one place</p>
-          </div>
-        </div>
-        <p className="mt-4 text-[15px] leading-normal text-gray-600">
-          The day’s schedule for every driver at an HPDE event. Sign in, and it keeps your laps, your
-          instructor’s notes and your car too.
-        </p>
+        <SheetTitle title="About" href={closeHref} onClose={onClose} />
 
         <Feature
           id="schedule"
