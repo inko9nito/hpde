@@ -395,9 +395,6 @@ function Alert({ className, when, title, body }: { className: string; when: stri
  * session comes in now, over the second row of app icons under the widget.
  */
 function WidgetGlimpse() {
-  // App icons as a phone's are: about a sixth of the screen across, four
-  // to a row, their corners about a fifth of their size.
-  const icons = ['bg-slate-400/70', 'bg-gray-400/60', 'bg-slate-500/50', 'bg-zinc-400/60', 'bg-gray-500/50', 'bg-slate-400/60', 'bg-zinc-500/45', 'bg-slate-500/55']
   return (
     <PhoneMock
       homeScreen
@@ -405,8 +402,11 @@ function WidgetGlimpse() {
       screen={
         <div className="px-3 pt-6">
           <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top shadow-sm" />
-          <div className="mt-4 grid grid-cols-4 gap-x-[18px] gap-y-[18px] px-1.5">
-            {icons.map((bg, i) => <span key={i} className={`aspect-square rounded-[22%] ${bg}`} />)}
+          {/* App icons, just hinted at: faint white squares on the
+              wallpaper, four to a row as wide as the widget, their
+              corners about a fifth of their size. */}
+          <div className="mt-5 grid grid-cols-4 gap-x-2.5 gap-y-3">
+            {Array.from({ length: 8 }, (_, i) => <span key={i} className="aspect-square rounded-[22%] bg-white/15" />)}
           </div>
         </div>
       }
