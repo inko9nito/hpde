@@ -1713,7 +1713,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(lapCalls('GET')).toHaveLength(0)
   })
 
-  it('switches tabs from the tab bar; More has tiles for Instructor evaluations and the Garage — which opens over it — and a list of Share and the iOS widget', async () => {
+  it('switches tabs from the tab bar; More has tiles for Instructor evaluations and the Garage — which opens over it — and a list of About, Share and the iOS widget', async () => {
     openAt('#/')
     expect(await screen.findByRole('heading', { level: 1, name: 'HPDE Events' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Events' })).toHaveAttribute('aria-current', 'page')
@@ -1724,7 +1724,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'More' })).toBeInTheDocument()
     const items = within(screen.getByRole('list', { name: 'More' })).getAllByRole('link')
     expect(items.map(a => a.getAttribute('href'))).toEqual(['#/evaluations', '#/garage'])
-    expect(within(screen.getByRole('list', { name: 'Share and widget' })).getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/share', '#/widget-setup'])
+    expect(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/about', '#/share', '#/widget-setup'])
 
     await userEvent.click(items[1])
     expect(window.location.hash).toBe('#/garage')

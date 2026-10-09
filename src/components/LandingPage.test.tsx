@@ -136,12 +136,13 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('opens Share and the iOS widget from a list under the tiles', async () => {
+  it('opens About, Share and the iOS widget from a list under the tiles', async () => {
     render(<EventsProvider><App /></EventsProvider>)
 
     expect(within(screen.getByRole('list', { name: 'More' })).getAllByRole('link').map(l => l.textContent)).toEqual(['Instructor evaluations', 'Garage'])
-    const links = screen.getByRole('list', { name: 'Share and widget' })
-    expect(within(links).getAllByRole('link').map(l => l.textContent)).toEqual(['Share', 'iOS widget'])
+    const links = screen.getByRole('list', { name: 'About, Share and iOS widget' })
+    // About first (#455).
+    expect(within(links).getAllByRole('link').map(l => l.textContent)).toEqual(['About', 'Share', 'iOS widget'])
     // The menu that held them beside the account button is gone.
     expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument()
 
@@ -154,9 +155,31 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     await userEvent.click(within(share).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(window.location.hash).toBe('#/more'))
 
-    await userEvent.click(within(screen.getByRole('list', { name: 'Share and widget' })).getByRole('link', { name: 'iOS widget' }))
+    await userEvent.click(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getByRole('link', { name: 'iOS widget' }))
     await waitFor(() => expect(window.location.hash).toBe('#/widget-setup'))
     expect(await screen.findByRole('heading', { level: 1, name: 'iOS widget' })).toBeInTheDocument()
+  })
+
+  it('About has a headline for each feature, under its title, and closes back to More (#455)', async () => {
+    render(<EventsProvider><App /></EventsProvider>)
+
+    await userEvent.click(within(screen.getByRole('list', { name: 'About, Share and iOS widget' })).getByRole('link', { name: 'About' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/about'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toBeInTheDocument()
+    const about = screen.getByRole('heading', { level: 1, name: 'About' }).closest<HTMLElement>('.fixed')!
+    expect(within(about).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
+      'See where you need to be.',
+      'Paste your laps. See your best.',
+      'See how you’re improving.',
+      'Your car’s setup, event by event.',
+      'Share a car, and its history.',
+      'See what’s next, without opening the app.',
+    ])
+    // Sharing a car is sharing its history, not entering it twice.
+    expect(within(screen.getByRole('region', { name: 'Share a car, and its history.' })).getByText(/same change log/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Close' }))
+    await waitFor(() => expect(window.location.hash).toBe('#/more'))
   })
 
   it('shows the build date on the More tab, not under the events list', async () => {

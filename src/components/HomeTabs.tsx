@@ -1,18 +1,19 @@
 import type { ComponentType, CSSProperties, ReactNode } from 'react'
-import { CalendarDays, ChevronRight, ClipboardCheck, Ellipsis, Route, Share, Smartphone } from 'lucide-react'
+import { CalendarDays, ChevronRight, ClipboardCheck, Ellipsis, Info, Route, Share, Smartphone } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { GarageIcon } from './CarIcons'
 import { AccountButton } from './AccountButton'
 import { BackButton } from './EventHeader'
 import { Footer } from './Footer'
 import { SHARE_HASH } from './ShareSheet'
+import { ABOUT_HASH } from './AboutPage'
 
 // The app's top-level sections (#274): Events (the list of events), Tracks
 // (lap times by track layout) and More (#345), picked from a tab bar along
 // the bottom, as in an iOS app. More is the rest — Instructor evaluations
 // and the Garage, each of which slides in over it, as pushed pages — an
-// event, a track — slide in over the tabs; and Share and the iOS widget
-// (#416), which slide up — as tiles.
+// event, a track — slide in over the tabs; and About (#455), Share and
+// the iOS widget (#416), which slide up — as tiles.
 
 export type HomeTab = 'events' | 'tracks' | 'more'
 
@@ -126,9 +127,11 @@ const MORE_ITEMS: readonly { href: string; label: string; Icon: TileIcon }[] = [
   { href: MORE_PAGE_HASH.garage, label: 'Garage', Icon: GarageIcon },
 ]
 
-// From the menu that was beside the account button (#416): a sheet (#411)
-// and a page sheet (#415), both up from the bottom.
+// About (#455), first; then, from the menu that was beside the account
+// button (#416), Share and the iOS widget. Share is a sheet (#411), the
+// others page sheets (#415): all up from the bottom.
 const MORE_LINKS: readonly { href: string; label: string; Icon: LucideIcon }[] = [
+  { href: ABOUT_HASH, label: 'About', Icon: Info },
   { href: SHARE_HASH, label: 'Share', Icon: Share },
   { href: '#/widget-setup', label: 'iOS widget', Icon: Smartphone },
 ]
@@ -137,7 +140,7 @@ const MORE_LINKS: readonly { href: string; label: string; Icon: LucideIcon }[] =
  * The More tab (#345): the rest of the app's pages, as tiles (#371) — each
  * opening its page over it — with outlined icons, as in the tab bar it's
  * the overflow of (white on black is for tracks). Under them, as a list,
- * as in iOS Settings (#416): Share and the iOS widget. Then the build date
+ * as in iOS Settings (#416): About (#455), Share and the iOS widget. Then the build date
  * (#395), out of the way of the events list.
  */
 export function MoreTab() {
@@ -158,7 +161,7 @@ export function MoreTab() {
             </li>
           ))}
         </ul>
-        <ul className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="Share and widget">
+        <ul className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white" aria-label="About, Share and iOS widget">
           {MORE_LINKS.map(({ href, label, Icon }) => (
             <li key={href}>
               <a

@@ -285,7 +285,7 @@ test('Share slides up from its row on the More tab, over the tab (#278, #416)', 
   // The menu that held it beside the account button is gone (#416).
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0)
-  await page.getByRole('list', { name: 'Share and widget' }).getByRole('link', { name: 'Share' }).click()
+  await page.getByRole('list', { name: 'About, Share and iOS widget' }).getByRole('link', { name: 'Share' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this app' })
   await expect(sheet.getByRole('button', { name: 'Copy link' })).toContainText('https://myhpde.netlify.app/')
   await expectShareSheet(page, sheet)
@@ -453,7 +453,7 @@ test('back from an event’s page, the list is still scrolled where it was (#389
 test('Share and the iOS widget slide up from the bottom, from the More tab (#278, #416)', async ({ page }) => {
   await stubEvents(page)
   await page.goto('/#/more')
-  const links = page.getByRole('list', { name: 'Share and widget' })
+  const links = page.getByRole('list', { name: 'About, Share and iOS widget' })
   // Share, as a sheet (#411).
   await links.getByRole('link', { name: 'Share' }).click()
   const sheet = page.getByRole('dialog', { name: 'Share this app' })
@@ -468,6 +468,35 @@ test('Share and the iOS widget slide up from the bottom, from the More tab (#278
   const widget = page.getByRole('heading', { level: 1, name: 'iOS widget' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
   await expect.poll(async () => (await widget.boundingBox())?.y).toBe(18)
   await expect(widget).toHaveCSS('border-top-left-radius', '12px')
+  await page.getByRole('link', { name: 'Close' }).click()
+  await expect(page).toHaveURL(/#\/more$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()
+})
+
+test('About slides up from the top of the More tab\'s list, as a page sheet with ✕ (#455)', async ({ page }) => {
+  await stubEvents(page)
+  await page.goto('/#/more')
+  const links = page.getByRole('list', { name: 'About, Share and iOS widget' })
+  await expect(links.getByRole('link').first()).toHaveText('About')
+  const slide = await trackSlide(page, () => links.getByRole('link', { name: 'About' }).click(), 'About')
+  expect(slide).toEqual({ fromBelow: true, fromSide: false })
+  const about = page.getByRole('heading', { level: 1, name: 'About' }).locator('xpath=ancestor::div[contains(@class, "fixed")][1]')
+  await expect.poll(async () => (await about.boundingBox())?.y).toBe(18)
+  await expect(about).toHaveCSS('border-top-left-radius', '12px')
+  await expect(page.getByRole('heading', { level: 2, name: 'Your car’s setup, event by event.' })).toBeAttached()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  // A card popping out over a phone never lines up with its edges: each is
+  // well inside the phone or well outside it.
+  const near = await about.locator('[data-phone-mock]').evaluateAll(mocks => mocks.flatMap(mock => {
+    const phone = mock.querySelector('[data-phone]')!.getBoundingClientRect()
+    return [...mock.querySelectorAll('[data-pop]')].flatMap(pop => {
+      const r = pop.getBoundingClientRect()
+      return Object.entries({ left: r.left - phone.left, right: r.right - phone.right, top: r.top - phone.top, bottom: r.bottom - phone.bottom })
+        .filter(([, gap]) => Math.abs(gap) < 12)
+        .map(([edge, gap]) => `${mock.closest('section')?.getAttribute('aria-labelledby')} ${edge} ${Math.round(gap)}px`)
+    })
+  }))
+  expect(near).toEqual([])
   await page.getByRole('link', { name: 'Close' }).click()
   await expect(page).toHaveURL(/#\/more$/)
   await expect(page.getByRole('heading', { level: 1, name: 'More' })).toBeInViewport()

@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Check, Copy, X, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid, SlidersHorizontal } from 'lucide-react'
+import { Check, Copy, Bell, BellOff, RefreshCw, ArrowUpRight, Plus, Minus, ChevronDown, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import loaderScript from '../../scripts/hpde-widget-loader.js?raw'
 import widgetSmall from '../assets/widget-small.png'
 import widgetMedium from '../assets/widget-medium.png'
 import widgetLarge from '../assets/widget-large.png'
 import notificationsImg from '../assets/notifications.png'
 import editWidgetImg from '../assets/edit-widget.jpg'
+import { SheetTitle } from './SheetCloseLink'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/scriptable/id1405459188'
 
@@ -130,21 +131,7 @@ export function WidgetSetupPage({ closeHref = '#/', onClose }: { closeHref?: str
     // As tall as the sheet it's on, at least (#415).
     <div className="min-h-full bg-gray-50">
       <div className="mx-auto max-w-lg px-4 pt-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-gray-900">iOS widget</h1>
-          {/* A sheet's ✕, as on iOS (#415): a gray circle. */}
-          <a
-            href={closeHref}
-            onClick={onClose && (e => {
-              e.preventDefault()
-              onClose()
-            })}
-            aria-label="Close"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600 transition-colors hover:bg-gray-200"
-          >
-            <X size={16} strokeWidth={2.5} />
-          </a>
-        </div>
+        <SheetTitle title="iOS widget" href={closeHref} onClose={onClose} className="mb-3" />
 
         <p className="mb-6 text-[15px] leading-relaxed text-gray-600">
           See what's next on track without opening the app, and get an alert before your sessions.
