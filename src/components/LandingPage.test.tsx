@@ -169,12 +169,12 @@ describe('the More tab: Share, the iOS widget and the build date (#395, #416)', 
     expect(screen.getByText('Your track days, in one place')).toBeInTheDocument()
     const about = screen.getByRole('heading', { level: 1, name: 'About' }).closest<HTMLElement>('.fixed')!
     expect(within(about).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual([
-      'See what’s on track now.',
+      'See where you need to be.',
       'Paste your laps. See your best.',
       'See how you’re improving.',
       'Your car’s setup, event by event.',
       'Share a car, and its history.',
-      'What’s next, without opening the app.',
+      'See what’s next, without opening the app.',
     ])
     // Sharing a car is sharing its history, not entering it twice.
     expect(within(screen.getByRole('region', { name: 'Share a car, and its history.' })).getByText(/same change log/)).toBeInTheDocument()

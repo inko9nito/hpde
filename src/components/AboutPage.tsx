@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
-import { CalendarClock, ChevronDown, ChevronRight, ClipboardCheck, Smartphone, Timer, UserPlus } from 'lucide-react'
-import { Avatar, AvatarStack } from './Avatar'
+import { CalendarClock, ChevronRight, ClipboardCheck, Smartphone, Timer, UserPlus } from 'lucide-react'
 import { CarIcon, GarageIcon } from './CarIcons'
 import { GroupBadge } from './GroupBadge'
 import { ScoreBar } from './ReportCardSkills'
@@ -44,14 +43,16 @@ function Pop({ className, children }: { className: string; children: ReactNode }
  * A phone, drawn plainly, with a sketch of a page of the app on `screen`,
  * and at most one Pop over it (`children`) for the part that matters. A
  * Pop never lines up with the phone's edges: each of its edges is well
- * inside the phone or well outside it, so it reads as over the phone.
+ * inside the phone or well outside it, so it reads as over the phone. As
+ * tall for its width as a phone is; `homeScreen` gives it a soft wallpaper
+ * in place of a page's gray.
  */
-function PhoneMock({ screen, dark, wide, children }: { screen: ReactNode; dark?: boolean; wide?: boolean; children?: ReactNode }) {
+function PhoneMock({ screen, homeScreen, wide, children }: { screen: ReactNode; homeScreen?: boolean; wide?: boolean; children?: ReactNode }) {
   return (
-    <div className="relative mx-auto mt-8 h-[330px] w-full max-w-[320px] text-left" aria-hidden="true" data-phone-mock>
-      <div className={`absolute inset-y-0 left-1/2 ${wide ? 'w-[206px]' : 'w-[188px]'} -translate-x-1/2 rounded-[34px] bg-white p-[7px] shadow-[0_24px_48px_-24px_rgba(17,24,39,0.35)] ring-1 ring-gray-200`} data-phone>
-        <div className={`h-full overflow-hidden rounded-[27px] ${dark ? 'bg-gradient-to-b from-slate-500 to-slate-800' : 'bg-gray-50'}`}>
-          <div className={`mx-auto mt-2 h-1.5 w-9 rounded-full ${dark ? 'bg-white/25' : 'bg-gray-900/10'}`} />
+    <div className="relative mx-auto mt-8 h-[372px] w-full max-w-[320px] text-left" aria-hidden="true" data-phone-mock>
+      <div className={`absolute inset-y-0 left-1/2 ${wide ? 'w-[196px]' : 'w-[176px]'} -translate-x-1/2 rounded-[36px] bg-white p-[7px] shadow-[0_24px_48px_-24px_rgba(17,24,39,0.35)] ring-1 ring-gray-200`} data-phone>
+        <div className={`h-full overflow-hidden rounded-[29px] ${homeScreen ? 'bg-gradient-to-b from-[#e3e8f0] to-[#cdd5e1]' : 'bg-gray-50'}`}>
+          <div className={`mx-auto mt-2 h-1.5 w-9 rounded-full ${homeScreen ? 'bg-gray-900/15' : 'bg-gray-900/10'}`} />
           {screen}
         </div>
       </div>
@@ -103,22 +104,19 @@ function ScheduleScreen() {
   )
 }
 
+/** The run group in class at 11:15. */
+const PURPLE_GROUP: RunGroupConfig = { id: 'purple', label: 'Purple', bgClass: 'bg-runpurple-500', textClass: 'text-white' }
+
 /**
- * The schedule, every group on it, and over it the same tab filtered to
- * Orange, as the run group picker leaves it: the time now, and Orange's
- * next session, at 11:15.
+ * The schedule, every group on it, and over it the time now and the next
+ * session, as the Schedule tab shows them: who's on track, and who's in class.
  */
 function ScheduleGlimpse() {
   return (
     <PhoneMock screen={<ScheduleScreen />}>
       {/* From 20px outside the phone's left edge to past its right. */}
-      <Pop className="left-[calc(50%-114px)] right-0 top-[47%] p-2.5">
-        {/* The run group picker, Orange picked. */}
-        <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1 shadow-sm">
-          <GroupBadge group={ORANGE} size="sm" />
-          <ChevronDown size={14} className="text-gray-400" />
-        </span>
-        <div className="relative mt-6">
+      <Pop className="left-[calc(50%-108px)] right-0 top-[48%] p-2.5">
+        <div className="relative mt-4">
           <div className="flex items-center">
             <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
             <div className="h-0.5 flex-1 bg-blue-500" />
@@ -126,12 +124,21 @@ function ScheduleGlimpse() {
           <span className="absolute -top-5 left-3 font-mono text-[10px] font-semibold text-blue-500">11:02 AM</span>
           <span className="absolute -top-5 right-0 text-[10px] text-gray-400">Next activity starts in <span className="font-semibold">13 min</span></span>
         </div>
-        <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm">
-          <span className="flex shrink-0 items-baseline gap-0.5 font-mono text-base font-semibold text-gray-900">
+        <div className="mt-3 flex gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+          <span className="flex w-[4.25rem] shrink-0 items-baseline gap-0.5 font-mono text-base font-semibold text-gray-900">
             11:15<span className="font-sans text-[9px] font-normal text-gray-400">AM</span>
           </span>
-          <span className="shrink-0 text-[11px] text-gray-900">On track</span>
-          <GroupBadge group={ORANGE} size="sm" />
+          <span className="flex flex-1 flex-col gap-2">
+            <span className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-[11px] text-gray-900">On track</span>
+              <GroupBadge group={ORANGE} size="sm" />
+            </span>
+            <span className="border-t border-gray-100" />
+            <span className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-[11px] text-gray-900">In class</span>
+              <GroupBadge group={PURPLE_GROUP} size="sm" />
+            </span>
+          </span>
         </div>
       </Pop>
     </PhoneMock>
@@ -229,9 +236,11 @@ function WheelSketch({ picked }: { picked?: number }) {
   }
   const ring = (pct: number) => Array.from({ length: spokes }, (_, i) => at(i, pct).join(',')).join(' ')
   const cards = [
-    { scores: [50, 40, 45, 30, 55, 35, 45, 30, 40], stroke: '#8b93a1', width: 1.75, fill: 'none', shape: 'triangle' },
-    { scores: [65, 45, 60, 35, 70, 50, 55, 40, 50], stroke: '#4b5563', width: 1.75, fill: 'none', shape: 'square' },
-    { scores: [80, 55, 75, 40, 90, 60, 70, 45, 65], stroke: '#111827', width: 2, fill: 'rgba(17, 24, 39, 0.07)', shape: 'circle' },
+    // Each card its own shape: strong in some skills and weak in others,
+    // each a little different from the one before, not one shape grown.
+    { scores: [70, 30, 45, 55, 25, 40, 60, 35, 30], stroke: '#8b93a1', width: 1.75, fill: 'none', shape: 'triangle' },
+    { scores: [60, 50, 35, 70, 45, 55, 40, 30, 55], stroke: '#4b5563', width: 1.75, fill: 'none', shape: 'square' },
+    { scores: [75, 70, 60, 60, 80, 45, 65, 70, 50], stroke: '#111827', width: 2, fill: 'rgba(17, 24, 39, 0.07)', shape: 'circle' },
   ]
   return (
     <svg viewBox="0 0 200 200" className="block w-full">
@@ -264,19 +273,27 @@ function WheelSketch({ picked }: { picked?: number }) {
 }
 
 /**
- * Instructor evaluations: the report cards at a glance and a skill's score
- * at each event on the page — its gain since the event before hatched green
- * on the end of its bar — and the skills wheel popping out over it. Skills
- * are gray bars, as on the wheel.
+ * Instructor evaluations: an event's notes, the report cards at a glance,
+ * and at the foot of the page a skill's score at each event — a gain since
+ * the event before hatched green on the end of its bar, a drop hatched rose
+ * — with the skills wheel popping out over the page above them. Skills are
+ * gray bars, as on the wheel.
  */
 function EvaluationGlimpse() {
-  const rows = [['Sep 12, 2026', 80, 10], ['Jul 19, 2026', 70, 10], ['Jun 7, 2026', 60, undefined]] as const
+  // Up 15 at the newest, after a drop of 10 at the one before.
+  const rows = [['Sep 12, 2026', 75, 15], ['Jul 19, 2026', 60, -10], ['Jun 7, 2026', 70, undefined]] as const
   return (
     <PhoneMock
       screen={
         <>
           <ScreenHead title="Instructor evaluations" />
-          <div className="mx-3 mt-2 grid grid-cols-2 divide-x divide-gray-100 rounded-md border border-gray-100 bg-white">
+          <div className="mx-3 mt-2 rounded-md border border-gray-100 bg-white px-2 py-1.5">
+            <p className="text-[8px] font-semibold text-gray-900">TDE at MSRC 1.7 CW</p>
+            <div className="mt-1 flex flex-col gap-1">
+              {['90%', '75%'].map(w => <span key={w} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
+            </div>
+          </div>
+          <div className="mx-3 mt-1.5 grid grid-cols-2 divide-x divide-gray-100 rounded-md border border-gray-100 bg-white">
             {([['+20', '+15', '+10'], ['50%', '55%', '60%']] as const).map((values, k) => (
               <div key={k} className="p-1.5">
                 <span className="mb-1.5 block h-1.5 w-12 rounded-full bg-gray-300" />
@@ -293,25 +310,22 @@ function EvaluationGlimpse() {
             <span className="block h-1.5 w-16 rounded-full bg-gray-900" />
             {rows.map(([date, score, change]) => (
               <div key={date} className="border-b border-gray-100 py-1.5 last:border-b-0">
-                <div className="flex items-center gap-1.5 text-[7px]">
+                <div className="flex items-center gap-1.5 text-[8px]">
                   <span className="flex-1 text-gray-900">{date}</span>
-                  {change !== undefined && <span className="font-medium text-emerald-700">+{change}</span>}
+                  {change !== undefined && (
+                    <span className={`font-medium ${change > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{change > 0 ? `+${change}` : `−${-change}`}</span>
+                  )}
                   <span className="font-semibold text-gray-900">{score}%</span>
                 </div>
-                <div className="-mt-1 origin-left scale-y-75"><ScoreBar score={score} change={change} /></div>
+                <div className="-mt-1"><ScoreBar score={score} change={change} /></div>
               </div>
             ))}
-          </div>
-          <div className="mx-3 mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
-            <p className="text-[8px] font-semibold text-gray-900">TDE at MSRC 1.7 CW</p>
-            <div className="mt-1 flex flex-col gap-1">
-              {['90%', '75%'].map(w => <span key={w} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
-            </div>
           </div>
         </>
       }
     >
-      <Pop className="right-0 top-[8%] w-[54%] p-1.5">
+      {/* Out past the phone's top and right, clear of the score bars. */}
+      <Pop className="right-0 top-[-5%] w-[52%] p-1.5">
         <WheelSketch picked={0} />
       </Pop>
     </PhoneMock>
@@ -319,39 +333,14 @@ function EvaluationGlimpse() {
 }
 
 /**
- * An event's My notes, the car you brought on top, and its sheet over it:
- * the car, its lug nut torque, and what was on it at that event, from its
+ * The event's schedule, and over it the sheet of the car you brought: the
+ * car, its lug nut torque, and what was on it at that event, from its
  * change log.
  */
 function GarageGlimpse() {
   return (
-    <PhoneMock
-      screen={
-        <>
-          <ScreenHead title="TDE at MSRC 1.7 CW" tabs={['Schedule', 'Details', 'My notes']} active={2} />
-          <div className="px-3 pt-2">
-            <div className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1.5">
-              <CarIcon size={11} className="text-gray-500" />
-              <span className="flex-1 truncate text-[8px] font-semibold text-gray-900">2019 Miata</span>
-              <ChevronRight size={8} className="text-gray-400" />
-            </div>
-            {/* Your sessions, Orange's, their laps under them. */}
-            {['9:30', '11:15', '1:50'].map(time => (
-              <div key={time} className="mt-1.5 rounded-md border border-gray-100 bg-white px-2 py-1.5">
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <span className="w-6 font-mono text-[8px] font-semibold text-gray-900">{time}</span>
-                  <span className="h-2.5 w-7 rounded-full bg-runorange-500" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  {['85%', '70%'].map((w, i) => <span key={i} className="h-1 rounded-full bg-gray-200" style={{ width: w }} />)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      }
-    >
-      {/* Narrow enough that Orange's color shows beside it. */}
+    <PhoneMock screen={<ScheduleScreen />}>
+      {/* Narrow enough that the schedule's colors show beside it. */}
       <Pop className="right-0 top-[16%] w-[57%] p-2.5">
         <p className="text-[14px] font-bold text-gray-900">Your car</p>
         <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-gray-200 p-1.5">
@@ -383,14 +372,14 @@ function GarageGlimpse() {
 }
 
 /** An alert the widget scheduled, as it pops up over the phone. */
-function Alert({ className, when, body }: { className: string; when: string; body: string }) {
+function Alert({ className, when, title, body }: { className: string; when: string; title: string; body: string }) {
   return (
     <Pop className={`flex gap-2 p-2.5 ${className}`}>
       {/* Scriptable's icon: the widget's alerts come from it. */}
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-800 font-mono text-[10px] font-bold text-white">{'{ }'}</span>
       <span className="min-w-0 flex-1 leading-tight">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-[11px] font-semibold text-gray-900">🟠 Orange · in 10m</span>
+          <span className="truncate text-[11px] font-semibold text-gray-900">{title}</span>
           <span className="shrink-0 text-[9px] text-gray-400">{when}</span>
         </span>
         <span className="block truncate text-[11px] text-gray-700">{body}</span>
@@ -400,101 +389,121 @@ function Alert({ className, when, body }: { className: string; when: string; bod
 }
 
 /**
- * The widget on a phone's Home Screen, and an alert it sent flying in from
- * the right, over a corner of the phone: the Large widget as the setup page
- * shows it (10:05 on the TDE event's Saturday), and Orange's alert for its
- * 9:55 class.
+ * A moment on the TDE event's Saturday: at 10:10 the Large widget, at the
+ * top of the Home Screen, says Pink is next, in 15 minutes — as the setup
+ * page shows it — and the alert a 15-minute lead schedules for Pink's
+ * session comes in now, at the bottom right.
  */
 function WidgetGlimpse() {
   return (
     <PhoneMock
-      dark
+      homeScreen
       wide
       screen={
-        // Under the speaker (mt-2 and h-1.5: 14px), the same 12px round the widget on three sides.
-        <div className="flex h-[calc(100%-14px)] flex-col justify-end px-3 pb-3">
-          <div className="mb-3 grid grid-cols-4 gap-x-4 px-2">
-            {Array.from({ length: 4 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/20" />)}
+        <div className="px-3 pt-3">
+          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top shadow-sm ring-1 ring-black/5" />
+          <div className="mt-3.5 grid grid-cols-4 gap-x-4 gap-y-3 px-2">
+            {Array.from({ length: 6 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/70 ring-1 ring-black/5" />)}
           </div>
-          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top" />
         </div>
       }
     >
-      <Alert className="right-0 top-[12%] w-[72%]" when="20m ago" body="Classroom at 9:55 AM" />
+      <Alert className="right-0 top-[66%] w-[74%]" when="now" title="🎟️ Pink · in 15m" body="On track at 10:25 AM" />
     </PhoneMock>
   )
 }
 
-const PURPLE_GROUP: RunGroupConfig = { id: 'purple', label: 'Purple', bgClass: 'bg-runpurple-500', textClass: 'text-white' }
+/**
+ * A driver's picture, drawn: them in their helmet, on a color of their own,
+ * as a shared car shows its drivers' pictures.
+ */
+function HelmetAvatar({ helmet, ground, size }: { helmet: string; ground: string; size: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={size} height={size} className="shrink-0 rounded-full ring-2 ring-white">
+      <circle cx="20" cy="20" r="20" fill={ground} />
+      {/* Shoulders, then the helmet over them, its visor and a stripe. */}
+      <path d="M5 40c2-7 8-10 15-10s13 3 15 10z" fill="#1f2937" />
+      <path d="M9 23c0-9 6-15 13-15 7 0 11 5 11 12v6c0 2-1.5 3.5-3.5 3.5h-17C10.5 29.5 9 27 9 23z" fill={helmet} />
+      <path d="M17 16h14.5c1 0 1.5.7 1.5 1.5v4.5H18.5c-1.4 0-2.5-1.1-2.5-2.5v-1.5c0-1.1.4-2 1-2z" fill="#111827" />
+      <path d="M20 17.5h9" stroke="#ffffff" strokeOpacity=".45" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M12 13.5c3-3.5 8-4.5 12-3.5" stroke="#ffffff" strokeOpacity=".7" strokeWidth="2" strokeLinecap="round" fill="none" />
+    </svg>
+  )
+}
+
+const DRIVERS = [
+  { name: 'Alex', helmet: '#dc2626', ground: '#fee2e2', group: ORANGE },
+  { name: 'Sam', helmet: '#2563eb', ground: '#dbeafe', group: PURPLE_GROUP },
+]
 
 /**
- * A shared car's page: both drivers' pictures up top, by the way to share
- * it with another, and its Events — each with who drove it there, their
- * picture on their run group's badge — one of them popping out.
+ * A shared car's page: its drivers' pictures up top, by the way to share
+ * it with another, and its change log under them, kept by both — and over
+ * it one of its events, each driver's picture on the run group they drove
+ * in, as the car's Events tab shows them.
  */
 function SharedCarGlimpse() {
-  const drivers = [{ name: 'Alex', group: ORANGE }, { name: 'Sam', group: PURPLE_GROUP }]
-  const whoDrove = (size: number, small?: boolean) => (
-    // Wrapping, where the card's too narrow for both (the SE).
-    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {drivers.map(({ name, group }) => (
-        <span key={name} className="inline-flex items-center">
-          <Avatar name={name} size={size} className="relative z-[1] ring-2 ring-white" />
-          {small
-            ? <span className={`-ml-1 h-2 w-6 rounded-full ${group.bgClass}`} />
-            : <GroupBadge group={group} size="sm" className="-ml-1.5 pl-3" />}
-        </span>
-      ))}
-    </span>
-  )
+  const log = [
+    ['September 2026', [['Sep 10', 'Tires', 'Hoosier R7'], ['Sep 10', 'Front pads', 'Carbotech XP12']]],
+    ['August 2026', [['Aug 22', 'Brake fluid', 'Castrol SRF'], ['Aug 2', 'Engine oil', 'Motul 300V']]],
+    ['July 2026', [['Jul 12', 'Rear pads', 'Hawk DTC-30']]],
+  ] as const
   return (
     <PhoneMock
       screen={
         <>
-          <div className="mx-3 mt-2 grid h-16 place-items-center rounded-lg bg-gray-200 text-gray-400">
-            <CarIcon size={30} />
-          </div>
           <div className="flex items-center justify-between px-3 pt-2">
             <p className="text-[9px] font-semibold text-gray-900">2019 Miata</p>
             <span className="flex items-center gap-1 text-gray-500">
-              <AvatarStack people={drivers} size={16} ring="ring-gray-50" />
+              <span className="flex">
+                {DRIVERS.map((d, i) => <span key={d.name} className={i ? '-ml-1' : ''}><HelmetAvatar helmet={d.helmet} ground={d.ground} size={16} /></span>)}
+              </span>
               <UserPlus size={10} strokeWidth={2.25} />
             </span>
           </div>
           <div className="mx-3 mt-1.5 flex gap-2.5 border-b border-gray-200 text-[8px] text-gray-400">
             <span>Setup</span>
-            <span>History</span>
-            <span className="-mb-px border-b border-gray-900 pb-1 font-semibold text-gray-900">Events</span>
+            <span className="-mb-px border-b border-gray-900 pb-1 font-semibold text-gray-900">History</span>
+            <span>Events</span>
           </div>
-          <div className="flex flex-col gap-1.5 px-3 pt-2">
-            {[['OCT', '4'], ['SEP', '12'], ['AUG', '16'], ['JUL', '19'], ['JUN', '7']].map(([month, day]) => (
-              <div key={day} className="flex items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1.5">
-                <span className="w-5 text-center font-rubik leading-none">
-                  <span className="block text-[6px] font-medium text-gray-500">{month}</span>
-                  <span className="block text-[10px] text-gray-900">{day}</span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="mb-1 block h-1.5 w-16 rounded-full bg-gray-200" />
-                  {whoDrove(10, true)}
-                </span>
+          <div className="px-3 pt-2">
+            {log.map(([month, entries]) => (
+              <div key={month} className="mb-2">
+                <p className="mb-1 text-[7px] font-semibold uppercase tracking-wider text-gray-400">{month}</p>
+                <div className="divide-y divide-gray-100 rounded-md border border-gray-100 bg-white px-2">
+                  {entries.map(([day, part, what]) => (
+                    <div key={part} className="flex gap-2 py-1 text-[7px]">
+                      <span className="w-7 shrink-0 text-gray-400">{day}</span>
+                      <span className="w-11 shrink-0 text-gray-500">{part}</span>
+                      <span className="truncate text-gray-900">{what}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
         </>
       }
     >
-      {/* From 20px outside the phone's left edge to past its right. */}
-      <Pop className="left-[calc(50%-114px)] right-0 top-[52%] flex items-center gap-3 p-3">
-        <span className="w-9 shrink-0 text-center font-rubik leading-none">
-          <span className="block text-[11px] font-medium uppercase tracking-wider text-red-600">Sep</span>
-          <span className="mt-1 block text-2xl text-gray-900">12</span>
+      {/* Its left edge 30px inside the phone, out past the phone's right. */}
+      <Pop className="left-[calc(50%-58px)] right-0 top-[60%] flex items-center gap-2.5 p-2.5">
+        <span className="w-8 shrink-0 text-center font-rubik leading-none">
+          <span className="block text-[10px] font-medium uppercase tracking-wider text-red-600">Sep</span>
+          <span className="mt-1 block text-xl text-gray-900">12</span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-rubik text-[14px] font-semibold leading-tight text-gray-900">TDE at MSRC 1.7 CW</span>
-          <span className="block truncate text-[13px] text-gray-500">The Drivers Edge</span>
-          <span className="mt-1.5 flex">{whoDrove(20)}</span>
+          <span className="block truncate font-rubik text-[13px] font-semibold leading-tight text-gray-900">TDE at MSRC 1.7 CW</span>
+          <span className="block truncate text-[11px] text-gray-500">The Drivers Edge</span>
+          <span className="mt-1.5 flex flex-col items-start gap-1">
+            {DRIVERS.map(d => (
+              <span key={d.name} className="inline-flex items-center">
+                <span className="relative z-[1]"><HelmetAvatar helmet={d.helmet} ground={d.ground} size={22} /></span>
+                <GroupBadge group={d.group} size="sm" className="-ml-1.5 pl-3" />
+              </span>
+            ))}
+          </span>
         </span>
-        <TrackIcon trackId="msrc-1-7" tone="dark" size={40} padding={0} radius="rounded-xl" />
+        <TrackIcon trackId="msrc-1-7" tone="dark" size={34} padding={0} radius="rounded-lg" />
       </Pop>
     </PhoneMock>
   )
@@ -547,8 +556,8 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
         <Feature
           id="schedule"
           Icon={CalendarClock}
-          title="See what’s on track now."
-          text="Each event’s schedule follows the day and counts down to what’s next. Filter it to your run group, or any you’re following, to see just their sessions."
+          title="See where you need to be."
+          text="Each event’s schedule follows the day, who’s on track and who’s in class, and counts down to what’s next. Filter it to your run group to see just your sessions."
         >
           <ScheduleGlimpse />
         </Feature>
@@ -592,7 +601,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
         <Feature
           id="widget"
           Icon={Smartphone}
-          title="What’s next, without opening the app."
+          title="See what’s next, without opening the app."
           text="On iPhone, swipe over to the widget without unlocking, or keep it on your Home Screen. Or skip the widget and just get alerts before your run group’s sessions, as far ahead as you like. Set it up under More → iOS widget."
         >
           <WidgetGlimpse />
