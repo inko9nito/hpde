@@ -382,33 +382,42 @@ function Alert({ className, when, title, body }: { className: string; when: stri
           <span className="truncate text-[11px] font-semibold text-gray-900">{title}</span>
           <span className="shrink-0 text-[9px] text-gray-400">{when}</span>
         </span>
-        <span className="block truncate text-[11px] text-gray-700">{body}</span>
+        <span className="line-clamp-2 text-[11px] text-gray-700">{body}</span>
       </span>
     </Pop>
   )
 }
 
 /**
- * A moment on the TDE event's Saturday: at 10:10 the Large widget, at the
- * top of the Home Screen, says Pink is next, in 15 minutes — as the setup
- * page shows it — and the alert a 15-minute lead schedules for Pink's
- * session comes in now, at the bottom right.
+ * A moment on the TDE event's Saturday: at 10:35 the Large widget, at the
+ * top of the Home Screen, says Purple is next, in 15 minutes — as the setup
+ * page shows it — and the alert a 15-minute lead schedules for Purple's
+ * session comes in now, over the second row of app icons under the widget.
  */
 function WidgetGlimpse() {
+  // App icons as a phone's are: about a sixth of the screen across, four
+  // to a row, their corners about a fifth of their size.
+  const icons = ['bg-slate-700', 'bg-gray-800', 'bg-slate-600', 'bg-zinc-800', 'bg-gray-700', 'bg-slate-800', 'bg-zinc-700', 'bg-slate-700']
   return (
     <PhoneMock
       homeScreen
       wide
       screen={
-        <div className="px-3 pt-3">
-          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top shadow-sm ring-1 ring-black/5" />
-          <div className="mt-3.5 grid grid-cols-4 gap-x-4 gap-y-3 px-2">
-            {Array.from({ length: 6 }, (_, i) => <span key={i} className="aspect-square rounded-[9px] bg-white/70 ring-1 ring-black/5" />)}
+        <div className="px-3 pt-6">
+          <img src={widgetLarge} alt="" width={364} className="aspect-[1095/960] w-full rounded-[16px] object-cover object-top shadow-sm" />
+          <div className="mt-4 grid grid-cols-4 gap-x-[18px] gap-y-[18px] px-1.5">
+            {icons.map((bg, i) => <span key={i} className={`aspect-square rounded-[22%] ${bg}`} />)}
           </div>
         </div>
       }
     >
-      <Alert className="right-0 top-[66%] w-[74%]" when="now" title="🎟️ Pink · in 15m" body="On track at 10:25 AM" />
+      <Alert
+        // Over the second row of icons, the first of them showing beside it.
+        className="right-0 top-[66%] w-[66%]"
+        when="now"
+        title="🟣 Purple · in 15m"
+        body="On track at 10:50 AM · Classroom follows at 11:15 AM."
+      />
     </PhoneMock>
   )
 }

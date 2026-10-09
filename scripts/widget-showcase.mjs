@@ -56,7 +56,7 @@ const SHOTS = [
   { family: 'medium', at: '2026-09-01T12:00:00', manifest: { events: realEvents } },
   {
     family: 'large',
-    at: `${EVENT_DAY}T10:10:00`,
+    at: `${EVENT_DAY}T10:35:00`,
     manifest: { events: [{ ...eventDay, days: [{ ...eventDay.days[1], date: EVENT_DAY }] }] },
   },
 ]
