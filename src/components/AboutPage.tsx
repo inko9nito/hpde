@@ -397,7 +397,7 @@ function Alert({ className, when, title, body }: { className: string; when: stri
 function WidgetGlimpse() {
   // App icons as a phone's are: about a sixth of the screen across, four
   // to a row, their corners about a fifth of their size.
-  const icons = ['bg-slate-700', 'bg-gray-800', 'bg-slate-600', 'bg-zinc-800', 'bg-gray-700', 'bg-slate-800', 'bg-zinc-700', 'bg-slate-700']
+  const icons = ['bg-slate-400/70', 'bg-gray-400/60', 'bg-slate-500/50', 'bg-zinc-400/60', 'bg-gray-500/50', 'bg-slate-400/60', 'bg-zinc-500/45', 'bg-slate-500/55']
   return (
     <PhoneMock
       homeScreen
@@ -446,7 +446,7 @@ const DRIVERS = [
 ]
 
 /**
- * A shared car's page: its drivers' pictures up top, by the way to share
+ * A shared car's page: its photo, its drivers' pictures by the way to share
  * it with another, and its change log under them, kept by both — and over
  * it one of its events, each driver's picture on the run group they drove
  * in, as the car's Events tab shows them.
@@ -461,6 +461,10 @@ function SharedCarGlimpse() {
     <PhoneMock
       screen={
         <>
+          {/* The car's photo, over its name, as its page has it. */}
+          <div className="mx-3 mt-2 grid h-16 place-items-center rounded-lg bg-gray-200 text-gray-400">
+            <CarIcon size={30} />
+          </div>
           <div className="flex items-center justify-between px-3 pt-2">
             <p className="text-[9px] font-semibold text-gray-900">2019 Miata</p>
             <span className="flex items-center gap-1 text-gray-500">
