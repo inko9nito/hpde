@@ -13,6 +13,7 @@ import { DriveAtSheet } from './DriveAtSheet'
 import { GroupBadge } from './GroupBadge'
 import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
+import { driverName } from '../data/drivers'
 import { useRsvps } from '../data/RsvpsContext'
 import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
@@ -430,11 +431,12 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const [title, setTitle] = useState<HTMLHeadingElement | null>(null)
   const collapsed = useScrolledPast(title, TOP_BAR_PX)
   const avatarOf = useDriverAvatar()
-  const { user } = useAuth()
-  // You first, then the others in the order they joined; on a car of your own, you.
+  const { user, actingAs } = useAuth()
+  // You first, then the others in the order they joined; on a car of your
+  // own, you — or the driver an admin is acting as, whose car it is (#433).
   const drivers = car?.drivers?.length
     ? [...car.drivers].sort((a, b) => Number(!!b.you) - Number(!!a.you))
-    : [{ id: '', name: user?.name ?? user?.email ?? 'You', you: true }]
+    : [{ id: '', name: actingAs ? driverName(actingAs) : user?.name ?? user?.email ?? 'You', you: true }]
   const faces = drivers.map(d => ({ name: d.name, url: avatarOf(d) }))
 
   // Theirs: the events in their garage it's the car of.

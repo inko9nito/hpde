@@ -46,9 +46,10 @@ export function AvatarStack({ people, size = 24, ring = 'ring-white' }: {
 
 /**
  * A car's driver's picture: theirs as the garage function sends it, or for
- * the signed-in driver — not an admin acting for someone — their own.
+ * the driver whose garage it is, their own — the signed-in driver's, or,
+ * for an admin acting for someone, that driver's (#433), never the admin's.
  */
 export function useDriverAvatar(): (driver: CarDriver) => string | null {
   const { user, actingAs } = useAuth()
-  return driver => driver.avatar ?? (driver.you && !actingAs ? user?.avatarUrl ?? null : null)
+  return driver => driver.avatar ?? (driver.you ? (actingAs ? actingAs.avatar : user?.avatarUrl) ?? null : null)
 }
