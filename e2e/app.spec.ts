@@ -1815,6 +1815,29 @@ test('a driver shares their car from its page, with a link to send or a code to 
   expect(invited).toBe(1)
 })
 
+test('acting as a driver, their car’s page shows their picture, not the admin’s initial (#433)', async ({ page }) => {
+  await stubEvents(page, [alpha])
+  await signInAsAdmin(page)
+  const avatar = '/api/profile?avatar=jason&v=1'
+  await page.route('**/api/profile?avatar=jason*', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' }))
+  await page.route(/\/api\/garage(\?|$)/, route => route.fulfill({
+    json: { cars: [{ id: 'car1', year: 2015, make: 'Ford', model: 'Mustang GT', nickname: 'The Blue Car' }], events: {} },
+  }))
+  const actAs = (driver: object) => page.addInitScript(d => localStorage.setItem('hpde:actingAs', JSON.stringify({ by: 'a', driver: d })), driver)
+
+  // With a picture: theirs.
+  await actAs({ id: 'jason', email: 'jason@example.com', name: 'Jason Rivera', avatar })
+  await page.goto('/#/garage/car1')
+  const face = page.getByRole('button', { name: 'Share with another driver' }).locator('[data-avatar]')
+  await expect(face).toHaveCount(1)
+  await expect(face).toHaveAttribute('src', avatar)
+
+  // Without one: their initial, not the admin's.
+  await actAs({ id: 'jason', email: 'jason@example.com', name: 'Jason Rivera' })
+  await page.reload()
+  await expect(face).toHaveText('J')
+})
+
 test('a driver joins a shared car from its link, and its page says who drove it where, in which group (#398)', async ({ page }) => {
   const [, bravo] = TEST_EVENTS
   await stubEvents(page, [alpha, bravo])
