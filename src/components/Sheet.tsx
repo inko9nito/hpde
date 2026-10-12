@@ -74,7 +74,11 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
   }, [])
   // Gone before it's down — something else closed it: nothing more to do.
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(timer.current), [])
+  const frame = useRef<number>(undefined)
+  useEffect(() => () => {
+    clearTimeout(timer.current)
+    if (frame.current !== undefined) cancelAnimationFrame(frame.current)
+  }, [])
   const dismiss: Dismiss = then => {
     const done = then ?? (() => latestClose.current())
     if (leaving.current) return
@@ -104,7 +108,24 @@ export function BottomSheet({ label, busy = false, onClose, className, dismissRe
       dim.style.transition = `opacity ${ease}`
       dim.style.opacity = '0'
     }
-    timer.current = setTimeout(done, SETTLE_MS)
+    // Gone once it's down: when its slide ends, not by the clock alone. A
+    // busy phone (or browser test) can let the clock run out before a
+    // single frame of the slide is drawn, and the sheet would vanish where
+    // it was rather than slide away. Should the slide's end never come,
+    // a little after it's had time to run from its first frame.
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer.current)
+      done()
+    }
+    sheet.addEventListener('transitionend', e => {
+      if (e.target === sheet && e.propertyName === 'transform') finish()
+    })
+    frame.current = requestAnimationFrame(() => {
+      timer.current = setTimeout(finish, SETTLE_MS + 100)
+    })
   }
   if (dismissRef) dismissRef.current = dismiss
   // The page dims behind it as it rises, not all at once (#445).
