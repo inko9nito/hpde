@@ -1960,6 +1960,10 @@ test('Back returns through history: a swipe back from the Garage after deleting 
   await expect(heading('More')).toBeInViewport()
 
   // Deleted from its page: back in the Garage, and back from there, More.
+  // Once the Garage has slid all the way away: a tap on it while it's still
+  // over the tile is retried by Playwright with the document scrolled to
+  // its end, which the tab then keeps (#389), its title out of sight.
+  await expect(pageOf('Garage')).toHaveCount(0)
   await page.getByRole('link', { name: /^Garage/ }).click()
   await cards.filter({ hasText: 'Test Test' }).click()
   const carPage = pageOf('Test Test')
