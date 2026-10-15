@@ -1,6 +1,8 @@
 import { normalizeKey } from './fieldOptions'
 import { lapStats } from './lapTimes'
 import type { SessionLaps } from './lapTimes'
+import { trackInfo } from '../data/tracks'
+import type { TrackInfo } from '../data/tracks'
 import type { EventConfig } from '../types'
 
 // Lap-time bests across events on the same track layout (#210): "Best on
@@ -46,11 +48,30 @@ export function layoutLabel(event: EventConfig): string | null {
   return [configuration, direction].filter(Boolean).join(' ') || null
 }
 
+/**
+ * A layout spelled out, on its track's page (#346): "1.7 mile" and
+ * "Clockwise", either one missing when the events don't say.
+ */
+export function layoutTitle(event: EventConfig): { length?: string; direction?: string } {
+  const number = event.configuration?.trim().replace(/\s*miles?$/i, '')
+  const length = number ? (/^[\d.]+$/.test(number) ? `${number} mile` : number) : undefined
+  const d = directionKey(event.direction)
+  const direction = d === 'cw' ? 'Clockwise' : d === 'ccw' ? 'Counter-clockwise' : event.direction?.trim() || undefined
+  return { ...(length ? { length } : {}), ...(direction ? { direction } : {}) }
+}
+
 /** "MSRC 1.7 CW": the track's short name, then the layout. Null with no track. */
 export function layoutName(event: EventConfig): string | null {
   const track = trackShortName(event)
   if (!track) return null
   return [track, layoutLabel(event)].filter(Boolean).join(' ')
+}
+
+/** A track's page id (#346): "msrc" — its short name, as the layouts' ids start. Null with no track. */
+export function trackSlug(event: Pick<EventConfig, 'track' | 'trackId'>): string | null {
+  const short = trackShortName(event)
+  if (!short) return null
+  return normalizeKey(short).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || null
 }
 
 /** The track page's id for this event's layout (#274): "msrc-1-7-cw". Null with no track. */
@@ -85,6 +106,8 @@ export interface Layout {
   track?: string
   /** Where the track is: "Cresson, TX". */
   city?: string
+  /** Its track's page id: "msrc" (#346). */
+  trackSlug: string
   trackId?: string
   /** Which way round it's driven, when the events say (#307). */
   direction?: 'cw' | 'ccw'
@@ -111,6 +134,7 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
       name: layoutName(e)!,
       track: e.track?.trim() || undefined,
       city: e.city?.trim() || undefined,
+      trackSlug: trackSlug(e)!,
       trackId: e.trackId,
       ...(direction === 'cw' || direction === 'ccw' ? { direction } : {}),
       events: eventsOnLayout(slug, events),
@@ -118,34 +142,58 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
   }).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))
 }
 
-/** A track and its layouts, for the Tracks tab's groups (#314). */
+/** A track and its layouts, for the Tracks tab's groups (#314) and its page (#346). */
 export interface TrackGroup {
-  /** The track's full name, or its short one when no event names it: "Motorsport Ranch - Cresson". */
+  /** Its page's id: "msrc". */
+  slug: string
+  /** The track's name: "Motorsport Ranch" when the app knows it, else the events' ("Motorsport Ranch - Cresson"), or its short one. */
   name: string
   city?: string
+  /** What the app knows of it: address, photo, the shape over it (#346). */
+  info?: TrackInfo
+  /** The shape it shows: its full course, or its first layout's. */
+  trackId?: string
   layouts: Layout[]
+  /** Every event on its layouts, the newest first. */
+  events: EventConfig[]
 }
 
 /**
- * The layouts grouped by their track (#314), however its name is spelled —
- * each group where its first layout falls, so the track with the latest
- * event comes first, and its layouts in alphabetical order.
+ * The layouts grouped by their track (#314), by its short name however
+ * its full one is spelled — each group where its first layout falls, so
+ * the track with the latest event comes first, and its layouts in
+ * alphabetical order.
  */
 export function trackGroups(layouts: Layout[]): TrackGroup[] {
   const groups = new Map<string, TrackGroup>()
   for (const layout of layouts) {
-    const name = layout.track ?? trackShortName(layout) ?? layout.name
-    const key = compact(name)
-    const group = groups.get(key)
+    const group = groups.get(layout.trackSlug)
     if (group) {
       group.layouts.push(layout)
       group.city ??= layout.city
     } else {
-      groups.set(key, { name, city: layout.city, layouts: [layout] })
+      const info = trackInfo(layout.trackId)
+      groups.set(layout.trackSlug, {
+        slug: layout.trackSlug,
+        name: info?.name ?? layout.track ?? trackShortName(layout) ?? layout.name,
+        city: info?.city ?? layout.city,
+        ...(info ? { info } : {}),
+        layouts: [layout],
+        events: [],
+      })
     }
   }
   const byName = (a: Layout, b: Layout) => a.name.localeCompare(b.name, undefined, { numeric: true })
-  return [...groups.values()].map(g => ({ ...g, layouts: g.layouts.sort(byName) }))
+  return [...groups.values()].map(g => {
+    const sorted = g.layouts.sort(byName)
+    const events = sorted.flatMap(l => l.events).sort((a, b) => startDate(b).localeCompare(startDate(a)))
+    return { ...g, trackId: g.info?.shape ?? sorted[0].trackId, layouts: sorted, events }
+  })
+}
+
+/** The track a page id names, from the events at it; null when none is. */
+export function trackGroup(slug: string, events: EventConfig[]): TrackGroup | null {
+  return trackGroups(layoutsOf(events)).find(g => g.slug === slug) ?? null
 }
 
 /**

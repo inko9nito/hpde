@@ -275,6 +275,11 @@ interface Props {
    */
   whiteHeader?: boolean
   /**
+   * The page's top edge is black instead — a track page's photo (#346) —
+   * so once in place its backdrop is black above, gray-50 below.
+   */
+  blackHeader?: boolean
+  /**
    * Which edge it slides in from, and back out to. 'right' is a push
    * (the event page), closed with Back; 'bottom' is a modal page closed
    * with ✕ or Cancel — New event, Share, iOS widget (#278), Add a car
@@ -306,7 +311,7 @@ interface Props {
  * so its content is still visible while sliding away; `onExited` fires
  * once the transform finishes and it can be unmounted.
  */
-export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, instant = false, whiteHeader = true, from = 'right', raised = false, sheet = false, onDismiss }: Props) {
+export function PushPage({ open, onExited, onEnteredChange, scrollRef, children, skipEnterAnimation, instant = false, whiteHeader = true, blackHeader = false, from = 'right', raised = false, sheet = false, onDismiss }: Props) {
   // Always start off-screen and animate in via requestAnimationFrame,
   // even when mounted with open=true — otherwise the initial off-screen
   // frame never paints and the transition doesn't fire. The exceptions
@@ -445,7 +450,9 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // content paints gray-50 over this; it only shows when
         // rubber-banding past either end, so keep it white above
         // (header) and gray-50 below (page).
-        backgroundImage: white ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)' : undefined,
+        backgroundImage: white ? 'linear-gradient(to bottom, #ffffff 50%, #f9fafb 50%)'
+          : entered && blackHeader ? 'linear-gradient(to bottom, #000000 50%, #f9fafb 50%)'
+          : undefined,
         transform: from === 'bottom'
           ? !inPosition ? 'translateY(100%)' : receded ? RECEDED : 'translateY(0)'
           : !inPosition ? 'translateX(100%)' : covered ? COVERED_SHIFT : receded ? RECEDED : 'translateX(0)',

@@ -14,6 +14,9 @@ export const HEADER_CHROME_COLOR = '#ffffff'
 /** Black, over a sheet: what's under it shrinks back on black (#415). */
 export const SHEET_CHROME_COLOR = '#000000'
 
+/** Black, over a track page's photo (#346). */
+export const TRACK_CHROME_COLOR = '#000000'
+
 /** The page's own gray, everywhere the top edge isn't white. */
 export const PAGE_CHROME_COLOR = '#f9fafb'
 

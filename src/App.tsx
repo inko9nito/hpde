@@ -27,6 +27,7 @@ import type { SessionSlot, SessionView } from './components/LapTimesSheet'
 import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
+import { TrackPage, trackPageHash, trackPageSlugFromHash } from './components/TrackPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
 import { HOME_TAB_HASH, MORE_PAGE_HASH, MoreTab, TAB_BAR_PX, TabBar, homeTabFromHash, morePageFromHash } from './components/HomeTabs'
 import { ArchivedCarsPage, GaragePage } from './components/GaragePage'
@@ -45,7 +46,7 @@ import { useAllNotes, useNotesLog } from './data/notesLog'
 import { hourAt, useWeather } from './data/weather'
 import { sessionKey } from './utils/lapTimes'
 import { isTdeEvent } from './utils/evaluation'
-import { bestOnLayout, eventBest, layoutName, layoutSlug } from './utils/trackStats'
+import { bestOnLayout, eventBest, layoutName, layoutSlug, trackGroup } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -56,7 +57,7 @@ import { myRunGroup } from './utils/rsvp'
 import type { EventSetup, SessionPressures } from './utils/garage'
 import { partitionEvents, classifyEvent } from './utils/eventClass'
 import { useTrackFavicon, useDocumentTitle } from './utils/trackFavicon'
-import { useChromeColor, dimmedChromeColor, HEADER_CHROME_COLOR, PAGE_CHROME_COLOR, SHEET_CHROME_COLOR } from './utils/chromeColor'
+import { useChromeColor, dimmedChromeColor, HEADER_CHROME_COLOR, PAGE_CHROME_COLOR, SHEET_CHROME_COLOR, TRACK_CHROME_COLOR } from './utils/chromeColor'
 import { useBottomSheetOpen } from './components/Sheet'
 import { todayLocalISO, nowMinutes, parseMinutes } from './utils/time'
 import type { EventConfig, DaySchedule } from './types'
@@ -164,10 +165,12 @@ type Overlay =
   | { kind: 'edit-event' | 'edit-schedule'; eventId: string }
 
 // What the page stack (#274) reads from a hash: the event it's a page of —
-// its own, or a sub-page (Share, the editors) — and the track page it is.
+// its own, or a sub-page (Share, the editors) — and the track page it is:
+// a layout's, or a track's own (#346).
 const PAGE_HASHES = {
   event: eventIdFromHash,
   track: trackSlugFromHash,
+  trackPage: trackPageSlugFromHash,
   more: morePageFromHash,
 }
 
@@ -328,6 +331,11 @@ export default function App() {
   if (stack.hash !== hash) setStack(nextPageStack(stack, hash, PAGE_HASHES))
   const trackOverEventId = trackSlug !== null ? stack.eventUnderTrack : null
   const trackUnderEvent = isOnEventRoute ? stack.trackUnderEvent : null
+  // A track's own page (#346), and the one under a layout's page or an
+  // event's opened from it (see pageStack).
+  const trackPageRoute = trackPageSlugFromHash(hash)
+  const trackPageUnder = trackSlug !== null || isOnEventRoute ? stack.trackPageUnder : null
+  const trackPageShowing = trackPageRoute ?? trackPageUnder
   // A car's page (#344) and an event's page, each opened from the other —
   // the car's events, the car at the top of My notes — go over it, and
   // Back returns to the one underneath, until somewhere else is opened.
@@ -383,7 +391,7 @@ export default function App() {
   // car's page from the Garage, More's. Pages pushed over a tab leave it as
   // it was, and go back to it.
   const hashTab = homeTabFromHash(hash)
-    ?? (trackSlug !== null && trackOverEventId === null ? 'tracks' : null)
+    ?? ((trackSlug !== null && trackOverEventId === null) || trackPageRoute !== null ? 'tracks' : null)
     ?? (morePage !== null || archivedRoute || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
@@ -424,6 +432,14 @@ export default function App() {
   const shownTrackSlug = trackPageSlug ?? lastTrackSlug
   const [trackEntered, setTrackEntered] = useState(false)
 
+  // …and a track's own page (#346).
+  const [lastTrackPage, setLastTrackPage] = useState(trackPageShowing)
+  useEffect(() => {
+    if (trackPageShowing) setLastTrackPage(trackPageShowing)
+  }, [trackPageShowing])
+  const shownTrackPage = trackPageShowing ?? lastTrackPage
+  const [trackPageEntered, setTrackPageEntered] = useState(false)
+
   // …and a More page.
   const [lastMorePage, setLastMorePage] = useState(morePageShowing)
   useEffect(() => {
@@ -463,20 +479,26 @@ export default function App() {
   const routeEvent = ALL_EVENTS.find(e => e.id === routeEventId)
   // …and a track page, its layout's (#274).
   const trackTitle = trackSlug !== null ? trackPageTitle(trackSlug, ALL_EVENTS) : null
-  useTrackFavicon(routeEvent?.trackId ?? trackTitle?.trackId)
-  useDocumentTitle(routeEvent?.name ?? trackTitle?.name)
+  // …and a track's own page, its own (#346).
+  const trackPageGroup = trackPageRoute !== null ? trackGroup(trackPageRoute, ALL_EVENTS) : null
+  useTrackFavicon(routeEvent?.trackId ?? trackTitle?.trackId ?? trackPageGroup?.trackId)
+  useDocumentTitle(routeEvent?.name ?? trackTitle?.name ?? trackPageGroup?.name)
   // …and the status bar above it matches its white header (#245) — once
   // the page has slid in, not while it's still on its way.
   const [pushEntered, setPushEntered] = useState(false)
   // Pages that slide up with a white toolbar across their top (#368) keep
   // it white; the iOS widget page and About are gray to the top.
   const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget' && shownOverlay.kind !== 'about'
-  const whiteTop = overlayEntered ? overlayWhiteTop : (eventPageOpen && pushEntered) || trackEntered || carEntered
+  // Track pages are black at the top, over their photos (#346): while one's
+  // in place and nothing's in place over it.
+  const blackTop = !overlayEntered && (trackEntered || trackPageEntered)
+    && !(isOnEventRoute && pushEntered) && !(carRouteId !== null && carEntered)
+  const whiteTop = overlayEntered ? overlayWhiteTop : !blackTop && ((eventPageOpen && pushEntered) || carEntered)
   // Black over a sheet, as what's under it shrinks back on black (#415).
   const sheetUp = useSheetUp()
   // Dimmed with the page under a sheet from the bottom (#445).
   const bottomSheetOpen = useBottomSheetOpen()
-  const topColor = whiteTop ? HEADER_CHROME_COLOR : null
+  const topColor = whiteTop ? HEADER_CHROME_COLOR : blackTop ? TRACK_CHROME_COLOR : null
   useChromeColor(sheetUp ? SHEET_CHROME_COLOR : bottomSheetOpen ? dimmedChromeColor(topColor ?? PAGE_CHROME_COLOR) : topColor)
   // The tabs slide a little way left under the first page pushed over them (#367).
   const underPages = useUnderPushedPages(swiped)
@@ -610,7 +632,7 @@ export default function App() {
     <>
     {/* Who an admin is acting as, over every page (#396). */}
     <ActingBanner />
-    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownMorePage || !!shownOverlay || !!shownCarId}>
+    <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownTrackPage || !!shownMorePage || !!shownOverlay || !!shownCarId}>
       {/* Room at the bottom for the tab bar. */}
       <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
@@ -669,6 +691,30 @@ export default function App() {
         />
       </PushPage>
     )}
+    {/* Before the event's page and a layout's, which go over it (#346). */}
+    {shownTrackPage && (
+      <PushPage
+        key={`track page ${shownTrackPage}`}
+        open={trackPageShowing !== null}
+        onExited={() => setLastTrackPage(null)}
+        onEnteredChange={setTrackPageEntered}
+        skipEnterAnimation={bootHashRef.current !== null}
+        instant={swiped}
+        whiteHeader={false}
+        blackHeader
+      >
+        <TrackPage
+          slug={shownTrackPage}
+          events={ALL_EVENTS}
+          eventsLoaded={eventsLoaded}
+          filter={tracksFilter}
+          onFilter={setTracksFilter}
+          onBack={backToTab}
+          onOpenEvent={switchEvent}
+          onAllTracks={() => setHash(HOME_TAB_HASH.tracks)}
+        />
+      </PushPage>
+    )}
     {pushMounted && (
     <PushPage
       // A fresh page when it goes over the track or a car's page, so it slides in.
@@ -697,6 +743,7 @@ export default function App() {
             trackUnderEvent !== null ? () => goBack(trackHash(trackUnderEvent))
               : carUnderEvent !== null ? () => goBack(carHash(carUnderEvent))
               : moreUnderEvent !== null ? () => goBack(moreUnderEvent)
+              : trackPageUnder !== null ? () => goBack(trackPageHash(trackPageUnder))
               : backToTab
           }
           onDeleted={() => {
@@ -886,6 +933,9 @@ export default function App() {
         scrollRef={trackScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
         instant={swiped}
+        // Black at the top, over the track's photo (#346).
+        whiteHeader={false}
+        blackHeader
       >
         <PullToRefresh disabled={trackSlug === null || !!shownOverlay} scrollContainerRef={trackScrollRef}>
         <TrackLapsPage
@@ -898,6 +948,7 @@ export default function App() {
           active={trackSlug !== null}
           onBack={() => {
             if (trackOverEventId !== null) backToEvent(trackOverEventId)
+            else if (trackPageUnder !== null) goBack(trackPageHash(trackPageUnder))
             else backToTab()
           }}
           onOpenEvent={openEventNotes}
