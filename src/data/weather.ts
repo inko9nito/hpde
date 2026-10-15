@@ -2,25 +2,19 @@ import { useEffect, useState } from 'react'
 import { skyFromCode } from '../utils/conditions'
 import type { Sky } from '../utils/conditions'
 import { todayLocalISO } from '../utils/time'
+import { trackInfo } from './tracks'
 import type { EventConfig } from '../types'
 
 // The weather near the track on an event's days (#347), from Open-Meteo
 // (free, no key, CORS open): a forecast up to 16 days ahead, and what it
 // was once the day's past. Looked up by where the track is, so only for
-// tracks the app knows the place of (#440 moves that onto the track).
+// tracks the app knows the place of (src/data/tracks.ts; #440 moves that
+// off the code).
 //
 // Never saved: each look-up is kept for half an hour, then looked up
 // afresh — on the next page that wants it, or when the app comes back to
 // the front — so a forecast that changes from rain to clear shows clear.
 // What a driver records for a session is theirs and stays as they saved it.
-
-/** Where each track is, by track icon id (an event's `trackId`). */
-export const TRACK_LOCATIONS: Record<string, { lat: number; lon: number; tz: string }> = {
-  'msrc-1-7': { lat: 32.448, lon: -97.616, tz: 'America/Chicago' },
-  'msrc-3-1': { lat: 32.448, lon: -97.616, tz: 'America/Chicago' },
-  'msrc-1-3': { lat: 32.448, lon: -97.616, tz: 'America/Chicago' },
-  'ecr-2-7': { lat: 33.264, lon: -97.581, tz: 'America/Chicago' },
-}
 
 export const FORECAST_DAYS = 16
 
@@ -120,7 +114,7 @@ const cache = new Map<string, { at: number; days: Promise<DayWeather[]> }>()
 
 /** The weather on the event's days, by date. Off for a track with no known place. */
 export function useWeather(event: EventConfig | null): { status: WeatherStatus; byDate: Map<string, DayWeather> } {
-  const place = event?.trackId ? TRACK_LOCATIONS[event.trackId] : undefined
+  const place = trackInfo(event?.trackId)
   const today = todayLocalISO()
   const dates = event && place ? weatherDates(event, today) : []
   const url = place && dates.length ? weatherUrl(place.lat, place.lon, place.tz, dates[0], dates[dates.length - 1], today) : null

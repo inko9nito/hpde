@@ -7,7 +7,7 @@ import { EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
 import { RsvpPicker } from './RsvpPicker'
-import { ICON_BUTTON } from './iconButton'
+import { ICON_BUTTON, ICON_BUTTON_ON_DARK } from './iconButton'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import { layoutName } from '../utils/trackStats'
 import type { EventStatus } from '../utils/eventClass'
@@ -208,12 +208,16 @@ function TrackLine({ event }: { event: EventConfig }) {
 
 // Pulled out to the header's edge, so the chevron lines up with the
 // content's left edge under it (#354), as iOS's back chevron does.
-export function BackButton({ onClick }: { onClick: () => void }) {
+export function BackButton({ onClick, onDark = false }: {
+  onClick: () => void
+  /** White, over a track page's dark header (#346). */
+  onDark?: boolean
+}) {
   return (
     <button
       onClick={onClick}
       aria-label="Back"
-      className={`-ml-4 ${ICON_BUTTON}`}
+      className={`-ml-4 ${onDark ? ICON_BUTTON_ON_DARK : ICON_BUTTON}`}
     >
       <ChevronLeft size={26} strokeWidth={2.25} />
     </button>

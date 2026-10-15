@@ -1306,7 +1306,7 @@ describe('a track page: the events on one layout (#274)', () => {
   })
   const TRACK = '#/track/msrc-1-7-cw'
   // The track page, as opposed to the event page under or over it.
-  const trackPage = async () => (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
+  const trackPage = async () => (await screen.findByRole('heading', { level: 1, name: '1.7 mile · Clockwise' })).closest<HTMLElement>('.fixed')!
   // Its event cards, newest first.
   const cards = async () => within(await within(await trackPage()).findByRole('region', { name: 'Events' })).getAllByRole('link')
   const card = async (name: string) => (await cards()).find(c => c.textContent!.includes(name))!
@@ -1331,7 +1331,8 @@ describe('a track page: the events on one layout (#274)', () => {
     expect(window.location.hash).toBe(TRACK)
 
     const page = await trackPage()
-    expect(page).toHaveTextContent('Motorsport Ranch - Cresson')
+    // Under its track's name (#346).
+    expect(page).toHaveTextContent('Motorsport Ranch')
     // One request for every event on the layout — not the one run the other way.
     await within(page).findByRole('group', { name: 'All time best' })
     const [url] = lapCalls('GET').find(([u]) => String(u).includes('events='))!
@@ -1587,7 +1588,9 @@ describe('a track page: the events on one layout (#274)', () => {
     await userEvent.click(await screen.findByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
 
     const page = await trackPage()
-    expect(page).toHaveTextContent('Motorsport Ranch - Cresson · Jason’s laps')
+    // Under its track's name (#346).
+    expect(page).toHaveTextContent('Motorsport Ranch')
+    expect(page).toHaveTextContent('Jason’s laps')
     expect(await within(page).findByRole('group', { name: 'All time best' })).toHaveTextContent('1:24.42Across 1 session at 1 event')
     // One event is still a chart: its best and average, labelled.
     const chart = within(page).getByRole('group', { name: /^Best and average lap at each event, oldest to newest: 1 event\./ })
@@ -1621,27 +1624,23 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     elsewhere = { [sameLayout.id]: [at('2026-02-07', [101_000, 98_540])] }
   })
 
-  it('lists every track layout under its track, A–Z, with the events you have sessions at there', async () => {
+  it('lists each track with its photo and full course, and the events and layouts you have there (#346)', async () => {
     openAt('#/tracks')
     expect(screen.getByRole('heading', { level: 1, name: 'Tracks' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
+    // One track, both its layouts (#314), as the app names it.
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCW1 event',
-      'MSRC 1.7 CW2 events',
+      'Motorsport RanchCresson, TX3 events · 2 configurations driven',
     ]))
-    // Each thumbnail shows which way round it goes (#307).
-    expect(tracks().map(t => t.querySelector('[data-direction]')?.getAttribute('data-direction'))).toEqual(['ccw', 'cw'])
-    // One track, both its layouts under its name (#314).
-    const track = screen.getByRole('region', { name: 'Motorsport Ranch - Cresson' })
-    expect(within(track).getByRole('heading', { level: 2, name: 'Motorsport Ranch - Cresson' })).toBeInTheDocument()
-    expect(within(track).getAllByRole('link')).toHaveLength(2)
+    expect(tracks()[0]).toHaveAttribute('href', '#/tracks/msrc')
+    expect(tracks()[0].querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
+    expect(tracks()[0].querySelector('[data-track-shape]')).toHaveAttribute('data-track-shape', 'msrc-3-1')
   })
 
   it('leaves out a layout you have no events at, and says so when that’s all of them (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW1 event']))
-    expect(screen.getAllByRole('region')).toHaveLength(1)
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX1 event · 1 configuration driven']))
   })
 
   it('says when none are yours, or yours couldn’t be had (#385)', async () => {
@@ -1656,7 +1655,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(await screen.findByText('Couldn’t load your tracks.')).toBeInTheDocument()
     // All still has them.
     await userEvent.click(within(screen.getByRole('group', { name: 'Which tracks' })).getByRole('button', { name: 'All' }))
-    expect(tracks()).toHaveLength(2)
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX3 events · 2 configurations'])
   })
 
   it('counts the events you said you’re going to as well as the ones with sessions, each once (#320)', async () => {
@@ -1665,48 +1664,71 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     rsvps = { [event.id]: { status: 'going' }, [sameLayout.id]: { status: 'going' }, [otherWay.id]: { status: 'not-going' } }
     window.location.hash = '#/tracks'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW2 events']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX2 events · 1 configuration driven']))
   })
 
-  it('lists every layout and counts every event on each on All, and starts on Mine (#385)', async () => {
+  it('counts every event on All, and starts on Mine; the track’s page opens on All too (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['MSRC 1.7 CW1 event']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX1 event · 1 configuration driven']))
     const toggle = screen.getByRole('group', { name: 'Which tracks' })
     expect(within(toggle).getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true')
 
     await userEvent.click(within(toggle).getByRole('button', { name: 'All' }))
-    expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCW1 event',
-      'MSRC 1.7 CW2 events',
-    ])
-    // The track page opens on All too.
-    await userEvent.click(tracks()[1])
-    const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
-    const list = await within(page).findByRole('region', { name: 'Events' })
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX3 events · 2 configurations'])
+    await userEvent.click(tracks()[0])
+    const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
+    const list = within(page).getByRole('region', { name: 'Events' })
     expect(within(list).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(list).getAllByRole('link')).toHaveLength(2)
+    expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(3)
+    // On Mine, theirs.
+    await userEvent.click(within(list).getByRole('button', { name: 'Mine' }))
+    expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(1)
   })
 
-  it('opens a track’s page, and goes back to the list', async () => {
+  it('opens a track’s page: where it is, its layouts, its events — a layout opens over it, and Back goes back through both (#346)', async () => {
     openAt('#/tracks')
-    await waitFor(() => expect(tracks()).toHaveLength(2))
-    await userEvent.click(tracks()[1])
-    expect(window.location.hash).toBe('#/track/msrc-1-7-cw')
-    const page = (await screen.findByRole('heading', { level: 1, name: 'MSRC 1.7 CW' })).closest<HTMLElement>('.fixed')!
-    await within(page).findByRole('region', { name: 'Events' })
+    await waitFor(() => expect(tracks()).toHaveLength(1))
+    await userEvent.click(tracks()[0])
+    expect(window.location.hash).toBe('#/tracks/msrc')
+    const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
+    expect(page).toHaveTextContent('Cresson, TX')
+    expect(page.querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
+    // Its address opens Maps.
+    const location = within(page).getByRole('region', { name: 'Location' })
+    expect(within(location).getByRole('link')).toHaveAttribute('href', expect.stringContaining('maps.apple.com/?address=9012%20Performance%20Ct'))
+    // Its layouts, each with how many events and, signed in, their best there.
+    const layouts = within(within(page).getByRole('region', { name: 'Configurations' })).getAllByRole('link')
+    expect(layouts.map(l => l.textContent)).toEqual([
+      '1.7 mileCounter-clockwise1 event · Best 1:30',
+      '1.7 mileClockwise2 events · Best 1:38.54',
+    ])
 
+    await userEvent.click(layouts[1])
+    expect(window.location.hash).toBe('#/track/msrc-1-7-cw')
+    const layoutPage = (await screen.findByRole('heading', { level: 1, name: '1.7 mile · Clockwise' })).closest<HTMLElement>('.fixed')!
+    await within(layoutPage).findByRole('region', { name: 'Events' })
+
+    await userEvent.click(within(layoutPage).getByRole('button', { name: 'Back' }))
+    expect(window.location.hash).toBe('#/tracks/msrc')
     await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe('#/tracks')
   })
 
+  it('opens an event from a track’s page, over it, and Back returns to it (#346)', async () => {
+    openAt('#/tracks/msrc')
+    const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
+    await userEvent.click((await within(within(page).getByRole('region', { name: 'Events' })).findAllByRole('button', { name: /Lap Day/ }))[0])
+    expect(window.location.hash).toBe(`#/event/${event.id}`)
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Back' })).at(-1)!)
+    expect(window.location.hash).toBe('#/tracks/msrc')
+  })
 
-  it('lists the tracks for anyone signed out, with every event on each and no lap times (#385)', async () => {
+  it('lists the tracks for anyone signed out, with every event at each and no lap times (#385)', async () => {
     signedIn = false
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'MSRC 1.7 CCW1 event',
-      'MSRC 1.7 CW2 events',
+      'Motorsport RanchCresson, TX3 events · 2 configurations',
     ]))
     // Nothing of theirs to pick between.
     expect(screen.queryByRole('group', { name: 'Which tracks' })).not.toBeInTheDocument()

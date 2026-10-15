@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Timer } from 'lucide-react'
-import { BackButton } from './EventHeader'
-import { TrackIcon } from './TrackIcon'
+import { TOP_BAR_PX, TrackShape, TrackTopBar, UNDER_BAR } from './TrackPhoto'
 import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
 import { BestChip } from './LapList'
@@ -19,7 +18,9 @@ import { useTrackLaps } from '../data/lapLog'
 import { useRsvps } from '../data/RsvpsContext'
 import { driverName } from '../data/drivers'
 import type { Driver } from '../data/drivers'
-import { eventBest, eventsOnLayout, layoutName, layoutSlug, startDate } from '../utils/trackStats'
+import { eventBest, eventsOnLayout, layoutName, layoutSlug, layoutTitle, startDate } from '../utils/trackStats'
+import { trackInfo } from '../data/tracks'
+import { useScrolledPast } from '../utils/useScrolledPast'
 import { formatAverage, formatSpeed, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import { classifyEvent } from '../utils/eventClass'
@@ -41,11 +42,26 @@ export function trackSlugFromHash(hash: string): string | null {
   return decodeURIComponent(hash.slice(TRACK_HASH_PREFIX.length).split('/')[0]) || null
 }
 
-/** The page's name ("MSRC 1.7 CW"), icon and track, from the events on its layout. */
-export function trackPageTitle(slug: string, events: EventConfig[]): { name: string; trackId?: string; track?: string } | null {
+/**
+ * The page's name ("MSRC 1.7 CW"), icon and track, from the events on its
+ * layout — and spelled out, under its track's name, for its header (#346).
+ */
+export function trackPageTitle(slug: string, events: EventConfig[]): {
+  name: string
+  trackId?: string
+  track?: string
+  length?: string
+  direction?: string
+} | null {
   const named = events.find(e => layoutSlug(e) === slug)
   const name = named && layoutName(named)
-  return name ? { name, trackId: named.trackId, track: named.track?.trim() || undefined } : null
+  if (!name) return null
+  return {
+    name,
+    trackId: named.trackId,
+    track: trackInfo(named.trackId)?.name ?? (named.track?.trim() || undefined),
+    ...layoutTitle(named),
+  }
 }
 
 /**
@@ -175,6 +191,8 @@ interface Props {
   onOpenEvent: (event: EventConfig, tab: EventTabId) => void
   /** To the Tracks tab. */
   onAllTracks: () => void
+  /** Whether its title has scrolled up into the top bar, which is gray-50 then, not over the photo. */
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
 /**
@@ -186,7 +204,7 @@ interface Props {
  * page for its sessions. The laps need a sign-in; signed out, it lists
  * every event on it.
  */
-export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFilter, active, onBack, onOpenEvent, onAllTracks }: Props) {
+export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFilter, active, onBack, onOpenEvent, onAllTracks, onCollapsedChange }: Props) {
   const { status: authStatus } = useAuth()
   const signedIn = authStatus === 'signed-in'
   const onLayout = useMemo(() => eventsOnLayout(slug, events), [slug, events])
@@ -198,6 +216,12 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
   const answers = useMemo(() => (driver ? {} : rsvps), [driver, rsvps])
   const going = useMemo(() => goingIds(onLayout, answers), [onLayout, answers])
   const name = driver ? driverName(driver) : null
+  // A ref that re-renders: the title is only there once the events are.
+  const [titleEl, setTitleEl] = useState<HTMLElement | null>(null)
+  const collapsed = useScrolledPast(titleEl, TOP_BAR_PX)
+  useEffect(() => {
+    onCollapsedChange?.(collapsed)
+  }, [collapsed])
 
   // Back from an event opened from here, where its laps may have changed.
   const wasActive = useRef(active)
@@ -235,32 +259,48 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
     }]
   })
 
-  const header = (
-    <div className="sticky top-0 z-20 border-b border-gray-500/20 bg-white shadow-[0_4px_15px_rgba(12,12,13,0.05)]">
-      <div className="mx-auto flex min-h-[64px] max-w-lg items-center gap-2 px-4 py-2">
-        <BackButton onClick={onBack} />
-        {title ? (
-          <div className="flex min-w-0 items-center gap-3">
-            <TrackIcon trackId={title.trackId} tone="dark" size={44} padding={0} radius="rounded-lg" />
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="truncate font-rubik text-lg font-bold leading-tight text-gray-900">{title.name}</h1>
-              <p className="truncate text-[13px] leading-tight text-gray-500">
-                {[title.track, name ? `${name}’s laps` : null].filter(Boolean).join(' · ') || 'All my laps'}
-              </p>
-            </div>
+  const info = trackInfo(title?.trackId)
+  // "1.7 mile · Clockwise", under its track's name (#346).
+  const heading = title ? [title.length, title.direction].filter(Boolean).join(' · ') || title.name : ''
+  const header = (<>
+    <TrackTopBar title={heading} collapsed={collapsed} onBack={onBack} />
+    {/* As the track's own page has it — its name over where it is, then
+        its shape — but the layout leads (#346): its shape over the track's
+        photo, softened and dimmed, in a shorter header with no panel over
+        it, so it doesn't read as the track's page, where the photo leads. */}
+    <header className="relative overflow-hidden bg-gray-900 text-white" style={UNDER_BAR}>
+      {info?.photo && (
+        <img
+          src={info.photo}
+          alt=""
+          data-track-photo={info.id}
+          className="absolute inset-0 h-full w-full scale-110 object-cover"
+          style={{ objectPosition: `${info.photoX} 50%`, filter: 'blur(3px) saturate(0.85) brightness(0.5)' }}
+        />
+      )}
+      <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.25) 45%, rgba(0, 0, 0, 0.75))' }} />
+      <div
+        className="relative mx-auto flex max-w-lg flex-col items-center px-4 pb-5 text-center font-rubik"
+        style={{ paddingTop: `calc(env(safe-area-inset-top) + ${TOP_BAR_PX}px)` }}
+      >
+        {title ? (<>
+          <h1 ref={setTitleEl} className="max-w-full truncate text-[20px] font-bold leading-normal">{heading}</h1>
+          {/* Its track, as the track page's city sits under its name. */}
+          <p className="mt-1.5 max-w-full truncate text-base leading-normal">
+            {[title.track, name ? `${name}’s laps` : null].filter(Boolean).join(' · ')}
+          </p>
+          {/* Its square is mostly margin: 77 pt above the shape, 78 below. */}
+          <TrackShape trackId={title.trackId} width={170} className="-mt-[61px] -mb-[62px]" />
+        </>) : !eventsLoaded ? (
+          <div className="flex w-full flex-col items-center gap-3 pb-2" aria-hidden="true">
+            <div className="h-5 w-2/5 animate-pulse rounded bg-white/15" />
+            <div className="h-4 w-1/3 animate-pulse rounded bg-white/10" />
+            <div className="mt-2 h-16 w-40 animate-pulse rounded-lg bg-white/10" />
           </div>
-        ) : !eventsLoaded && (
-          <div className="flex min-w-0 flex-1 items-center gap-3" aria-hidden="true">
-            <div className="h-11 w-11 shrink-0 animate-pulse rounded-lg bg-gray-200" />
-            <div className="flex flex-1 flex-col gap-2">
-              <div className="h-4 w-2/5 animate-pulse rounded bg-gray-200" />
-              <div className="h-3 w-3/5 animate-pulse rounded bg-gray-100" />
-            </div>
-          </div>
-        )}
+        ) : <div className="h-24" />}
       </div>
-    </div>
-  )
+    </header>
+  </>)
 
   // Theirs whether or not they've laps there (#320), or all of them (#385):
   // every one to anyone signed out, with no toggle.
