@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-import type { RefObject } from 'react'
 import { BackButton } from './EventHeader'
 import { trackIconSrc } from './TrackIcon'
 
@@ -35,59 +33,47 @@ export function TrackShape({ trackId, width, className = '' }: { trackId?: strin
   )
 }
 
-/** The bar's height under the status bar: the design's 36 pt controls. */
-const BAR_PX = 36
+/** The top bar's height, as on every page pushed from the right (EventHeader, CarPage). */
+export const TOP_BAR_PX = 52
 
 /**
- * Back over a track page's dark header (#346), sticky at the top: clear
- * over the photo, then black with the page's name once `compact` (the
- * header has scrolled up under it), as iOS's large title folds into its
- * bar. The header goes under it, from the top of the screen.
+ * The top bar over a track page's dark header (#346), as on the app's
+ * other pages: Back alone, then — once the page's title has scrolled up
+ * under it (`collapsed`) — the page's name in the middle, on the pages'
+ * own gray-50, as iOS's large title folds into its bar. Clear and white
+ * over the photo till then. The header goes under it, from the top.
  */
-export function DarkPageBar({ title, compact, onBack, barRef }: {
+export function TrackTopBar({ title, collapsed, onBack }: {
   title: string
-  compact: boolean
+  collapsed: boolean
   onBack: () => void
-  barRef: RefObject<HTMLDivElement | null>
 }) {
   return (
     <div
-      ref={barRef}
-      className="sticky top-0 z-20 transition-colors duration-200"
-      style={{ paddingTop: 'env(safe-area-inset-top)', backgroundColor: compact ? '#000' : 'transparent' }}
+      className={`sticky top-0 z-20 transition-colors duration-200 ${collapsed ? 'bg-gray-50' : 'bg-transparent'}`}
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="relative mx-auto flex max-w-lg items-center px-6" style={{ height: BAR_PX }}>
-        <BackButton onClick={onBack} onDark />
-        <p
-          aria-hidden={!compact}
-          className="pointer-events-none absolute inset-x-16 truncate text-center font-rubik text-[17px] font-semibold text-white transition-opacity duration-200"
-          style={{ opacity: compact ? 1 : 0 }}
+      <div
+        className="mx-auto grid max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4"
+        style={{ height: TOP_BAR_PX }}
+      >
+        <div className="justify-self-start"><BackButton onClick={onBack} onDark={!collapsed} /></div>
+        {/* The title's echo, once it's scrolled away: fades in, but hides
+            at once — hidden from assistive tech, so the name isn't
+            announced twice. */}
+        <span
+          aria-hidden="true"
+          className={`truncate text-center font-rubik text-[15px] font-semibold text-gray-900 ${
+            collapsed ? 'opacity-100 transition-opacity duration-200' : 'opacity-0'
+          }`}
         >
           {title}
-        </p>
+        </span>
+        <div />
       </div>
     </div>
   )
 }
 
-/** Pulls a header up under the DarkPageBar before it, to the top of the screen. */
-export const UNDER_BAR = { marginTop: `calc(-1 * (env(safe-area-inset-top) + ${BAR_PX}px))` }
-
-/**
- * Whether `target` has scrolled up under the bar: its bottom edge above
- * the bar's. False until both are on the page.
- */
-export function useScrolledUnder(target: RefObject<HTMLElement | null>, bar: RefObject<HTMLElement | null>): boolean {
-  const [under, setUnder] = useState(false)
-  useEffect(() => {
-    const el = target.current
-    if (!el || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(
-      ([entry]) => setUnder(!entry.isIntersecting && entry.boundingClientRect.top < (bar.current?.getBoundingClientRect().bottom ?? 0)),
-      { rootMargin: `-${bar.current?.offsetHeight ?? 0}px 0px 0px 0px` },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [target, bar])
-  return under
-}
+/** Pulls a header up under the TrackTopBar before it, to the top of the screen. */
+export const UNDER_BAR = { marginTop: `calc(-1 * (env(safe-area-inset-top) + ${TOP_BAR_PX}px))` }

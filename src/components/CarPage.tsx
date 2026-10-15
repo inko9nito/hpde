@@ -18,6 +18,7 @@ import { useRsvps } from '../data/RsvpsContext'
 import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
+import { useScrolledPast } from '../utils/useScrolledPast'
 import type { EventConfig } from '../types'
 
 const CAR_HASH_PREFIX = '#/garage/'
@@ -175,24 +176,6 @@ function AddLink({ onClick, children }: { onClick: () => void; children: string 
       {children}
     </button>
   )
-}
-
-/**
- * Whether the page's title has scrolled up under the top bar — the cue
- * for the bar's own copy of the name, as on iOS.
- */
-function useScrolledPast(el: HTMLElement | null, offset: number): boolean {
-  const [past, setPast] = useState(false)
-  useEffect(() => {
-    if (!el || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(
-      ([entry]) => setPast(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? offset)),
-      { rootMargin: `-${offset}px 0px 0px 0px` },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [el, offset])
-  return past
 }
 
 /**

@@ -2215,6 +2215,20 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(location.getByRole('link')).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
   // Signed out here, so every event at it, and no lap times.
   await expect(trackPage.getByRole('region', { name: 'Events' }).getByRole('button').first()).toContainText(alpha.name)
+  // Its top bar is the other pages' (#346): Back alone over the photo,
+  // black above it; scrolled, the name in the middle on gray-50.
+  const themeColor = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')!.getAttribute('content'))
+  await expect.poll(themeColor).toBe('#000000')
+  // Short enough to scroll: the test events' page fits a whole phone.
+  const phone = page.viewportSize()!
+  await page.setViewportSize({ width: phone.width, height: 480 })
+  await trackPage.evaluate(el => el.scrollTo(0, 200))
+  await expect.poll(themeColor).toBe('#f9fafb')
+  await expect(trackPage.locator('.sticky').first()).toHaveCSS('background-color', 'rgb(249, 250, 251)')
+  await expect(trackPage.locator('.sticky').first().getByText('Motorsport Ranch')).toHaveCSS('opacity', '1')
+  await trackPage.evaluate(el => el.scrollTo(0, 0))
+  await expect.poll(themeColor).toBe('#000000')
+  await page.setViewportSize(phone)
   expect(await trackPage.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
   // A layout's page opens over it: its shape leads, under the track's name…

@@ -439,6 +439,9 @@ export default function App() {
   }, [trackPageShowing])
   const shownTrackPage = trackPageShowing ?? lastTrackPage
   const [trackPageEntered, setTrackPageEntered] = useState(false)
+  // Each track page's title scrolled up into its bar, which turns the pages' gray-50 (#346).
+  const [trackPageCollapsed, setTrackPageCollapsed] = useState(false)
+  const [layoutCollapsed, setLayoutCollapsed] = useState(false)
 
   // …and a More page.
   const [lastMorePage, setLastMorePage] = useState(morePageShowing)
@@ -491,7 +494,9 @@ export default function App() {
   const overlayWhiteTop = shownOverlay !== null && shownOverlay.kind !== 'widget' && shownOverlay.kind !== 'about'
   // Track pages are black at the top, over their photos (#346): while one's
   // in place and nothing's in place over it.
-  const blackTop = !overlayEntered && (trackEntered || trackPageEntered)
+  // Not once its title's up in its gray-50 bar.
+  const trackTopCollapsed = trackSlug !== null ? layoutCollapsed : trackPageRoute !== null ? trackPageCollapsed : false
+  const blackTop = !overlayEntered && (trackEntered || trackPageEntered) && !trackTopCollapsed
     && !(isOnEventRoute && pushEntered) && !(carRouteId !== null && carEntered)
   const whiteTop = overlayEntered ? overlayWhiteTop : !blackTop && ((eventPageOpen && pushEntered) || carEntered)
   // Black over a sheet, as what's under it shrinks back on black (#415).
@@ -701,7 +706,7 @@ export default function App() {
         skipEnterAnimation={bootHashRef.current !== null}
         instant={swiped}
         whiteHeader={false}
-        blackHeader
+        blackHeader={!trackPageCollapsed}
       >
         <TrackPage
           slug={shownTrackPage}
@@ -712,6 +717,7 @@ export default function App() {
           onBack={backToTab}
           onOpenEvent={switchEvent}
           onAllTracks={() => setHash(HOME_TAB_HASH.tracks)}
+          onCollapsedChange={setTrackPageCollapsed}
         />
       </PushPage>
     )}
@@ -933,9 +939,9 @@ export default function App() {
         scrollRef={trackScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
         instant={swiped}
-        // Black at the top, over the track's photo (#346).
+        // Black at the top, over the track's photo (#346), till its title's up in its bar.
         whiteHeader={false}
-        blackHeader
+        blackHeader={!layoutCollapsed}
       >
         <PullToRefresh disabled={trackSlug === null || !!shownOverlay} scrollContainerRef={trackScrollRef}>
         <TrackLapsPage
@@ -953,6 +959,7 @@ export default function App() {
           }}
           onOpenEvent={openEventNotes}
           onAllTracks={() => setHash(HOME_TAB_HASH.tracks)}
+          onCollapsedChange={setLayoutCollapsed}
         />
         </PullToRefresh>
       </PushPage>

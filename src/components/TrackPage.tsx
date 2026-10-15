@@ -1,7 +1,7 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, MapPin, RotateCcw, RotateCw } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
-import { DarkPageBar, TrackShape, UNDER_BAR, useScrolledUnder } from './TrackPhoto'
+import { TOP_BAR_PX, TrackShape, TrackTopBar, UNDER_BAR } from './TrackPhoto'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { EventsFilterToggle } from './EventsFilterToggle'
 import type { EventsFilter } from './EventsFilterToggle'
@@ -14,6 +14,7 @@ import { goingIds, myRunGroup } from '../utils/rsvp'
 import { classifyEvent, partitionEvents } from '../utils/eventClass'
 import { formatLapTime } from '../utils/lapTimes'
 import { layoutLaps, layoutTitle, trackGroup } from '../utils/trackStats'
+import { useScrolledPast } from '../utils/useScrolledPast'
 import type { Layout, TrackGroup } from '../utils/trackStats'
 import type { EventConfig } from '../types'
 
@@ -133,6 +134,8 @@ interface Props {
   onOpenEvent: (event: EventConfig) => void
   /** To the Tracks tab, when there's no such track. */
   onAllTracks: () => void
+  /** Whether its title has scrolled up into the top bar, which is gray-50 then, not over the photo. */
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
 /**
@@ -141,7 +144,7 @@ interface Props {
  * over the photo's foot, where it is, its layouts — each opens its own
  * page (#274) — and every event at it, or theirs.
  */
-export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack, onOpenEvent, onAllTracks }: Props) {
+export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack, onOpenEvent, onAllTracks, onCollapsedChange }: Props) {
   const group = useMemo(() => trackGroup(slug, events), [slug, events])
   const { status: authStatus } = useAuth()
   const signedIn = authStatus === 'signed-in'
@@ -156,9 +159,12 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
     return new Set([...driven, ...going])
   }, [signedIn, summary.events, going])
 
-  const barRef = useRef<HTMLDivElement>(null)
-  const titleRef = useRef<HTMLDivElement>(null)
-  const compact = useScrolledUnder(titleRef, barRef)
+  // A ref that re-renders: the title is only there once the track's found.
+  const [title, setTitle] = useState<HTMLElement | null>(null)
+  const collapsed = useScrolledPast(title, TOP_BAR_PX)
+  useEffect(() => {
+    onCollapsedChange?.(collapsed)
+  }, [collapsed])
 
   const name = group?.name ?? ''
   const info = group?.info
@@ -245,7 +251,7 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DarkPageBar title={name} compact={compact} onBack={onBack} barRef={barRef} />
+      <TrackTopBar title={name} collapsed={collapsed} onBack={onBack} />
       {/* The design's header, 375 pt wide: everything placed from the
           status bar's foot, as there. */}
       <header className="relative overflow-hidden bg-black text-white" style={{ ...UNDER_BAR, height: 'calc(env(safe-area-inset-top) + 358px)' }}>
@@ -270,9 +276,9 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
           style={{ top: 'env(safe-area-inset-top)', height: 113, backgroundImage: 'linear-gradient(to bottom, #000 19.391%, rgba(0, 0, 0, 0) 99.304%)' }}
         />
         <div className="absolute inset-x-0 top-0 bg-black" style={{ height: 'env(safe-area-inset-top)' }} />
-        <div ref={titleRef} className="absolute inset-x-0 flex flex-col items-center gap-1.5 px-4 text-center font-rubik" style={{ top: 'calc(env(safe-area-inset-top) + 52px)' }}>
+        <div className="absolute inset-x-0 flex flex-col items-center gap-1.5 px-4 text-center font-rubik" style={{ top: `calc(env(safe-area-inset-top) + ${TOP_BAR_PX}px)` }}>
           {group ? (<>
-            <h1 className="max-w-full truncate text-[20px] font-bold leading-normal">{name}</h1>
+            <h1 ref={setTitle} className="max-w-full truncate text-[20px] font-bold leading-normal">{name}</h1>
             {group.city && <p className="max-w-full truncate text-base leading-normal">{group.city}</p>}
           </>) : !eventsLoaded && (
             <div className="h-6 w-44 animate-pulse rounded bg-white/15" aria-hidden="true" />
