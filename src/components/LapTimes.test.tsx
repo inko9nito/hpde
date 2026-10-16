@@ -1678,12 +1678,20 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX3 events · 2 configurations'])
     await userEvent.click(tracks()[0])
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
-    const list = within(page).getByRole('region', { name: 'Events' })
+    // The events are a tab of their own (#346).
+    await userEvent.click(within(page).getByRole('tab', { name: 'Events (3)' }))
+    const list = within(page).getByRole('tabpanel')
     expect(within(list).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(3)
-    // On Mine, theirs.
+    // On Mine, theirs…
     await userEvent.click(within(list).getByRole('button', { name: 'Mine' }))
     expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(1)
+    // …and on its layouts, how many of theirs: none on one.
+    await userEvent.click(within(page).getByRole('tab', { name: 'Configurations' }))
+    expect(within(within(page).getByRole('list', { name: 'Configurations' })).getAllByRole('link').map(l => l.textContent)).toEqual([
+      '1.7 mileCounter-clockwiseNo events',
+      '1.7 mileClockwise1 event · Best 1:39.1',
+    ])
   })
 
   it('opens a track’s page: where it is, its layouts, its events — a layout opens over it, and Back goes back through both (#346)', async () => {
@@ -1694,11 +1702,14 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
     expect(page).toHaveTextContent('Cresson, TX')
     expect(page.querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
-    // Its address opens Maps.
-    const location = within(page).getByRole('region', { name: 'Location' })
-    expect(within(location).getByRole('link')).toHaveAttribute('href', expect.stringContaining('maps.apple.com/?address=9012%20Performance%20Ct'))
     // Its layouts, each with how many events and, signed in, their best there.
-    const layouts = within(within(page).getByRole('region', { name: 'Configurations' })).getAllByRole('link')
+    expect(within(page).getByRole('tab', { name: 'Configurations' })).toHaveAttribute('aria-selected', 'true')
+    const list = within(page).getByRole('list', { name: 'Configurations' })
+    const layouts = within(list).getAllByRole('link')
+    // Where it is, under them; its address opens Maps.
+    const location = within(page).getByRole('region', { name: 'Location' })
+    expect(list.compareDocumentPosition(location) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(location).getByRole('link')).toHaveAttribute('href', expect.stringContaining('maps.apple.com/?address=9012%20Performance%20Ct'))
     expect(layouts.map(l => l.textContent)).toEqual([
       '1.7 mileCounter-clockwise1 event · Best 1:30',
       '1.7 mileClockwise2 events · Best 1:38.54',
@@ -1718,7 +1729,8 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
   it('opens an event from a track’s page, over it, and Back returns to it (#346)', async () => {
     openAt('#/tracks/msrc')
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
-    await userEvent.click((await within(within(page).getByRole('region', { name: 'Events' })).findAllByRole('button', { name: /Lap Day/ }))[0])
+    await userEvent.click(within(page).getByRole('tab', { name: /^Events/ }))
+    await userEvent.click((await within(within(page).getByRole('tabpanel')).findAllByRole('button', { name: /Lap Day/ }))[0])
     expect(window.location.hash).toBe(`#/event/${event.id}`)
     await userEvent.click((await screen.findAllByRole('button', { name: 'Back' })).at(-1)!)
     expect(window.location.hash).toBe('#/tracks/msrc')

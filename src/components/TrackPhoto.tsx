@@ -49,10 +49,9 @@ export function TrackTopBar({ title, collapsed, onBack }: {
   onBack: () => void
 }) {
   return (
-    <div
-      className={`sticky top-0 z-20 transition-colors duration-200 ${collapsed ? 'bg-gray-50' : 'bg-transparent'}`}
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
-    >
+    // No room of its own for the status bar: the other pages' bars have
+    // none, and iOS puts the page under it the same for all of them.
+    <div className={`sticky top-0 z-20 transition-colors duration-200 ${collapsed ? 'bg-gray-50' : 'bg-transparent'}`}>
       <div
         className="mx-auto grid max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4"
         style={{ height: TOP_BAR_PX }}
@@ -76,4 +75,4 @@ export function TrackTopBar({ title, collapsed, onBack }: {
 }
 
 /** Pulls a header up under the TrackTopBar before it, to the top of the screen. */
-export const UNDER_BAR = { marginTop: `calc(-1 * (env(safe-area-inset-top) + ${TOP_BAR_PX}px))` }
+export const UNDER_BAR = { marginTop: -TOP_BAR_PX }

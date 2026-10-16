@@ -2088,6 +2088,25 @@ test('a track page slides in over the event from My notes, listing the layout’
   await expect(events.nth(1)).toBeInViewport()
 })
 
+// On an iPhone, iOS puts every page under its status bar the same way, and
+// no page's top bar makes room for it: the track pages' bars made room
+// again, and sat a status bar lower than the rest, past a strip of the
+// photo (#346).
+test('a track page’s top bar sits where the other pages’ do, under the status bar (#346)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Only Chromium can stand in for an iPhone’s status bar (a DevTools override)')
+  await stubEvents(page)
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 54 } })
+  const backAt = async (hash: string, heading: string) => {
+    await page.goto(`/${hash}`)
+    const pushed = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: heading }) })
+    return Math.round((await pushed.getByRole('button', { name: 'Back' }).boundingBox())!.y)
+  }
+  const event = await backAt(`#/event/${alpha.id}`, alpha.name)
+  expect(await backAt('#/tracks/msrc', 'Motorsport Ranch')).toBe(event)
+  expect(await backAt('#/track/msrc-2-0-cw', '2.0 mile · Clockwise')).toBe(event)
+})
+
 test('an admin switches to the test account from the account menu, sees its laps and speeds, and switches back (#309)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
@@ -2214,7 +2233,8 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(trackPage.locator('img[data-track-photo="msrc"]')).toHaveCSS('opacity', '0.6')
   await expect(location.getByRole('link')).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
   // Signed out here, so every event at it, and no lap times.
-  await expect(trackPage.getByRole('region', { name: 'Events' }).getByRole('button').first()).toContainText(alpha.name)
+  await trackPage.getByRole('tab', { name: /^Events/ }).click()
+  await expect(trackPage.getByRole('tabpanel').getByRole('button').first()).toContainText(alpha.name)
   // Its top bar is the other pages' (#346): Back alone over the photo,
   // black above it; scrolled, the name in the middle on gray-50.
   const themeColor = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')!.getAttribute('content'))
@@ -2232,7 +2252,8 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   expect(await trackPage.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
   // A layout's page opens over it: its shape leads, under the track's name…
-  const layouts = trackPage.getByRole('region', { name: 'Configurations' }).getByRole('link')
+  await trackPage.getByRole('tab', { name: 'Configurations' }).click()
+  const layouts = trackPage.getByRole('list', { name: 'Configurations' }).getByRole('link')
   await expect(layouts).toHaveText([/^2\.0 mile\s*Clockwise\s*\d+ events?$/])
   const layoutSlide = await trackSlide(page, () => layouts.first().click(), '2.0 mile · Clockwise')
   expect(layoutSlide).toEqual({ fromBelow: false, fromSide: true })
