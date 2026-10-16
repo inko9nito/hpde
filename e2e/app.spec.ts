@@ -2231,7 +2231,15 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   expect(Math.round((await trackPage.getByRole('heading', { level: 1 }).boundingBox())!.y)).toBe(52)
   expect(Math.round((await location.locator('xpath=ancestor::div[contains(@class, "rounded-t-")][1]').boundingBox())!.y)).toBe(292)
   await expect(trackPage.locator('img[data-track-photo="msrc"]')).toHaveCSS('opacity', '0.6')
-  await expect(location.getByRole('link')).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
+  // Its address asks which maps app to open it in (#346).
+  await location.getByRole('button', { name: /open in Maps$/ }).click()
+  const maps = page.getByRole('dialog', { name: 'Open in' })
+  await expect(maps.getByRole('link')).toHaveText(['Apple Maps', 'Google Maps', 'Waze'])
+  await expect(maps.getByRole('link', { name: 'Apple Maps' })).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
+  await maps.getByRole('button', { name: 'Close' }).click()
+  await expect(maps).toHaveCount(0)
+  // Gone all the way, the page under it let go again.
+  await expect(page.locator('html')).not.toHaveClass(/bottom-sheet-open/)
   // Signed out here, so every event at it, and no lap times.
   await trackPage.getByRole('tab', { name: /^Events/ }).click()
   await expect(trackPage.getByRole('tabpanel').getByRole('button').first()).toContainText(alpha.name)

@@ -1706,10 +1706,10 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(within(page).getByRole('tab', { name: 'Configurations' })).toHaveAttribute('aria-selected', 'true')
     const list = within(page).getByRole('list', { name: 'Configurations' })
     const layouts = within(list).getAllByRole('link')
-    // Where it is, under them; its address opens Maps.
+    // Where it is, under them.
     const location = within(page).getByRole('region', { name: 'Location' })
     expect(list.compareDocumentPosition(location) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(location).getByRole('link')).toHaveAttribute('href', expect.stringContaining('maps.apple.com/?address=9012%20Performance%20Ct'))
+    expect(location).toHaveTextContent('9012 Performance CtCresson, TX 76035')
     expect(layouts.map(l => l.textContent)).toEqual([
       '1.7 mileCounter-clockwise1 event · Best 1:30',
       '1.7 mileClockwise2 events · Best 1:38.54',
@@ -1724,6 +1724,18 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(window.location.hash).toBe('#/tracks/msrc')
     await userEvent.click(within(page).getByRole('button', { name: 'Back' }))
     expect(window.location.hash).toBe('#/tracks')
+  })
+
+  it('asks which maps app to open a track’s address in (#346)', async () => {
+    openAt('#/tracks/msrc')
+    const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
+    await userEvent.click(within(within(page).getByRole('region', { name: 'Location' })).getByRole('button', { name: '9012 Performance Ct, Cresson, TX 76035: open in Maps' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Open in' })
+    expect(within(sheet).getAllByRole('link').map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('target')])).toEqual([
+      ['Apple Maps', 'https://maps.apple.com/?address=9012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035&q=Motorsport%20Ranch', '_blank'],
+      ['Google Maps', 'https://www.google.com/maps/search/?api=1&query=Motorsport%20Ranch%2C%209012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035', '_blank'],
+      ['Waze', 'https://waze.com/ul?q=9012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035&navigate=yes', '_blank'],
+    ])
   })
 
   it('opens an event from a track’s page, over it, and Back returns to it (#346)', async () => {

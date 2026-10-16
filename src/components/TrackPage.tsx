@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, MapPin, RotateCcw, RotateCw } from 'lucide-react'
+import { ChevronRight, ExternalLink, MapPin, RotateCcw, RotateCw } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
 import { TOP_BAR_PX, TrackShape, TrackTopBar, UNDER_BAR } from './TrackPhoto'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
 import { TabStrip } from './EventTabs'
+import { MapsSheet } from './MapsSheet'
 import { EventsFilterToggle } from './EventsFilterToggle'
 import type { EventsFilter } from './EventsFilterToggle'
 import { trackHash } from './TrackLapsPage'
@@ -92,10 +93,12 @@ function LayoutRow({ layout, count, best }: { layout: Layout; count: number; bes
 const SECTION_HEADING = 'font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500'
 
 /**
- * Where it is (#346), plainly, under its layouts: its address, which
- * opens Maps — or its city, when that's all there is.
+ * Where it is (#346), plainly, under its layouts: its address — or its
+ * city, when that's all there is. Tapped, its address asks which maps app
+ * to open it in, with the icon iOS uses for going elsewhere.
  */
 function Location({ group }: { group: TrackGroup }) {
+  const [picking, setPicking] = useState(false)
   const address = group.info?.address
   if (!address && !group.city) return null
   // "9012 Performance Ct" over "Cresson, TX 76035".
@@ -104,9 +107,8 @@ function Location({ group }: { group: TrackGroup }) {
   const text = (
     <>
       <MapPin size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         {lines.map(line => <span key={line} className="block">{line}</span>)}
-        {address && <span className="mt-1 block text-sm font-medium text-gray-900">Open in Maps</span>}
       </span>
     </>
   )
@@ -114,17 +116,18 @@ function Location({ group }: { group: TrackGroup }) {
     <section aria-label="Location">
       <h2 className={`mb-2 px-1 ${SECTION_HEADING}`}>Location</h2>
       {address ? (
-        <a
-          href={`https://maps.apple.com/?address=${encodeURIComponent(address)}&q=${encodeURIComponent(group.name)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-start gap-2 px-1 text-[15px] leading-snug text-gray-600 transition-colors hover:text-gray-900"
+        <button
+          onClick={() => setPicking(true)}
+          aria-label={`${address}: open in Maps`}
+          className="flex w-full items-start gap-2 px-1 text-left text-[15px] leading-snug text-gray-600 transition-colors hover:text-gray-900"
         >
           {text}
-        </a>
+          <ExternalLink size={18} className="shrink-0 self-center text-gray-400" aria-hidden="true" />
+        </button>
       ) : (
         <p className="flex items-start gap-2 px-1 text-[15px] leading-snug text-gray-600">{text}</p>
       )}
+      {picking && address && <MapsSheet name={group.name} address={address} onClose={() => setPicking(false)} />}
     </section>
   )
 }
