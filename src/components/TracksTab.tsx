@@ -18,16 +18,14 @@ import type { TrackGroup } from '../utils/trackStats'
  * One track (#346), as the Garage shows a car (#410): its photo, dimmed on
  * black as its page has it, with its full course's shape over the middle;
  * its name and where it is over the foot, with how many layouts — all of
- * them, or theirs (#385) — and how many events across from them. Opens
- * its page.
+ * them, or the ones theirs are on (#385). Opens its page.
  */
-function TrackCard({ group, events, layouts, mine }: { group: TrackGroup; events: number; layouts: number; mine: boolean }) {
+function TrackCard({ group, layouts, mine }: { group: TrackGroup; layouts: number; mine: boolean }) {
   const configurations = `${plural(layouts, 'configuration', 'configurations')}${mine ? ' driven' : ''}`
-  const count = plural(events, 'event', 'events')
   return (
     <a
       href={trackPageHash(group.slug)}
-      aria-label={`${group.name}${group.city ? `, ${group.city}` : ''}: ${count} · ${configurations}`}
+      aria-label={`${group.name}${group.city ? `, ${group.city}` : ''}: ${configurations}`}
       className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
@@ -54,9 +52,6 @@ function TrackCard({ group, events, layouts, mine }: { group: TrackGroup; events
             <h2 className="line-clamp-2 text-balance font-rubik text-[20px] font-bold leading-tight text-white">{group.name}</h2>
             <p className="mt-0.5 truncate text-sm text-white/85">{[group.city, configurations].filter(Boolean).join(' · ')}</p>
           </div>
-          <span className="block shrink-0 rounded-full bg-white/90 px-2.5 py-1 text-[13px] font-semibold tabular-nums text-gray-900 shadow-sm" data-events-badge>
-            {count}
-          </span>
         </div>
       </div>
     </a>
@@ -69,10 +64,10 @@ function TrackCardSkeleton() {
 
 /**
  * The Tracks tab (#274): each track (#346), the one with the latest event
- * first, with how many events and layouts it has — every one, or, signed
- * in, on Mine (#385), only the tracks the driver has events at and how
- * many: ones they're going to or went to, or have sessions at (#320), and
- * on how many layouts. Each opens its page.
+ * first, with how many layouts it has — every one, or, signed in, on Mine
+ * (#385), only the tracks the driver has events at (ones they're going to
+ * or went to, or have sessions at, #320), and on how many layouts. Each
+ * opens its page.
  */
 export function TracksTab({ filter, onFilter }: { filter: EventsFilter; onFilter: (f: EventsFilter) => void }) {
   const { events, loaded } = useEvents()
@@ -110,7 +105,6 @@ export function TracksTab({ filter, onFilter }: { filter: EventsFilter; onFilter
           <li key={group.slug}>
             <TrackCard
               group={group}
-              events={group.layouts.reduce((n, l) => n + (counts.get(l.slug) ?? 0), 0)}
               layouts={group.layouts.length}
               mine={mine}
             />

@@ -1630,7 +1630,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
     // One track, both its layouts (#314), as the app names it.
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'Motorsport RanchCresson, TX · 2 configurations driven3 events',
+      'Motorsport RanchCresson, TX · 2 configurations driven',
     ]))
     expect(tracks()[0]).toHaveAttribute('href', '#/tracks/msrc')
     expect(tracks()[0].querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
@@ -1640,7 +1640,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
   it('leaves out a layout you have no events at, and says so when that’s all of them (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven1 event']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven']))
   })
 
   it('says when none are yours, or yours couldn’t be had (#385)', async () => {
@@ -1655,27 +1655,27 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(await screen.findByText('Couldn’t load your tracks.')).toBeInTheDocument()
     // All still has them.
     await userEvent.click(within(screen.getByRole('group', { name: 'Which tracks' })).getByRole('button', { name: 'All' }))
-    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations3 events'])
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations'])
   })
 
-  it('counts the events you said you’re going to as well as the ones with sessions, each once (#320)', async () => {
+  it('counts the layouts of the events you said you’re going to as well as the ones with sessions (#320)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
-    // Going to both CW events — one with sessions too — and not to the CCW one.
-    rsvps = { [event.id]: { status: 'going' }, [sameLayout.id]: { status: 'going' }, [otherWay.id]: { status: 'not-going' } }
+    // Sessions at a CW event, and going to the CCW one, with none there yet.
+    rsvps = { [otherWay.id]: { status: 'going' } }
     window.location.hash = '#/tracks'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven2 events']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations driven']))
   })
 
   it('counts every event on All, and starts on Mine; the track’s page opens on All too (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven1 event']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven']))
     const toggle = screen.getByRole('group', { name: 'Which tracks' })
     expect(within(toggle).getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true')
 
     await userEvent.click(within(toggle).getByRole('button', { name: 'All' }))
-    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations3 events'])
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations'])
     await userEvent.click(tracks()[0])
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
     // The events are a tab of their own (#346).
@@ -1752,7 +1752,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     signedIn = false
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'Motorsport RanchCresson, TX · 2 configurations3 events',
+      'Motorsport RanchCresson, TX · 2 configurations',
     ]))
     // Nothing of theirs to pick between.
     expect(screen.queryByRole('group', { name: 'Which tracks' })).not.toBeInTheDocument()

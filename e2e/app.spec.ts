@@ -2144,14 +2144,14 @@ test('an admin switches to the test account from the account menu, sees its laps
   // The page starts below it, not under it.
   const bannerBottom = (await banner.boundingBox())!.y + (await banner.boundingBox())!.height
   expect((await page.getByRole('heading', { level: 1, name: 'Tracks' }).boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
-  await expect(alphaTrack).toContainText('1 event')
+  await expect(alphaTrack).toContainText('1 configuration driven')
   expect(asked).toContain('test-account')
 
   // Still on it after a reload — once its laps are in, so the reload
   // doesn't cut off requests on their way.
   await page.reload()
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
-  await expect(alphaTrack).toContainText('1 event')
+  await expect(alphaTrack).toContainText('1 configuration driven')
 
   // Its laps show with each lap's speeds.
   await page.goto(`/#/event/${alpha.id}`)
@@ -2198,12 +2198,12 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(page).toHaveURL(/#\/tracks$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
   // The one coming up first, then the rest: each track (#346), named as
-  // the app knows it, with how many events and layouts, signed out too (#385).
+  // the app knows it, with how many layouts, signed out too (#385).
   const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
   await expect(tracks).toHaveText([
-    /^Charlie Raceway\s*1 configuration\s*1 event$/,
-    /^Motorsport Ranch\s*Cresson, TX · 1 configuration\s*\d+ events?$/,
-    /^Eagles Canyon Raceway\s*Decatur, TX · 1 configuration\s*\d+ events?$/,
+    /^Charlie Raceway\s*1 configuration$/,
+    /^Motorsport Ranch\s*Cresson, TX · 1 configuration$/,
+    /^Eagles Canyon Raceway\s*Decatur, TX · 1 configuration$/,
   ])
   // As the Garage shows a car (#346): its photo fills the card, 16:9,
   // inside its 1px border, dimmed as on its page, with the course's shape
