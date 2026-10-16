@@ -2201,20 +2201,23 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   // the app knows it, with how many events and layouts, signed out too (#385).
   const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
   await expect(tracks).toHaveText([
-    /^Charlie Raceway\s*1 event · 1 configuration$/,
-    /^Motorsport Ranch\s*Cresson, TX\s*\d+ events? · 1 configuration$/,
-    /^Eagles Canyon Raceway\s*Decatur, TX\s*\d+ events? · 1 configuration$/,
+    /^Charlie Raceway\s*1 configuration\s*1 event$/,
+    /^Motorsport Ranch\s*Cresson, TX · 1 configuration\s*\d+ events?$/,
+    /^Eagles Canyon Raceway\s*Decatur, TX · 1 configuration\s*\d+ events?$/,
   ])
-  // Its photo across the card's top, flush with its sides (inside its 1px
-  // border), the course's shape over it; Charlie Raceway has none yet.
-  const [card, band] = await tracks.nth(1).evaluate(a => [a, a.firstElementChild!].map(el => {
-    const { left, right, top, width, height } = el.getBoundingClientRect()
-    return { left, right, top, width, height }
+  // As the Garage shows a car (#346): its photo fills the card, 16:9,
+  // inside its 1px border, dimmed as on its page, with the course's shape
+  // over it and its name over the foot; Charlie Raceway has no photo yet.
+  const [card, photo] = await tracks.nth(1).evaluate(a => [a, a.firstElementChild!].map(el => {
+    const { left, right, top, bottom, width, height } = el.getBoundingClientRect()
+    return { left, right, top, bottom, width, height }
   }))
-  expect(band.width).toBeGreaterThan(band.height * 2)
-  expect(band.left - card.left).toBeCloseTo(1, 0)
-  expect(card.right - band.right).toBeCloseTo(1, 0)
-  expect(band.top - card.top).toBeCloseTo(1, 0)
+  expect(photo.width / photo.height).toBeCloseTo(16 / 9, 1)
+  expect(photo.left - card.left).toBeCloseTo(1, 0)
+  expect(card.right - photo.right).toBeCloseTo(1, 0)
+  expect(photo.top - card.top).toBeCloseTo(1, 0)
+  expect(card.bottom - photo.bottom).toBeCloseTo(1, 0)
+  await expect(tracks.nth(1).locator('img[data-track-photo="msrc"]')).toHaveCSS('opacity', '0.6')
   await expect(tracks.nth(1).locator('img[data-track-photo="msrc"]')).toHaveJSProperty('complete', true)
   expect(await tracks.nth(1).locator('img[data-track-photo="msrc"]').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1280)
   await expect(tracks.nth(1).locator('[data-track-shape="msrc-3-1"]')).toBeVisible()

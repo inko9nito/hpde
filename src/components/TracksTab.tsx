@@ -1,10 +1,9 @@
 import { useMemo } from 'react'
-import { ChevronRight } from 'lucide-react'
 import { HomeHeader } from './HomeTabs'
 import { EventsFilterToggle } from './EventsFilterToggle'
 import type { EventsFilter } from './EventsFilterToggle'
 import { TrackShape } from './TrackPhoto'
-import { CARD_FRAME, EmptyRow } from './EventCard'
+import { EmptyRow } from './EventCard'
 import { trackPageHash } from './TrackPage'
 import { plural } from './LapSessions'
 import { useEvents } from '../data/EventsContext'
@@ -15,60 +14,57 @@ import { goingIds } from '../utils/rsvp'
 import { layoutLaps, layoutsOf, trackGroups } from '../utils/trackStats'
 import type { TrackGroup } from '../utils/trackStats'
 
-// The card's photo band: about as the design has it (#346), 2.6 times as
-// wide as tall.
-const BAND = 'h-[136px]'
-
 /**
- * One track (#346): its photo with its full course's shape over it, its
- * name and where it is, and how many events and layouts — all of them, or
- * theirs (#385). Opens its page.
+ * One track (#346), as the Garage shows a car (#410): its photo, dimmed on
+ * black as its page has it, with its full course's shape over the middle;
+ * its name and where it is over the foot, with how many layouts — all of
+ * them, or theirs (#385) — and how many events across from them. Opens
+ * its page.
  */
 function TrackCard({ group, events, layouts, mine }: { group: TrackGroup; events: number; layouts: number; mine: boolean }) {
-  const counts = `${plural(events, 'event', 'events')} · ${plural(layouts, 'configuration', 'configurations')}${mine ? ' driven' : ''}`
+  const configurations = `${plural(layouts, 'configuration', 'configurations')}${mine ? ' driven' : ''}`
+  const count = plural(events, 'event', 'events')
   return (
     <a
       href={trackPageHash(group.slug)}
-      aria-label={`${group.name}${group.city ? `, ${group.city}` : ''}: ${counts}`}
-      className={`${CARD_FRAME} block overflow-hidden transition-colors hover:border-gray-400`}
+      aria-label={`${group.name}${group.city ? `, ${group.city}` : ''}: ${count} · ${configurations}`}
+      className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors hover:border-gray-300"
     >
-      <div className={`relative ${BAND} overflow-hidden bg-black`}>
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
         {group.info?.photo && (
+          // At 60% on black, as on the track's page.
           <img
             src={group.info.photo}
             alt=""
             data-track-photo={group.slug}
-            className="absolute inset-0 h-full w-full object-cover opacity-75"
+            className="absolute inset-0 h-full w-full object-cover opacity-60"
             style={{ objectPosition: `${group.info.photoX} 50%` }}
           />
         )}
-        {/* Flex, not grid: its square is taller than the band, and a grid row would grow to fit it. */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <TrackShape trackId={group.trackId} width={168} className="shrink-0" />
+        {/* Dark enough at the foot for the name to read, as the Garage's. */}
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
+        {/* Over the photo above the name. Flex, not grid: its square is
+            taller than the room, and a grid row would grow to fit it. */}
+        <div className="absolute inset-x-0 top-0 flex h-[62%] items-center justify-center">
+          <TrackShape trackId={group.trackId} width={150} className="shrink-0" />
         </div>
-      </div>
-      <div className="flex items-center gap-3 py-3.5 pl-4 pr-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate font-rubik text-[17px] font-semibold leading-tight text-gray-900">{group.name}</h2>
-          {group.city && <div className="mt-0.5 truncate text-sm text-gray-700">{group.city}</div>}
-          <div className="mt-1 truncate text-sm text-gray-500">{counts}</div>
+        <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-3.5">
+          <div className="min-w-0 flex-1">
+            {/* Two lines rather than cut short beside the events: "Eagles Canyon Raceway". */}
+            <h2 className="line-clamp-2 text-balance font-rubik text-[20px] font-bold leading-tight text-white">{group.name}</h2>
+            <p className="mt-0.5 truncate text-sm text-white/85">{[group.city, configurations].filter(Boolean).join(' · ')}</p>
+          </div>
+          <span className="block shrink-0 rounded-full bg-white/90 px-2.5 py-1 text-[13px] font-semibold tabular-nums text-gray-900 shadow-sm" data-events-badge>
+            {count}
+          </span>
         </div>
-        <ChevronRight size={20} className="shrink-0 text-gray-300" aria-hidden="true" />
       </div>
     </a>
   )
 }
 
 function TrackCardSkeleton() {
-  return (
-    <div aria-busy="true" aria-label="Loading tracks" className={`${CARD_FRAME} overflow-hidden`}>
-      <div className={`${BAND} animate-pulse bg-gray-100`} />
-      <div className="space-y-2 p-4">
-        <div className="h-4 w-2/5 animate-pulse rounded bg-gray-100" />
-        <div className="h-3 w-3/5 animate-pulse rounded bg-gray-100" />
-      </div>
-    </div>
-  )
+  return <div aria-busy="true" aria-label="Loading tracks" className="aspect-[16/9] animate-pulse rounded-2xl border border-gray-200 bg-white" />
 }
 
 /**
