@@ -44,7 +44,7 @@ function TrackCard({ group, layouts, mine }: { group: TrackGroup; layouts: numbe
         {/* Over the photo above the name. Flex, not grid: its square is
             taller than the room, and a grid row would grow to fit it. */}
         <div className="absolute inset-x-0 top-0 flex h-[62%] items-center justify-center">
-          <TrackShape trackId={group.trackId} width={150} className="shrink-0" />
+          <TrackShape trackId={group.trackId} width={185} className="shrink-0" />
         </div>
         <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-3.5">
           <div className="min-w-0 flex-1">
