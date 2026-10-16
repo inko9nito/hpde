@@ -56,7 +56,7 @@ export function TrackTopBar({ title, collapsed, onBack }: {
         className="mx-auto grid max-w-lg grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-4"
         style={{ height: TOP_BAR_PX }}
       >
-        <div className="justify-self-start"><BackButton onClick={onBack} onDark={!collapsed} /></div>
+        <div className="flex justify-self-start"><BackButton onClick={onBack} onDark={!collapsed} /></div>
         {/* The title's echo, once it's scrolled away: fades in, but hides
             at once — hidden from assistive tech, so the name isn't
             announced twice. */}

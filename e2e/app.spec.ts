@@ -2097,22 +2097,16 @@ test('a track page’s top bar sits where the other pages’ do, under the statu
   await stubEvents(page)
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 54 } })
-  // Where Back is, once the page has settled: a page can still be a pixel
-  // off in the frame it first shows (CI once read 7 for 8), so `want` is
-  // waited for, and the test fails if Back never gets there.
+  // Under the default fonts too, not only Inter: Back sat a pixel high on
+  // the track pages when a text line's height set its box's (CI, #346).
   const backAt = async (hash: string, heading: string) => {
     await page.goto(`/${hash}`)
     const pushed = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: heading }) })
-    const back = pushed.getByRole('button', { name: 'Back' })
-    return async (want?: number) => {
-      if (want === undefined) return Math.round((await back.boundingBox())!.y)
-      await expect.poll(async () => Math.round((await back.boundingBox())!.y)).toBe(want)
-      return want
-    }
+    return Math.round((await pushed.getByRole('button', { name: 'Back' }).boundingBox())!.y)
   }
-  const event = await (await backAt(`#/event/${alpha.id}`, alpha.name))()
-  await (await backAt('#/tracks/msrc', 'Motorsport Ranch'))(event)
-  await (await backAt('#/track/msrc-2-0-cw', '2.0 mile · Clockwise'))(event)
+  const event = await backAt(`#/event/${alpha.id}`, alpha.name)
+  expect(await backAt('#/tracks/msrc', 'Motorsport Ranch')).toBe(event)
+  expect(await backAt('#/track/msrc-2-0-cw', '2.0 mile · Clockwise')).toBe(event)
 })
 
 test('an admin switches to the test account from the account menu, sees its laps and speeds, and switches back (#309)', async ({ page }) => {
