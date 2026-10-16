@@ -41,14 +41,16 @@ function TrackCard({ group, layouts, mine }: { group: TrackGroup; layouts: numbe
         )}
         {/* Dark enough at the foot for the name to read, as the Garage's. */}
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/35 to-transparent" aria-hidden="true" />
-        {/* Over the photo above the name. Flex, not grid: its square is
-            taller than the room, and a grid row would grow to fit it. */}
-        <div className="absolute inset-x-0 top-0 flex h-[62%] items-center justify-center">
-          <TrackShape trackId={group.trackId} width={215} className="shrink-0" />
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-3.5">
-          <div className="min-w-0 flex-1">
-            {/* Two lines rather than cut short beside the events: "Eagles Canyon Raceway". */}
+        {/* The shape in the room above the name, as far from the card's top
+            as from the name, however many lines that takes. Flex, not
+            grid: its square is taller than the room, and a grid row would
+            grow to fit it. */}
+        <div className="absolute inset-0 flex flex-col">
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <TrackShape trackId={group.trackId} width={215} className="shrink-0" fill="bg-white/60" />
+          </div>
+          <div className="px-4 pb-3.5">
+            {/* Two lines rather than cut short: "Eagles Canyon Raceway". */}
             <h2 className="line-clamp-2 text-balance font-rubik text-[20px] font-bold leading-tight text-white">{group.name}</h2>
             <p className="mt-0.5 truncate text-sm text-white/85">{[group.city, configurations].filter(Boolean).join(' · ')}</p>
           </div>

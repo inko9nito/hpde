@@ -8,10 +8,10 @@ const SHAPE_FRAME = 437 / 341
 /**
  * A track's shape in white over its photo (#346): the app's own icon,
  * with the design's glow and shadow (HPDE Figma 2079:1128, its "M3
- * Elevation Light/3"). `width` is the shape's, not its square's. Nothing
- * for a track with no icon yet.
+ * Elevation Light/3"). `width` is the shape's, not its square's; `fill`,
+ * how white it is. Nothing for a track with no icon yet.
  */
-export function TrackShape({ trackId, width, className = '' }: { trackId?: string; width: number; className?: string }) {
+export function TrackShape({ trackId, width, className = '', fill = 'bg-white/80' }: { trackId?: string; width: number; className?: string; fill?: string }) {
   const src = trackIconSrc(trackId)
   if (!src) return null
   const box = Math.round(width * SHAPE_FRAME)
@@ -26,7 +26,7 @@ export function TrackShape({ trackId, width, className = '' }: { trackId?: strin
       style={{ width: box, height: box, filter: 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15))' }}
     >
       <span
-        className="block bg-white/80"
+        className={`block ${fill}`}
         style={{ width: box, height: box, WebkitMaskImage: mask, maskImage: mask, WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center' }}
       />
     </span>
