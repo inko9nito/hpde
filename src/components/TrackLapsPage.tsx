@@ -281,7 +281,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
       <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.25) 45%, rgba(0, 0, 0, 0.75))' }} />
       <div
         className="relative mx-auto flex max-w-lg flex-col items-center px-4 pb-5 text-center font-rubik"
-        style={{ paddingTop: `calc(env(safe-area-inset-top) + ${TOP_BAR_PX}px)` }}
+        style={{ paddingTop: TOP_BAR_PX }}
       >
         {title ? (<>
           <h1 ref={setTitleEl} className="max-w-full truncate text-[20px] font-bold leading-normal">{heading}</h1>

@@ -2088,6 +2088,27 @@ test('a track page slides in over the event from My notes, listing the layout’
   await expect(events.nth(1)).toBeInViewport()
 })
 
+// On an iPhone, iOS puts every page under its status bar the same way, and
+// no page's top bar makes room for it: the track pages' bars made room
+// again, and sat a status bar lower than the rest, past a strip of the
+// photo (#346).
+test('a track page’s top bar sits where the other pages’ do, under the status bar (#346)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Only Chromium can stand in for an iPhone’s status bar (a DevTools override)')
+  await stubEvents(page)
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 54 } })
+  // Under the default fonts too, not only Inter: Back sat a pixel high on
+  // the track pages when a text line's height set its box's (CI, #346).
+  const backAt = async (hash: string, heading: string) => {
+    await page.goto(`/${hash}`)
+    const pushed = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: heading }) })
+    return Math.round((await pushed.getByRole('button', { name: 'Back' }).boundingBox())!.y)
+  }
+  const event = await backAt(`#/event/${alpha.id}`, alpha.name)
+  expect(await backAt('#/tracks/msrc', 'Motorsport Ranch')).toBe(event)
+  expect(await backAt('#/track/msrc-2-0-cw', '2.0 mile · Clockwise')).toBe(event)
+})
+
 test('an admin switches to the test account from the account menu, sees its laps and speeds, and switches back (#309)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
@@ -2125,14 +2146,14 @@ test('an admin switches to the test account from the account menu, sees its laps
   // The page starts below it, not under it.
   const bannerBottom = (await banner.boundingBox())!.y + (await banner.boundingBox())!.height
   expect((await page.getByRole('heading', { level: 1, name: 'Tracks' }).boundingBox())!.y).toBeGreaterThanOrEqual(bannerBottom)
-  await expect(alphaTrack).toContainText('1 event')
+  await expect(alphaTrack).toContainText('1 configuration driven')
   expect(asked).toContain('test-account')
 
   // Still on it after a reload — once its laps are in, so the reload
   // doesn't cut off requests on their way.
   await page.reload()
   await expect(page.getByRole('button', { name: 'Account: admin@example.com, on the test account' })).toBeVisible()
-  await expect(alphaTrack).toContainText('1 event')
+  await expect(alphaTrack).toContainText('1 configuration driven')
 
   // Its laps show with each lap's speeds.
   await page.goto(`/#/event/${alpha.id}`)
@@ -2179,23 +2200,26 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   await expect(page).toHaveURL(/#\/tracks$/)
   await expect(page.getByRole('heading', { level: 1, name: 'Tracks' })).toBeVisible()
   // The one coming up first, then the rest: each track (#346), named as
-  // the app knows it, with how many events and layouts, signed out too (#385).
+  // the app knows it, with how many layouts, signed out too (#385).
   const tracks = page.getByRole('list', { name: 'Tracks' }).getByRole('link')
   await expect(tracks).toHaveText([
-    /^Charlie Raceway\s*1 event · 1 configuration$/,
-    /^Motorsport Ranch\s*Cresson, TX\s*\d+ events? · 1 configuration$/,
-    /^Eagles Canyon Raceway\s*Decatur, TX\s*\d+ events? · 1 configuration$/,
+    /^Charlie Raceway\s*1 configuration$/,
+    /^Motorsport Ranch\s*Cresson, TX · 1 configuration$/,
+    /^Eagles Canyon Raceway\s*Decatur, TX · 1 configuration$/,
   ])
-  // Its photo across the card's top, flush with its sides (inside its 1px
-  // border), the course's shape over it; Charlie Raceway has none yet.
-  const [card, band] = await tracks.nth(1).evaluate(a => [a, a.firstElementChild!].map(el => {
-    const { left, right, top, width, height } = el.getBoundingClientRect()
-    return { left, right, top, width, height }
+  // As the Garage shows a car (#346): its photo fills the card, 16:9,
+  // inside its 1px border, dimmed as on its page, with the course's shape
+  // over it and its name over the foot; Charlie Raceway has no photo yet.
+  const [card, photo] = await tracks.nth(1).evaluate(a => [a, a.firstElementChild!].map(el => {
+    const { left, right, top, bottom, width, height } = el.getBoundingClientRect()
+    return { left, right, top, bottom, width, height }
   }))
-  expect(band.width).toBeGreaterThan(band.height * 2)
-  expect(band.left - card.left).toBeCloseTo(1, 0)
-  expect(card.right - band.right).toBeCloseTo(1, 0)
-  expect(band.top - card.top).toBeCloseTo(1, 0)
+  expect(photo.width / photo.height).toBeCloseTo(16 / 9, 1)
+  expect(photo.left - card.left).toBeCloseTo(1, 0)
+  expect(card.right - photo.right).toBeCloseTo(1, 0)
+  expect(photo.top - card.top).toBeCloseTo(1, 0)
+  expect(card.bottom - photo.bottom).toBeCloseTo(1, 0)
+  await expect(tracks.nth(1).locator('img[data-track-photo="msrc"]')).toHaveCSS('opacity', '0.6')
   await expect(tracks.nth(1).locator('img[data-track-photo="msrc"]')).toHaveJSProperty('complete', true)
   expect(await tracks.nth(1).locator('img[data-track-photo="msrc"]').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1280)
   await expect(tracks.nth(1).locator('[data-track-shape="msrc-3-1"]')).toBeVisible()
@@ -2212,9 +2236,18 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   expect(Math.round((await trackPage.getByRole('heading', { level: 1 }).boundingBox())!.y)).toBe(52)
   expect(Math.round((await location.locator('xpath=ancestor::div[contains(@class, "rounded-t-")][1]').boundingBox())!.y)).toBe(292)
   await expect(trackPage.locator('img[data-track-photo="msrc"]')).toHaveCSS('opacity', '0.6')
-  await expect(location.getByRole('link')).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
+  // Its address asks which maps app to open it in (#346).
+  await location.getByRole('button', { name: /open in Maps$/ }).click()
+  const maps = page.getByRole('dialog', { name: 'Open in' })
+  await expect(maps.getByRole('link')).toHaveText(['Apple Maps', 'Google Maps', 'Waze'])
+  await expect(maps.getByRole('link', { name: 'Apple Maps' })).toHaveAttribute('href', /^https:\/\/maps\.apple\.com\/\?address=9012%20Performance%20Ct/)
+  await maps.getByRole('button', { name: 'Close' }).click()
+  await expect(maps).toHaveCount(0)
+  // Gone all the way, the page under it let go again.
+  await expect(page.locator('html')).not.toHaveClass(/bottom-sheet-open/)
   // Signed out here, so every event at it, and no lap times.
-  await expect(trackPage.getByRole('region', { name: 'Events' }).getByRole('button').first()).toContainText(alpha.name)
+  await trackPage.getByRole('tab', { name: /^Events/ }).click()
+  await expect(trackPage.getByRole('tabpanel').getByRole('button').first()).toContainText(alpha.name)
   // Its top bar is the other pages' (#346): Back alone over the photo,
   // black above it; scrolled, the name in the middle on gray-50.
   const themeColor = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')!.getAttribute('content'))
@@ -2232,7 +2265,8 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   expect(await trackPage.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
 
   // A layout's page opens over it: its shape leads, under the track's name…
-  const layouts = trackPage.getByRole('region', { name: 'Configurations' }).getByRole('link')
+  await trackPage.getByRole('tab', { name: 'Configurations' }).click()
+  const layouts = trackPage.getByRole('list', { name: 'Configurations' }).getByRole('link')
   await expect(layouts).toHaveText([/^2\.0 mile\s*Clockwise\s*\d+ events?$/])
   const layoutSlide = await trackSlide(page, () => layouts.first().click(), '2.0 mile · Clockwise')
   expect(layoutSlide).toEqual({ fromBelow: false, fromSide: true })

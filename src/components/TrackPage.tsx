@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, MapPin, RotateCcw, RotateCw } from 'lucide-react'
+import { ChevronRight, ExternalLink, MapPin, RotateCcw, RotateCw } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
 import { TOP_BAR_PX, TrackShape, TrackTopBar, UNDER_BAR } from './TrackPhoto'
 import { CARD_FRAME, EmptyRow, EventCard } from './EventCard'
+import { TabStrip } from './EventTabs'
+import { MapsSheet } from './MapsSheet'
 import { EventsFilterToggle } from './EventsFilterToggle'
 import type { EventsFilter } from './EventsFilterToggle'
 import { trackHash } from './TrackLapsPage'
@@ -36,6 +38,11 @@ function layoutText(layout: Layout): string {
   return [length, direction].filter(Boolean).join(' · ') || layout.name
 }
 
+/** "1 event", "3 events" — or "No events", on Mine at a layout none of theirs are on. */
+function eventCount(n: number): string {
+  return n === 0 ? 'No events' : plural(n, 'event', 'events')
+}
+
 /**
  * One of the track's layouts (#346): its shape on a dark panel along the
  * card's left edge (#274), how far round and which way, and how many
@@ -48,16 +55,16 @@ function LayoutRow({ layout, count, best }: { layout: Layout; count: number; bes
   return (
     <a
       href={trackHash(layout.slug)}
-      aria-label={`${layoutText(layout)}, ${plural(count, 'event', 'events')}`}
+      aria-label={`${layoutText(layout)}, ${eventCount(count)}`}
       className={`${CARD_FRAME} flex items-stretch overflow-hidden transition-colors hover:border-gray-400`}
     >
-      <div className="relative w-24 min-h-[72px] shrink-0 overflow-hidden bg-gray-900">
+      <div className="relative w-20 min-h-[64px] shrink-0 overflow-hidden bg-gray-900">
         <div className="absolute inset-0 grid place-items-center">
-          <TrackIcon trackId={layout.trackId} tone="dark" size={76} padding={0} radius="rounded-none" />
+          <TrackIcon trackId={layout.trackId} tone="dark" size={64} padding={0} radius="rounded-none" />
         </div>
         {layout.direction && (
           <DirectionIcon
-            size={14}
+            size={13}
             strokeWidth={2.25}
             data-direction={layout.direction}
             className="absolute bottom-1.5 right-1.5 text-white/60"
@@ -65,13 +72,15 @@ function LayoutRow({ layout, count, best }: { layout: Layout; count: number; bes
           />
         )}
       </div>
-      <div className="flex min-w-0 flex-1 items-center gap-4 py-3.5 pl-4 pr-3">
+      <div className="flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 pr-3">
         <div className="min-w-0 flex-1">
-          {/* How far round, then which way: "Counter-clockwise" won't fit beside it. */}
-          <div className="truncate font-rubik text-[15px] font-semibold leading-tight text-gray-900">{length ?? layout.name}</div>
-          {direction && <div className="mt-0.5 truncate text-sm text-gray-700">{direction}</div>}
-          <div className="mt-0.5 truncate text-sm text-gray-500">
-            {plural(count, 'event', 'events')}
+          {/* How far round, and which way beside it. */}
+          <div className="flex min-w-0 items-baseline gap-1.5 font-rubik text-[15px] leading-tight">
+            <span className="shrink-0 font-semibold text-gray-900">{length ?? layout.name}</span>
+            {direction && <span className="min-w-0 truncate text-gray-500">{direction}</span>}
+          </div>
+          <div className="mt-1 truncate text-sm text-gray-500">
+            {eventCount(count)}
             {best !== undefined && <> · Best <span className="font-mono tabular-nums text-gray-700">{formatLapTime(best)}</span></>}
           </div>
         </div>
@@ -83,44 +92,47 @@ function LayoutRow({ layout, count, best }: { layout: Layout; count: number; bes
 
 const SECTION_HEADING = 'font-rubik text-xs font-medium uppercase tracking-[0.15em] text-gray-500'
 
-/** Where it is (#346): its address, which opens Maps. Its city, when that's all there is. */
-function LocationCard({ group }: { group: TrackGroup }) {
+/**
+ * Where it is (#346), plainly, under its layouts: its address — or its
+ * city, when that's all there is. Tapped, its address asks which maps app
+ * to open it in, with the icon iOS uses for going elsewhere.
+ */
+function Location({ group }: { group: TrackGroup }) {
+  const [picking, setPicking] = useState(false)
   const address = group.info?.address
   if (!address && !group.city) return null
   // "9012 Performance Ct" over "Cresson, TX 76035".
   const comma = address?.indexOf(',') ?? -1
-  const [street, rest] = address && comma > 0 ? [address.slice(0, comma), address.slice(comma + 1).trim()] : [address ?? group.city!, null]
-  const body = (
+  const lines = address && comma > 0 ? [address.slice(0, comma), address.slice(comma + 1).trim()] : [address ?? group.city!]
+  const text = (
     <>
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-red-50 text-red-600">
-        <MapPin size={20} strokeWidth={2} aria-hidden="true" />
-      </span>
+      <MapPin size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] text-gray-900">{street}</span>
-        {rest && <span className="block truncate text-sm text-gray-500">{rest}</span>}
+        {lines.map(line => <span key={line} className="block">{line}</span>)}
       </span>
     </>
   )
   return (
-    <section aria-labelledby="track-location-heading">
-      <h2 id="track-location-heading" className={`mb-2 ${SECTION_HEADING}`}>Location</h2>
+    <section aria-label="Location">
+      <h2 className={`mb-2 px-1 ${SECTION_HEADING}`}>Location</h2>
       {address ? (
-        <a
-          href={`https://maps.apple.com/?address=${encodeURIComponent(address)}&q=${encodeURIComponent(group.name)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`${address}, in Maps`}
-          className={`${CARD_FRAME} flex items-center gap-3 p-3 transition-colors hover:border-gray-400`}
+        <button
+          onClick={() => setPicking(true)}
+          aria-label={`${address}: open in Maps`}
+          className="flex w-full items-start gap-2 px-1 text-left text-[15px] leading-snug text-gray-600 transition-colors hover:text-gray-900"
         >
-          {body}
-          <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
-        </a>
+          {text}
+          <ExternalLink size={18} className="shrink-0 self-center text-gray-400" aria-hidden="true" />
+        </button>
       ) : (
-        <div className={`${CARD_FRAME} flex items-center gap-3 p-3`}>{body}</div>
+        <p className="flex items-start gap-2 px-1 text-[15px] leading-snug text-gray-600">{text}</p>
       )}
+      {picking && address && <MapsSheet name={group.name} address={address} onClose={() => setPicking(false)} />}
     </section>
   )
 }
+
+type TrackTab = 'layouts' | 'events'
 
 interface Props {
   slug: string
@@ -141,8 +153,9 @@ interface Props {
 /**
  * A track's page (#346, HPDE Figma 2079:1128): its photo, dimmed on black,
  * with its name and its full course's shape over it; then, on a panel
- * over the photo's foot, where it is, its layouts — each opens its own
- * page (#274) — and every event at it, or theirs.
+ * over the photo's foot, two tabs, as a car's page has: its layouts —
+ * each opens its own page (#274) — with where it is under them, and
+ * every event at it, or theirs.
  */
 export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack, onOpenEvent, onAllTracks, onCollapsedChange }: Props) {
   const group = useMemo(() => trackGroup(slug, events), [slug, events])
@@ -168,6 +181,7 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
 
   const name = group?.name ?? ''
   const info = group?.info
+  const [tab, setTab] = useState<TrackTab>('layouts')
 
   let body
   if (!group) {
@@ -201,51 +215,50 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
       </li>
     )
     const countOf = (layout: Layout) => (mine && theirs ? layout.events.filter(e => theirs.has(e.id)).length : layout.events.length)
-    body = (
+    body = tab === 'layouts' ? (
       <div className="space-y-8">
-        <LocationCard group={group} />
-        <section aria-labelledby="track-layouts-heading">
-          <h2 id="track-layouts-heading" className={`mb-2 ${SECTION_HEADING}`}>Configurations</h2>
-          <ul className="space-y-3" aria-label="Configurations">
-            {group.layouts.map(layout => (
-              <li key={layout.slug}>
-                <LayoutRow
-                  layout={layout}
-                  count={countOf(layout)}
-                  best={signedIn && summary.events ? layoutLaps(layout, summary.events).best : undefined}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section aria-labelledby="track-events-heading">
-          {/* As on a layout's page (#385): every event at it, or theirs. */}
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 id="track-events-heading" className={SECTION_HEADING}>Events</h2>
-            {signedIn && <EventsFilterToggle filter={filter} onChange={onFilter} mineLabel="Mine" />}
-          </div>
-          {mine && !theirs ? (
-            summary.status === 'error' ? <EmptyRow>Couldn’t load your events here.</EmptyRow> : <div aria-busy="true" aria-label="Loading your events" className="h-20 animate-pulse rounded-xl bg-gray-100" />
-          ) : listed.length === 0 ? (
-            <EmptyRow>None of yours here yet.</EmptyRow>
-          ) : (
-            <div className="space-y-6">
-              {live.length + upcoming.length > 0 && (
-                <div>
-                  <h3 className="mb-2 font-rubik text-[13px] font-medium text-gray-500">Upcoming</h3>
-                  <ul className="space-y-3" aria-label="Upcoming events">{[...live, ...upcoming].map(card)}</ul>
-                </div>
-              )}
-              {past.length > 0 && (
-                <div>
-                  <h3 className="mb-2 font-rubik text-[13px] font-medium text-gray-500">Past</h3>
-                  <ul className="space-y-3" aria-label="Past events">{past.map(card)}</ul>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        <ul className="space-y-3" aria-label="Configurations">
+          {group.layouts.map(layout => (
+            <li key={layout.slug}>
+              <LayoutRow
+                layout={layout}
+                count={countOf(layout)}
+                best={signedIn && summary.events ? layoutLaps(layout, summary.events).best : undefined}
+              />
+            </li>
+          ))}
+        </ul>
+        <Location group={group} />
       </div>
+    ) : (
+      <>
+        {/* As on a layout's page (#385): every event at it, or theirs. */}
+        {signedIn && (
+          <div className="mb-4 flex justify-end">
+            <EventsFilterToggle filter={filter} onChange={onFilter} mineLabel="Mine" />
+          </div>
+        )}
+        {mine && !theirs ? (
+          summary.status === 'error' ? <EmptyRow>Couldn’t load your events here.</EmptyRow> : <div aria-busy="true" aria-label="Loading your events" className="h-20 animate-pulse rounded-xl bg-gray-100" />
+        ) : listed.length === 0 ? (
+          <EmptyRow>None of yours here yet.</EmptyRow>
+        ) : (
+          <div className="space-y-6">
+            {live.length + upcoming.length > 0 && (
+              <section aria-labelledby="track-upcoming-heading">
+                <h2 id="track-upcoming-heading" className={`mb-2 ${SECTION_HEADING}`}>Upcoming</h2>
+                <ul className="space-y-3" aria-label="Upcoming events">{[...live, ...upcoming].map(card)}</ul>
+              </section>
+            )}
+            {past.length > 0 && (
+              <section aria-labelledby="track-past-heading">
+                <h2 id="track-past-heading" className={`mb-2 ${SECTION_HEADING}`}>Past</h2>
+                <ul className="space-y-3" aria-label="Past events">{past.map(card)}</ul>
+              </section>
+            )}
+          </div>
+        )}
+      </>
     )
   }
 
@@ -254,7 +267,7 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
       <TrackTopBar title={name} collapsed={collapsed} onBack={onBack} />
       {/* The design's header, 375 pt wide: everything placed from the
           status bar's foot, as there. */}
-      <header className="relative overflow-hidden bg-black text-white" style={{ ...UNDER_BAR, height: 'calc(env(safe-area-inset-top) + 358px)' }}>
+      <header className="relative overflow-hidden bg-black text-white" style={{ ...UNDER_BAR, height: 358 }}>
         {info?.photo && (
           // At its natural size on a phone, 640 × 364 pt, dimmed to 60% on black.
           <img
@@ -262,21 +275,20 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
             alt=""
             data-track-photo={group?.slug}
             className="absolute inset-x-0 w-full object-cover opacity-60"
-            style={{ top: 'calc(env(safe-area-inset-top) - 6px)', height: 364, objectPosition: `${info.photoX} 50%` }}
+            style={{ top: -6, height: 364, objectPosition: `${info.photoX} 50%` }}
           />
         )}
         {/* Black to clear, up from the panel's edge (the design's Bottom fade, at 80%)… */}
         <div
           className="absolute inset-x-0 opacity-80"
-          style={{ top: 'calc(env(safe-area-inset-top) + 178px)', height: 179, backgroundImage: 'linear-gradient(to top, #000 39.753%, rgba(0, 0, 0, 0) 99.304%)' }}
+          style={{ top: 178, height: 179, backgroundImage: 'linear-gradient(to top, #000 39.753%, rgba(0, 0, 0, 0) 99.304%)' }}
         />
         {/* …and down from under the bar (its Top fade). */}
         <div
           className="absolute inset-x-0"
-          style={{ top: 'env(safe-area-inset-top)', height: 113, backgroundImage: 'linear-gradient(to bottom, #000 19.391%, rgba(0, 0, 0, 0) 99.304%)' }}
+          style={{ top: 0, height: 113, backgroundImage: 'linear-gradient(to bottom, #000 19.391%, rgba(0, 0, 0, 0) 99.304%)' }}
         />
-        <div className="absolute inset-x-0 top-0 bg-black" style={{ height: 'env(safe-area-inset-top)' }} />
-        <div className="absolute inset-x-0 flex flex-col items-center gap-1.5 px-4 text-center font-rubik" style={{ top: `calc(env(safe-area-inset-top) + ${TOP_BAR_PX}px)` }}>
+        <div className="absolute inset-x-0 flex flex-col items-center gap-1.5 px-4 text-center font-rubik" style={{ top: TOP_BAR_PX }}>
           {group ? (<>
             <h1 ref={setTitle} className="max-w-full truncate text-[20px] font-bold leading-normal">{name}</h1>
             {group.city && <p className="max-w-full truncate text-base leading-normal">{group.city}</p>}
@@ -286,17 +298,39 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
         </div>
         {group && (
           // Its full course, centred, 266 pt across.
-          <div className="absolute inset-x-0 flex justify-center" style={{ top: 'calc(env(safe-area-inset-top) + 137px)' }}>
+          <div className="absolute inset-x-0 flex justify-center" style={{ top: 137 }}>
             <TrackShape trackId={group.trackId} width={266} className="-mt-[120px]" />
           </div>
         )}
       </header>
       <div
-        className="relative rounded-t-[20px] bg-gray-50"
+        // Clipped to its round corners, the tabs' gray too — clip, not
+        // hidden, so the tabs still stick under the bar.
+        className="relative rounded-t-[20px] bg-gray-50 [overflow:clip]"
         // Over the photo's foot, from 292 pt below the status bar.
         style={{ marginTop: -66 }}
       >
-        <div className="mx-auto max-w-lg px-3 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4">
+        {group && (
+          // As a car's page has them (#410): under the bar, staying there.
+          <div className="sticky z-10 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
+            <div className="mx-auto max-w-lg">
+              <TabStrip
+                tabs={[
+                  { id: 'layouts', label: 'Configurations' },
+                  { id: 'events', label: group.events.length ? `Events (${group.events.length})` : 'Events' },
+                ]}
+                active={tab} onChange={setTab} label="Track section" idPrefix="track" className="px-1 pt-4"
+              />
+            </div>
+          </div>
+        )}
+        <div
+          role={group ? 'tabpanel' : undefined}
+          id={group ? `track-tabpanel-${tab}` : undefined}
+          aria-labelledby={group ? `track-tab-${tab}` : undefined}
+          // At least a screen tall, so a shorter tab doesn't pull the page back up.
+          className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
+        >
           {body}
         </div>
       </div>

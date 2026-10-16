@@ -1630,7 +1630,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(screen.getByRole('link', { name: 'Tracks' })).toHaveAttribute('aria-current', 'page')
     // One track, both its layouts (#314), as the app names it.
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'Motorsport RanchCresson, TX3 events · 2 configurations driven',
+      'Motorsport RanchCresson, TX · 2 configurations driven',
     ]))
     expect(tracks()[0]).toHaveAttribute('href', '#/tracks/msrc')
     expect(tracks()[0].querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
@@ -1640,7 +1640,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
   it('leaves out a layout you have no events at, and says so when that’s all of them (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX1 event · 1 configuration driven']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven']))
   })
 
   it('says when none are yours, or yours couldn’t be had (#385)', async () => {
@@ -1655,35 +1655,43 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(await screen.findByText('Couldn’t load your tracks.')).toBeInTheDocument()
     // All still has them.
     await userEvent.click(within(screen.getByRole('group', { name: 'Which tracks' })).getByRole('button', { name: 'All' }))
-    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX3 events · 2 configurations'])
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations'])
   })
 
-  it('counts the events you said you’re going to as well as the ones with sessions, each once (#320)', async () => {
+  it('counts the layouts of the events you said you’re going to as well as the ones with sessions (#320)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
-    // Going to both CW events — one with sessions too — and not to the CCW one.
-    rsvps = { [event.id]: { status: 'going' }, [sameLayout.id]: { status: 'going' }, [otherWay.id]: { status: 'not-going' } }
+    // Sessions at a CW event, and going to the CCW one, with none there yet.
+    rsvps = { [otherWay.id]: { status: 'going' } }
     window.location.hash = '#/tracks'
     render(<AuthProvider><EventsProvider><RsvpsProvider><App /></RsvpsProvider></EventsProvider></AuthProvider>)
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX2 events · 1 configuration driven']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations driven']))
   })
 
   it('counts every event on All, and starts on Mine; the track’s page opens on All too (#385)', async () => {
     summary = [{ eventId: event.id, best: 99_100, sessions: 1 }]
     openAt('#/tracks')
-    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX1 event · 1 configuration driven']))
+    await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 1 configuration driven']))
     const toggle = screen.getByRole('group', { name: 'Which tracks' })
     expect(within(toggle).getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true')
 
     await userEvent.click(within(toggle).getByRole('button', { name: 'All' }))
-    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX3 events · 2 configurations'])
+    expect(tracks().map(t => t.textContent)).toEqual(['Motorsport RanchCresson, TX · 2 configurations'])
     await userEvent.click(tracks()[0])
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
-    const list = within(page).getByRole('region', { name: 'Events' })
+    // The events are a tab of their own (#346).
+    await userEvent.click(within(page).getByRole('tab', { name: 'Events (3)' }))
+    const list = within(page).getByRole('tabpanel')
     expect(within(list).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(3)
-    // On Mine, theirs.
+    // On Mine, theirs…
     await userEvent.click(within(list).getByRole('button', { name: 'Mine' }))
     expect(within(list).getAllByRole('button', { name: /Lap Day|Earlier|CCW/ })).toHaveLength(1)
+    // …and on its layouts, how many of theirs: none on one.
+    await userEvent.click(within(page).getByRole('tab', { name: 'Configurations' }))
+    expect(within(within(page).getByRole('list', { name: 'Configurations' })).getAllByRole('link').map(l => l.textContent)).toEqual([
+      '1.7 mileCounter-clockwiseNo events',
+      '1.7 mileClockwise1 event · Best 1:39.1',
+    ])
   })
 
   it('opens a track’s page: where it is, its layouts, its events — a layout opens over it, and Back goes back through both (#346)', async () => {
@@ -1694,11 +1702,14 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
     expect(page).toHaveTextContent('Cresson, TX')
     expect(page.querySelector('[data-track-photo]')).toHaveAttribute('data-track-photo', 'msrc')
-    // Its address opens Maps.
-    const location = within(page).getByRole('region', { name: 'Location' })
-    expect(within(location).getByRole('link')).toHaveAttribute('href', expect.stringContaining('maps.apple.com/?address=9012%20Performance%20Ct'))
     // Its layouts, each with how many events and, signed in, their best there.
-    const layouts = within(within(page).getByRole('region', { name: 'Configurations' })).getAllByRole('link')
+    expect(within(page).getByRole('tab', { name: 'Configurations' })).toHaveAttribute('aria-selected', 'true')
+    const list = within(page).getByRole('list', { name: 'Configurations' })
+    const layouts = within(list).getAllByRole('link')
+    // Where it is, under them.
+    const location = within(page).getByRole('region', { name: 'Location' })
+    expect(list.compareDocumentPosition(location) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(location).toHaveTextContent('9012 Performance CtCresson, TX 76035')
     expect(layouts.map(l => l.textContent)).toEqual([
       '1.7 mileCounter-clockwise1 event · Best 1:30',
       '1.7 mileClockwise2 events · Best 1:38.54',
@@ -1715,10 +1726,23 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     expect(window.location.hash).toBe('#/tracks')
   })
 
+  it('asks which maps app to open a track’s address in (#346)', async () => {
+    openAt('#/tracks/msrc')
+    const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
+    await userEvent.click(within(within(page).getByRole('region', { name: 'Location' })).getByRole('button', { name: '9012 Performance Ct, Cresson, TX 76035: open in Maps' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Open in' })
+    expect(within(sheet).getAllByRole('link').map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('target')])).toEqual([
+      ['Apple Maps', 'https://maps.apple.com/?address=9012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035&q=Motorsport%20Ranch', '_blank'],
+      ['Google Maps', 'https://www.google.com/maps/search/?api=1&query=Motorsport%20Ranch%2C%209012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035', '_blank'],
+      ['Waze', 'https://waze.com/ul?q=9012%20Performance%20Ct%2C%20Cresson%2C%20TX%2076035&navigate=yes', '_blank'],
+    ])
+  })
+
   it('opens an event from a track’s page, over it, and Back returns to it (#346)', async () => {
     openAt('#/tracks/msrc')
     const page = (await screen.findByRole('heading', { level: 1, name: 'Motorsport Ranch' })).closest<HTMLElement>('.fixed')!
-    await userEvent.click((await within(within(page).getByRole('region', { name: 'Events' })).findAllByRole('button', { name: /Lap Day/ }))[0])
+    await userEvent.click(within(page).getByRole('tab', { name: /^Events/ }))
+    await userEvent.click((await within(within(page).getByRole('tabpanel')).findAllByRole('button', { name: /Lap Day/ }))[0])
     expect(window.location.hash).toBe(`#/event/${event.id}`)
     await userEvent.click((await screen.findAllByRole('button', { name: 'Back' })).at(-1)!)
     expect(window.location.hash).toBe('#/tracks/msrc')
@@ -1728,7 +1752,7 @@ describe('the Events, Tracks and More tabs (#274, #345)', () => {
     signedIn = false
     openAt('#/tracks')
     await waitFor(() => expect(tracks().map(t => t.textContent)).toEqual([
-      'Motorsport RanchCresson, TX3 events · 2 configurations',
+      'Motorsport RanchCresson, TX · 2 configurations',
     ]))
     // Nothing of theirs to pick between.
     expect(screen.queryByRole('group', { name: 'Which tracks' })).not.toBeInTheDocument()
