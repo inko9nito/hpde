@@ -205,7 +205,7 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
  * what they said. The chevron opens it in the session's sheet; its button
  * stretches over the row.
  */
-function EvaluationRow({ evaluation, title, onOpen }: { evaluation: NonNullable<SessionNotes['evaluation']>; title: string; onOpen?: () => void }) {
+export function EvaluationRow({ evaluation, title, onOpen }: { evaluation: NonNullable<SessionNotes['evaluation']>; title: string; onOpen?: () => void }) {
   const { feedback, instructor } = evaluation
   return (
     <div className="relative flex flex-col gap-1.5 border-t border-gray-100 pt-3" data-session-evaluation>
@@ -234,7 +234,7 @@ function EvaluationRow({ evaluation, title, onOpen }: { evaluation: NonNullable<
  * temperatures in a line, and their note. The chevron opens them in the
  * session's sheet; its button stretches over the row.
  */
-function ConditionsRow({ conditions, title, onOpen }: { conditions: SessionConditions; title: string; onOpen?: () => void }) {
+export function ConditionsRow({ conditions, title, onOpen }: { conditions: SessionConditions; title: string; onOpen?: () => void }) {
   const Icon = conditions.sky ? SKY_ICONS[conditions.sky] : Waves
   const line = conditionsText(conditions)
   return (
@@ -270,7 +270,7 @@ function ConditionsRow({ conditions, title, onOpen }: { conditions: SessionCondi
  * for each corner, a row for before and after — and what was changed. The
  * chevron opens them in the session's sheet; its button stretches over the row.
  */
-function PressuresRow({ pressures, title, onOpen }: { pressures: SessionPressures; title: string; onOpen?: () => void }) {
+export function PressuresRow({ pressures, title, onOpen }: { pressures: SessionPressures; title: string; onOpen?: () => void }) {
   const rows = ([['Before', pressures.cold], ['After', pressures.hot]] as [string, Corners | undefined][])
     .flatMap(([label, corners]) => (corners ? [[label, corners] as const] : []))
   return (

@@ -44,6 +44,31 @@ function eventCount(n: number): string {
 }
 
 /**
+ * A layout's shape on a dark panel along a card's left edge (#274), with
+ * which way round it goes in its corner: the track page's layouts, and an
+ * event's past events at its layout (#462).
+ */
+export function LayoutTile({ trackId, direction }: { trackId?: string; direction?: 'cw' | 'ccw' }) {
+  const DirectionIcon = direction === 'ccw' ? RotateCcw : RotateCw
+  return (
+    <div className="relative w-20 min-h-[64px] shrink-0 overflow-hidden bg-gray-900">
+      <div className="absolute inset-0 grid place-items-center">
+        <TrackIcon trackId={trackId} tone="dark" size={64} padding={0} radius="rounded-none" />
+      </div>
+      {direction && (
+        <DirectionIcon
+          size={13}
+          strokeWidth={2.25}
+          data-direction={direction}
+          className="absolute bottom-1.5 right-1.5 text-white/60"
+          aria-hidden="true"
+        />
+      )}
+    </div>
+  )
+}
+
+/**
  * One of the track's layouts (#346): its shape on a dark panel along the
  * card's left edge (#274), how far round and which way, and how many
  * events are on it — all of them, or theirs — with their best lap there.
@@ -51,27 +76,13 @@ function eventCount(n: number): string {
  */
 function LayoutRow({ layout, count, best }: { layout: Layout; count: number; best?: number }) {
   const { length, direction } = layoutTitle(layout.events[0])
-  const DirectionIcon = layout.direction === 'ccw' ? RotateCcw : RotateCw
   return (
     <a
       href={trackHash(layout.slug)}
       aria-label={`${layoutText(layout)}, ${eventCount(count)}`}
       className={`${CARD_FRAME} flex items-stretch overflow-hidden transition-colors hover:border-gray-400`}
     >
-      <div className="relative w-20 min-h-[64px] shrink-0 overflow-hidden bg-gray-900">
-        <div className="absolute inset-0 grid place-items-center">
-          <TrackIcon trackId={layout.trackId} tone="dark" size={64} padding={0} radius="rounded-none" />
-        </div>
-        {layout.direction && (
-          <DirectionIcon
-            size={13}
-            strokeWidth={2.25}
-            data-direction={layout.direction}
-            className="absolute bottom-1.5 right-1.5 text-white/60"
-            aria-hidden="true"
-          />
-        )}
-      </div>
+      <LayoutTile trackId={layout.trackId} direction={layout.direction} />
       <div className="flex min-w-0 flex-1 items-center gap-4 py-3 pl-4 pr-3">
         <div className="min-w-0 flex-1">
           {/* How far round, and which way beside it. */}

@@ -31,8 +31,24 @@ export const MORE_PAGE_HASH: Record<MorePage, string> = {
   garage: '#/garage',
 }
 
+/**
+ * Instructor evaluations of the events on one layout (#462): from an
+ * event's past events there, `#/evaluations/msrc-3-1-ccw`.
+ */
+export function evaluationsHash(layoutSlug: string): string {
+  return `${MORE_PAGE_HASH.evaluations}/${encodeURIComponent(layoutSlug)}`
+}
+
+/** The layout an Instructor evaluations hash is filtered to (#462); null for any other. */
+export function evaluationsLayoutFromHash(hash: string): string | null {
+  const prefix = `${MORE_PAGE_HASH.evaluations}/`
+  if (!hash.startsWith(prefix)) return null
+  return decodeURIComponent(hash.slice(prefix.length).split('/')[0]) || null
+}
+
 /** The More page a hash is; null for anything else. */
 export function morePageFromHash(hash: string): MorePage | null {
+  if (evaluationsLayoutFromHash(hash) !== null) return 'evaluations'
   const page = (Object.keys(MORE_PAGE_HASH) as MorePage[]).find(p => MORE_PAGE_HASH[p] === hash)
   return page ?? null
 }

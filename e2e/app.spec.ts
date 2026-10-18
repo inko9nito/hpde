@@ -2455,6 +2455,119 @@ test('Instructor evaluations, from More: the TDE report cards’ overview and sk
   await expect(page.getByRole('dialog', { name: 'Instructor evaluation' })).toBeVisible()
 })
 
+// Before an event, how they did at its layout (#462): a card on its My
+// notes for every past event of theirs there, which opens Instructor
+// evaluations on the layout, over the event; the layout's own page, from its
+// Details, with their notes from every event on it; and its track's page.
+test('an upcoming event’s past events at its layout: Instructor evaluations on it, over the event, and its layout’s notes (#462)', async ({ page }) => {
+  // On Alpha's layout (MSRC 2.0 CW): one coming up, and two of theirs before it.
+  const next: EventConfig = { ...alpha, id: `${isoInDays(10)}_alpha-next`, name: 'Alpha Next', days: [{ ...alpha.days[0], date: isoInDays(10) }] }
+  const earlier: EventConfig = { ...alpha, id: '2025-10-04_alpha', name: 'Alpha in October', days: [{ ...alpha.days[0], date: '2025-10-04' }] }
+  const bravo = TEST_EVENTS.find(e => e.name === 'Bravo HPDE')!
+  await stubEvents(page, [next, ...TEST_EVENTS, earlier])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/laps(\?|$)/, route => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('event')) return route.fulfill({ json: { sessions: [] } })
+    if (params.has('events')) return route.fulfill({ json: { events: [] } })
+    return route.fulfill({ json: { events: [
+      { eventId: alpha.id, best: 106_000, sessions: 1 },
+      { eventId: earlier.id, best: 105_220, sessions: 1 },
+      { eventId: bravo.id, best: 99_000, sessions: 1 },
+    ] } })
+  })
+  const key = '2025-10-04 08:30 blue'
+  const session = { key, date: '2025-10-04', time: '08:30', group: 'blue', sessionNumber: 1 }
+  const notes = [{
+    eventId: earlier.id,
+    evaluation: { instructor: 'Sam Ortiz', notes: 'Carry more speed through the carousel.' },
+    conditions: { note: 'Cold track till ten.' },
+    sessions: [{ ...session, evaluation: { feedback: 'Turn in later for T1.', instructor: 'Sam Ortiz' }, conditions: { surface: 'dry', sky: 'sunny', airF: 64 } }],
+  }]
+  await page.route(/\/api\/notes(\?|$)/, route => {
+    const id = new URL(route.request().url()).searchParams.get('event')
+    if (!id) return route.fulfill({ json: { events: notes } })
+    const { eventId: _id, ...rest } = notes.find(n => n.eventId === id) ?? { eventId: id, sessions: [] }
+    return route.fulfill({ json: rest })
+  })
+  await page.route(/\/api\/garage(\?|$)/, route => route.fulfill({ json: { cars: [], events: {
+    [earlier.id]: { sessions: { [key]: { ...session, cold: { fl: 30, fr: 30, rl: 28, rr: 28 }, hot: { fl: 36, fr: 37, rl: 34, rr: 34 } } } },
+  } } }))
+
+  // The card: both of theirs on the layout (not Bravo, elsewhere), the newer first, and their best there.
+  await page.goto(`/#/event/${next.id}`)
+  await page.getByRole('tab', { name: /^My notes/ }).click()
+  const card = page.getByRole('link', { name: 'Your past events here: 2 events at 2.0 CW' })
+  await expect(card).toContainText('Last Mar 2026 · Best 1:45.22')
+
+  // It opens Instructor evaluations on the layout, every organizer's, over the event.
+  const slide = await trackSlide(page, () => card.click(), 'Instructor evaluations')
+  expect(slide).toEqual({ fromBelow: false, fromSide: true })
+  await expect(page).toHaveURL(/#\/evaluations\/msrc-2-0-cw$/)
+  const evaluations = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Instructor evaluations' }) })
+  const filters = evaluations.getByRole('group', { name: 'Filter events' })
+  await expect(filters.getByRole('button', { name: /^Organizer: / })).toHaveAccessibleName('Organizer: All organizers')
+  await expect(filters.getByRole('button', { name: /^Configuration: / })).toHaveAccessibleName('Configuration: MSRC 2.0 CW')
+  await expect(evaluations.getByRole('banner', { name: 'Showing' })).toHaveText(/MSRC 2\.0 CW\s*Motorsport Ranch · 2\.0 mile · Clockwise/)
+  const events = evaluations.getByRole('region', { name: 'Events' }).getByRole('link')
+  await expect(events).toHaveText([/Alpha Track Day/, /Alpha in October/])
+  // Its choices: each layout of theirs.
+  await filters.getByRole('button', { name: /^Configuration: / }).click()
+  await expect(page.getByRole('listbox', { name: 'Configuration' }).getByRole('option')).toHaveText(['All configurations', 'ECR', 'MSRC 2.0 CW'])
+  await page.keyboard.press('Escape')
+  // On a phone, the filters wrap rather than run off the side.
+  expect(await evaluations.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+
+  // One of them opens over it, on My notes; Back returns to it, and Back again to the event, where it was.
+  await events.nth(1).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${earlier.id}$`))
+  const october = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Alpha in October' }) })
+  await expect(october.getByRole('tab', { name: /^My notes/ })).toHaveAttribute('aria-selected', 'true')
+  await october.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/evaluations\/msrc-2-0-cw$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Alpha in October' })).toHaveCount(0)
+  await evaluations.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${next.id}$`))
+  await expect(page.getByRole('heading', { level: 1, name: 'Instructor evaluations' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: /^My notes/ })).toHaveAttribute('aria-selected', 'true')
+  // On top again: taps reach it.
+  await card.click({ trial: true })
+
+  // Its Details' Track config opens the layout's page, over it.
+  await page.getByRole('tab', { name: 'Details' }).click()
+  await trackSlide(page, () => page.getByRole('link', { name: /^Track config/ }).click(), '2.0 mile · Clockwise')
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+  const layout = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: '2.0 mile · Clockwise' }) })
+  await expect(layout.getByRole('tab', { name: 'Events (3)' })).toHaveAttribute('aria-selected', 'true')
+  // Its My notes: their notes from each event on it — the day's conditions,
+  // the instructor's evaluation, and each session's feedback and tire pressures.
+  await layout.getByRole('tab', { name: 'My notes' }).click()
+  const noted = layout.getByRole('list', { name: 'Your notes' }).getByRole('article')
+  await expect(noted).toHaveCount(1)
+  await expect(noted.first()).toContainText('Alpha in October')
+  await expect(noted.first().locator('[data-event-conditions]')).toHaveText(/Track conditions\s*Dry · Sunny · 64°F\s*Cold track till ten\./)
+  await expect(noted.first().locator('[data-event-evaluation]')).toHaveText(/Instructor evaluation · Sam Ortiz\s*Carry more speed through the carousel\./)
+  const first = noted.first().getByRole('region', { name: 'Session 1, 8:30 AM' })
+  await expect(first).toContainText('Turn in later for T1.')
+  await expect(first.getByRole('table', { name: 'Tire pressures' }).getByRole('row')).toHaveText([/FL\s*FR\s*RL\s*RR/, /Before\s*30\s*30\s*28\s*28/, /After\s*36\s*37\s*34\s*34/])
+  expect(await layout.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  // Back to the event; the track under its name opens the layout's page too.
+  await layout.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(new RegExp(`#/event/${next.id}$`))
+  await page.getByRole('link', { name: 'Open the MSRC 2.0 CW page' }).click()
+  await expect(page).toHaveURL(/#\/track\/msrc-2-0-cw$/)
+
+  // From there, its track's name goes up to the track's own page.
+  await layout.getByRole('link', { name: 'Motorsport Ranch: its track page' }).click()
+  await expect(page).toHaveURL(/#\/tracks\/msrc$/)
+  await expect(page.getByRole('heading', { level: 1, name: '2.0 mile · Clockwise' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: 'Alpha Next' })).toHaveCount(0)
+  const track = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Motorsport Ranch' }) })
+  await expect(track.getByRole('tab', { name: 'Configurations' })).toHaveAttribute('aria-selected', 'true')
+  await track.getByRole('button', { name: 'Back' }).click()
+  await expect(page).toHaveURL(/#\/tracks$/)
+})
+
 test('My events shows the run group they’re in on each card (#330), and Past how many they attended (#331)', async ({ page }) => {
   const withGroups: EventConfig = {
     id: `${isoInDays(20)}_group-day`,

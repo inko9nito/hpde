@@ -4,6 +4,8 @@ import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTi
 import type { SessionHead } from './LapSessions'
 import { AddEventEvaluation, EventEvaluationCard } from './EventEvaluationCard'
 import { CarRow } from './CarRow'
+import { PastEventsCard } from './PastEventsCard'
+import type { PastEventsHere } from './PastEventsCard'
 import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import type { TrendPoint } from './LapTrendChart'
@@ -51,6 +53,8 @@ interface Props {
     onOpenCar: () => void
     reload: () => void
   }
+  /** Before the event, their past events at its layout (#462), once they're known. */
+  pastEvents?: PastEventsHere | null
 }
 
 /**
@@ -61,7 +65,7 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage, pastEvents,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
@@ -89,8 +93,10 @@ export function MyLapTimes({
       onOpen={setOpen}
     />
   )
+  // Then, before the event, how they did at its layout before (#462).
   const top = (<>
     {carRow}
+    {pastEvents && <div className="mb-5"><PastEventsCard past={pastEvents} /></div>}
   </>)
   const header = <>{top}{toolbar}</>
 

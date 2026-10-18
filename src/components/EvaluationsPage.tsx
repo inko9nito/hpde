@@ -4,7 +4,7 @@ import { SubPageHeader } from './HomeTabs'
 import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
 import { groupFor } from './LapTimesSheet'
-import { CARD_FRAME, CARD_SHELL } from './EventCard'
+import { CARD_FRAME, CARD_SHELL, EmptyRow } from './EventCard'
 import { DateBlock } from './DateBlock'
 import { sessionTitle, useSkeletonFade } from './LapSessions'
 import { SkillOverview, SkillsWheel, scoredCards } from './ReportCardSkills'
@@ -22,7 +22,8 @@ import { answerFor, myRunGroup } from '../utils/rsvp'
 import type { Rsvps } from '../utils/rsvp'
 import { classifyEvent } from '../utils/eventClass'
 import { useLapSummary } from '../data/lapLog'
-import { startDate } from '../utils/trackStats'
+import { eventsOnLayout, layoutName, layoutSlug, layoutTitle, startDate } from '../utils/trackStats'
+import { trackInfo } from '../data/tracks'
 import { opensElsewhere } from '../utils/links'
 import { formatAmPm, formatTime, todayLocalISO } from '../utils/time'
 import type { EventConfig } from '../types'
@@ -69,6 +70,25 @@ export function unevaluatedEvents(
     .sort((a, b) => startDate(b).localeCompare(startDate(a)))
 }
 
+/**
+ * Every event on the page (#345), newest first: the ones with an
+ * evaluation, and the ones they went to without one yet — `withLaps`, the
+ * ones they've laps at, which they went to whatever they answered. An
+ * event's past events at its layout count the same ones (#462).
+ */
+export function evaluationEntries(
+  notes: EventNotes[],
+  events: EventConfig[],
+  rsvps: Rsvps,
+  withLaps: ReadonlySet<string>,
+  today: string = todayLocalISO(),
+): Entry[] {
+  const evaluated = evaluatedEvents(notes, events)
+  const rest = unevaluatedEvents(events, rsvps, withLaps, new Set(evaluated.map(e => e.event.id)), today)
+  return [...evaluated, ...rest.map(event => ({ event, notes: null }))]
+    .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
+}
+
 /** The TDE events' report cards, for the chart. */
 export function reportCards(evaluated: Evaluated[]): ReportCardPoint[] {
   return evaluated.flatMap(({ event, notes }) =>
@@ -99,16 +119,18 @@ export interface Entry {
  * What the page's events — and so its report cards — are filtered by
  * (#401): an organizer, then one of its run groups. A run group is the
  * organizer's own — Blue is TDE's second level, but SCCA's first — so it's
- * only picked with an organizer.
+ * only picked with an organizer. And, on its own, a track layout (#462).
  */
 export interface Filters {
   /** An organizer, as organizerOf names it; null: every one. */
   organizer: string | null
   /** One of the organizer's run groups, by its name lowercased; null: every one. */
   group: string | null
+  /** A layout, by its track page's id ("msrc-3-1-ccw"); null or left out: every one. */
+  layout?: string | null
 }
 
-export const NO_FILTERS: Filters = { organizer: null, group: null }
+export const NO_FILTERS: Filters = { organizer: null, group: null, layout: null }
 
 export const TDE_ORGANIZER = 'The Drivers Edge'
 
@@ -187,11 +209,41 @@ export function filterChoices(entries: Entry[], rsvps: Rsvps, organizer: string 
   }
 }
 
-/** The events that pass the filters (#401); a run group only with its organizer. */
-export function filterEntries(entries: Entry[], rsvps: Rsvps, { organizer, group }: Filters): Entry[] {
+/**
+ * The events that pass the filters (#401); a run group only with its
+ * organizer. A layout's are the ones its track page lists (#462), found
+ * among `events`.
+ */
+export function filterEntries(entries: Entry[], rsvps: Rsvps, { organizer, group, layout = null }: Filters, events: EventConfig[] = entries.map(e => e.event)): Entry[] {
+  const onLayout = layout === null ? null : new Set(eventsOnLayout(layout, events).map(e => e.id))
   return entries.filter(entry =>
     (organizer === null || organizerOf(entry.event) === organizer)
-    && (organizer === null || group === null || entryGroups(entry, rsvps, entries).some(n => n.toLowerCase() === group)))
+    && (organizer === null || group === null || entryGroups(entry, rsvps, entries).some(n => n.toLowerCase() === group))
+    && (onLayout === null || onLayout.has(entry.event.id)))
+}
+
+/** A layout to filter by (#462): its track page's id and its name ("MSRC 3.1 CCW"). */
+export interface LayoutChoice {
+  slug: string
+  name: string
+}
+
+/**
+ * The layouts their events are on (#462), by name — and `picked`, if it
+ * names one that isn't among them, as an event's past events there can.
+ */
+export function layoutChoices(entries: Entry[], events: EventConfig[], picked: string | null = null): LayoutChoice[] {
+  const choices = new Map<string, string>()
+  for (const { event } of entries) {
+    const slug = layoutSlug(event)
+    if (slug && !choices.has(slug)) choices.set(slug, layoutName(event)!)
+  }
+  if (picked !== null && !choices.has(picked)) {
+    const named = events.find(e => layoutSlug(e) === picked)
+    if (named) choices.set(picked, layoutName(named)!)
+  }
+  return [...choices].map(([slug, name]) => ({ slug, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
 }
 
 /**
@@ -363,6 +415,11 @@ interface Props {
   eventsLoaded: boolean
   /** On top, not under an event opened from it: back on top, the evaluations are fetched again. */
   active: boolean
+  /**
+   * The layout it opens on (#462), from an event's past events there:
+   * every organizer's events on it, as the event's card counted them.
+   */
+  layout?: string | null
   onBack: () => void
   /** Opens one of the events on My notes, where its evaluations are. */
   onOpenEvent: (event: EventConfig) => void
@@ -376,9 +433,10 @@ interface Props {
  * said (or a button to add it), under how their TDE report cards have come
  * along — the skills most improved and needing the most work, and the
  * skills wheel. Filters at the top (#401) narrow the events, and so the
- * report cards, by organizer and run group. It needs a sign-in.
+ * report cards, by organizer and run group — and by layout (#462). It
+ * needs a sign-in.
  */
-export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEvent, onAddEvaluation }: Props) {
+export function EvaluationsPage({ events, eventsLoaded, active, layout = null, onBack, onOpenEvent, onAddEvaluation }: Props) {
   const { status: authStatus } = useAuth()
   const notes = useAllNotes(active)
   const { status: rsvpsStatus, rsvps } = useRsvps()
@@ -393,21 +451,23 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
     wasActive.current = active
   }, [active, reload])
 
-  const evaluated = useMemo(() => evaluatedEvents(notes.events, events), [notes.events, events])
   // Every event on the list, newest first: the ones evaluated, and the ones they went to without one yet.
-  const entries = useMemo((): Entry[] => {
-    const withLaps = new Set((lapSummary ?? []).map(e => e.eventId))
-    const rest = unevaluatedEvents(events, rsvps, withLaps, new Set(evaluated.map(e => e.event.id)))
-    return [...evaluated, ...rest.map(event => ({ event, notes: null }))]
-      .sort((a, b) => startDate(b.event).localeCompare(startDate(a.event)))
-  }, [evaluated, events, rsvps, lapSummary])
+  const entries = useMemo(
+    () => evaluationEntries(notes.events, events, rsvps, new Set((lapSummary ?? []).map(e => e.eventId))),
+    [notes.events, events, rsvps, lapSummary],
+  )
 
   // The events by organizer, then one of its run groups (#401) — and so
   // the report cards: each run group's card shown has its own overview and
   // wheel (#350), the newest's first. Until they pick, the organizer and
   // run group of their newest report card (undefined till then): The
   // Drivers Edge's, the only ones with report cards.
-  const [picked, setFilters] = useState<{ organizer?: string | null; group?: string | null }>({})
+  // Opened on a layout (#462): every organizer's events on it.
+  const [picked, setFilters] = useState<{ organizer?: string | null; group?: string | null; layout?: string | null }>(
+    () => (layout !== null ? { organizer: null, group: null, layout } : {}),
+  )
+  const pickedLayout = picked.layout ?? null
+  const layouts = useMemo(() => layoutChoices(entries, events, pickedLayout), [entries, events, pickedLayout])
   const anyCards = useMemo(() => shownReportCards(entries, null).length > 0, [entries])
   const pickedOrganizer = picked.organizer === undefined ? (anyCards ? TDE_ORGANIZER : null) : picked.organizer
   const choices = useMemo(() => filterChoices(entries, rsvps, pickedOrganizer), [entries, rsvps, pickedOrganizer])
@@ -417,8 +477,18 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
   const filters: Filters = {
     organizer,
     group: group !== null && choices.groups.some(g => g.toLowerCase() === group) ? group : null,
+    layout: pickedLayout !== null && layouts.some(l => l.slug === pickedLayout) ? pickedLayout : null,
   }
-  const shown = filterEntries(entries, rsvps, filters)
+  const shown = filterEntries(entries, rsvps, filters, events)
+  // The layout picked, spelled out under its name (#462): "Motorsport Ranch · 3.1 mile · Counter-clockwise".
+  const layoutShown = !filters.layout ? null : (() => {
+    const named = events.find(e => layoutSlug(e) === filters.layout)
+    const { length, direction } = named ? layoutTitle(named) : {}
+    return {
+      name: layouts.find(l => l.slug === filters.layout)!.name,
+      about: [named && (trackInfo(named.trackId)?.name ?? named.track?.trim()), length, direction].filter(Boolean).join(' · '),
+    }
+  })()
   const cards = shownReportCards(shown, filters.group)
   const kinds = reportCardKinds(cards)
   // What TDE's levels shown here are (#401): the events at one counted
@@ -474,10 +544,15 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
       { id: null, text: 'All run groups' },
       ...choices.groups.map(g => ({ id: g.toLowerCase(), text: g, content: <GroupBadge group={groupNamed(g, organizerEvents)} size="sm" /> })),
     ]
+    const layoutOptions: FilterOption[] = [
+      { id: null, text: 'All configurations' },
+      ...layouts.map(l => ({ id: l.slug, text: l.name })),
+    ]
     body = (
       <div className="fade-in">
-        <div role="group" aria-label="Filter events" className="mb-6 flex min-w-0 gap-2">
-          <FilterMenu label="Organizer" options={organizerOptions} value={filters.organizer} onChange={o => setFilters({ organizer: o })} />
+        {/* On a phone, the layout's on a row of its own when all three don't fit (#462). */}
+        <div role="group" aria-label="Filter events" className="mb-6 flex min-w-0 flex-wrap gap-2">
+          <FilterMenu label="Organizer" options={organizerOptions} value={filters.organizer} onChange={o => setFilters({ organizer: o, layout: filters.layout ?? null })} />
           {/* An organizer's own run groups: none to pick till there's an organizer. */}
           <FilterMenu
             label="Run group"
@@ -486,15 +561,24 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
             onChange={g => setFilters({ ...filters, group: g })}
             disabled={organizer === null}
           />
+          <FilterMenu label="Configuration" options={layoutOptions} value={filters.layout ?? null} onChange={l => setFilters({ ...filters, layout: l })} />
         </div>
-        {/* Whose they are (#401), on the page and not just in the filters: the organizer, then its run group. */}
-        {organizer !== null && (
+        {/* Whose they are (#401), on the page and not just in the filters:
+            the organizer, then its run group; and where (#462). */}
+        {(organizer !== null || layoutShown !== null) && (
           <header aria-label="Showing" className="mb-6">
-            <p className="font-rubik text-xl font-bold leading-tight text-gray-900">{organizer || 'Organizer not set'}</p>
-            {filters.group !== null && (
+            <p className="font-rubik text-xl font-bold leading-tight text-gray-900">
+              {organizer !== null ? organizer || 'Organizer not set' : layoutShown!.name}
+            </p>
+            {organizer !== null && filters.group !== null && (
               <p className="mt-1.5 flex items-center gap-2 text-sm text-gray-500">
                 <GroupBadge group={groupNamed(choices.groups.find(g => g.toLowerCase() === filters.group)!, organizerEvents)} size="sm" />
                 run group
+              </p>
+            )}
+            {layoutShown !== null && (
+              <p className="mt-1.5 text-sm text-gray-500" data-layout-shown>
+                {[organizer !== null ? layoutShown.name : null, layoutShown.about].filter(Boolean).join(' · ')}
               </p>
             )}
             {levelNotes.map(note => <p key={note} className="mt-2 text-xs text-gray-500">{note}</p>)}
@@ -520,6 +604,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, onBack, onOpenEv
           <h2 id="evaluations-events-heading" className={HEADING}>
             Events
           </h2>
+          {shown.length === 0 && <EmptyRow>None of your events match.</EmptyRow>}
           <ul className="space-y-3">
             {shown.map(({ event, notes }) => (
               <li key={event.id}>

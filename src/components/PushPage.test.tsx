@@ -200,6 +200,28 @@ describe('what a page is pushed over (#367)', () => {
     expect(getByTestId('second').querySelector('[data-covering-dim]')).toBeNull()
   })
 
+  it('puts a page raised further over one raised less, wherever it comes on the page (#462)', async () => {
+    // An event's page (raised), then Instructor evaluations opened from it (earlier on the page, raised a level more).
+    function Raised({ more }: { more: boolean }) {
+      return (
+        <>
+          <div data-testid="more"><PushPage open={more} raised={2}><div /></PushPage></div>
+          <div data-testid="event"><PushPage open raised><div /></PushPage></div>
+        </>
+      )
+    }
+    const { getByTestId, rerender } = render(<Raised more={false} />)
+    await nextFrame()
+    const event = pageIn(getByTestId('event'))
+    expect(event.style.zIndex).toBe('31')
+    rerender(<Raised more />)
+    await nextFrame()
+    expect(pageIn(getByTestId('more')).style.zIndex).toBe('32')
+    expect(dimIn(getByTestId('more')).style.zIndex).toBe('32')
+    // It covers the event's page, though it comes before it.
+    expect(event.style.transform).toBe('translateX(-30%)')
+  })
+
   it('lets a page closed under the page over it go at once, as that one slides away', async () => {
     const onExited = vi.fn()
     function Two({ open }: { open: boolean }) {

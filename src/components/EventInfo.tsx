@@ -1,17 +1,26 @@
 import { useState } from 'react'
-import { Calendar, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximize2, Route, Users } from 'lucide-react'
+import { Calendar, ChevronRight, ExternalLink, Image as ImageIcon, Link2, Map, MapPin, Maximize2, Route, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { MapViewer } from './MapViewer'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import { EventConditionsCard } from './EventConditionsCard'
 import type { EventConditionsProps } from './EventConditionsCard'
+import { opensElsewhere } from '../utils/links'
 import type { EventConfig } from '../types'
+
+/** The page of the event's layout (#462), which its Track config row opens. */
+export interface TrackLink {
+  href: string
+  /** Opens it in place: over the event, or back to it if the event's over it. */
+  onOpen: () => void
+}
 
 interface Props {
   event: EventConfig
   /** The weather near the track, and the driver's own conditions (#347). */
   weather?: EventConditionsProps['weather']
   conditions?: EventConditionsProps['conditions']
+  track?: TrackLink
 }
 
 function linkDisplay(url: string): string {
@@ -54,7 +63,33 @@ function Row({ icon: Icon, label, subtitle, children }: RowProps) {
   )
 }
 
-export function EventInfo({ event, weather, conditions }: Props) {
+/**
+ * The Track config row as a link to the layout's page (#462): its other
+ * events, and the driver's notes from them. A chevron says it opens.
+ */
+function TrackConfigLink({ track, children }: { track: TrackLink; children: React.ReactNode }) {
+  return (
+    <a
+      href={track.href}
+      onClick={e => {
+        if (opensElsewhere(e)) return
+        e.preventDefault()
+        track.onOpen()
+      }}
+      className="-mx-1 grid grid-cols-[124px_1fr_auto] items-center gap-3 rounded-lg border-b border-gray-100 px-1 py-3 transition-colors last:border-b-0 hover:bg-gray-100"
+      data-track-config
+    >
+      <span className="flex items-center gap-3 text-[13px] font-medium text-gray-500">
+        <Route size={14} className="shrink-0 text-gray-400" />
+        Track config
+      </span>
+      <span className="text-sm text-gray-900 tabular-nums break-words">{children}</span>
+      <ChevronRight size={18} className="shrink-0 text-gray-300" aria-hidden="true" />
+    </a>
+  )
+}
+
+export function EventInfo({ event, weather, conditions, track }: Props) {
   const [mapExpanded, setMapExpanded] = useState(false)
 
   const dates = formatDateRangeWithWeekday(event.days)
@@ -76,8 +111,9 @@ export function EventInfo({ event, weather, conditions }: Props) {
         {event.track && (
           <Row icon={MapPin} label="Location" subtitle={event.city}>{event.track}</Row>
         )}
-        {trackConfiguration && (
-          <Row icon={Route} label="Track config">{trackConfiguration}</Row>
+        {trackConfiguration && (track
+          ? <TrackConfigLink track={track}>{trackConfiguration}</TrackConfigLink>
+          : <Row icon={Route} label="Track config">{trackConfiguration}</Row>
         )}
         {event.link && (
           <Row icon={Link2} label="Event page">

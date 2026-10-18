@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NO_FILTERS, entryGroups, ranIn, filterChoices, filterEntries, newestCardGroup, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
+import { NO_FILTERS, entryGroups, evaluationEntries, ranIn, filterChoices, filterEntries, layoutChoices, newestCardGroup, organizerOf, reportCardKinds, shownReportCards, unevaluatedEvents } from './EvaluationsPage'
 import type { Entry } from './EvaluationsPage'
 import type { EventConfig } from '../types'
 
@@ -122,5 +122,48 @@ describe('filtering the events, and so the report cards (#401)', () => {
     expect(reportCardKinds(all).map(k => k.id)).toEqual(['blue', 'green'])
     expect(shownReportCards(entries, 'green').map(p => p.key)).toEqual(['green-day'])
     expect(shownReportCards(filterEntries(entries, rsvps, { ...NO_FILTERS, organizer: 'Texas Region SCCA' }), null)).toEqual([])
+  })
+})
+
+describe('an event’s layout, among the events (#462)', () => {
+  const on = (id: string, date: string, track: string, configuration?: string, direction?: string, trackId?: string): EventConfig => ({
+    ...at(id, date), track, configuration, direction, trackId,
+  })
+  const msrc31 = on('msrc-31', '2025-11-07', 'Motorsport Ranch - Cresson', '3.1 mile', 'Counter-clockwise', 'msrc-3-1')
+  // The same layout, spelled another way: its track page counts it.
+  const msrc31b = on('msrc-31b', '2024-11-02', 'Motorsport Ranch - Cresson', '3.1', 'CCW')
+  const msrc17 = on('msrc-17', '2025-09-13', 'Motorsport Ranch - Cresson', '1.7 mile', 'Clockwise', 'msrc-1-7')
+  const ecr = on('ecr', '2025-10-04', 'Eagles Canyon Raceway', '2.7 mile', 'Clockwise', 'ecr-2-7')
+  const next = on('next', '2026-11-20', 'Motorsport Ranch - Cresson', '3.1 mile', 'Counter-clockwise', 'msrc-3-1')
+  const events = [next, msrc31, msrc17, ecr, msrc31b]
+  const today = '2026-10-18'
+  // An evaluation at one, laps at two, and a yes to the one coming up.
+  const entries = evaluationEntries(
+    [{ eventId: 'msrc-31', evaluation: { notes: 'Carry more speed' }, sessions: [] }],
+    events, { next: { status: 'going' } }, new Set(['msrc-17', 'msrc-31b', 'ecr']), today,
+  )
+
+  it('lists the evaluated and the ones they went to, newest first — not one still to come', () => {
+    expect(entries.map(e => e.event.id)).toEqual(['msrc-31', 'ecr', 'msrc-17', 'msrc-31b'])
+    expect(entries[0].notes?.evaluation?.notes).toBe('Carry more speed')
+    expect(entries[1].notes).toBeNull()
+  })
+
+  it('filters to a layout as its track page finds its events, however they’re spelled', () => {
+    expect(filterEntries(entries, {}, { ...NO_FILTERS, layout: 'msrc-3-1-ccw' }, events).map(e => e.event.id)).toEqual(['msrc-31', 'msrc-31b'])
+    expect(filterEntries(entries, {}, { ...NO_FILTERS, layout: 'ecr-2-7-cw' }, events).map(e => e.event.id)).toEqual(['ecr'])
+    expect(filterEntries(entries, {}, NO_FILTERS, events)).toHaveLength(4)
+  })
+
+  it('offers each layout of theirs by name — and one picked from an event, if it isn’t among them', () => {
+    // One with no track icon goes by its track's name, as on the Tracks tab.
+    expect(layoutChoices(entries, events)).toEqual([
+      { slug: 'ecr-2-7-cw', name: 'ECR 2.7 CW' },
+      { slug: 'motorsport-ranch-cresson-3-1-ccw', name: 'Motorsport Ranch - Cresson 3.1 CCW' },
+      { slug: 'msrc-1-7-cw', name: 'MSRC 1.7 CW' },
+      { slug: 'msrc-3-1-ccw', name: 'MSRC 3.1 CCW' },
+    ])
+    expect(layoutChoices([], events, 'msrc-3-1-ccw')).toEqual([{ slug: 'msrc-3-1-ccw', name: 'MSRC 3.1 CCW' }])
+    expect(layoutChoices([], events, 'nowhere')).toEqual([])
   })
 })

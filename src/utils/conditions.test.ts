@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cleanEventConditions, cleanSessionConditions, conditionsText, skyFromCode, surfaceTrend } from './conditions'
+import { cleanEventConditions, cleanSessionConditions, conditionsSummary, conditionsText, skyFromCode, surfaceTrend } from './conditions'
 
 describe('track conditions (#347)', () => {
   it('reads Open-Meteo’s weather codes as the app’s skies', () => {
@@ -18,6 +18,14 @@ describe('track conditions (#347)', () => {
   it('follows the surface through the day, running repeats together', () => {
     expect(surfaceTrend([{ surface: 'wet' }, { surface: 'wet' }, { sky: 'rain' }, { surface: 'damp' }, { surface: 'dry' }])).toBe('Wet → Damp → Dry')
     expect(surfaceTrend([{ sky: 'sunny' }])).toBeNull()
+  })
+
+  it('sums up an event’s sessions in a line: the surface through the day, the sky if it held, the air’s range (#462)', () => {
+    expect(conditionsSummary([{ surface: 'damp', sky: 'sunny', airF: 58 }, { surface: 'dry', sky: 'sunny', airF: 71 }]))
+      .toBe('Damp → Dry · Sunny · 58–71°F')
+    expect(conditionsSummary([{ surface: 'wet', sky: 'rain', airF: 60 }, { surface: 'wet', sky: 'cloudy', airF: 60 }])).toBe('Wet · 60°F')
+    expect(conditionsSummary([{ note: 'Oil at Turn 4' }])).toBeNull()
+    expect(conditionsSummary([])).toBeNull()
   })
 
   it('keeps only what a session’s conditions have filled in, and needs something', () => {
