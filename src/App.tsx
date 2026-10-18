@@ -15,7 +15,7 @@ import { WidgetSetupPage } from './components/WidgetSetupPage'
 import { AboutPage, ABOUT_HASH } from './components/AboutPage'
 import { ShareSheet, SHARE_HASH, isEventShareHash } from './components/ShareSheet'
 import { LandingPage } from './components/LandingPage'
-import { PushPage, useSheetUp, useUnderPushedPages } from './components/PushPage'
+import { PAGE_FILL, PushPage, SCREEN_FILL, useSheetUp, useUnderPushedPages } from './components/PushPage'
 import { EventHeader, BackButton, EVENT_PAGE_MIN_HEIGHT } from './components/EventHeader'
 import { SignInPrompt } from './components/SignInPrompt'
 import { NewEventPage, ADMIN_ROLE } from './components/NewEventPage'
@@ -746,8 +746,10 @@ export default function App() {
     {/* Who an admin is acting as, over every page (#396). */}
     <ActingBanner />
     <PullToRefresh disabled={pushMounted || !!shownTrackSlug || !!shownTrackPage || !!shownMorePage || !!shownOverlay || !!shownCarId}>
-      {/* Room at the bottom for the tab bar. */}
-      <div key={homeTab} className="tab-fade" style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
+      {/* Room at the bottom for the tab bar — within the screen's height,
+          not added under it (#465): a short tab doesn't scroll. Gray-50,
+          as a card under a page sheet (#415). */}
+      <div key={homeTab} className={`tab-fade bg-gray-50 ${SCREEN_FILL}`} style={{ paddingBottom: `calc(${TAB_BAR_PX}px + env(safe-area-inset-bottom))`, ...underPages }}>
         {homeTab === 'events' && <LandingPage onOpenEvent={switchEvent} />}
         {homeTab === 'tracks' && <TracksTab filter={tracksFilter} onFilter={setTracksFilter} />}
         {homeTab === 'more' && <MoreTab />}
@@ -857,8 +859,8 @@ export default function App() {
       skipEnterAnimation={skipPushEnterAnimationRef.current}
       instant={swiped}
     >
-    <PullToRefresh disabled={!isOnEventRoute || !!shownOverlay} scrollContainerRef={pushScrollRef}>
-    <div className="min-h-screen bg-gray-50" style={routeMissing ? undefined : { minHeight: EVENT_PAGE_MIN_HEIGHT }}>
+    <PullToRefresh disabled={!isOnEventRoute || !!shownOverlay} scrollContainerRef={pushScrollRef} minHeight={routeMissing ? undefined : EVENT_PAGE_MIN_HEIGHT}>
+    <div className={`${PAGE_FILL} bg-gray-50`}>
         {routeMissing ? (
           <MissingEvent loading={!eventsLoaded} onHome={goHome} />
         ) : (<>

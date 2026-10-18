@@ -13,6 +13,7 @@ import { useRsvps } from '../data/RsvpsContext'
 import { MAX_CARS, activeCars, carName, carOutings, formatDay, isShared, othersText } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import type { EventConfig } from '../types'
+import { PAGE_FILL } from './PushPage'
 
 /**
  * A car in the Garage (#410): its photo with its name over it, how many
@@ -69,7 +70,7 @@ export function GaragePage({ events, onBack, onToast }: {
   const archived = garage.cars.filter(c => c.archived)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       <SubPageHeader title="Garage" onBack={onBack} />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {authStatus !== 'signed-in' ? (
@@ -153,7 +154,7 @@ export function ArchivedCarsPage({ events, onBack, onOpenCar }: {
   const { rsvps } = useRsvps()
   const archived = garage.cars.filter(c => c.archived)
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       <SubPageHeader title="Archived" onBack={onBack} />
       <div className="mx-auto max-w-lg px-3 pt-2 sm:px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <p className="mb-4 px-1 text-sm text-gray-500">Cars out of your garage, kept for the events they went to. Open one to put it back.</p>

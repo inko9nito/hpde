@@ -15,9 +15,11 @@ interface Props {
    * whose scroll doesn't move the document.
    */
   scrollContainerRef?: RefObject<HTMLElement | null>
+  /** At least this tall, in a pushed page: `calc(100% + 96px)` (#465). */
+  minHeight?: string
 }
 
-export function PullToRefresh({ children, disabled, scrollContainerRef }: Props) {
+export function PullToRefresh({ children, disabled, scrollContainerRef, minHeight }: Props) {
   const [pullY, setPullY] = useState(0)
   const [phase, setPhase] = useState<'idle' | 'pulling' | 'releasing' | 'refreshing'>('idle')
   const startY = useRef<number | null>(null)
@@ -104,8 +106,12 @@ export function PullToRefresh({ children, disabled, scrollContainerRef }: Props)
           />
         </div>
       </div>
+      {/* In a pushed page, as tall as it at least, as the page in it is
+          (#465, src/components/PushPage.tsx). */}
       <div
+        className="flex flex-1 flex-col"
         style={{
+          minHeight,
           transform: `translateY(${pullY}px)`,
           transition: animate ? 'transform 0.25s ease' : 'none',
         }}

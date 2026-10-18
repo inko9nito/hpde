@@ -19,6 +19,7 @@ import { layoutLaps, layoutTitle, trackGroup } from '../utils/trackStats'
 import { useScrolledPast } from '../utils/useScrolledPast'
 import type { Layout, TrackGroup } from '../utils/trackStats'
 import type { EventConfig } from '../types'
+import { PAGE_FILL } from './PushPage'
 
 export const TRACK_PAGE_HASH_PREFIX = '#/tracks/'
 
@@ -274,7 +275,7 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       <TrackTopBar title={name} collapsed={collapsed} onBack={onBack} />
       {/* The design's header, 375 pt wide: everything placed from the
           status bar's foot, as there. */}
@@ -339,8 +340,7 @@ export function TrackPage({ slug, events, eventsLoaded, filter, onFilter, onBack
           role={group ? 'tabpanel' : undefined}
           id={group ? `track-tabpanel-${tab}` : undefined}
           aria-labelledby={group ? `track-tab-${tab}` : undefined}
-          // At least a screen tall, so a shorter tab doesn't pull the page back up.
-          className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
+          className="mx-auto max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
         >
           {body}
         </div>

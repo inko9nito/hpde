@@ -20,6 +20,7 @@ import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import { useScrolledPast } from '../utils/useScrolledPast'
 import type { EventConfig } from '../types'
+import { PAGE_FILL } from './PushPage'
 
 const CAR_HASH_PREFIX = '#/garage/'
 
@@ -474,7 +475,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
 
   if (!car) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className={`${PAGE_FILL} bg-gray-50`}>
         {topBar}
         <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
           {garage.status === 'loading' ? (
@@ -498,7 +499,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
   const subtitle = carSubtitle(car)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       {topBar}
       <div className="mx-auto max-w-lg px-3 pb-5 sm:px-4">
         <h1 ref={setTitle} className="px-1 font-rubik text-[28px] font-bold leading-tight text-gray-900">{carHeading(car)}</h1>
@@ -536,8 +537,7 @@ export function CarPage({ carId, events, onBack, onOpenEvent, onToast }: {
         role="tabpanel"
         id={`car-tabpanel-${tab}`}
         aria-labelledby={`car-tab-${tab}`}
-        // At least a screen tall, so a shorter tab doesn't pull the page back up.
-        className="mx-auto min-h-screen max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
+        className="mx-auto max-w-lg px-3 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-4"
       >
         {tab === 'setup' && (
           <SetupPanel car={car} driven={driven} onOpenEntry={setEntry} onLog={car.archived ? undefined : () => setEntry('new')} />
