@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
 import { DateBlock, firstDayParts } from './DateBlock'
-import { EventTabs } from './EventTabs'
+import { DESCENDER_ROOM, EventTabs } from './EventTabs'
 import type { EventTabId } from './EventTabs'
 import { EventOverflowMenu } from './EventOverflowMenu'
 import { RsvpPicker } from './RsvpPicker'
@@ -188,7 +188,7 @@ function CompactTitle({ event, status, date }: { event: EventConfig; status: Eve
       <span className="truncate font-rubik text-[13px] font-bold leading-tight text-gray-900">{event.name}</span>
       <span className="text-center font-rubik text-lg font-bold leading-none text-gray-900">{parts?.day}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-[10px] leading-none text-gray-500">{date}</span>
+        <span className={`truncate text-[10px] leading-none text-gray-500 ${DESCENDER_ROOM}`}>{date}</span>
         <StatusBadge status={status} size="sm" />
       </span>
     </div>
