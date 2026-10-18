@@ -22,6 +22,20 @@ const RECEDED = `translateY(calc(env(safe-area-inset-top) + 8px)) scale(${RECEDE
 const RECEDED_RADIUS = `${+(10 / RECEDED_SCALE).toFixed(2)}px`
 const RECEDED_DIM = 0.12
 /** Where a sheet's top edge stops: below the acting banner and status bar. */
+/**
+ * A pushed page's root: as tall as the page's frame at least, so its own
+ * background reaches the bottom — and no taller, so a short page doesn't
+ * scroll (#465). Not `min-h-screen`: 100vh can be taller than the frame on
+ * an iPhone, and the page then scrolls with nothing to show.
+ */
+export const PAGE_FILL = 'flex-1'
+
+/**
+ * A tab's root, at least as tall as the screen under the banner (#396),
+ * its padding for the tab bar included: a short tab doesn't scroll (#465).
+ */
+export const SCREEN_FILL = 'min-h-[calc(100dvh-var(--acting-h,0px))]'
+
 export const SHEET_TOP = 'calc(var(--acting-h, 0px) + env(safe-area-inset-top) + 18px)'
 const SHEET_RADIUS = '12px'
 // Over every page, a raised one too (#274): an event's page opened from a
@@ -443,7 +457,11 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
       }}
       // A sheet's own drag, not a pull to refresh the page under it (#445).
       data-page-sheet={isSheet || undefined}
-      className={`fixed inset-0 z-30 overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
+      // A column: the page in it fills it with `flex-1` (PAGE_FILL), so it's
+      // as tall as this frame at least — gray-50 to the bottom — and no
+      // taller than its content beyond that (#465). Not `min-h-screen`:
+      // 100vh can be taller than this frame on an iPhone, and scrolls.
+      className={`fixed inset-0 z-30 flex flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain ${white ? 'bg-white' : 'bg-gray-50'}`}
       style={{
         // Below the banner while an admin acts as another driver (#396);
         // a sheet, below the status bar too, with the card under it showing.

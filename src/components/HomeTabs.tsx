@@ -161,7 +161,7 @@ const MORE_LINKS: readonly { href: string; label: string; Icon: LucideIcon }[] =
  */
 export function MoreTab() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="More" />
         <ul className="grid grid-cols-2 gap-3" aria-label="More">

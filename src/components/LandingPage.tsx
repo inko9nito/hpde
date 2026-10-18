@@ -197,7 +197,7 @@ export function LandingPage({ onOpenEvent }: Props) {
   const attended = rsvpsReady ? partitionEvents(EVENTS).past.filter(e => answerFor(e, rsvps) === 'going').length : 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
       {/* Across the top, above the title, as the App Store's banner sits
           on a site (#379). */}
       <HomeScreenBanner />

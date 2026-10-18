@@ -117,7 +117,7 @@ export function TracksTab({ filter, onFilter }: { filter: EventsFilter; onFilter
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
       <div className="mx-auto max-w-lg px-3 py-4 sm:px-4 sm:py-6">
         <HomeHeader title="Tracks">
           {/* All or theirs (#385), as on the Events tab. */}

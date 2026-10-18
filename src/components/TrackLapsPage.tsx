@@ -32,6 +32,7 @@ import { LayoutNotes } from './LayoutNotes'
 import type { TrackLink } from './EventInfo'
 import type { EventConfig } from '../types'
 import type { EventTabId } from './EventTabs'
+import { PAGE_FILL } from './PushPage'
 
 export const TRACK_HASH_PREFIX = '#/track/'
 
@@ -437,7 +438,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       {header}
       {tabs && (
         // Under the bar, staying there, as on the track's page.
@@ -457,8 +458,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
         role={tabs ? 'tabpanel' : undefined}
         id={tabs ? `layout-tabpanel-${tab}` : undefined}
         aria-labelledby={tabs ? `layout-tab-${tab}` : undefined}
-        // At least a screen tall, so a shorter tab doesn't pull the page back up.
-        className={`mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] ${tabs ? 'min-h-screen' : ''}`}
+        className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       >
         {body}
       </div>

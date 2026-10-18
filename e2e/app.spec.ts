@@ -2252,9 +2252,10 @@ test('Events, Tracks and More tabs along the bottom; a track opens from Tracks (
   // black above it; scrolled, the name in the middle on gray-50.
   const themeColor = () => page.evaluate(() => document.querySelector('meta[name="theme-color"]')!.getAttribute('content'))
   await expect.poll(themeColor).toBe('#000000')
-  // Short enough to scroll: the test events' page fits a whole phone.
+  // Short enough to scroll: the test events' page fits a whole phone, and
+  // isn't padded out to a screen under its header any more (#465).
   const phone = page.viewportSize()!
-  await page.setViewportSize({ width: phone.width, height: 480 })
+  await page.setViewportSize({ width: phone.width, height: 400 })
   await trackPage.evaluate(el => el.scrollTo(0, 200))
   await expect.poll(themeColor).toBe('#f9fafb')
   await expect(trackPage.locator('.sticky').first()).toHaveCSS('background-color', 'rgb(249, 250, 251)')
@@ -2852,4 +2853,38 @@ test('a car’s page opened from one of its events, after another of its events,
   await carPage.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/#\/garage$/)
   await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()
+})
+
+// A short page doesn't scroll (#465). Pages were at least a screen tall
+// (100vh) under their header, or above the tab bar's room, so they scrolled
+// to show nothing; on an iPhone 100vh can be taller than a pushed page's
+// frame, too. An event page still scrolls its title block away (#305).
+test('a short page doesn’t scroll; an event page’s only as far as its title (#465)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  const range = (scroller: Locator) => scroller.evaluate(el => el.scrollHeight - el.clientHeight)
+  const documentRange = () => page.evaluate(() => document.scrollingElement!.scrollHeight - document.scrollingElement!.clientHeight)
+  const pushed = (heading: string | RegExp) => page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: heading }) })
+
+  for (const tab of ['#/tracks', '#/more']) {
+    await page.goto(`/${tab}`)
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+    await expect.poll(documentRange, { message: tab }).toBe(0)
+  }
+
+  await page.goto('/#/tracks/msrc')
+  const track = page.locator('.fixed', { has: page.getByRole('tab', { name: 'Configurations' }) })
+  await expect(track.getByRole('tab', { name: 'Configurations' })).toBeVisible()
+  await expect.poll(() => range(track), { message: 'Configurations' }).toBe(0)
+  await track.getByRole('tab', { name: /^Events/ }).click()
+  await expect.poll(() => range(track), { message: 'Events' }).toBe(0)
+
+  await page.goto('/#/garage')
+  await expect(pushed('Garage')).toBeVisible()
+  await expect.poll(() => range(pushed('Garage'))).toBe(0)
+
+  const [, bravo] = TEST_EVENTS
+  await page.goto(`/#/event/${bravo.id}`)
+  await page.getByRole('tab', { name: 'Details' }).click()
+  await expect.poll(() => range(pushed(bravo.name))).toBe(96)
 })

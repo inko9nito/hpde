@@ -27,6 +27,7 @@ import { trackInfo } from '../data/tracks'
 import { opensElsewhere } from '../utils/links'
 import { formatAmPm, formatTime, todayLocalISO } from '../utils/time'
 import type { EventConfig } from '../types'
+import { PAGE_FILL } from './PushPage'
 
 const weekday = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })
 
@@ -624,7 +625,7 @@ export function EvaluationsPage({ events, eventsLoaded, active, layout = null, o
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`${PAGE_FILL} bg-gray-50`}>
       <SubPageHeader title="Instructor evaluations" onBack={onBack} />
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         {body}
