@@ -6,7 +6,7 @@ const read = {
   event: (h: string) => /^#\/event\/([^/]+)/.exec(h)?.[1] ?? null,
   track: (h: string) => /^#\/track\/([^/]+)/.exec(h)?.[1] ?? null,
   trackPage: (h: string) => /^#\/tracks\/([^/]+)/.exec(h)?.[1] ?? null,
-  more: (h: string) => (h === '#/evaluations' ? 'evaluations' : null),
+  more: (h: string) => (/^#\/evaluations(\/|$)/.test(h) ? 'evaluations' : null),
 }
 
 // Follows the hashes from the first, as the app sees them change.
@@ -17,22 +17,22 @@ function walk(hashes: string[]): PageStack {
 describe('page stack (#274)', () => {
   it('puts a track page opened from an event over it, and goes back to it', () => {
     expect(walk(['#/event/a', '#/track/t'])).toEqual({
-      hash: '#/track/t', eventUnderTrack: 'a', trackUnderEvent: null, moreUnderEvent: null, trackPageUnder: null,
+      hash: '#/track/t', eventUnderTrack: 'a', trackUnderEvent: null, moreUnderEvent: null, trackPageUnder: null, underMore: null, moreOverEvent: null,
     })
     expect(walk(['#/event/a', '#/track/t', '#/event/a'])).toEqual(emptyPageStack('#/event/a'))
   })
 
   it('puts an event opened from a track page over it, and goes back to it', () => {
     const over = walk(['#/tracks', '#/track/t', '#/event/b'])
-    expect(over).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null, trackPageUnder: null })
+    expect(over).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null, trackPageUnder: null, underMore: null, moreOverEvent: null })
     expect(walk(['#/tracks', '#/track/t', '#/event/b', '#/track/t'])).toEqual(emptyPageStack('#/track/t'))
   })
 
   it('from a track page over one event, opens another over it, and back leaves the first behind', () => {
     const stack = walk(['#/event/a', '#/track/t', '#/event/b'])
-    expect(stack).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null, trackPageUnder: null })
+    expect(stack).toEqual({ hash: '#/event/b', eventUnderTrack: null, trackUnderEvent: 't', moreUnderEvent: null, trackPageUnder: null, underMore: null, moreOverEvent: null })
     expect(walk(['#/event/a', '#/track/t', '#/event/b', '#/track/t'])).toEqual({
-      hash: '#/track/t', eventUnderTrack: null, trackUnderEvent: null, moreUnderEvent: null, trackPageUnder: null,
+      hash: '#/track/t', eventUnderTrack: null, trackUnderEvent: null, moreUnderEvent: null, trackPageUnder: null, underMore: null, moreOverEvent: null,
     })
   })
 
@@ -67,6 +67,37 @@ describe('page stack (#274)', () => {
     expect(walk(['#/tracks/msrc', '#/event/b', '#/track/t', '#/event/b'])).toEqual({ ...emptyPageStack('#/event/b'), trackPageUnder: 'msrc' })
     // A layout's page opened on its own has no track's page under it.
     expect(walk(['#/tracks', '#/track/t'])).toEqual(emptyPageStack('#/track/t'))
+  })
+
+  it('puts Instructor evaluations opened from an event over it, and the events opened from it over both, back to the first (#462)', () => {
+    const a = walk(['#/event/a'])
+    const over = walk(['#/event/a', '#/evaluations/t'])
+    expect(over).toEqual({ ...emptyPageStack('#/evaluations/t'), underMore: a, moreOverEvent: 'a' })
+    // Back to the event, as it was.
+    expect(walk(['#/event/a', '#/evaluations/t', '#/event/a'])).toEqual(a)
+    // Another event over it: the first's no longer in place under it, but still what it goes back to.
+    const b = walk(['#/event/a', '#/evaluations/t', '#/event/b'])
+    expect(b).toEqual({ ...emptyPageStack('#/event/b'), moreUnderEvent: '#/evaluations/t', underMore: a })
+    expect(walk(['#/event/a', '#/evaluations/t', '#/event/b', '#/event/b/share', '#/event/b'])).toEqual(b)
+    const back = walk(['#/event/a', '#/evaluations/t', '#/event/b', '#/evaluations/t'])
+    expect(back).toEqual({ ...emptyPageStack('#/evaluations/t'), underMore: a })
+    expect(walk(['#/event/a', '#/evaluations/t', '#/event/b', '#/evaluations/t', '#/event/a'])).toEqual(a)
+    // Through the other event's layout page and back.
+    expect(walk(['#/event/a', '#/evaluations/t', '#/event/b', '#/track/t'])).toMatchObject({ eventUnderTrack: 'b', moreUnderEvent: '#/evaluations/t', underMore: a })
+    expect(walk(['#/event/a', '#/evaluations/t', '#/event/b', '#/track/t', '#/event/b'])).toEqual(b)
+  })
+
+  it('keeps what an event was over under Instructor evaluations opened from it (#462)', () => {
+    // An event opened from its layout's page, over its track's page.
+    const a = walk(['#/tracks/msrc', '#/track/t', '#/event/a'])
+    expect(walk(['#/tracks/msrc', '#/track/t', '#/event/a', '#/evaluations/t', '#/event/a'])).toEqual(a)
+    expect(a).toMatchObject({ trackUnderEvent: 't', trackPageUnder: 'msrc' })
+    // From the More tab's Instructor evaluations, its own are a page apart.
+    const fromMore = walk(['#/evaluations', '#/event/a', '#/evaluations/t'])
+    expect(fromMore).toMatchObject({ underMore: { hash: '#/event/a', moreUnderEvent: '#/evaluations' }, moreOverEvent: 'a' })
+    expect(walk(['#/evaluations', '#/event/a', '#/evaluations/t', '#/event/a'])).toMatchObject({ moreUnderEvent: '#/evaluations' })
+    // Opened on its own, it's over nothing.
+    expect(walk(['#/more', '#/evaluations/t'])).toEqual(emptyPageStack('#/evaluations/t'))
   })
 
   it('starts over anywhere else', () => {

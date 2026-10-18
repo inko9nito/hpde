@@ -27,9 +27,16 @@ const SHEET_RADIUS = '12px'
 // Over every page, a raised one too (#274): an event's page opened from a
 // track or car page sat over its own Edit details at 31.
 const SHEET_Z = 35
+// How far a page can be raised (#462): one level under the sheets.
+const MAX_RAISED = SHEET_Z - 31
 
-function zIndex(sheet: boolean, raised: boolean) {
-  return sheet ? SHEET_Z : raised ? 31 : undefined
+/** How far up a page is raised: `true` is one level, as it was before there were more (#462). */
+function raisedLevel(raised: boolean | number): number {
+  return Math.min(MAX_RAISED, raised === true ? 1 : raised === false ? 0 : Math.max(0, Math.round(raised)))
+}
+
+function zIndex(sheet: boolean, level: number) {
+  return sheet ? SHEET_Z : level > 0 ? 30 + level : undefined
 }
 
 // Pages pushed from the right that are in place. Each covers whatever is
@@ -37,7 +44,8 @@ function zIndex(sheet: boolean, raised: boolean) {
 // event) cover nothing, as on iOS.
 interface Pushed {
   el: HTMLElement | null
-  raised: boolean
+  /** How far it's raised: 0, or a level over the pages at the levels under it. */
+  raised: number
 }
 const covering: Pushed[] = []
 const coveringListeners = new Set<() => void>()
@@ -52,19 +60,19 @@ function onCoveringChange(listener: () => void) {
 }
 
 /**
- * Whether `a` is painted over `b`: raised pages over the rest, and
- * otherwise whichever comes later on the page. Not the order they got
+ * Whether `a` is painted over `b`: raised pages over the rest, the higher
+ * over the lower (#462), and otherwise whichever comes later on the page. Not the order they got
  * into place: a page can arrive under one already there — the Garage,
  * under a car's page opened from an event, once another of the car's
  * events is opened over it (#380).
  */
 function isOver(a: Pushed, b: Pushed): boolean {
-  if (a.raised !== b.raised) return a.raised
+  if (a.raised !== b.raised) return a.raised > b.raised
   if (!a.el || !b.el) return false
   return !!(b.el.compareDocumentPosition(a.el) & Node.DOCUMENT_POSITION_FOLLOWING)
 }
 
-function useCovering(page: Pushed, on: boolean, raised: boolean) {
+function useCovering(page: Pushed, on: boolean, raised: number) {
   useLayoutEffect(() => {
     if (page.raised === raised) return
     page.raised = raised
@@ -128,7 +136,7 @@ function useUnderSheet(page?: Pushed): UnderSheet {
  * page stays black around the card till it's back in place.
  */
 export function useRecedeUnder(shown: boolean, up: boolean) {
-  const page = useRef<Pushed>({ el: null, raised: false }).current
+  const page = useRef<Pushed>({ el: null, raised: 0 }).current
   useSheet(page, shown, up)
   useHtmlClass('page-sheet-open', shown)
   useHtmlClass('page-sheet-up', up)
@@ -288,9 +296,11 @@ interface Props {
   from?: 'right' | 'bottom'
   /**
    * Above the other pushed pages, whatever their order on the page: an
-   * event's page opened from a track page, over it (#274).
+   * event's page opened from a track page, over it (#274). A number raises
+   * it that many levels, over pages raised fewer (#462): Instructor
+   * evaluations over an event raised itself, and an event over that.
    */
-  raised?: boolean
+  raised?: boolean | number
   /**
    * With `from="bottom"`: an iOS page sheet (#415), for a page with Cancel
    * and Save, or the iOS widget page's ✕. It stops a little below the status bar, with rounded top
@@ -351,9 +361,10 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   // Pushed from the right, it covers the page before it while in place —
   // from the frame it starts sliding in to the frame it starts sliding out
   // — and is itself covered by the next (#367).
-  const self = useRef<Pushed>({ el: null, raised }).current
+  const level = raisedLevel(raised)
+  const self = useRef<Pushed>({ el: null, raised: level }).current
   const pushed = from === 'right'
-  useCovering(self, pushed && inPosition, raised)
+  useCovering(self, pushed && inPosition, level)
   const covered = useCovered(self) && pushed
   // A sheet, up from the frame it starts sliding up to the frame it starts
   // sliding down, as a push covers (#415); and any other page under one.
@@ -404,7 +415,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         data-covering-dim
         className="pointer-events-none fixed inset-0 z-30 bg-black"
         style={{
-          zIndex: raised ? 31 : undefined,
+          zIndex: level > 0 ? 30 + level : undefined,
           opacity: inPosition ? COVERED_DIM : 0,
           transition: slide('opacity', instant),
         }}
@@ -437,7 +448,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // Below the banner while an admin acts as another driver (#396);
         // a sheet, below the status bar too, with the card under it showing.
         top: isSheet ? SHEET_TOP : 'var(--acting-h, 0px)',
-        zIndex: zIndex(isSheet, raised),
+        zIndex: zIndex(isSheet, level),
         // Out of sight under the page pushed over it, while a sheet makes
         // that one a card: hidden, so it doesn't show at the card's corners.
         visibility: covered && underSheet !== 'none' ? 'hidden' : undefined,

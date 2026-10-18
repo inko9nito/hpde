@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Timer } from 'lucide-react'
+import { Check, ChevronRight, Timer } from 'lucide-react'
 import { TOP_BAR_PX, TrackShape, TrackTopBar, UNDER_BAR } from './TrackPhoto'
 import { SignInPrompt } from './SignInPrompt'
 import { GroupBadge } from './GroupBadge'
@@ -27,6 +27,9 @@ import { classifyEvent } from '../utils/eventClass'
 import { goingIds, myRunGroup } from '../utils/rsvp'
 import type { Rsvp } from '../utils/rsvp'
 import { opensElsewhere } from '../utils/links'
+import { TabStrip } from './EventTabs'
+import { LayoutNotes } from './LayoutNotes'
+import type { TrackLink } from './EventInfo'
 import type { EventConfig } from '../types'
 import type { EventTabId } from './EventTabs'
 
@@ -193,7 +196,11 @@ interface Props {
   onAllTracks: () => void
   /** Whether its title has scrolled up into the top bar, which is gray-50 then, not over the photo. */
   onCollapsedChange?: (collapsed: boolean) => void
+  /** Its track's own page (#462), which the track's name under its title opens. */
+  track?: TrackLink
 }
+
+type LayoutTab = 'events' | 'notes'
 
 /**
  * A track page (#274): the driver's events on one layout — the same track,
@@ -202,9 +209,10 @@ interface Props {
  * at, and the ones they said they're going to or went to, laps or not
  * (#320) — or, on All, every event on it (#385). Each event opens its own
  * page for its sessions. The laps need a sign-in; signed out, it lists
- * every event on it.
+ * every event on it. Beside them, on a tab of its own, their notes from
+ * every event on it (#462).
  */
-export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFilter, active, onBack, onOpenEvent, onAllTracks, onCollapsedChange }: Props) {
+export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFilter, active, onBack, onOpenEvent, onAllTracks, onCollapsedChange, track }: Props) {
   const { status: authStatus } = useAuth()
   const signedIn = authStatus === 'signed-in'
   const onLayout = useMemo(() => eventsOnLayout(slug, events), [slug, events])
@@ -230,6 +238,8 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
     if (active && !wasActive.current) reload()
     wasActive.current = active
   }, [active, reload])
+
+  const [tab, setTab] = useState<LayoutTab>('events')
 
   const loading = signedIn
     && (laps.status === 'loading' || (laps.status === 'off' && !eventsLoaded) || (!driver && rsvpsStatus === 'loading'))
@@ -285,9 +295,25 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
       >
         {title ? (<>
           <h1 ref={setTitleEl} className="max-w-full truncate text-[20px] font-bold leading-normal">{heading}</h1>
-          {/* Its track, as the track page's city sits under its name. */}
-          <p className="mt-1.5 max-w-full truncate text-base leading-normal">
-            {[title.track, name ? `${name}’s laps` : null].filter(Boolean).join(' · ')}
+          {/* Its track, as the track page's city sits under its name — which opens the track's page (#462). */}
+          <p className="mt-1.5 flex max-w-full items-center justify-center text-base leading-normal">
+            {title.track && track ? (
+              <a
+                href={track.href}
+                onClick={e => {
+                  if (opensElsewhere(e)) return
+                  e.preventDefault()
+                  track.onOpen()
+                }}
+                aria-label={`${title.track}: its track page`}
+                className="-mx-1.5 inline-flex min-w-0 items-center gap-0.5 rounded-md px-1.5 transition-colors hover:bg-white/15"
+                data-track-link
+              >
+                <span className="truncate">{title.track}</span>
+                <ChevronRight size={16} strokeWidth={2.5} className="shrink-0 text-white/70" aria-hidden="true" />
+              </a>
+            ) : title.track && <span className="truncate">{title.track}</span>}
+            {name && <span className="shrink-0 whitespace-pre">{title.track ? ' · ' : ''}{name}’s laps</span>}
           </p>
           {/* Its square is mostly margin: 77 pt above the shape, 78 below. */}
           <TrackShape trackId={title.trackId} width={170} className="-mt-[61px] -mb-[62px]" />
@@ -402,10 +428,38 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
     )
   }
 
+  // Its events, or the driver's notes from them (#462), as the track's page has its tabs.
+  const tabs = title !== null
+  if (tabs && tab === 'notes') {
+    body = signedIn
+      ? <LayoutNotes events={onLayout} layout={heading} active={active} onOpenEvent={onOpenEvent} />
+      : <SignInPrompt reason="see your notes from this track" />
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {header}
-      <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      {tabs && (
+        // Under the bar, staying there, as on the track's page.
+        <div className="sticky z-10 border-b border-gray-200 bg-gray-50" style={{ top: TOP_BAR_PX }}>
+          <div className="mx-auto max-w-lg">
+            <TabStrip
+              tabs={[
+                { id: 'events', label: `Events (${onLayout.length})` },
+                { id: 'notes', label: 'My notes' },
+              ]}
+              active={tab} onChange={setTab} label="Track config section" idPrefix="layout" className="px-1 pt-4"
+            />
+          </div>
+        </div>
+      )}
+      <div
+        role={tabs ? 'tabpanel' : undefined}
+        id={tabs ? `layout-tabpanel-${tab}` : undefined}
+        aria-labelledby={tabs ? `layout-tab-${tab}` : undefined}
+        // At least a screen tall, so a shorter tab doesn't pull the page back up.
+        className={`mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] ${tabs ? 'min-h-screen' : ''}`}
+      >
         {body}
       </div>
     </div>

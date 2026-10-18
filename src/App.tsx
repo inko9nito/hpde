@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { CalendarClock } from 'lucide-react'
 import { Timeline } from './components/Timeline'
@@ -27,9 +27,12 @@ import type { SessionSlot, SessionView } from './components/LapTimesSheet'
 import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
+import type { TrackLink } from './components/EventInfo'
+import type { PastEventsHere } from './components/PastEventsCard'
 import { TrackPage, trackPageHash, trackPageSlugFromHash } from './components/TrackPage'
 import { emptyPageStack, nextPageStack } from './utils/pageStack'
-import { HOME_TAB_HASH, MORE_PAGE_HASH, MoreTab, TAB_BAR_PX, TabBar, homeTabFromHash, morePageFromHash } from './components/HomeTabs'
+import type { PageStack } from './utils/pageStack'
+import { HOME_TAB_HASH, MORE_PAGE_HASH, MoreTab, TAB_BAR_PX, TabBar, evaluationsHash, evaluationsLayoutFromHash, homeTabFromHash, morePageFromHash } from './components/HomeTabs'
 import { ArchivedCarsPage, GaragePage } from './components/GaragePage'
 import { EventCarSheet } from './components/EventCarSheet'
 import { CarFormPage } from './components/CarFormPage'
@@ -37,7 +40,7 @@ import { ARCHIVED_HASH, CarPage, carHash, carIdFromHash } from './components/Car
 import { JoinCarPage } from './components/JoinCarPage'
 import { inviteFromHash } from './components/ShareCarSheet'
 import type { HomeTab } from './components/HomeTabs'
-import { EvaluationsPage, latestCard } from './components/EvaluationsPage'
+import { EvaluationsPage, evaluationEntries, latestCard } from './components/EvaluationsPage'
 import { TracksTab } from './components/TracksTab'
 import type { EventsFilter } from './components/EventsFilterToggle'
 import { ActingBanner } from './components/ActingBanner'
@@ -46,7 +49,7 @@ import { useAllNotes, useNotesLog } from './data/notesLog'
 import { hourAt, useWeather } from './data/weather'
 import { sessionKey } from './utils/lapTimes'
 import { isTdeEvent } from './utils/evaluation'
-import { bestOnLayout, eventBest, layoutName, layoutSlug, trackGroup } from './utils/trackStats'
+import { bestOnLayout, eventBest, eventsOnLayout, layoutDirection, layoutLabel, layoutName, layoutSlug, startDate, trackGroup, trackSlug as trackSlugOf } from './utils/trackStats'
 import { Toast } from './components/Toast'
 import type { ToastMessage } from './components/Toast'
 import { useAuth } from './auth/AuthContext'
@@ -363,23 +366,50 @@ export default function App() {
     else if (!onCar && (underCar.arrived || routeEventId !== underCar.eventId)) setUnderCar(null)
   }
   const eventUnderCar = underCar?.eventId ?? null
-  // The event whose page is showing: the route's, or the one under the track or car page.
-  const pageEventId = routeEventId ?? trackOverEventId ?? (carRouteId !== null ? eventUnderCar : null)
-  const eventPageOpen = pageEventId !== null
-  // The track page showing: the route's, or the one under the event's page.
-  const trackPageSlug = trackSlug ?? trackUnderEvent
-  // An event's page opened from a track or car page goes over it — kept
-  // through its slide-out.
-  const [eventRaised, setEventRaised] = useState(trackUnderEvent !== null)
-  if (isOnEventRoute && eventRaised !== (trackUnderEvent !== null || carUnderEvent !== null)) {
-    setEventRaised(trackUnderEvent !== null || carUnderEvent !== null)
-  }
-  // …and a car's page opened from an event's, over it.
-  const [carRaised, setCarRaised] = useState(false)
-  if (carRouteId !== null && carRaised !== (eventUnderCar !== null)) setCarRaised(eventUnderCar !== null)
   // A More page (#345), and the one under the event's page opened from it.
   const morePage = morePageFromHash(hash)
   const moreUnderEvent = isOnEventRoute || trackOverEventId !== null ? stack.moreUnderEvent : null
+  // Instructor evaluations opened from an event's past events at its layout
+  // (#462): over the event's page, which stays in place under it until
+  // another event is opened from it, and is what Back returns to.
+  const underMore = morePage !== null ? stack.underMore : null
+  const moreOverEventId = morePage !== null ? stack.moreOverEvent : null
+  // The event whose page is showing: the route's, or the one under the track, More or car page.
+  const pageEventId = routeEventId ?? trackOverEventId ?? moreOverEventId ?? (carRouteId !== null ? eventUnderCar : null)
+  const eventPageOpen = pageEventId !== null
+  // The track page showing: the route's, or the one under the event's page.
+  const trackPageSlug = trackSlug ?? trackUnderEvent
+  // How far each pushed page is raised over the others (#274, #462), kept
+  // through its slide-out: a page opened over one that comes after it on
+  // the page goes a level over that one; one opened over one before it, at
+  // its level. An event's page opened from a track or car page goes over
+  // it — and from Instructor evaluations over another event, over that.
+  const [eventLevel, setEventLevel] = useState(trackUnderEvent !== null ? 1 : 0)
+  const [layoutLevel, setLayoutLevel] = useState(0)
+  const [moreLevel, setMoreLevel] = useState(0)
+  const [carLevel, setCarLevel] = useState(0)
+  if (isOnEventRoute) {
+    const level = trackUnderEvent !== null ? Math.max(1, layoutLevel + 1)
+      : carUnderEvent !== null ? 1
+      : moreUnderEvent !== null ? moreLevel
+      : 0
+    if (level !== eventLevel) setEventLevel(level)
+  }
+  // …a layout's page opened from an event's, at its level: it comes after it.
+  if (trackSlug !== null) {
+    const level = trackOverEventId !== null ? eventLevel : 0
+    if (level !== layoutLevel) setLayoutLevel(level)
+  }
+  // …Instructor evaluations opened from an event's, over it, as it was when opened.
+  if (morePage !== null) {
+    const level = moreOverEventId !== null ? Math.min(eventLevel + 1, 4) : underMore !== null ? moreLevel : 0
+    if (level !== moreLevel) setMoreLevel(level)
+  }
+  // …and a car's page opened from an event's, over it.
+  if (carRouteId !== null) {
+    const level = eventUnderCar !== null ? Math.max(1, eventLevel) : 0
+    if (level !== carLevel) setCarLevel(level)
+  }
   // A car's page opened from the Garage (#344) has the Garage under it —
   // and so does an event's page opened from that car's.
   const carFromGarage = (carRouteId !== null && eventUnderCar === null) || (isOnEventRoute && carUnderEvent !== null) || archivedRoute
@@ -392,7 +422,7 @@ export default function App() {
   // it was, and go back to it.
   const hashTab = homeTabFromHash(hash)
     ?? ((trackSlug !== null && trackOverEventId === null) || trackPageRoute !== null ? 'tracks' : null)
-    ?? (morePage !== null || archivedRoute || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
+    ?? ((morePage !== null && underMore === null) || archivedRoute || (carRouteId !== null && eventUnderCar === null) ? 'more' : null)
   const [homeTab, setHomeTab] = useState<HomeTab>(hashTab ?? 'events')
   if (hashTab !== null && hashTab !== homeTab) setHomeTab(hashTab)
   // Another tab starts at its top; pages opened over a tab, and closed
@@ -431,6 +461,9 @@ export default function App() {
   }, [trackPageSlug])
   const shownTrackSlug = trackPageSlug ?? lastTrackSlug
   const [trackEntered, setTrackEntered] = useState(false)
+  // Its track's own page (#346), which its track's name opens (#462).
+  const layoutNamed = shownTrackSlug ? ALL_EVENTS.find(e => layoutSlug(e) === shownTrackSlug) : undefined
+  const layoutTrackSlug = layoutNamed ? trackSlugOf(layoutNamed) : null
 
   // …and a track's own page (#346).
   const [lastTrackPage, setLastTrackPage] = useState(trackPageShowing)
@@ -443,11 +476,22 @@ export default function App() {
   const [trackPageCollapsed, setTrackPageCollapsed] = useState(false)
   const [layoutCollapsed, setLayoutCollapsed] = useState(false)
 
-  // …and a More page.
+  // …and a More page — and, for Instructor evaluations, the layout it's on (#462).
   const [lastMorePage, setLastMorePage] = useState(morePageShowing)
   useEffect(() => {
     if (morePageShowing) setLastMorePage(morePageShowing)
   }, [morePageShowing])
+  const moreHashShowing = morePage !== null ? hash : moreUnderEvent
+  const [lastMoreHash, setLastMoreHash] = useState(moreHashShowing)
+  useEffect(() => {
+    if (moreHashShowing) setLastMoreHash(moreHashShowing)
+  }, [moreHashShowing])
+  const evaluationsLayout = evaluationsLayoutFromHash(moreHashShowing ?? lastMoreHash ?? '')
+  const [moreEntered, setMoreEntered] = useState(false)
+  // A track's own page gone up to from a layout's that isn't over it
+  // (#462): in place under the layout's page, which slides away to show it,
+  // as when the layout's page was opened from it.
+  const [trackPageInPlace, setTrackPageInPlace] = useState(false)
   const shownMorePage = morePageShowing ?? lastMorePage
 
   // Same for New event / iOS widget: the last one opened stays
@@ -496,9 +540,11 @@ export default function App() {
   // in place and nothing's in place over it.
   // Not once its title's up in its gray-50 bar.
   const trackTopCollapsed = trackSlug !== null ? layoutCollapsed : trackPageRoute !== null ? trackPageCollapsed : false
+  // Instructor evaluations over an event (#462) is gray to the top, as a tab is.
+  const moreOnTop = morePage !== null && moreEntered
   const blackTop = !overlayEntered && (trackEntered || trackPageEntered) && !trackTopCollapsed
-    && !(isOnEventRoute && pushEntered) && !(carRouteId !== null && carEntered)
-  const whiteTop = overlayEntered ? overlayWhiteTop : !blackTop && ((eventPageOpen && pushEntered) || carEntered)
+    && !(isOnEventRoute && pushEntered) && !(carRouteId !== null && carEntered) && !moreOnTop
+  const whiteTop = overlayEntered ? overlayWhiteTop : !blackTop && !moreOnTop && ((eventPageOpen && pushEntered) || carEntered)
   // Black over a sheet, as what's under it shrinks back on black (#415).
   const sheetUp = useSheetUp()
   // Dimmed with the page under a sheet from the bottom (#445).
@@ -528,11 +574,6 @@ export default function App() {
   const rsvpGroup = myRunGroup(activeEvent, eventRsvps.rsvps[activeEvent.id])
   const drivenGroup = rsvpGroup ?? lapLog.sessions[0]?.group ?? notesLog.sessions[0]?.group
   const evaluationGroup = drivenGroup ? groupFor(drivenGroup, activeEvent.runGroups) : null
-  // …and the card their latest evaluation elsewhere was on (#350): the one
-  // its form starts on when their group has no card of its own. Fetched
-  // while the form is open.
-  const otherNotes = useAllNotes(evaluationOpen && isTdeEvent(activeEvent))
-  const lastCard = latestCard(otherNotes.events, ALL_EVENTS, activeEvent.id)
   // …and what they ran there (#344): the car, its consumables and each
   // session's tire pressures — from their garage.
   const garage = useGarage()
@@ -553,6 +594,36 @@ export default function App() {
   const activeLayout = layoutName(activeEvent)
   const activeLayoutSlug = layoutSlug(activeEvent)
   const trackLink = activeLayout && activeLayoutSlug ? { name: activeLayout, href: trackHash(activeLayoutSlug) } : undefined
+  // …which its Track config row and the track under its name open too (#462).
+  const layoutLink: TrackLink | undefined = activeLayoutSlug
+    ? { href: trackHash(activeLayoutSlug), onOpen: () => openLayoutFromEvent(activeLayoutSlug) }
+    : undefined
+  // Before the event, on its My notes, their past events at its layout
+  // (#462): the ones Instructor evaluations lists there, so the count is the
+  // same.
+  const pastWanted = authStatus === 'signed-in' && pageEventId === activeEvent.id && activeTab === 'notes'
+    && eventStatus !== 'past' && activeLayoutSlug !== null
+  // Every event's notes: for that, and for the card their latest evaluation
+  // elsewhere was on (#350) — the one its form starts on when their group
+  // has no card of its own. Fetched while either's wanted.
+  const otherNotes = useAllNotes((evaluationOpen && isTdeEvent(activeEvent)) || pastWanted)
+  const lastCard = latestCard(otherNotes.events, ALL_EVENTS, activeEvent.id)
+  const pastEntries = useMemo(() => {
+    if (!pastWanted || otherNotes.status !== 'ready' || !lapSummary || activeLayoutSlug === null) return null
+    const onLayout = new Set(eventsOnLayout(activeLayoutSlug, ALL_EVENTS).map(e => e.id))
+    return evaluationEntries(otherNotes.events, ALL_EVENTS, rsvps, new Set(lapSummary.map(e => e.eventId)))
+      .filter(e => onLayout.has(e.event.id) && e.event.id !== activeEvent.id)
+  }, [pastWanted, otherNotes.status, otherNotes.events, lapSummary, activeLayoutSlug, ALL_EVENTS, rsvps, activeEvent.id])
+  const pastEvents: PastEventsHere | null = pastEntries?.length && activeLayoutSlug !== null ? {
+    layout: layoutLabel(activeEvent) ?? activeLayout ?? activeLayoutSlug,
+    trackId: activeEvent.trackId,
+    direction: layoutDirection(activeEvent),
+    count: pastEntries.length,
+    last: startDate(pastEntries[0].event),
+    best: layoutBest.best,
+    href: evaluationsHash(activeLayoutSlug),
+    onOpen: () => openPastEvents(activeLayoutSlug),
+  } : null
 
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -632,6 +703,43 @@ export default function App() {
     goBack(eventHash(eventId))
   }
 
+  // Back from Instructor evaluations to the event it was opened over
+  // (#462), in place under it as it slides away — on My notes, where its
+  // card was, if another event's been opened since.
+  function backToEventUnder(under: PageStack) {
+    const event = ALL_EVENTS.find(e => e.id === eventIdFromHash(under.hash))
+    if (event && event.id !== activeEvent.id) {
+      selectEvent(event)
+      setActiveTab('notes')
+    }
+    skipPushEnterAnimationRef.current = true
+    goBack(under.hash)
+  }
+
+  // From an event, its layout's page (#462): over it — or, the one it was
+  // opened from, back to it.
+  function openLayoutFromEvent(slug: string) {
+    if (trackUnderEvent === slug) goBack(trackHash(slug))
+    else setHash(trackHash(slug))
+  }
+
+  // From an event, Instructor evaluations on its layout (#462): over it —
+  // or, the one it was opened from, back to it.
+  function openPastEvents(slug: string) {
+    const target = evaluationsHash(slug)
+    if (moreUnderEvent === target) goBack(target)
+    else setHash(target)
+  }
+
+  // From a layout's page, its track's own (#462): back to it, if that's
+  // what the layout's page was opened from; otherwise up to it, in place
+  // under the layout's page as that slides away — and whatever the
+  // layout's page was over with it.
+  function openTrackFromLayout(slug: string) {
+    if (trackPageUnder !== slug) setTrackPageInPlace(true)
+    goBack(trackPageHash(slug))
+  }
+
 
   return (
     <>
@@ -646,12 +754,16 @@ export default function App() {
       </div>
     </PullToRefresh>
     <TabBar active={homeTab} style={underTabBar} />
-    {/* Before the event's page, which goes over it when opened from it. */}
+    {/* Before the event's page, which goes over it when opened from it —
+        and under it, unless it was opened from an event (#462): raised. */}
     {shownMorePage && (
       <PushPage
-        key={shownMorePage}
+        // A fresh page when it goes over an event's page, so it slides in over it.
+        key={moreLevel > 0 ? `${shownMorePage} raised ${moreLevel}` : shownMorePage}
+        raised={moreLevel}
         open={morePageShowing !== null}
         onExited={() => setLastMorePage(null)}
+        onEnteredChange={setMoreEntered}
         scrollRef={moreScrollRef}
         skipEnterAnimation={bootHashRef.current !== null}
         instant={swiped}
@@ -661,11 +773,20 @@ export default function App() {
         {shownMorePage === 'evaluations' ? (
           <PullToRefresh disabled={morePage === null || !!shownOverlay} scrollContainerRef={moreScrollRef}>
           <EvaluationsPage
+            // Afresh on another layout, or none.
+            key={evaluationsLayout ?? ''}
             events={ALL_EVENTS}
             eventsLoaded={eventsLoaded}
             active={morePage !== null}
-            onBack={backToTab}
-            onOpenEvent={event => openEventNotes(event)}
+            layout={evaluationsLayout}
+            onBack={() => (underMore !== null ? backToEventUnder(underMore) : backToTab())}
+            onOpenEvent={event => {
+              // The event it was opened over: back to it, under it.
+              if (underMore !== null && eventIdFromHash(underMore.hash) === event.id) {
+                setActiveTab('notes')
+                backToEventUnder(underMore)
+              } else openEventNotes(event)
+            }}
             onAddEvaluation={event => {
               openEventNotes(event)
               openEvaluation()
@@ -702,8 +823,11 @@ export default function App() {
         key={`track page ${shownTrackPage}`}
         open={trackPageShowing !== null}
         onExited={() => setLastTrackPage(null)}
-        onEnteredChange={setTrackPageEntered}
-        skipEnterAnimation={bootHashRef.current !== null}
+        onEnteredChange={entered => {
+          setTrackPageEntered(entered)
+          if (entered) setTrackPageInPlace(false)
+        }}
+        skipEnterAnimation={bootHashRef.current !== null || trackPageInPlace}
         instant={swiped}
         whiteHeader={false}
         blackHeader={!trackPageCollapsed}
@@ -723,9 +847,9 @@ export default function App() {
     )}
     {pushMounted && (
     <PushPage
-      // A fresh page when it goes over the track or a car's page, so it slides in.
-      key={eventRaised ? 'event raised' : 'event'}
-      raised={eventRaised}
+      // A fresh page when it goes over the track, More or a car's page, so it slides in.
+      key={eventLevel > 0 ? `event raised ${eventLevel}` : 'event'}
+      raised={eventLevel}
       open={eventPageOpen}
       onExited={() => setPushMounted(false)}
       onEnteredChange={setPushEntered}
@@ -757,6 +881,7 @@ export default function App() {
             goHome()
           }}
           scrollRef={pushScrollRef}
+          track={layoutLink}
         />
 
       <div className="mx-auto max-w-lg px-3 pt-4 sm:px-4 sm:pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
@@ -875,12 +1000,14 @@ export default function App() {
                 onOpenCar: () => setCarSheetOpen(true),
                 reload: garage.reload,
               } : undefined}
+              pastEvents={pastEvents}
             />
           )}
 
           {activeTab === 'info' && (
             <EventInfo
               event={activeEvent}
+              track={layoutLink}
               weather={weather}
               conditions={authStatus === 'signed-in' ? {
                 sessions: notesLog.sessions.flatMap(s => (s.conditions ? [{ ...s, conditions: s.conditions }] : [])),
@@ -901,7 +1028,7 @@ export default function App() {
       // Opened from an event's page, the car is in that page's garage: the picked driver's (#362).
       <PushPage
         key={`car ${shownCarId}`}
-        raised={carRaised}
+        raised={carLevel}
         open={carPageId !== null}
         onExited={() => setLastCarId(null)}
         onEnteredChange={setCarEntered}
@@ -933,6 +1060,8 @@ export default function App() {
     {shownTrackSlug && (
       <PushPage
         key={shownTrackSlug}
+        // Over the event it was opened from, however far that's raised (#462).
+        raised={layoutLevel}
         open={trackPageSlug !== null}
         onExited={() => setLastTrackSlug(null)}
         onEnteredChange={setTrackEntered}
@@ -960,6 +1089,7 @@ export default function App() {
           onOpenEvent={openEventNotes}
           onAllTracks={() => setHash(HOME_TAB_HASH.tracks)}
           onCollapsedChange={setLayoutCollapsed}
+          track={layoutTrackSlug !== null ? { href: trackPageHash(layoutTrackSlug), onOpen: () => openTrackFromLayout(layoutTrackSlug) } : undefined}
         />
         </PullToRefresh>
       </PushPage>

@@ -25,6 +25,12 @@ function directionKey(direction: string | undefined): string {
   return d
 }
 
+/** Which way round an event's layout goes (#307), when it says. */
+export function layoutDirection(event: Pick<EventConfig, 'direction'>): 'cw' | 'ccw' | undefined {
+  const d = directionKey(event.direction)
+  return d === 'cw' || d === 'ccw' ? d : undefined
+}
+
 /** Same track, configuration and direction. False when the event names no track. */
 export function sameLayout(a: EventConfig, b: EventConfig): boolean {
   if (!compact(a.track)) return false
@@ -128,7 +134,7 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
   }
   const latest = (layout: Layout) => layout.events.map(startDate).sort().at(-1) ?? ''
   return [...named].map(([slug, e]): Layout => {
-    const direction = directionKey(e.direction)
+    const direction = layoutDirection(e)
     return {
       slug,
       name: layoutName(e)!,
@@ -136,7 +142,7 @@ export function layoutsOf(events: EventConfig[]): Layout[] {
       city: e.city?.trim() || undefined,
       trackSlug: trackSlug(e)!,
       trackId: e.trackId,
-      ...(direction === 'cw' || direction === 'ccw' ? { direction } : {}),
+      ...(direction ? { direction } : {}),
       events: eventsOnLayout(slug, events),
     }
   }).sort((a, b) => latest(b).localeCompare(latest(a)) || a.name.localeCompare(b.name))

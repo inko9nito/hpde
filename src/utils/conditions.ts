@@ -82,6 +82,24 @@ export function surfaceTrend(sessions: SessionConditions[]): string | null {
   return steps.length ? steps.map(surfaceLabel).join(' → ') : null
 }
 
+/**
+ * An event's conditions in a line (#462), from what they recorded for its
+ * sessions: how the surface went, the sky when it was the same all along,
+ * and the air from coolest to warmest — "Dry → Damp · Sunny · 58–71°F".
+ * Null with none recorded.
+ */
+export function conditionsSummary(sessions: SessionConditions[]): string | null {
+  const skies = [...new Set(sessions.flatMap(s => (s.sky ? [s.sky] : [])))]
+  const temps = sessions.flatMap(s => (s.airF !== undefined ? [s.airF] : []))
+  const [low, high] = [Math.min(...temps), Math.max(...temps)]
+  const parts = [
+    surfaceTrend(sessions),
+    skies.length === 1 ? skyLabel(skies[0]) : null,
+    temps.length === 0 ? null : low === high ? `${low}°F` : `${low}–${high}°F`,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}
+
 type Cleaned<T> = { value: T } | { error: string }
 
 function temp(v: unknown, what: string): Cleaned<number | undefined> {

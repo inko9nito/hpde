@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { TrackIcon } from './TrackIcon'
 import { DateBlock, firstDayParts } from './DateBlock'
 import { EventTabs } from './EventTabs'
@@ -10,6 +10,8 @@ import { RsvpPicker } from './RsvpPicker'
 import { ICON_BUTTON, ICON_BUTTON_ON_DARK } from './iconButton'
 import { formatDateRangeWithWeekday } from '../utils/time'
 import { layoutName } from '../utils/trackStats'
+import { opensElsewhere } from '../utils/links'
+import type { TrackLink } from './EventInfo'
 import type { EventStatus } from '../utils/eventClass'
 import type { EventConfig } from '../types'
 
@@ -74,6 +76,8 @@ interface Props {
   onDeleted: () => void
   /** The page's scroll container — drives the collapse. */
   scrollRef: RefObject<HTMLElement | null>
+  /** The layout's page (#462), which the track under the name opens. */
+  track?: TrackLink
 }
 
 /**
@@ -97,7 +101,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef, track }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -153,7 +157,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
               {/* The track, then Join event or their answer (#235) across
                   from it: the date line keeps the width to itself. */}
               <div className="flex min-h-7 min-w-0 items-center gap-2.5">
-                <TrackLine event={event} />
+                <TrackLine event={event} track={track} />
                 <div className="ml-auto flex shrink-0">
                   <RsvpPicker event={event} status={status} variant="header" onRunGroup={onRunGroup} />
                 </div>
@@ -193,16 +197,32 @@ function CompactTitle({ event, status, date }: { event: EventConfig; status: Eve
 
 /** The track, second to the date (#305): its shape, small, and its
  *  layout ("MSRC 1.7 CW") — the name its track page goes by — or just the
- *  track's name without a layout. */
-function TrackLine({ event }: { event: EventConfig }) {
+ *  track's name without a layout. With a layout, it opens the layout's
+ *  page (#462), as a chevron says. */
+function TrackLine({ event, track }: { event: EventConfig; track?: TrackLink }) {
   const name = layoutName(event) ?? event.track?.trim()
+  const content = (<>
+    {/* No padding: the track SVGs already carry their own margin
+        inside a square viewBox. */}
+    <TrackIcon trackId={event.trackId} tone="dark" size={18} padding={0} radius="rounded" />
+    {name && <span className="truncate text-xs leading-tight text-gray-500">{name}</span>}
+  </>)
+  if (!track) return <span className="flex min-w-0 items-center gap-1.5">{content}</span>
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      {/* No padding: the track SVGs already carry their own margin
-          inside a square viewBox. */}
-      <TrackIcon trackId={event.trackId} tone="dark" size={18} padding={0} radius="rounded" />
-      {name && <span className="truncate text-xs leading-tight text-gray-500">{name}</span>}
-    </span>
+    <a
+      href={track.href}
+      onClick={e => {
+        if (opensElsewhere(e)) return
+        e.preventDefault()
+        track.onOpen()
+      }}
+      aria-label={`Open the ${name} page`}
+      className="-mx-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-gray-100"
+      data-track-line
+    >
+      {content}
+      <ChevronRight size={12} strokeWidth={2.5} className="-ml-0.5 shrink-0 text-gray-400" aria-hidden="true" />
+    </a>
   )
 }
 
