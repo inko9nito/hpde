@@ -46,6 +46,14 @@ export function EventTabs({ active, onChange, notesCount }: Props) {
 }
 
 /**
+ * A one-line label's `truncate` clips at its box, and with `leading-none`
+ * that box is only the font size tall, cutting off descenders on iOS (#464).
+ * Padding gives them room inside the clip; the negative margin keeps the
+ * label where it was.
+ */
+export const DESCENDER_ROOM = '-my-1 py-1'
+
+/**
  * A page's tabs, in equal columns, the active one marked by a heavier
  * label and a dark bar under it: the event page's, and a car's (#410).
  * Each controls the panel `${idPrefix}-tabpanel-${id}`.
@@ -74,7 +82,9 @@ export function TabStrip<T extends string>({ tabs, active, onChange, label, idPr
               isActive ? 'font-medium' : 'font-normal hover:text-gray-600'
             }`}
           >
-            <span className="truncate px-4 leading-none">{tab.label}</span>
+            {/* Room in the clip for descenders, as on the "g" of
+                Configurations (#464), without moving the label. */}
+            <span className={`truncate px-4 leading-none ${DESCENDER_ROOM}`}>{tab.label}</span>
             <span
               aria-hidden="true"
               className={`h-1 w-full rounded-t-sm ${isActive ? 'bg-gray-900' : ''}`}

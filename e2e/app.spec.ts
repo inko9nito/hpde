@@ -2853,3 +2853,25 @@ test('a car’s page opened from one of its events, after another of its events,
   await expect(page).toHaveURL(/#\/garage$/)
   await expect(page.getByRole('list', { name: 'Cars' })).toBeInViewport()
 })
+
+// A tab's label is cut off at its box (`truncate`), which `leading-none`
+// made only the font size tall: the "g" of Configurations lost its tail on
+// iOS (#464). The text's own box — ascenders to descenders — fits in it.
+test('tab labels have room for their descenders (#464)', async ({ page }) => {
+  await stubEvents(page)
+  const clipped = (where: Locator) => where.getByRole('tab').evaluateAll(tabs => tabs.flatMap(tab => {
+    const label = tab.firstElementChild!
+    const text = document.createRange()
+    text.selectNodeContents(label)
+    const t = text.getBoundingClientRect()
+    const box = label.getBoundingClientRect()
+    return t.top < box.top - 0.5 || t.bottom > box.bottom + 0.5 ? [`${label.textContent}: text ${t.top}–${t.bottom}, box ${box.top}–${box.bottom}`] : []
+  }))
+  await page.goto('/#/tracks/msrc')
+  const track = page.locator('.fixed', { has: page.getByRole('tab', { name: 'Configurations' }) })
+  await expect(track.getByRole('tab', { name: 'Configurations' })).toBeVisible()
+  expect(await clipped(track)).toEqual([])
+  await page.goto(`/#/event/${alpha.id}`)
+  await expect(page.getByRole('tab', { name: 'Schedule' })).toBeVisible()
+  expect(await clipped(page.getByRole('tablist', { name: 'Event section' }))).toEqual([])
+})
