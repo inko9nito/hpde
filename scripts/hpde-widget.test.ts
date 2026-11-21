@@ -37,7 +37,7 @@ function num(v: unknown): number {
 // The alerts iOS holds pending on each device (keyed by the device's
 // files map), across runs: scheduling one adds or replaces it by
 // identifier, removePending takes it down.
-type PendingAlert = { identifier: string; title: string }
+type PendingAlert = { identifier: string; title: string; body: string; nextTriggerDate: Date | null }
 const pendingByDevice = new WeakMap<Map<string, string>, Map<string, PendingAlert>>()
 function pendingOn(files: Map<string, string>) {
   let p = pendingByDevice.get(files)
@@ -235,10 +235,36 @@ function installScriptableMocks(
         sound: this.sound,
         nextTriggerDate: this.nextTriggerDate,
       })
-      pending.set(this.identifier, { identifier: this.identifier, title: this.title })
+      pending.set(this.identifier, {
+        identifier: this.identifier, title: this.title, body: this.body, nextTriggerDate: this.nextTriggerDate,
+      })
     }
   }
   const pending = pendingOn(files)
+  // The alert queue the script lists when run in the app (#468).
+  g.__queueRows = [] as Array<{ header: boolean; title: string; subtitle: string }>
+  g.__queuePresented = false
+  g.UITableRow = class {
+    isHeader = false
+    height = 44
+    cells: Array<{ title: string; subtitle: string }> = []
+    addText(title: string, subtitle = '') {
+      const cell = { title, subtitle, titleFont: null, subtitleFont: null }
+      this.cells.push(cell)
+      return cell
+    }
+  }
+  g.UITable = class {
+    showSeparators = false
+    rows: any[] = []
+    addRow(r: any) { this.rows.push(r) }
+    async present() {
+      g.__queuePresented = true
+      for (const r of this.rows) {
+        for (const c of r.cells) g.__queueRows.push({ header: r.isHeader, title: c.title, subtitle: c.subtitle })
+      }
+    }
+  }
   ;(NotificationStub as any).allPending = async () => [...pending.values()]
   ;(NotificationStub as any).removePending = async (ids: string[]) => { for (const id of ids) pending.delete(id) }
   g.Notification = NotificationStub
@@ -980,6 +1006,38 @@ describe('notifications', () => {
       await runWidget('large', FUTURE_MANIFEST, 'orange', failing, files)
       expect(pendingTitles(files).filter(t => /Red|Blue/.test(t))).toEqual([])
       expect(pendingTitles(files)).toContain('🟠 Orange · in 10m')
+    })
+
+    it('lists the widgets that set alerts and the queued alerts when run in the app', async () => {
+      const files = new Map<string, string>()
+      const inApp = () => { (globalThis as any).config = { widgetFamily: null, runsInWidget: false } }
+      const queue = () => (globalThis as any).__queueRows as Array<{ header: boolean; title: string; subtitle: string }>
+      await runWidget('large', FUTURE_MANIFEST, null, () => {}, files)
+      await runWidget('medium', FUTURE_MANIFEST, null, inApp, files)
+      expect((globalThis as any).__queuePresented).toBe(true)
+      expect(queue().filter(r => r.header).map(r => r.title)).toEqual(['Widgets that set alerts', 'Queued alerts (6)'])
+      expect(queue().map(r => r.title)).toContain('Large · every group · 10m ahead')
+      expect(queue().map(r => r.title)).toContain('🔴 Red · in 10m')
+      const red = queue().find(r => r.title === '🔴 Red · in 10m')!
+      expect(red.subtitle).toMatch(/^\w{3} 8:20 AM · On track at 8:30 AM/)
+      // The queue is in the order the alerts fire.
+      expect(queue().filter(r => !r.header).slice(1).map(r => r.title)[0]).toBe('Drivers meeting · in 10m')
+
+      await runWidget('large', FUTURE_MANIFEST, 'green,blue', () => {}, files)
+      await runWidget('medium', FUTURE_MANIFEST, null, inApp, files)
+      expect(queue().map(r => r.title)).toContain('Large · blue · 10m ahead')
+      expect(queue().filter(r => /Red|Orange/.test(r.title))).toEqual([])
+    })
+
+    it('says so when iOS won\'t list the queue to the app', async () => {
+      const inApp = () => {
+        ;(globalThis as any).config = { widgetFamily: null, runsInWidget: false }
+        ;(globalThis as any).Notification.allPending = async () => { throw new Error('unavailable') }
+      }
+      await runWidget('medium', FUTURE_MANIFEST, null, inApp)
+      const rows = (globalThis as any).__queueRows as Array<{ title: string }>
+      expect(rows.map(r => r.title)).toContain("Couldn't read the queue")
+      expect(rows.map(r => r.title)).toContain('None yet')
     })
 
     it('alerts for the groups of every widget size on the device', async () => {
