@@ -352,16 +352,23 @@ function readWidgetParameter() {
 
 // Validates group ids against a manifest's known run groups; unknown ids
 // are moved into `invalid` for the widget footer. Mutates and returns the
-// parsed object.
+// parsed object. Matching ignores case (#468): iOS capitalizes what's
+// typed into the widget's Parameter field, and `Green` must not read as
+// an unknown group — a filter left with no known group alerts for every
+// group.
 function validateWidgetParameter(parsed, manifest) {
-  const known = new Set()
+  const known = new Map()
   for (const event of (manifest && manifest.events) || []) {
-    for (const g of event.runGroups || []) known.add(g.id)
+    for (const g of event.runGroups || []) {
+      const key = String(g.id).toLowerCase()
+      if (!known.has(key)) known.set(key, g.id)
+    }
   }
   const kept = []
   for (const gid of parsed.groups) {
-    if (known.has(gid)) kept.push(gid)
-    else parsed.invalid.push(gid)
+    const id = known.get(String(gid).toLowerCase())
+    if (id == null) parsed.invalid.push(gid)
+    else if (!kept.includes(id)) kept.push(id)
   }
   parsed.groups = kept
   return parsed
@@ -2530,19 +2537,42 @@ function computeMergedSpecs(feed, state, now) {
   return specs
 }
 
-async function cancelExistingHpdeNotifications() {
-  if (typeof Notification === "undefined" || !Notification.allPending) return
-  const pending = await Notification.allPending()
-  const ids = []
-  for (const n of (pending || [])) {
-    if (n && typeof n.identifier === "string" &&
-        n.identifier.indexOf(NOTIF_ID_PREFIX) === 0) {
-      ids.push(n.identifier)
+// Every alert identifier the widget could have scheduled for an activity
+// still to come: every group's session in every event, as the feed reads
+// with no fixture flags, with `test`, and with each live widget's own.
+function allCandidateIds(feed, state, now) {
+  const flagSets = [{}, { test: true }]
+  for (const inst of Object.values(state.instances || {})) flagSets.push(inst.flags || {})
+  const ids = new Set()
+  for (const flags of flagSets) {
+    for (const target of collectNotifTargets(withFixtureFlags(feed, flags), now)) {
+      ids.add(NOTIF_ID_PREFIX + target.sessionKey)
     }
   }
-  if (ids.length > 0 && Notification.removePending) {
-    await Notification.removePending(ids)
-  }
+  return ids
+}
+
+// Removes every pending widget alert that isn't in `keep` (the ones about
+// to be scheduled again, which replace themselves by identifier). Which
+// alerts are pending comes from two places (#468): what iOS says is
+// pending, and every identifier the feed could have produced. The second
+// doesn't depend on Notification.allPending answering from inside a
+// widget, so an alert for a group no widget wants anymore — scheduled
+// before its parameter was set or edited — is still taken down.
+async function removeUnwantedNotifications(feed, state, now, keep) {
+  if (typeof Notification === "undefined" || !Notification.removePending) return
+  const ids = allCandidateIds(feed, state, now)
+  try {
+    const pending = Notification.allPending ? await Notification.allPending() : []
+    for (const n of (pending || [])) {
+      if (n && typeof n.identifier === "string" &&
+          n.identifier.indexOf(NOTIF_ID_PREFIX) === 0) {
+        ids.add(n.identifier)
+      }
+    }
+  } catch (_) {}
+  const remove = [...ids].filter(id => !keep.has(id))
+  if (remove.length > 0) await Notification.removePending(remove)
 }
 
 async function scheduleSpecs(specs) {
@@ -2600,9 +2630,84 @@ async function refreshNotifications(feed, parsed) {
 
   const specs = computeMergedSpecs(feed, state, now)
   try {
-    await cancelExistingHpdeNotifications()
+    await removeUnwantedNotifications(feed, state, now, new Set(specs.map(s => s.identifier)))
   } catch (_) {}
   return await scheduleSpecs(specs)
+}
+
+// ---------- alert queue (#468) ----------
+//
+// Run in the Scriptable app (not as a widget), the script first lists
+// what's behind the widget's alerts: the widgets this device counts, with
+// their groups and when each last refreshed, and the alerts iOS has
+// queued — so a stray alert can be traced to the widget or the old
+// schedule that queued it.
+
+const QUEUE_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+function formatQueueTime(d) {
+  const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  return `${QUEUE_WEEKDAYS[d.getDay()]} ${formatTimeWithAmPm(hhmm)}`
+}
+
+function familyName(family) {
+  const f = String(family || "widget")
+  return f.charAt(0).toUpperCase() + f.slice(1)
+}
+
+async function presentAlertQueue() {
+  if (typeof UITable === "undefined" || typeof UITableRow === "undefined") return
+  const table = new UITable()
+  table.showSeparators = true
+  const header = text => {
+    const r = new UITableRow()
+    r.isHeader = true
+    r.addText(text).titleFont = Font.boldSystemFont(17)
+    table.addRow(r)
+  }
+  const row = (title, subtitle) => {
+    const r = new UITableRow()
+    r.height = 64
+    const cell = r.addText(title, subtitle)
+    cell.titleFont = Font.systemFont(16)
+    cell.subtitleFont = Font.systemFont(13)
+    table.addRow(r)
+  }
+
+  const now = new Date()
+  const cutoffMs = now.getTime() - NOTIF_STALE_INSTANCE_HOURS * 3600 * 1000
+  const instances = Object.values(loadNotifState().instances || {})
+  header("Widgets that set alerts")
+  if (instances.length === 0) row("None yet", "A widget joins in when it refreshes")
+  for (const inst of instances) {
+    const groups = (inst.groups || []).length > 0 ? inst.groups.join(", ") : "every group"
+    const lead = Number.isFinite(inst.leadMinutes) ? inst.leadMinutes : DEFAULT_LEAD_MIN
+    const t = Date.parse((inst && inst.lastRefreshed) || "")
+    let sub = isFinite(t) ? `Refreshed ${formatQueueTime(new Date(t))}` : "Never refreshed"
+    if (!isFinite(t) || t < cutoffMs) sub += " · no longer counted"
+    row(`${familyName(inst.family)} · ${groups} · ${lead}m ahead`, sub)
+  }
+
+  let pending = null
+  try {
+    pending = Notification.allPending ? await Notification.allPending() : null
+  } catch (_) {}
+  if (pending == null) {
+    header("Queued alerts")
+    row("Couldn't read the queue", "iOS didn't list the pending alerts")
+  } else {
+    const mine = pending
+      .filter(n => n && typeof n.identifier === "string" && n.identifier.indexOf(NOTIF_ID_PREFIX) === 0)
+      .map(n => ({ n, at: n.nextTriggerDate ? new Date(n.nextTriggerDate) : null }))
+      .sort((a, b) => (a.at ? a.at.getTime() : Infinity) - (b.at ? b.at.getTime() : Infinity))
+    header(`Queued alerts (${mine.length})`)
+    if (mine.length === 0) row("Nothing queued", "")
+    for (const { n, at } of mine) {
+      const when = at && isFinite(at.getTime()) ? formatQueueTime(at) : "Time unknown"
+      row(n.title || n.identifier, n.body ? `${when} · ${n.body}` : when)
+    }
+  }
+  await table.present(false)
 }
 
 // ---------- entrypoint ----------
@@ -2631,9 +2736,15 @@ try {
 
 if (config.runsInWidget) {
   Script.setWidget(widget)
-} else if (config.widgetFamily === "large" || config.widgetFamily === "extraLarge") {
-  await widget.presentLarge()
 } else {
-  await widget.presentMedium()
+  // In the app: the alert queue first, then the widget's preview.
+  try {
+    await presentAlertQueue()
+  } catch (_) {}
+  if (config.widgetFamily === "large" || config.widgetFamily === "extraLarge") {
+    await widget.presentLarge()
+  } else {
+    await widget.presentMedium()
+  }
 }
 Script.complete()
