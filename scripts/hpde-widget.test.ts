@@ -34,6 +34,17 @@ function num(v: unknown): number {
   return v
 }
 
+// The alerts iOS holds pending on each device (keyed by the device's
+// files map), across runs: scheduling one adds or replaces it by
+// identifier, removePending takes it down.
+type PendingAlert = { identifier: string; title: string }
+const pendingByDevice = new WeakMap<Map<string, string>, Map<string, PendingAlert>>()
+function pendingOn(files: Map<string, string>) {
+  let p = pendingByDevice.get(files)
+  if (!p) { p = new Map(); pendingByDevice.set(files, p) }
+  return p
+}
+
 function installScriptableMocks(
   manifest: unknown, widgetParameter: string | null = null,
   // The device's files. Pass the same map to several runs to keep what
@@ -224,10 +235,12 @@ function installScriptableMocks(
         sound: this.sound,
         nextTriggerDate: this.nextTriggerDate,
       })
+      pending.set(this.identifier, { identifier: this.identifier, title: this.title })
     }
   }
-  ;(NotificationStub as any).allPending = async () => []
-  ;(NotificationStub as any).removePending = async (_: string[]) => {}
+  const pending = pendingOn(files)
+  ;(NotificationStub as any).allPending = async () => [...pending.values()]
+  ;(NotificationStub as any).removePending = async (ids: string[]) => { for (const id of ids) pending.delete(id) }
   g.Notification = NotificationStub
   g.__scheduled = 0
   g.__notifs = []
@@ -831,6 +844,14 @@ describe('notifications', () => {
     expect((globalThis as any).__scheduled).toBe(3)
   })
 
+  it('reads group names in any case (#468: iOS capitalizes the parameter)', async () => {
+    await runWidget('medium', FUTURE_MANIFEST, 'Orange, BLUE')
+    const notifs = (globalThis as any).__notifs as Array<{ title: string }>
+    // orange on-track + blue on-track + blue in-class + meeting + lunch = 5
+    expect(notifs).toHaveLength(5)
+    expect(notifs.filter(n => n.title.includes('Red'))).toEqual([])
+  })
+
   it('parses `Nm` as lead time even without a pipe or before the groups', async () => {
     await runWidget('medium', FUTURE_MANIFEST, '15m,blue')
     // blue on-track (1) + blue in-class (1) + drivers meeting (1) + lunch (1) = 4
@@ -933,6 +954,32 @@ describe('notifications', () => {
       expect(titles()).toHaveLength(4)
       expect(titles().filter(t => /Red|Orange/.test(t))).toEqual([])
       for (const t of titles()) expect(t).toMatch(/· in 6m$/)
+    })
+
+    // #468: alerts for every group, scheduled while a widget had no
+    // parameter, kept firing after it was set to two groups.
+    const pendingTitles = (files: Map<string, string>) => [...pendingOn(files).values()].map(a => a.title)
+
+    it('takes down the alerts the old parameter scheduled once the parameter is set', async () => {
+      const files = new Map<string, string>()
+      await runWidget('large', FUTURE_MANIFEST, null, () => {}, files)
+      expect(pendingTitles(files)).toContain('🔴 Red · in 10m')
+      await runWidget('large', FUTURE_MANIFEST, 'blue', () => {}, files)
+      expect(pendingTitles(files).sort()).toEqual(
+        ['Drivers meeting · in 10m', '🥙 Lunch · in 10m', '🔵 Blue · in 10m', '🔵 Blue · in 10m'].sort())
+    })
+
+    it('takes them down even when iOS doesn\'t list the pending alerts to the widget', async () => {
+      const files = new Map<string, string>()
+      await runWidget('large', FUTURE_MANIFEST, null, () => {}, files)
+      const blind = () => { (globalThis as any).Notification.allPending = async () => [] }
+      await runWidget('large', FUTURE_MANIFEST, 'blue', blind, files)
+      expect(pendingTitles(files).filter(t => /Red|Orange/.test(t))).toEqual([])
+      const failing = () => { (globalThis as any).Notification.allPending = async () => { throw new Error('unavailable') } }
+      await runWidget('large', FUTURE_MANIFEST, null, () => {}, files)
+      await runWidget('large', FUTURE_MANIFEST, 'orange', failing, files)
+      expect(pendingTitles(files).filter(t => /Red|Blue/.test(t))).toEqual([])
+      expect(pendingTitles(files)).toContain('🟠 Orange · in 10m')
     })
 
     it('alerts for the groups of every widget size on the device', async () => {

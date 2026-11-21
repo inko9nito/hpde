@@ -352,16 +352,23 @@ function readWidgetParameter() {
 
 // Validates group ids against a manifest's known run groups; unknown ids
 // are moved into `invalid` for the widget footer. Mutates and returns the
-// parsed object.
+// parsed object. Matching ignores case (#468): iOS capitalizes what's
+// typed into the widget's Parameter field, and `Green` must not read as
+// an unknown group — a filter left with no known group alerts for every
+// group.
 function validateWidgetParameter(parsed, manifest) {
-  const known = new Set()
+  const known = new Map()
   for (const event of (manifest && manifest.events) || []) {
-    for (const g of event.runGroups || []) known.add(g.id)
+    for (const g of event.runGroups || []) {
+      const key = String(g.id).toLowerCase()
+      if (!known.has(key)) known.set(key, g.id)
+    }
   }
   const kept = []
   for (const gid of parsed.groups) {
-    if (known.has(gid)) kept.push(gid)
-    else parsed.invalid.push(gid)
+    const id = known.get(String(gid).toLowerCase())
+    if (id == null) parsed.invalid.push(gid)
+    else if (!kept.includes(id)) kept.push(id)
   }
   parsed.groups = kept
   return parsed
@@ -2530,19 +2537,42 @@ function computeMergedSpecs(feed, state, now) {
   return specs
 }
 
-async function cancelExistingHpdeNotifications() {
-  if (typeof Notification === "undefined" || !Notification.allPending) return
-  const pending = await Notification.allPending()
-  const ids = []
-  for (const n of (pending || [])) {
-    if (n && typeof n.identifier === "string" &&
-        n.identifier.indexOf(NOTIF_ID_PREFIX) === 0) {
-      ids.push(n.identifier)
+// Every alert identifier the widget could have scheduled for an activity
+// still to come: every group's session in every event, as the feed reads
+// with no fixture flags, with `test`, and with each live widget's own.
+function allCandidateIds(feed, state, now) {
+  const flagSets = [{}, { test: true }]
+  for (const inst of Object.values(state.instances || {})) flagSets.push(inst.flags || {})
+  const ids = new Set()
+  for (const flags of flagSets) {
+    for (const target of collectNotifTargets(withFixtureFlags(feed, flags), now)) {
+      ids.add(NOTIF_ID_PREFIX + target.sessionKey)
     }
   }
-  if (ids.length > 0 && Notification.removePending) {
-    await Notification.removePending(ids)
-  }
+  return ids
+}
+
+// Removes every pending widget alert that isn't in `keep` (the ones about
+// to be scheduled again, which replace themselves by identifier). Which
+// alerts are pending comes from two places (#468): what iOS says is
+// pending, and every identifier the feed could have produced. The second
+// doesn't depend on Notification.allPending answering from inside a
+// widget, so an alert for a group no widget wants anymore — scheduled
+// before its parameter was set or edited — is still taken down.
+async function removeUnwantedNotifications(feed, state, now, keep) {
+  if (typeof Notification === "undefined" || !Notification.removePending) return
+  const ids = allCandidateIds(feed, state, now)
+  try {
+    const pending = Notification.allPending ? await Notification.allPending() : []
+    for (const n of (pending || [])) {
+      if (n && typeof n.identifier === "string" &&
+          n.identifier.indexOf(NOTIF_ID_PREFIX) === 0) {
+        ids.add(n.identifier)
+      }
+    }
+  } catch (_) {}
+  const remove = [...ids].filter(id => !keep.has(id))
+  if (remove.length > 0) await Notification.removePending(remove)
 }
 
 async function scheduleSpecs(specs) {
@@ -2600,7 +2630,7 @@ async function refreshNotifications(feed, parsed) {
 
   const specs = computeMergedSpecs(feed, state, now)
   try {
-    await cancelExistingHpdeNotifications()
+    await removeUnwantedNotifications(feed, state, now, new Set(specs.map(s => s.identifier)))
   } catch (_) {}
   return await scheduleSpecs(specs)
 }
