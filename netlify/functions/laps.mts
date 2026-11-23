@@ -8,6 +8,8 @@ import { droveIn } from '../../src/utils/rsvp.ts'
 import type { Rsvp } from '../../src/utils/rsvp.ts'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount.ts'
 import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps.ts'
+import { LAP_FILLS } from '../../src/data/fixtures/driverLapFills.ts'
+import type { LapFill } from '../../src/data/fixtures/driverLapFills.ts'
 
 // A signed-in driver's own lap times (#210), private to them: every request
 // needs their sign-in, and only ever reaches their own laps — the key is
@@ -20,7 +22,8 @@ import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures
 // laps belong to gets them in their own account too (see ensureOwnLaps),
 // and the sheet's speeds on the laps they'd already logged (ensureOwnSpeeds).
 // Laps at an event that got the organizer's schedule after the fact move
-// onto its sessions (ensureMovedSessions, #339).
+// onto its sessions (ensureMovedSessions, #339), and sessions a driver
+// asked to have added from their lap timer are filled in (ensureLapFills).
 //   GET                          a summary of every event they have laps
 //                                for — its best lap and how many sessions —
 //                                for bests across a track (My notes)
@@ -62,6 +65,8 @@ type Deps = StoreDeps & {
   fetch?: typeof fetch
   /** Stands in for SAMPLE_DRIVER_EMAIL_SHA256 in tests. */
   sampleDriverSha256?: string
+  /** Stands in for LAP_FILLS in tests. */
+  lapFills?: LapFill[]
 }
 
 /**
@@ -257,6 +262,31 @@ async function ensureOwnSpeeds({ records: laps, meta }: { records: Store; meta: 
   await meta.setJSON(doneKey, { at: new Date().toISOString(), sessions })
 }
 
+/**
+ * Sessions a driver asked to have added from their lap timer (LAP_FILLS):
+ * each fill that's theirs, by their email, goes into their account once,
+ * in this store — production's, or a preview's own. A session they already
+ * have is kept as it is; the record of the fill lists those. Removed
+ * afterwards, laps stay removed. Resolves to the events filled and the run
+ * group they drove in, for "I drove" (#377).
+ */
+async function ensureLapFills({ records: laps, meta }: { records: Store; meta: Store }, driverId: string, email: string | undefined, fills: LapFill[]) {
+  const drove: { eventId: string; runGroup?: string }[] = []
+  for (const fill of fills) {
+    if (!isSampleDriver(email, fill.emailSha256)) continue
+    const doneKey = `lap-fill:${fill.id}:${driverId}`
+    if (await meta.get(doneKey, { type: 'json' })) continue
+    const key = `${driverId}/${fill.eventId}`
+    const existing = (await laps.get(key, { type: 'json' })) as EventLaps | null
+    const kept = Object.keys(fill.sessions).filter(k => existing?.sessions[k])
+    const sessions = { ...fill.sessions, ...existing?.sessions }
+    await laps.setJSON(key, { eventId: fill.eventId, sessions })
+    await meta.setJSON(doneKey, { at: new Date().toISOString(), kept })
+    drove.push({ eventId: fill.eventId, runGroup: droveIn(Object.values(sessions)) })
+  }
+  return drove
+}
+
 function inOrder(record: EventLaps | null): SessionLaps[] {
   return Object.values(record?.sessions ?? {}).sort((a, b) => a.key.localeCompare(b.key))
 }
@@ -281,6 +311,15 @@ export default async function handler(req: Request, context: unknown, deps: Deps
     await ensureOwnLaps(stores, driverId, driverEmail, deps.sampleDriverSha256)
     await ensureMovedSessions(stores, driverId)
     await ensureOwnSpeeds(stores, driverId, driverEmail, deps.sampleDriverSha256)
+    const filled = await ensureLapFills(stores, driverId, driverEmail, deps.lapFills ?? LAP_FILLS)
+    // With laps, they drove it (#377), as when they save laps themselves.
+    if (filled.length) {
+      try {
+        await markDrove(openRsvpStores(context, deps), driverId, filled)
+      } catch (err) {
+        console.error('laps: answering "I drove" for filled laps failed:', err)
+      }
+    }
   }
   const store = stores.records
 
