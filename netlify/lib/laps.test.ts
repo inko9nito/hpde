@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import handler, { MOVED_SESSIONS, TEST_SEED_KEY, isSampleDriver, withSheetSpeeds } from '../functions/laps.mts'
 import { fakeBlobs } from './fakeBlobs'
 import { TEST_DRIVER_ID } from '../../src/data/testAccount'
 import { TEST_ACCOUNT_LAPS, TEST_ACCOUNT_VERSION } from '../../src/data/fixtures/testAccountLaps'
-import { cleanSessionLaps } from '../../src/utils/lapTimes'
+import { cleanSessionLaps, sessionKey } from '../../src/utils/lapTimes'
+import { LAP_FILLS } from '../../src/data/fixtures/driverLapFills'
+import type { LapFill } from '../../src/data/fixtures/driverLapFills'
 
 const blobs = fakeBlobs()
 const store = blobs.data('site:laps')
@@ -39,6 +41,8 @@ const EVENT = '2026-09-13_msr-scca'
 
 // Whose the sample laps are, for these tests: nobody, unless one sets it.
 let sampleDriverSha256 = ''
+// Laps filled in for a driver: none, unless a test sets some.
+let lapFills: LapFill[] = []
 
 const call = (
   method: string,
@@ -51,7 +55,7 @@ const call = (
       ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     context,
-    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, sampleDriverSha256 } as never,
+    { getStore: blobs.getStore, getDeployStore: blobs.getDeployStore, fetch: fakeFetch, identity, sampleDriverSha256, lapFills } as never,
   )
 
 const session1 = { date: '2026-09-13', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 116_000 }, { ms: 108_000 }] }
@@ -629,5 +633,63 @@ describe('withSheetSpeeds (#322)', () => {
     const { laps, added } = withSheetSpeeds(mine, sheet)
     expect(added).toBe(2)
     expect(laps).toEqual([{ ms: 85_800, topMph: 104.9, avgMph: 71.7 }, { ms: 85_900, topMph: 105.7, avgMph: 71.6 }])
+  })
+})
+
+describe('laps filled in from a driver’s lap timer', () => {
+  const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
+  const meta = blobs.data('site:laps-meta')
+  const rsvps = blobs.data('site:rsvps')
+  const s1 = { key: sessionKey('2026-09-13', '09:50', 'blue'), ...session1 }
+  const s2 = { key: sessionKey('2026-09-13', '11:45', 'blue'), ...session2 }
+  const jasonsFill: LapFill = { id: 'fill-1', emailSha256: sha256('jason@example.com'), eventId: EVENT, sessions: { [s1.key]: s1, [s2.key]: s2 } }
+  beforeEach(() => {
+    blobs.clear()
+    sampleDriverSha256 = ''
+    lapFills = [jasonsFill]
+  })
+  afterEach(() => {
+    lapFills = []
+  })
+
+  it('go into their account the first time they use their laps, once', async () => {
+    expect(await sessionsOf('jason-token')).toEqual([s1, s2])
+    expect(meta.get(`lap-fill:fill-1:${JASON}`)).toMatchObject({ kept: [] })
+
+    // Removed afterwards, they stay removed.
+    await call('DELETE', { token: 'jason-token', query: `?event=${EVENT}&session=${encodeURIComponent(s1.key)}` })
+    expect(await sessionsOf('jason-token')).toEqual([s2])
+  })
+
+  it('keep a session they already have as it is', async () => {
+    const mine = { ...s1, laps: [{ ms: 100_000 }], summary: 'Mine' }
+    store.set(`${JASON}/${EVENT}`, { eventId: EVENT, sessions: { [s1.key]: mine } })
+    expect(await sessionsOf('jason-token')).toEqual([mine, s2])
+    expect(meta.get(`lap-fill:fill-1:${JASON}`)).toMatchObject({ kept: [s1.key] })
+  })
+
+  it('answer "I drove" for them, in their last session’s group', async () => {
+    rsvps.set(JASON, { events: { [EVENT]: { status: 'maybe' } } })
+    await sessionsOf('jason-token')
+    expect(rsvps.get(JASON)).toEqual({ events: { [EVENT]: { status: 'going', runGroup: 'blue', updatedAt: expect.any(String) } } })
+  })
+
+  it('go in when an admin picks the driver too, and nobody else gets them', async () => {
+    await call('GET', { token: 'vera-token' })
+    await call('GET', { token: 'admin-token', query: '' })
+    expect(store.size).toBe(0)
+    await call('GET', { token: 'admin-token', query: `?event=${EVENT}&driver=${JASON}` })
+    expect([...store.keys()]).toEqual([`${JASON}/${EVENT}`])
+  })
+
+  it('are sessions the laps function would take, at the event’s schedule', () => {
+    for (const fill of LAP_FILLS) {
+      for (const [key, session] of Object.entries(fill.sessions)) {
+        expect(key).toBe(sessionKey(session.date, session.time, session.group))
+        expect(fill.eventId <= session.date).toBe(true)
+        const { key: _key, ...sent } = session
+        expect(cleanSessionLaps(sent)).toEqual({ session })
+      }
+    }
   })
 })
