@@ -1075,6 +1075,21 @@ test('a driver imports laps from lap timer screenshots on My notes (#472)', asyn
   expect(images.every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
+  // Each shows its screenshot, which opens full size, to see which it is…
+  const failed = rows.filter({ hasText: 'This doesn’t look like a lap timer’s lap table.' })
+  const name = (await failed.getAttribute('aria-label'))!
+  await expect.poll(() => failed.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+  await failed.getByRole('button', { name: `Show ${name}` }).click()
+  const viewer = page.getByRole('dialog', { name })
+  await expect(viewer.locator('img')).toBeVisible()
+  // Escape closes it, not the sheet under it.
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
+  await expect(sheet).toBeVisible()
+  // …and comes out with its ✕.
+  await failed.getByRole('button', { name: `Remove ${name}` }).click()
+  await expect(rows).toHaveCount(2)
+
   await sheet.getByRole('button', { name: 'Import 1 session' }).click()
   await expect(sheet).toBeHidden()
   // The toast: the lap chart that's appeared has a status of its own.

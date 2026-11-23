@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ImagePlus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { ImagePlus, X } from 'lucide-react'
 import { Sheet } from './Sheet'
 import { GroupBadge } from './GroupBadge'
 import { groupFor, shortDate } from './LapTimesSheet'
@@ -16,6 +18,8 @@ import type { EventConfig } from '../types'
 interface Item {
   id: number
   name: string
+  /** The screenshot itself, to show: an object URL, let go once it's removed. */
+  url: string
   status: 'reading' | 'read' | 'failed'
   error?: string
   read?: ScreenshotRead
@@ -67,7 +71,14 @@ export function LapImportSheet({ event, groups, saved, showDate, read, onImport,
   const queue = useRef<{ id: number; file: File }[]>([])
   const running = useRef(0)
   const mounted = useRef(true)
-  useEffect(() => () => { mounted.current = false }, [])
+  // The screenshot shown full size, by its id.
+  const [shown, setShown] = useState<number | null>(null)
+  // Every screenshot's URL, to let go of them all once the sheet's gone.
+  const urls = useRef(new Set<string>())
+  useEffect(() => () => {
+    mounted.current = false
+    urls.current.forEach(url => URL.revokeObjectURL(url))
+  }, [])
 
   const update = (id: number, change: (item: Item) => Item) =>
     setItems(prev => prev.map(item => (item.id === id ? change(item) : item)))
@@ -103,11 +114,20 @@ export function LapImportSheet({ event, groups, saved, showDate, read, onImport,
 
   function add(files: FileList | null) {
     if (!files?.length) return
-    const added = [...files].map(file => ({ id: nextId.current++, file }))
-    setItems(prev => [...prev, ...added.map(({ id, file }): Item => ({ id, name: file.name, status: 'reading', slotKey: '' }))])
+    const added = [...files].map(file => ({ id: nextId.current++, file, url: URL.createObjectURL(file) }))
+    added.forEach(({ url }) => urls.current.add(url))
+    setItems(prev => [...prev, ...added.map(({ id, file, url }): Item => ({ id, name: file.name, url, status: 'reading', slotKey: '' }))])
     queue.current.push(...added)
     setFailure(null)
     pump()
+  }
+
+  /** Takes a screenshot out: not read if it's still waiting, and its laps not imported. */
+  function remove(item: Item) {
+    queue.current = queue.current.filter(q => q.id !== item.id)
+    setItems(prev => prev.filter(it => it.id !== item.id))
+    URL.revokeObjectURL(item.url)
+    urls.current.delete(item.url)
   }
 
   const allSlots = event.days.flatMap(day => slotsOn(event, day.date))
@@ -128,6 +148,8 @@ export function LapImportSheet({ event, groups, saved, showDate, read, onImport,
       setSaving(false)
     }
   }
+
+  const shownItem = items.find(item => item.id === shown)
 
   const choose = (
     <>
@@ -186,6 +208,8 @@ export function LapImportSheet({ event, groups, saved, showDate, read, onImport,
               takenBy={key => items.some(other => other.id !== item.id && other.slotKey === key)}
               slots={item.read?.date && event.days.some(d => d.date === item.read!.date) ? slotsOn(event, item.read.date) : allSlots}
               onPick={slotKey => update(item.id, it => ({ ...it, slotKey }))}
+              onShow={() => setShown(item.id)}
+              onRemove={() => remove(item)}
               disabled={saving}
             />
           ))}
@@ -204,12 +228,13 @@ export function LapImportSheet({ event, groups, saved, showDate, read, onImport,
           {saving ? 'Importing…' : reading ? 'Reading screenshots…' : chosen.length ? `Import ${plural(chosen.length, 'session', 'sessions')}` : 'Import'}
         </button>
       </div>
+      {shownItem && <ScreenshotViewer item={shownItem} onClose={() => setShown(null)} />}
     </Sheet>
   )
 }
 
 /** One screenshot: what was read off it, and the session it goes in. */
-function ImportRow({ item, event, showDate, saved, takenBy, slots, onPick, disabled }: {
+function ImportRow({ item, event, showDate, saved, takenBy, slots, onPick, onShow, onRemove, disabled }: {
   item: Item
   event: EventConfig
   showDate: boolean
@@ -217,24 +242,41 @@ function ImportRow({ item, event, showDate, saved, takenBy, slots, onPick, disab
   takenBy: (key: string) => boolean
   slots: ImportSlot[]
   onPick: (slotKey: string) => void
+  /** Shows the screenshot full size. */
+  onShow: () => void
+  onRemove: () => void
   disabled: boolean
 }) {
   const selectId = useId()
-  const box = 'rounded-2xl border border-gray-200 bg-white p-3'
+  const box = (inside: ReactNode, extra = '', data = false) => (
+    <li className={`flex gap-3 rounded-2xl border border-gray-200 bg-white p-3 ${extra}`} aria-label={item.name} aria-busy={item.status === 'reading' || undefined} {...(data ? { 'data-import-row': true } : {})}>
+      {/* The screenshot, its top: where a lap timer puts the session's date and time. */}
+      <button
+        onClick={onShow}
+        aria-label={`Show ${item.name}`}
+        className="h-24 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100"
+      >
+        <img src={item.url} alt="" className={`h-full w-full object-cover object-top ${item.status === 'reading' ? 'opacity-60' : ''}`} />
+      </button>
+      <div className="min-w-0 flex-1">{inside}</div>
+      <button
+        onClick={onRemove}
+        disabled={disabled}
+        aria-label={`Remove ${item.name}`}
+        className="-mr-1 -mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+      >
+        <X size={16} strokeWidth={2.5} />
+      </button>
+    </li>
+  )
   if (item.status === 'reading') {
-    return (
-      <li className={`${box} text-sm text-gray-500`} aria-busy="true">
-        <p className="truncate">Reading {item.name}…</p>
-      </li>
-    )
+    return box(<p className="truncate pt-0.5 text-sm text-gray-500">Reading {item.name}…</p>)
   }
   if (item.status === 'failed') {
-    return (
-      <li className={box}>
-        <p className="truncate text-sm font-medium text-gray-700">{item.name}</p>
-        <p className="mt-0.5 text-xs text-red-700">{item.error}</p>
-      </li>
-    )
+    return box(<>
+      <p className="truncate pt-0.5 text-sm font-medium text-gray-700">{item.name}</p>
+      <p className="mt-0.5 text-xs text-red-700">{item.error}</p>
+    </>)
   }
 
   const read = item.read!
@@ -247,8 +289,7 @@ function ImportRow({ item, event, showDate, saved, takenBy, slots, onPick, disab
     [showDate || slots.some(o => o.date !== s.date) ? shortDate(s.date) : null, sessionTitle(s), time(s.time), groupFor(s.group, event.runGroups).label]
       .filter(Boolean).join(' · ')
 
-  return (
-    <li className={`${box} ${slot ? '' : 'bg-gray-50'}`} data-import-row>
+  return box(<>
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
           {slot ? `${sessionTitle(slot)} · ${time(slot.time)}` : 'Not imported'}
@@ -288,6 +329,46 @@ function ImportRow({ item, event, showDate, saved, takenBy, slots, onPick, disab
           <option key={s.key} value={s.key} disabled={s.key !== item.slotKey && takenBy(s.key)}>{label(s)}</option>
         ))}
       </select>
-    </li>
+  </>, slot ? '' : 'bg-gray-50', true)
+}
+
+/**
+ * A screenshot full size, over everything (#472): to see which one it is.
+ * A tap anywhere, ✕ or Escape closes it — Escape not the sheet under it too.
+ */
+function ScreenshotViewer({ item, onClose }: { item: Item; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const latest = useRef(onClose)
+  latest.current = onClose
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      latest.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={item.name}
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]"
+      data-screenshot-viewer
+    >
+      <img src={item.url} alt={item.name} className="max-h-full max-w-full rounded-lg object-contain" />
+      <button
+        ref={closeRef}
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] grid h-9 w-9 place-items-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25"
+      >
+        <X size={18} strokeWidth={2.5} />
+      </button>
+    </div>,
+    document.body,
   )
 }
