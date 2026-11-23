@@ -1017,6 +1017,75 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+// Laps from a lap timer's screenshots (#472): several at once, each read,
+// matched to the session on track when it started, and checked before
+// anything's saved.
+test('a driver imports laps from lap timer screenshots on My notes (#472)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  let sessions: { key: string }[] = []
+  const saves: unknown[] = []
+  await page.route(/\/api\/laps(\?|$)/, async route => {
+    const req = route.request()
+    if (!new URL(req.url()).searchParams.has('event')) return route.fulfill({ json: { events: [] } })
+    if (req.method() === 'PUT') {
+      const { session } = req.postDataJSON()
+      saves.push(session)
+      const saved = { ...session, key: `${session.date} ${session.time} ${session.group}` }
+      sessions = [...sessions, saved]
+      return route.fulfill({ json: { session: saved } })
+    }
+    return route.fulfill({ json: { sessions } })
+  })
+  // What's read off each screenshot, in the order they're sent: a session,
+  // lead-follow laps at lunch, and one that isn't a lap table.
+  const answers = [
+    { status: 200, json: { read: { date: '2026-03-07', start: '08:31', laps: [{ ms: 112_000, counted: true }, { ms: 300_000, counted: false }, { ms: 106_000, counted: true }] } } },
+    { status: 200, json: { read: { date: '2026-03-07', start: '12:10', laps: [{ ms: 130_000, counted: true }] } } },
+    { status: 422, json: { error: 'This doesn’t look like a lap timer’s lap table.' } },
+  ]
+  const images: { mediaType: string; data: string }[] = []
+  await page.route(/\/api\/lap-import$/, async route => {
+    const req = route.request()
+    expect(req.method()).toBe('POST')
+    expect(req.headers().authorization).toBe('Bearer token')
+    images.push(req.postDataJSON().image)
+    const answer = answers[images.length - 1]
+    return route.fulfill({ status: answer.status, json: answer.json })
+  })
+
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: /^My notes/ }).click()
+  await page.getByRole('button', { name: 'Import laps from screenshots' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Import laps from screenshots' })
+  await expect(sheet).toBeVisible()
+
+  // A real image, so it's shrunk and sent as the browser would.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  await sheet.locator('[data-lap-import-files]').setInputFiles(['a', 'b', 'c'].map(n => ({ name: `IMG_${n}.png`, mimeType: 'image/png', buffer: png })))
+
+  const rows = sheet.getByRole('listitem')
+  await expect(rows).toHaveCount(3)
+  const matched = rows.filter({ has: page.getByText('Session 1 · 8:30 AM', { exact: true }) })
+  await expect(matched).toContainText('Started 8:31 AM')
+  await expect(matched).toContainText('2 laps · best 1:46.00')
+  await expect(matched.getByLabel('Laps read')).toHaveText('1:52.00 · 5:00.00 (in) · 1:46.00')
+  await expect(rows.filter({ hasText: 'No session was on track then' })).toContainText('Not imported')
+  await expect(rows.filter({ hasText: 'This doesn’t look like a lap timer’s lap table.' })).toHaveCount(1)
+  expect(images.every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await sheet.getByRole('button', { name: 'Import 1 session' }).click()
+  await expect(sheet).toBeHidden()
+  // The toast: the lap chart that's appeared has a status of its own.
+  await expect(page.getByRole('status').filter({ hasText: 'Laps imported' })).toBeVisible()
+  expect(saves).toEqual([{
+    date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+    laps: [{ ms: 112_000 }, { ms: 300_000, kind: 'in', note: 'Left out by the lap timer' }, { ms: 106_000 }],
+  }])
+  await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' })).toContainText('2 laps')
+})
+
 // With laps, they drove it (#377): saving them answers "Did you drive?",
 // in the session's group, and the header says so straight away.
 // Whether what `selector` finds moves down before it goes (#388): a sheet

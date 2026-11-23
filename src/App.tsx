@@ -26,6 +26,8 @@ import { EventConditionsSheet } from './components/EventConditionsSheet'
 import type { SessionSlot, SessionView } from './components/LapTimesSheet'
 import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
+import { LapImportSheet } from './components/LapImportSheet'
+import { useScreenshotReader } from './data/lapImport'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import type { TrackLink } from './components/EventInfo'
 import type { PastEventsHere } from './components/PastEventsCard'
@@ -308,6 +310,9 @@ export default function App() {
   const [evaluationOpen, setEvaluationOpen] = useState(false)
   // The note on the event's conditions, from Details (#347).
   const [conditionsNoteOpen, setConditionsNoteOpen] = useState(false)
+  // The sheet that imports laps from a lap timer's screenshots (#472).
+  const [lapImportOpen, setLapImportOpen] = useState(false)
+  const readScreenshot = useScreenshotReader()
   // A fresh page each time it's opened, even while the last is still sliding away (#415).
   const [evaluationN, setEvaluationN] = useState(0)
   function openEvaluation() {
@@ -673,6 +678,7 @@ export default function App() {
     setActiveTab('schedule')
     setLapSlot(null)
     setEvaluationOpen(false)
+    setLapImportOpen(false)
     setCarSheetOpen(false)
   }
 
@@ -1029,6 +1035,7 @@ export default function App() {
                 reload: garage.reload,
               } : undefined}
               pastEvents={pastEvents}
+              onImport={() => setLapImportOpen(true)}
             />
           )}
 
@@ -1332,6 +1339,27 @@ export default function App() {
           showToast('Note removed')
         }}
         onClose={() => setConditionsNoteOpen(false)}
+      />
+    )}
+    {lapImportOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
+      <LapImportSheet
+        key={`${activeEvent.id} ${driver?.id ?? ''}`}
+        event={activeEvent}
+        // Theirs at the event: their answer to "Did you drive?", then their laps'.
+        groups={[...new Set([rsvpGroup, ...lapLog.sessions.map(s => s.group)].filter((g): g is string => !!g))]}
+        saved={key => lapLog.byKey.get(key)}
+        showDate={multiDay}
+        read={readScreenshot}
+        onImport={async sessions => {
+          for (const session of sessions) {
+            // With laps, they drove it (#377), as with laps saved one at a time.
+            const rsvp = await lapLog.save(session)
+            if (rsvp) eventRsvps.remember(activeEvent.id, rsvp)
+          }
+          setLapImportOpen(false)
+          showToast(sessions.length === 1 ? 'Laps imported' : `Laps imported for ${sessions.length} sessions`)
+        }}
+        onClose={() => setLapImportOpen(false)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
