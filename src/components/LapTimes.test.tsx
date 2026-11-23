@@ -687,6 +687,51 @@ describe('lap times (#210)', () => {
     expect(readout).toHaveTextContent('Session 19:50 AM · Blue1:39.42Best1:40.210Average')
   })
 
+  it('charts each lap of an opened session against its best and average, or the event’s (#475)', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1,
+        laps: [{ ms: 130_000, kind: 'out' }, { ms: 101_000 }, { ms: 99_420 }, { ms: 100_200 }, { ms: 125_000, kind: 'in' }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910 }, { ms: 99_300 }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
+    const first = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    // Closed, the card has its figures only.
+    expect(within(first).queryByRole('group', { name: /^Each lap’s time/ })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    const chart = within(first).getByRole('group', { name: /^Each lap’s time in Session 1, against the session’s best and average: 3 laps\./ })
+    // The laps that count, numbered as the table numbers them; no out or in lap.
+    expect(chart.querySelectorAll('[data-series="lap"] circle')).toHaveLength(3)
+    expect([...chart.querySelectorAll('svg > text')].map(t => t.textContent).filter(t => /^\d$/.test(t!))).toEqual(['1', '2', '3'])
+    expect(chart.querySelector('[data-end-label="best"]')).toHaveTextContent('1:39.42')
+    expect(chart.querySelector('[data-end-label="average"]')).toHaveTextContent('1:40.21')
+    fireEvent.focus(chart)
+    const readout = within(chart).getByRole('status')
+    expect(readout).toHaveTextContent('Lap 31:40.2+0.78vs best−0.01vs average')
+    fireEvent.keyDown(chart, { key: 'ArrowLeft' })
+    expect(readout).toHaveTextContent('Lap 21:39.420.00vs best−0.79vs average')
+
+    // Switched to the event's, every session's chart goes over together.
+    const second = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    await userEvent.click(within(first).getByRole('button', { name: 'Event' }))
+    expect(within(first).getByRole('button', { name: 'Event' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(second).getByRole('button', { name: 'Event' })).toHaveAttribute('aria-pressed', 'true')
+    const switched = within(first).getByRole('group', { name: /^Each lap’s time in Session 1, against the event’s best and average/ })
+    expect(switched.parentElement).toHaveTextContent('LapBestAverageSessionEvent')
+    expect(switched.querySelector('[data-end-label="best"]')).toHaveTextContent('1:38.91')
+    fireEvent.focus(switched)
+    expect(within(switched).getByRole('status')).toHaveTextContent('Lap 21:39.42+0.51vs event best')
+  })
+
+  it('charts an opened session’s laps with no switch when it’s all the event has (#475)', async () => {
+    saved = [{ key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 101_000 }, { ms: 99_420 }] }]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show laps for Session 1' }))
+    expect(screen.getByRole('group', { name: /^Each lap’s time in Session 1/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Event' })).toBeNull()
+  })
+
   it('shows each session’s top and average speed, and charts top speed on a right-hand axis (#298)', async () => {
     saved = [
       { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1,

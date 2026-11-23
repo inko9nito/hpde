@@ -3,6 +3,8 @@ import {
   parseLapTimes,
   formatLapTime,
   formatAverage,
+  formatGap,
+  lapDecimals,
   lapStats,
   lapLabels,
   lapSpeeds,
@@ -328,6 +330,21 @@ describe('lapStats', () => {
   it('averages to one decimal more than the laps have', () => {
     const laps = parseLapTimes('1:39.42, 1:38.91').laps
     expect(formatAverage(laps, lapStats(laps).average!)).toBe('1:39.165')
+  })
+})
+
+describe('formatGap (#475)', () => {
+  it('signs a lap’s gap to the best or average, to the laps’ own decimals', () => {
+    expect(lapDecimals(parseLapTimes('3:53.16, 3:40.96').laps)).toBe(2)
+    expect(lapDecimals(parseLapTimes('1:56, 1:58').laps)).toBe(0)
+    expect(formatGap(870, 2)).toBe('+0.87')
+    expect(formatGap(-3_486.7, 2)).toBe('−3.49')
+    expect(formatGap(0, 2)).toBe('0.00')
+    // Rounds to nothing: no sign.
+    expect(formatGap(-2, 2)).toBe('0.00')
+    expect(formatGap(3_000, 0)).toBe('+3')
+    // A minute or more reads as a lap time.
+    expect(formatGap(62_400, 2)).toBe('+1:02.40')
   })
 })
 

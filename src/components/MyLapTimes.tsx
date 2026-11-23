@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ImagePlus, NotebookPen } from 'lucide-react'
 import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
@@ -8,6 +9,8 @@ import { PastEventsCard } from './PastEventsCard'
 import type { PastEventsHere } from './PastEventsCard'
 import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
+import { eventReference } from './SessionLapChart'
+import type { LapChartScope } from './SessionLapChart'
 import type { TrendPoint } from './LapTrendChart'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { eventBest, trackShortName } from '../utils/trackStats'
@@ -70,6 +73,8 @@ export function MyLapTimes({
   event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage, pastEvents, onImport,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
+  // Whose best and average every session's chart draws its lines at (#475).
+  const [scope, setScope] = useState<LapChartScope>('session')
   const runGroups = event.runGroups
   const track = trackShortName(event)
 
@@ -173,6 +178,10 @@ export function MyLapTimes({
   }
 
   const days = new Set(sessions.map(s => s.date))
+  // The event's best and average, to switch the session charts to, once
+  // there's more of it than one session (#475).
+  const sessionsWithLaps = log.sessions.filter(s => lapStats(s.laps).count > 0)
+  const eventLaps = sessionsWithLaps.length > 1 ? eventReference(sessionsWithLaps) : undefined
   // One set of columns for every session's table, so they line up.
   const columns = lapColumns(log.sessions.flatMap(s => s.laps))
   // Each session's best and average, in schedule order, for the chart (#274).
@@ -233,6 +242,7 @@ export function MyLapTimes({
               showDate={days.size > 1}
               columns={columns}
               allTimeBest={allTimeBest}
+              chart={{ scope, event: eventLaps, onScope: setScope }}
               expanded={open.has(session.key)}
               onToggle={() => toggle(session.key)}
               onEdit={() => onEdit(session, 'menu')}
