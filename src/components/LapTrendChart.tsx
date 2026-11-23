@@ -44,29 +44,29 @@ export function withTopSpeed(topSpeed: number | undefined): Pick<TrendPoint, 'to
   return topSpeed !== undefined ? { topSpeed } : {}
 }
 
-const SERIES = {
+export const SERIES = {
   best: { label: 'Best', color: '#111827' },
   average: { label: 'Average', color: '#8b93a1' },
   speed: { label: 'Top speed', color: '#2563eb' },
 } as const
 const SPEED_DASH = '4 3'
-const GRID = '#e5e7eb'
-const CROSSHAIR = '#d1d5db'
-const INK = '#111827'
-const MUTED = '#6b7280'
+export const GRID = '#e5e7eb'
+export const CROSSHAIR = '#d1d5db'
+export const INK = '#111827'
+export const MUTED = '#6b7280'
 
-const PLOT_HEIGHT = 136
+export const PLOT_HEIGHT = 136
 // Room under the plot for one line of ticks, or two with their groups.
-const X_AXIS = 22
+export const X_AXIS = 22
 const X_AXIS_GROUPED = 34
-const LEFT = 38
+export const LEFT = 38
 // Room for the end values, "1:38.54". With a speed axis (#298), its ticks
 // take the right edge instead, and there are no end values: beside the mph
 // ticks, a lap time there would read as belonging to them.
-const RIGHT = 50
+export const RIGHT = 50
 const SPEED_AXIS = 34
 // Keeps the first and last points off the plot's edges.
-const INSET = 10
+export const INSET = 10
 // How far a finger can move, in px, and still be a tap (#332).
 const TAP_SLOP = 10
 const TICK_STEPS = [500, 1000, 2000, 5000, 10_000, 15_000, 30_000, 60_000]
@@ -154,7 +154,7 @@ export function useWidth() {
   return [ref, width] as const
 }
 
-function LineKey({ color, dashed }: { color: string; dashed?: boolean }) {
+export function LineKey({ color, dashed }: { color: string; dashed?: boolean }) {
   if (dashed) {
     return (
       <svg aria-hidden="true" width={12} height={2} className="shrink-0">
@@ -163,6 +163,64 @@ function LineKey({ color, dashed }: { color: string; dashed?: boolean }) {
     )
   }
   return <span aria-hidden="true" className="inline-block h-0.5 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+}
+
+/**
+ * Which point the readout shows, and the handlers that pick it, for a
+ * chart whose `n` points sit at `x(i)` across it.
+ *
+ * A mouse shows the readout as it moves. A finger only once it taps or
+ * scrubs sideways (#332): one that comes down on the chart and scrolls
+ * the page (the browser takes it over, and cancels it) leaves the chart
+ * alone, so a thumb scrolling past doesn't pop it open. The arrow keys
+ * step through the points; focus starts on the latest.
+ */
+export function useReadout(n: number, x: (i: number) => number) {
+  const [active, setActive] = useState<number | null>(null)
+  const touch = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null)
+
+  function pick(e: PointerEvent<HTMLDivElement>) {
+    const box = e.currentTarget.getBoundingClientRect()
+    const px = e.clientX - box.left
+    let nearest = 0
+    for (let i = 0; i < n; i++) if (Math.abs(x(i) - px) < Math.abs(x(nearest) - px)) nearest = i
+    setActive(nearest)
+  }
+
+  const handlers = {
+    onPointerDown(e: PointerEvent<HTMLDivElement>) {
+      if (e.pointerType === 'mouse') pick(e)
+      else touch.current = { x: e.clientX, y: e.clientY, scrubbing: false }
+    },
+    onPointerMove(e: PointerEvent<HTMLDivElement>) {
+      if (e.pointerType === 'mouse') return pick(e)
+      const t = touch.current
+      if (!t) return
+      const dx = Math.abs(e.clientX - t.x)
+      if (!t.scrubbing && dx > TAP_SLOP && dx > Math.abs(e.clientY - t.y)) t.scrubbing = true
+      if (t.scrubbing) pick(e)
+    },
+    onPointerUp(e: PointerEvent<HTMLDivElement>) {
+      const t = touch.current
+      touch.current = null
+      if (e.pointerType === 'mouse' || !t || t.scrubbing) return
+      if (Math.abs(e.clientX - t.x) <= TAP_SLOP && Math.abs(e.clientY - t.y) <= TAP_SLOP) pick(e)
+    },
+    onPointerCancel() { touch.current = null },
+    onPointerLeave(e: PointerEvent<HTMLDivElement>) { if (e.pointerType === 'mouse') setActive(null) },
+    onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        const step = e.key === 'ArrowLeft' ? -1 : 1
+        setActive(a => Math.max(0, Math.min(n - 1, (a ?? n - 1) + step)))
+      } else if (e.key === 'Escape') {
+        setActive(null)
+      }
+    },
+    onFocus() { setActive(a => a ?? n - 1) },
+    onBlur() { setActive(null) },
+  }
+  return { active, handlers }
 }
 
 /**
@@ -177,8 +235,6 @@ export function LapTrendChart({ points, label, noun }: {
   const [ref, measured] = useWidth()
   // Before it's measured (or where nothing can be, as in tests), a phone's width.
   const width = measured || 300
-  const [active, setActive] = useState<number | null>(null)
-
   const n = points.length
   const hasSpeed = points.some(p => p.topSpeed !== undefined)
   const right = hasSpeed ? SPEED_AXIS : RIGHT
@@ -206,51 +262,7 @@ export function LapTrendChart({ points, label, noun }: {
   const last = points[n - 1]
   const showBestEnd = !hasSpeed
   const showAverageEnd = showBestEnd && Math.abs(y(last.average) - y(last.best)) >= 13
-
-  function pick(e: PointerEvent<HTMLDivElement>) {
-    const box = e.currentTarget.getBoundingClientRect()
-    const px = e.clientX - box.left
-    let nearest = 0
-    points.forEach((_, i) => { if (Math.abs(x(i) - px) < Math.abs(x(nearest) - px)) nearest = i })
-    setActive(nearest)
-  }
-
-  // A mouse shows the readout as it moves. A finger only once it taps or
-  // scrubs sideways (#332): one that comes down on the chart and scrolls
-  // the page (the browser takes it over, and cancels it) leaves the chart
-  // alone, so a thumb scrolling past doesn't pop it open.
-  const touch = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null)
-
-  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (e.pointerType === 'mouse') pick(e)
-    else touch.current = { x: e.clientX, y: e.clientY, scrubbing: false }
-  }
-
-  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (e.pointerType === 'mouse') return pick(e)
-    const t = touch.current
-    if (!t) return
-    const dx = Math.abs(e.clientX - t.x)
-    if (!t.scrubbing && dx > TAP_SLOP && dx > Math.abs(e.clientY - t.y)) t.scrubbing = true
-    if (t.scrubbing) pick(e)
-  }
-
-  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
-    const t = touch.current
-    touch.current = null
-    if (e.pointerType === 'mouse' || !t || t.scrubbing) return
-    if (Math.abs(e.clientX - t.x) <= TAP_SLOP && Math.abs(e.clientY - t.y) <= TAP_SLOP) pick(e)
-  }
-
-  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault()
-      const from = active ?? n - 1
-      setActive(Math.max(0, Math.min(n - 1, from + (e.key === 'ArrowLeft' ? -1 : 1))))
-    } else if (e.key === 'Escape') {
-      setActive(null)
-    }
-  }
+  const { active, handlers } = useReadout(n, x)
 
   const shown = active !== null ? points[active] : null
   // Wider with a speed in it, so "mph top speed" keeps to one line.
@@ -279,14 +291,7 @@ export function LapTrendChart({ points, label, noun }: {
         tabIndex={0}
         role="group"
         aria-label={`${label}${hasSpeed ? ', with top speed in mph on the right' : ''}: ${n} ${n === 1 ? noun[0] : noun[1]}. Left and right arrows step through them.`}
-        onPointerMove={onPointerMove}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => { touch.current = null }}
-        onPointerLeave={e => { if (e.pointerType === 'mouse') setActive(null) }}
-        onKeyDown={onKeyDown}
-        onFocus={() => setActive(a => a ?? n - 1)}
-        onBlur={() => setActive(null)}
+        {...handlers}
       >
         <svg width={width} height={PLOT_HEIGHT + xAxis} className="block overflow-visible" aria-hidden="true">
           {ticks.map(t => (

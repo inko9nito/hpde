@@ -4,9 +4,11 @@ import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Wa
 import { GroupBadge } from './GroupBadge'
 import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
 import type { LapColumns } from './LapList'
+import { SessionLapChart } from './SessionLapChart'
+import type { LapChartScope, Reference } from './SessionLapChart'
 import { groupFor, shortDate } from './LapTimesSheet'
 import { formatTime, formatAmPm } from '../utils/time'
-import { formatLapTime } from '../utils/lapTimes'
+import { formatLapTime, lapStats } from '../utils/lapTimes'
 import type { SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
 import { CORNERS, formatPsi } from '../utils/garage'
@@ -118,7 +120,7 @@ export function LapsToolbar({ keys, open, onOpen, action }: {
  * session's sheet. `onEdit` adds an
  * Edit button, for everything the session has.
  */
-export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, onOpenConditions, tableId }: {
+export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, chart, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, onOpenConditions, tableId }: {
   session: SessionHead
   laps?: SessionLaps
   notes?: SessionNotes
@@ -129,6 +131,12 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
   /** Shared by every card on the page, so the tables line up. */
   columns: LapColumns
   allTimeBest?: number
+  /**
+   * Opened, the chart of its laps over the table (#475): its lines at this
+   * session's best and average, or the event's (`event`, when it has more
+   * than this session), as `scope` says — one switch for every card.
+   */
+  chart?: { scope: LapChartScope; event?: Reference; onScope: (scope: LapChartScope) => void }
   expanded: boolean
   onToggle: () => void
   onEdit?: () => void
@@ -190,7 +198,12 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
               <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{laps.summary}</p>
             )}
             {expanded && (
-              <div id={tableId}>
+              <div id={tableId} className="flex flex-col gap-3">
+                {chart && lapStats(laps.laps).count > 1 && (
+                  <div className="pt-2">
+                    <SessionLapChart laps={laps.laps} title={title} {...chart} />
+                  </div>
+                )}
                 <LapTable laps={laps.laps} columns={columns} allTimeBest={allTimeBest} />
               </div>
             )}

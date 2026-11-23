@@ -1389,6 +1389,47 @@ test('a finger scrolling the page over the lap chart leaves its readout shut; a 
   await expect(readout).toContainText('8:00 AM · Red')
 })
 
+test('an opened session charts its laps against its best and average, or the event’s, at a phone’s width (#475)', async ({ page }) => {
+  await stubEvents(page)
+  await signInAsAdmin(page)
+  const sessions = [
+    { key: '2026-03-07 08:30 blue', date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+      laps: [{ ms: 233_160 }, { ms: 220_960 }, { ms: 221_830 }] },
+    { key: '2026-03-07 10:30 blue', date: '2026-03-07', time: '10:30', group: 'blue', sessionNumber: 2,
+      laps: [{ ms: 182_000, kind: 'out' }, { ms: 178_400 }, { ms: 176_900 }, { ms: 175_310 }, { ms: 177_200 }, { ms: 176_100 }, { ms: 190_000, kind: 'in' }] },
+  ]
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions } : { events: [] },
+  }))
+  await page.goto(`/#/event/${alpha.id}`)
+  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  const card = page.getByRole('region', { name: 'Session 2, 10:30 AM' })
+  await card.getByRole('button', { name: 'Show laps for Session 2' }).click()
+  const chart = card.getByRole('group', { name: /^Each lap’s time in Session 2, against the session’s best and average: 5 laps\./ })
+  await expect(chart.locator('[data-series="lap"] circle')).toHaveCount(5)
+  // Above the table, inside the card, with nothing off the side of the page.
+  const table = card.getByRole('table', { name: 'Laps' })
+  expect((await chart.boundingBox())!.y).toBeLessThan((await table.boundingBox())!.y)
+  const cardBox = (await card.boundingBox())!
+  const end = (await chart.locator('[data-end-label="best"]').boundingBox())!
+  expect(end.x + end.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect(chart.locator('[data-end-label="best"]')).toHaveText('2:55.31')
+
+  // A tap on the best lap: no gap to the best.
+  await chart.scrollIntoViewIfNeeded()
+  const dot = (await chart.locator('[data-series="lap"] circle').nth(2).boundingBox())!
+  await page.mouse.click(dot.x + dot.width / 2, dot.y + dot.height / 2)
+  await expect(chart.getByRole('status')).toContainText('Lap 3')
+  await expect(chart.getByRole('status')).toContainText('0.00vs best')
+
+  // The event's lines, for every session's chart at once.
+  await card.getByRole('button', { name: 'Event' }).click()
+  await expect(card.getByRole('group', { name: /against the event’s best and average/ })).toBeVisible()
+  await page.getByRole('region', { name: 'Session 1, 8:30 AM' }).getByRole('button', { name: 'Show laps for Session 1' }).click()
+  await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' }).getByRole('button', { name: 'Event' })).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('an admin logs another driver’s lap times, switched to from the account menu (#288, #399, #416)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)

@@ -157,12 +157,30 @@ export function lapSpeeds(laps: Lap[]): SpeedStats {
  * the hundredth.
  */
 export function formatAverage(laps: Lap[], average: number): string {
-  const decimals = Math.max(0, ...laps.map(lap => {
+  return formatLapTime(average, Math.min(3, lapDecimals(laps) + 1))
+}
+
+/** How many decimals the laps are timed to: 0 for whole seconds, 2 for hundredths. */
+export function lapDecimals(laps: Lap[]): number {
+  return Math.max(0, ...laps.map(lap => {
     const fraction = lap.ms % 1000
     if (!fraction) return 0
     return String(fraction).padStart(3, '0').replace(/0+$/, '').length
   }))
-  return formatLapTime(average, Math.min(3, decimals + 1))
+}
+
+/**
+ * How far one time is off another, in seconds to `decimals` places, signed
+ * as a timing screen shows it: "+0.87", "−3.49", "0.00". A minute or more
+ * reads as a lap time: "+1:02.40".
+ */
+export function formatGap(ms: number, decimals: number): string {
+  const step = 10 ** (3 - decimals)
+  const rounded = Math.round(Math.abs(ms) / step) * step
+  if (!rounded) return (0).toFixed(decimals)
+  const sign = ms < 0 ? '−' : '+'
+  if (rounded >= 60_000) return sign + formatLapTime(rounded, decimals)
+  return sign + (rounded / 1000).toFixed(decimals)
 }
 
 /** A speed as a lap table shows it: to the tenth, as a lap timer records it. */
