@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import handler, { MAX_IMAGE_BASE64, lapTimeMs } from '../functions/lap-import.mts'
+import handler, { MAX_IMAGE_BASE64, gatewayFrom, lapTimeMs } from '../functions/lap-import.mts'
 
 // Stands in for Netlify Identity's /user endpoint.
 const fakeFetch = async (_url: URL, init: { headers: Record<string, string> }) =>
@@ -23,8 +23,8 @@ const ANSWER = {
 }
 
 const call = (
-  { token = 'vera-token', body = { image: IMAGE } as unknown, method = 'POST', read, apiKey = 'key' }:
-  { token?: string; body?: unknown; method?: string; read?: unknown; apiKey?: string } = {},
+  { token = 'vera-token', body = { image: IMAGE } as unknown, method = 'POST', read }:
+  { token?: string; body?: unknown; method?: string; read?: unknown } = {},
 ) =>
   handler(
     new Request('https://site.example/api/lap-import', {
@@ -33,7 +33,7 @@ const call = (
       ...(method === 'POST' ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
     }),
     {},
-    { fetch: fakeFetch, apiKey, read: read ?? (async () => ({ ok: true, answer: ANSWER })) } as never,
+    { fetch: fakeFetch, env: { ANTHROPIC_API_KEY: 'key' }, read: read ?? (async () => ({ ok: true, answer: ANSWER })) } as never,
   )
 
 describe('lap-import function (#472)', () => {
@@ -82,13 +82,43 @@ describe('lap-import function (#472)', () => {
     expect(read).not.toHaveBeenCalled()
   })
 
-  it('says it isn’t set up when the site has no API key', async () => {
-    const res = await handler(
+  it('says it isn’t set up without the AI Gateway, naming the gateway variables it found', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const post = (env: Record<string, string>) => handler(
       new Request('https://site.example/api/lap-import', { method: 'POST', headers: { Authorization: 'Bearer vera-token' }, body: JSON.stringify({ image: IMAGE }) }),
       {},
-      { fetch: fakeFetch as never, apiKey: '' },
+      { fetch: fakeFetch as never, env },
     )
+    let res = await post({ PATH: '/bin' })
     expect(res.status).toBe(503)
+    expect((await res.json()).error).toMatch(/Gateway variables found: none\.\)$/)
+    res = await post({ ANTHROPIC_BASE_URL: 'https://secret.example', NETLIFY_AI_GATEWAY_URL: 'https://secret.example' })
+    const { error } = await res.json()
+    expect(error).toMatch(/Gateway variables found: ANTHROPIC_BASE_URL, NETLIFY_AI_GATEWAY_URL\.\)$/)
+    expect(error).not.toContain('secret')
+    errors.mockRestore()
+  })
+})
+
+describe('gatewayFrom', () => {
+  const context = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64')
+
+  it('leaves the SDK to read ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL itself', () => {
+    expect(gatewayFrom({ ANTHROPIC_API_KEY: 'k', NETLIFY_AI_GATEWAY_KEY: 't', NETLIFY_AI_GATEWAY_URL: 'u' })).toEqual({})
+  })
+
+  it('takes the gateway’s own variables, then the context they’re made from', () => {
+    expect(gatewayFrom({ NETLIFY_AI_GATEWAY_KEY: 't', NETLIFY_AI_GATEWAY_URL: 'https://site/.netlify/ai' }))
+      .toEqual({ apiKey: 't', baseURL: 'https://site/.netlify/ai' })
+    expect(gatewayFrom({ AI_GATEWAY: context({ token: 't', url: 'https://site/.netlify/ai', envVars: [] }) }))
+      .toEqual({ apiKey: 't', baseURL: 'https://site/.netlify/ai' })
+  })
+
+  it('is null with none of them, or a context that isn’t one', () => {
+    expect(gatewayFrom({})).toBeNull()
+    expect(gatewayFrom({ NETLIFY_AI_GATEWAY_KEY: 't' })).toBeNull()
+    expect(gatewayFrom({ AI_GATEWAY: 'not base64 json' })).toBeNull()
+    expect(gatewayFrom({ AI_GATEWAY: context({ token: '' , url: 'u' }) })).toBeNull()
   })
 })
 

@@ -94,8 +94,8 @@ type Read = (image: { mediaType: MediaType; data: string }) => Promise<
  * ordinary function gets 30 seconds, so Claude gets 25 and one try: a lap
  * table is short to read.
  */
-function claudeReader(model: string): Read {
-  const client = new Anthropic({ timeout: 25_000, maxRetries: 0 })
+function claudeReader(model: string, gateway: Gateway): Read {
+  const client = new Anthropic({ ...gateway, timeout: 25_000, maxRetries: 0 })
   return async ({ mediaType, data }) => {
     let response
     try {
@@ -140,12 +140,44 @@ function claudeReader(model: string): Read {
   }
 }
 
+/** Where to reach Claude: the gateway's (or a key set on the site); none for the SDK's own defaults. */
+type Gateway = { apiKey?: string; baseURL?: string }
+
+// The variables the AI Gateway can show up in, for the message when none
+// is there: names only, never values.
+const GATEWAY_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'NETLIFY_AI_GATEWAY_KEY', 'NETLIFY_AI_GATEWAY_URL', 'AI_GATEWAY'] as const
+
+/**
+ * How to reach Claude, from what Netlify gave the function, or null if it
+ * gave nothing. ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL first — the AI
+ * Gateway's, or a key set on the site, which the SDK reads itself. Then the
+ * gateway's own NETLIFY_AI_GATEWAY_KEY and NETLIFY_AI_GATEWAY_URL, which it
+ * says are always there; then AI_GATEWAY, the base64 JSON they're made from
+ * ({token, url}: the same token and URL for every provider, as Netlify's
+ * own @netlify/dev sets them).
+ */
+export function gatewayFrom(env: Record<string, string | undefined>): Gateway | null {
+  if (env.ANTHROPIC_API_KEY) return {}
+  if (env.NETLIFY_AI_GATEWAY_KEY && env.NETLIFY_AI_GATEWAY_URL) {
+    return { apiKey: env.NETLIFY_AI_GATEWAY_KEY, baseURL: env.NETLIFY_AI_GATEWAY_URL }
+  }
+  if (env.AI_GATEWAY) {
+    try {
+      const { token, url } = JSON.parse(Buffer.from(env.AI_GATEWAY, 'base64').toString('utf8'))
+      if (typeof token === 'string' && token && typeof url === 'string' && url) return { apiKey: token, baseURL: url }
+    } catch {
+      // Not what it should be: as if it weren't there.
+    }
+  }
+  return null
+}
+
 type Deps = {
   fetch?: typeof fetch
   /** Stands in for Claude in tests. */
   read?: Read
-  /** Stands in for the ANTHROPIC_API_KEY the AI Gateway gives, in tests. */
-  apiKey?: string
+  /** Stands in for process.env, in tests. */
+  env?: Record<string, string | undefined>
 }
 
 export default async function handler(req: Request, _context: unknown, deps: Deps = {}) {
@@ -167,9 +199,18 @@ export default async function handler(req: Request, _context: unknown, deps: Dep
   if (data.length > MAX_IMAGE_BASE64) return json(413, { error: 'That image is too large.' })
 
   // The AI Gateway gives the function its key.
-  const apiKey = deps.apiKey ?? process.env.ANTHROPIC_API_KEY
-  const read = deps.read ?? (apiKey ? claudeReader(process.env.LAP_IMPORT_MODEL || DEFAULT_MODEL) : undefined)
-  if (!read) return json(503, { error: 'Screenshot import isn’t set up on this site: it needs Netlify’s AI Gateway.' })
+  const env = deps.env ?? process.env
+  const gateway = gatewayFrom(env)
+  const read = deps.read ?? (gateway ? claudeReader(env.LAP_IMPORT_MODEL || DEFAULT_MODEL, gateway) : undefined)
+  if (!read) {
+    // Which of the gateway's variables Netlify gave the function: names
+    // only, to tell a gateway that's off from one that's half there.
+    const found = GATEWAY_VARS.filter(name => env[name] !== undefined)
+    console.error(`lap-import: no AI Gateway. Gateway variables set: ${found.join(', ') || 'none'}`)
+    return json(503, {
+      error: `Screenshot import isn’t set up on this site: it needs Netlify’s AI Gateway. (Gateway variables found: ${found.join(', ') || 'none'}.)`,
+    })
+  }
 
   const result = await read({ mediaType, data })
   if (!result.ok) return json(result.status, { error: result.error })
