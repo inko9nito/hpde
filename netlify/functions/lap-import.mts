@@ -5,19 +5,24 @@ import { cleanRead } from '../../src/utils/lapImport.ts'
 // Reads one screenshot of a lap timer's lap table (#472) — its date, the
 // time the session started, and each lap — for the import sheet on My
 // notes, which matches it to a session and shows it to the driver before
-// anything is saved. Nothing is kept here: the screenshot goes to Claude
-// (Anthropic's API) to be read, and what it read comes back.
+// anything is saved. Nothing is kept here: the screenshot goes to Claude to
+// be read, and what it read comes back. Claude is reached through Netlify's
+// AI Gateway, as the cookbook app's recipe reading is: on Netlify it gives
+// every function ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL, so the SDK's
+// default client uses it and the usage is billed to the Netlify account —
+// no key of our own. One set on the site by hand would be used instead.
 //   POST {image: {mediaType, data}}   data is the image, base64-encoded
 //     200 {read: {date?, start?, laps: [{ms, counted}]}}
 //     422 {error}  not a lap table, or nothing could be read off it
-//     503 {error}  ANTHROPIC_API_KEY isn't set on the site
+//     503 {error}  no AI Gateway (or key) on the site
 // Signed-in drivers only: each read costs a little.
 //
 // TypeScript (.mts) so it can share the checks in src/; Netlify bundles it
 // with esbuild (see netlify/lib/functionsLoad.test.ts).
 export const config = { path: '/api/lap-import' }
 
-export const MODEL = 'claude-opus-5-5'
+/** The model, unless the site sets LAP_IMPORT_MODEL (e.g. if the gateway doesn't offer this one). */
+export const DEFAULT_MODEL = 'claude-opus-5-5'
 
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
 type MediaType = (typeof MEDIA_TYPES)[number]
@@ -84,18 +89,19 @@ type Read = (image: { mediaType: MediaType; data: string }) => Promise<
   | { ok: false; status: number; error: string }
 >
 
-/** Asks Claude to read the screenshot, with its answer held to SCHEMA. */
-function claudeReader(apiKey: string): Read {
-  const client = new Anthropic({ apiKey, timeout: 50_000, maxRetries: 1 })
+/**
+ * Asks Claude to read the screenshot, with its answer held to SCHEMA. An
+ * ordinary function gets 30 seconds, so Claude gets 25 and one try: a lap
+ * table is short to read.
+ */
+function claudeReader(model: string): Read {
+  const client = new Anthropic({ timeout: 25_000, maxRetries: 0 })
   return async ({ mediaType, data }) => {
     let response
     try {
-      response = await client.beta.messages.create({
-        model: MODEL,
+      response = await client.messages.create({
+        model,
         max_tokens: 8000,
-        // Another model reads it if this one declines.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
         system: SYSTEM,
         messages: [{
@@ -109,7 +115,13 @@ function claudeReader(apiKey: string): Read {
     } catch (err) {
       console.error('lap-import: reading the screenshot failed:', err)
       if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-        return { ok: false, status: 503, error: 'Screenshot import isn’t set up on this site yet.' }
+        return { ok: false, status: 503, error: 'Screenshot import isn’t set up on this site: Netlify’s AI Gateway didn’t accept the request.' }
+      }
+      if (err instanceof Anthropic.NotFoundError) {
+        return { ok: false, status: 503, error: 'Screenshot import isn’t set up on this site: the AI model wasn’t found.' }
+      }
+      if (err instanceof Anthropic.APIConnectionTimeoutError) {
+        return { ok: false, status: 504, error: 'Claude took too long to read the screenshot. Try again.' }
       }
       if (err instanceof Anthropic.RateLimitError) {
         return { ok: false, status: 429, error: 'Too many screenshots at once. Wait a minute and try again.' }
@@ -132,7 +144,7 @@ type Deps = {
   fetch?: typeof fetch
   /** Stands in for Claude in tests. */
   read?: Read
-  /** Stands in for ANTHROPIC_API_KEY in tests. */
+  /** Stands in for the ANTHROPIC_API_KEY the AI Gateway gives, in tests. */
   apiKey?: string
 }
 
@@ -154,9 +166,10 @@ export default async function handler(req: Request, _context: unknown, deps: Dep
   if (typeof data !== 'string' || !data || !BASE64.test(data)) return json(400, { error: 'The image must be base64-encoded.' })
   if (data.length > MAX_IMAGE_BASE64) return json(413, { error: 'That image is too large.' })
 
+  // The AI Gateway gives the function its key.
   const apiKey = deps.apiKey ?? process.env.ANTHROPIC_API_KEY
-  const read = deps.read ?? (apiKey ? claudeReader(apiKey) : undefined)
-  if (!read) return json(503, { error: 'Screenshot import isn’t set up on this site yet.' })
+  const read = deps.read ?? (apiKey ? claudeReader(process.env.LAP_IMPORT_MODEL || DEFAULT_MODEL) : undefined)
+  if (!read) return json(503, { error: 'Screenshot import isn’t set up on this site: it needs Netlify’s AI Gateway.' })
 
   const result = await read({ mediaType, data })
   if (!result.ok) return json(result.status, { error: result.error })
