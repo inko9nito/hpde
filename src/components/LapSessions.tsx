@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Waves } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, NotebookPen, Waves } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
+import { CardFigures, FIGURES_INDENT, LapTable } from './LapList'
 import type { LapColumns } from './LapList'
 import { SessionLapChart } from './SessionLapChart'
 import type { LapChartScope, Reference } from './SessionLapChart'
@@ -114,8 +114,9 @@ export function LapsToolbar({ keys, open, onOpen, action }: {
 
 /**
  * One session's notes on My notes (#210): its time and group, then what's
- * saved for it (#324) — its lap count and a small table of its average and
- * best lap and speeds, which open onto the lap table; its instructor's
+ * saved for it (#324) — its average and best lap and its laps in a
+ * sparkline (#477), which open onto the lap chart and table, and its note;
+ * its instructor's
  * evaluation (#340) and its tire pressures (#344), which open in the
  * session's sheet. `onEdit` adds an
  * Edit button, for everything the session has.
@@ -171,31 +172,29 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
           )}
         </div>
         {laps && (
-          <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-            {/* The heading and figures open the table: the chevron's button stretches over them. */}
-            <div className="relative flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <LapsHeading laps={laps.laps} />
-                <button
-                  onClick={onToggle}
-                  aria-expanded={expanded}
-                  aria-controls={tableId}
-                  aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
-                  className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
-                >
-                  <ChevronRight
-                    size={18}
-                    className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
-              <div className={FIGURES_INDENT}>
-                <SessionFigures laps={laps.laps} allTimeBest={allTimeBest} />
-              </div>
+          <div className="flex flex-col gap-2.5 border-t border-gray-100 pt-3">
+            {/* The figures open the table: the chevron's button stretches over them. */}
+            <div className="relative flex items-center gap-3">
+              <CardFigures laps={laps.laps} allTimeBest={allTimeBest} sparkline={!expanded} />
+              <button
+                onClick={onToggle}
+                aria-expanded={expanded}
+                aria-controls={tableId}
+                aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
+                className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+              >
+                <ChevronRight
+                  size={18}
+                  className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
             {laps.summary && (
-              <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{laps.summary}</p>
+              <p className="flex gap-1.5 text-sm text-gray-700" data-lap-summary>
+                <NotebookPen size={13} className="mt-[3px] shrink-0 text-gray-400" aria-label="Note" />
+                <span>{laps.summary}</span>
+              </p>
             )}
             {expanded && (
               <div id={tableId} className="flex flex-col gap-3">
@@ -383,11 +382,9 @@ export function LapsSkeleton({ cards, leaving, label }: {
           <div className={`h-5 w-16 ${bar}`} />
           <div className="h-5 w-12 animate-pulse rounded-full bg-gray-100" />
         </div>
-        <div className="flex flex-col gap-2.5 border-t border-gray-100 pt-3">
-          <div className={`h-3 w-28 ${bar}`} />
-          <div className={`flex flex-col gap-2 ${FIGURES_INDENT}`}>
-            {[0, 1].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
-          </div>
+        <div className="grid grid-cols-[1fr_1fr_5rem] gap-x-3 gap-y-2 border-t border-gray-100 pt-3">
+          {[0, 1, 2].map(i => <div key={i} className={`h-2.5 w-12 ${bar}`} />)}
+          {[0, 1, 2].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
         </div>
       </div>
     </div>

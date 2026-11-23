@@ -443,16 +443,15 @@ describe('lap times (#210)', () => {
     expect(screen.getByRole('button', { name: 'Lap times: 11:45 AM, Blue (saved)' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    // Its laps that count, then a compact table of its figures (#324).
-    expect(card).toHaveTextContent('Lap times · 2 laps')
-    expect(sessionFigures(card)).toEqual([
-      ['', 'Average', 'Best'],
-      ['Lap time', '1:50.0', '1:44'],
-    ])
+    // Its average and best lap, then its laps that count in a sparkline (#477).
+    expect(figures(card, 'Session figures')).toEqual({ Average: '1:50.0', Best: '1:44', '2 laps': '' })
+    expect(within(card).getByRole('img', { name: 'Each lap’s time: 1:56, 1:44' })).toBeInTheDocument()
     // The laps are folded away until asked for.
     expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     await userEvent.click(within(card).getByRole('button', { name: 'Show laps for Session 2' }))
     expect(rows(card)[3]).toEqual(['2', '11:50:47 AM – 11:52:31 AM', '1:44', 'Best so far'])
+    // Opened, the chart below stands in for the sparkline, which fades.
+    expect(within(card).queryByRole('img', { name: /^Each lap’s time/ })).toBeNull()
     await userEvent.click(within(card).getByRole('button', { name: 'Hide laps for Session 2' }))
     expect(within(card).queryByRole('table', { name: 'Laps' })).not.toBeInTheDocument()
     // No Private tag: what's theirs is theirs without saying so (#414).
@@ -740,22 +739,16 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (2)' }))
-    // A row under the lap times (#324), the top speed in a chip like the best
-    // lap's; nothing for a session without speeds.
+    // The card keeps to lap times (#477), speeds or not: they're in the table
+    // it opens onto, each lap's top and average.
     const withSpeeds = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
-    expect(withSpeeds).toHaveTextContent('Laps & speeds · 2 laps')
-    expect(sessionFigures(withSpeeds)).toEqual([
-      ['', 'Average', 'Best / top'],
-      ['Lap time', '1:40.210', '1:39.42'],
-      ['Speed', '69.5 mph', '104.5 mph'],
-    ])
-    expect(withSpeeds.querySelector('[data-top-speed]')).toHaveTextContent('104.5')
+    expect(figures(withSpeeds, 'Session figures')).toEqual({ Average: '1:40.210', Best: '1:39.42', '2 laps': '' })
+    expect(withSpeeds).not.toHaveTextContent('mph')
     const without = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    expect(without).toHaveTextContent('Lap times · 2 laps')
-    expect(sessionFigures(without)).toEqual([
-      ['', 'Average', 'Best'],
-      ['Lap time', '1:39.105', '1:38.91'],
-    ])
+    expect(figures(without, 'Session figures')).toEqual({ Average: '1:39.105', Best: '1:38.91', '2 laps': '' })
+    await userEvent.click(within(withSpeeds).getByRole('button', { name: 'Show laps for Session 1' }))
+    expect([...within(withSpeeds).getByRole('table', { name: 'Laps' }).querySelectorAll('[data-speed]')].map(c => c.textContent))
+      .toEqual(['103.9', '69.0', '104.5', '70.0'])
 
     const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order, with top speed in mph on the right: 2 sessions\./ })
     const legend = chart.parentElement!
@@ -1048,7 +1041,7 @@ describe('instructor evaluation (#340)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
     expect(card).toHaveTextContent('Instructor feedback · John HarmsUnwind the wheel sooner.')
-    expect(within(card).queryByRole('table', { name: 'Session figures' })).not.toBeInTheDocument()
+    expect(card.querySelector('dl[aria-label="Session figures"]')).toBeNull()
 
     // Its chevron opens it in the sheet, where it's removed.
     await userEvent.click(within(card).getByRole('button', { name: 'Open the instructor feedback for Session 2' }))
@@ -1070,7 +1063,7 @@ describe('instructor evaluation (#340)', () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
     const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
-    expect(card).toHaveTextContent('Lap times · 2 laps')
+    expect(figures(card, 'Session figures')['2 laps']).toBe('')
     expect(card.querySelector('[data-session-evaluation]')).toHaveTextContent('Instructor feedbackEyes up through Big Bend.')
 
     // Edit opens the sheet on everything the session has.

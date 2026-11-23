@@ -1,6 +1,7 @@
 import { Timer } from 'lucide-react'
 import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
+import { LapSparkline } from './LapSparkline'
 
 const chip = 'inline-flex items-center gap-1 rounded-md bg-gray-900 px-1.5 py-0.5 font-mono font-bold tabular-nums text-white'
 
@@ -86,6 +87,38 @@ export function SessionFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest
         )}
       </tbody>
     </table>
+  )
+}
+
+/**
+ * A session's figures on its card (#477), in one row: the average and best
+ * lap, each under its label, then its laps in a sparkline under their
+ * count. No speeds: they're in the lap table when the card is opened. With
+ * `sparkline` off, it fades — the full chart is open below — but keeps its
+ * room, so nothing moves. The columns are the same widths on every card, so
+ * they line up down the page.
+ */
+export function CardFigures({ laps, allTimeBest, sparkline = true }: { laps: Lap[]; allTimeBest?: number; sparkline?: boolean }) {
+  const stats = lapStats(laps)
+  const label = 'pb-1 text-[11px] font-medium text-gray-500'
+  const figure = 'flex h-6 items-center font-mono text-xs font-semibold tabular-nums text-gray-900'
+  return (
+    <dl className="grid min-w-0 flex-1 grid-cols-[1fr_1fr_5rem] gap-x-3" aria-label="Session figures">
+      <div>
+        <dt className={label}>Average</dt>
+        <dd className={figure}>{stats.average !== undefined ? formatAverage(laps, stats.average) : '—'}</dd>
+      </div>
+      <div>
+        <dt className={label}>Best</dt>
+        <dd className={figure}>{stats.best !== undefined ? <BestChip ms={stats.best} allTime={stats.best === allTimeBest} aligned /> : '—'}</dd>
+      </div>
+      <div>
+        <dt className={label}>{stats.count} {stats.count === 1 ? 'lap' : 'laps'}</dt>
+        <dd className={`${figure} transition-opacity ${sparkline ? '' : 'opacity-0'}`} aria-hidden={!sparkline || undefined}>
+          <LapSparkline laps={laps} />
+        </dd>
+      </div>
+    </dl>
   )
 }
 
