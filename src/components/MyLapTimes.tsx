@@ -1,4 +1,4 @@
-import { NotebookPen } from 'lucide-react'
+import { ImagePlus, NotebookPen } from 'lucide-react'
 import { lapColumns } from './LapList'
 import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
 import type { SessionHead } from './LapSessions'
@@ -55,6 +55,8 @@ interface Props {
   }
   /** Before the event, their past events at its layout (#462), once they're known. */
   pastEvents?: PastEventsHere | null
+  /** Opens the sheet that imports laps from a lap timer's screenshots (#472). */
+  onImport?: () => void
 }
 
 /**
@@ -65,7 +67,7 @@ interface Props {
  * (#288).
  */
 export function MyLapTimes({
-  event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage, pastEvents,
+  event, log, notes, layoutBest, allTimeBest, track: trackPage, runGroup, events, onEdit, onEditEvaluation, garage, pastEvents, onImport,
 }: Props) {
   const { open, setOpen, toggle } = useOpenSessions()
   const runGroups = event.runGroups
@@ -84,6 +86,13 @@ export function MyLapTimes({
     </div>
   )
 
+  // Laps from the lap timer's screenshots (#472), once the event's begun.
+  const importLaps = onImport && classifyEvent(event) !== 'upcoming' && log.status === 'ready' && (
+    <button onClick={onImport} className="flex items-center gap-1 text-gray-500 transition-colors hover:text-gray-800" data-import-laps>
+      <ImagePlus size={14} aria-hidden="true" />
+      Import laps
+    </button>
+  )
   // Expand all: at the top until there are sessions to list,
   // then just over them, by the cards it opens (#361).
   const toolbar = (
@@ -91,6 +100,8 @@ export function MyLapTimes({
       keys={log.status === 'ready' ? log.sessions.map(s => s.key) : []}
       open={open}
       onOpen={setOpen}
+      // With nothing saved yet, the empty state has its own button.
+      action={log.sessions.length || notes.sessions.length || garage?.pressures.size ? importLaps : undefined}
     />
   )
   // Then, before the event, how they did at its layout before (#462).
@@ -149,6 +160,12 @@ export function MyLapTimes({
             <p className="mt-1 text-xs text-gray-400">
               On the Schedule tab, tap a session you drove to add your laps, tire pressures or your instructor’s feedback.
             </p>
+            {importLaps && (
+              <button onClick={onImport} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700">
+                <ImagePlus size={16} aria-hidden="true" />
+                Import laps from screenshots
+              </button>
+            )}
           </div>
         </div>
       </>

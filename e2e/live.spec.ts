@@ -78,6 +78,13 @@ test('/api/laps keeps lap times to signed-in drivers (#210)', async ({ request }
   expect(res.status()).toBe(401)
 })
 
+// Loaded (a crash would be a 502), and reading screenshots only for
+// signed-in drivers: each read costs a little (#472).
+test('/api/lap-import reads screenshots only for signed-in drivers (#472)', async ({ request }) => {
+  const res = await request.post('/api/lap-import', { data: { image: { mediaType: 'image/jpeg', data: 'aGVsbG8=' } } })
+  expect(res.status()).toBe(401)
+})
+
 test('/api/notes keeps instructor evaluations to signed-in drivers (#340)', async ({ request }) => {
   // Refused at the sign-in check, so this reads and changes nothing — but
   // answers with the function's own JSON, so it loaded.

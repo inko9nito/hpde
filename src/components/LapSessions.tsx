@@ -23,7 +23,8 @@ import type { RunGroupConfig } from '../types'
 /** Which session: its day, start time and run group. */
 export type SessionHead = Pick<SessionLaps, 'key' | 'date' | 'time' | 'group' | 'sessionNumber'>
 
-export function sessionTitle(s: Pick<SessionLaps, 'sessionNumber'>): string {
+export function sessionTitle(s: Pick<SessionLaps, 'sessionNumber' | 'label'>): string {
+  if (s.label) return s.label
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
 }
 
@@ -83,10 +84,12 @@ export function useOpenSessions() {
  * Above the laps: Expand all / Collapse all, once there are laps to open
  * (`keys`).
  */
-export function LapsToolbar({ keys, open, onOpen }: {
+export function LapsToolbar({ keys, open, onOpen, action }: {
   keys: string[]
   open: Set<string>
   onOpen: (open: Set<string>) => void
+  /** Across from Expand all: My notes' Import laps (#472). */
+  action?: ReactNode
 }) {
   const allOpen = keys.length > 0 && keys.every(k => open.has(k))
   return (
@@ -102,6 +105,7 @@ export function LapsToolbar({ keys, open, onOpen }: {
           {allOpen ? 'Collapse all' : 'Expand all'}
         </button>
       ) : <span />}
+      {action}
     </div>
   )
 }
