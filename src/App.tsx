@@ -89,6 +89,12 @@ function defaultDay(event: EventConfig): DaySchedule {
   return findTodayDay(event) ?? event.days[0]
 }
 
+interface StoredDay {
+  id: string
+  /** The local date ("YYYY-MM-DD") the day was picked on. */
+  on: string
+}
+
 /**
  * The page's hash, and whether the browser already animated the move to
  * it (#355): an iOS swipe back or forward slides the pages across itself,
@@ -273,7 +279,15 @@ export default function App() {
   const ownRsvps = useRsvps()
   const { rsvps } = ownRsvps
   const [activeEventId, setActiveEventId] = useLocalStorage<string>('hpde:activeEvent', ALL_EVENTS[0].id)
-  const [activeDayId, setActiveDayId] = useLocalStorage<string | null>('hpde:activeDay', null)
+  // The day tab picked, and the date it was picked on (#470): it holds
+  // through a reload that day (pull-to-refresh), but not into the next —
+  // the next day opens on today's tab, as a first visit would. (A bare id,
+  // stored before #470, is never today's pick.)
+  const [storedDay, setStoredDay] = useLocalStorage<StoredDay | string | null>('hpde:activeDay', null)
+  const activeDayId = storedDay !== null && typeof storedDay === 'object' && storedDay.on === todayLocalISO() ? storedDay.id : null
+  function setActiveDayId(id: string) {
+    setStoredDay({ id, on: todayLocalISO() })
+  }
   const [selectedGroups, setSelectedGroups] = useLocalStorage<string[]>('hpde:groups', [])
   const [hidePast, setHidePast] = useLocalStorage<boolean>('hpde:hidePast', false)
   // All the events at a track, or the driver's (#385): theirs to start with; the same on the Tracks tab and a track's page.
@@ -631,6 +645,20 @@ export default function App() {
     const id = setInterval(() => setTick(t => t + 1), 60000)
     return () => clearInterval(id)
   }, [isToday])
+  // Back to a page left open — iOS keeps it, frozen, overnight — redraw it
+  // at once (#470): it may be another day now, so another day's tab, and
+  // yesterday's "now" line has to go before anyone sees it.
+  useEffect(() => {
+    const redraw = () => {
+      if (document.visibilityState === 'visible') setTick(t => t + 1)
+    }
+    document.addEventListener('visibilitychange', redraw)
+    window.addEventListener('pageshow', redraw)
+    return () => {
+      document.removeEventListener('visibilitychange', redraw)
+      window.removeEventListener('pageshow', redraw)
+    }
+  }, [])
 
   const hasPastActivities = isToday
     && activeDay.activities.some(a => a.type !== 'break' && parseMinutes(a.time) < nowMinutes())
