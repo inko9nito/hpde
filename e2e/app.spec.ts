@@ -1006,6 +1006,9 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await expect(card.getByLabel('Session figures').locator('dt')).toHaveText(['Average', 'Best', '2 laps'])
   await expect(card.getByRole('img', { name: 'Each lap’s time: 1:52, 1:46' })).toBeVisible()
   await expect(card).not.toContainText('mph')
+  // Their labels in a line, though the best is in a taller chip.
+  const labelTops = await card.getByLabel('Session figures').locator('dt').evaluateAll(dts => dts.map(dt => Math.round(dt.getBoundingClientRect().top)))
+  expect(new Set(labelTops).size).toBe(1)
   // Tapping anywhere on the figures opens the laps (the toggle covers them).
   // Below the chart on a phone, so scrolled to first, as a thumb would.
   const firstFigure = card.getByLabel('Session figures').locator('dd').first()
