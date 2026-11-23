@@ -46,6 +46,12 @@ export interface SessionLaps {
   group: string
   /** Kept so the laps still read "Session 3" if the schedule changes later. */
   sessionNumber?: number
+  /**
+   * What it's called when it isn't a numbered session: laps driven in a
+   * line of the schedule that isn't one, like lead-follow laps at lunch
+   * (#472) — that line's name.
+   */
+  label?: string
   laps: Lap[]
   /**
    * A summary of the laps, in the driver's words: out lap, traffic, flags.
@@ -73,6 +79,7 @@ export const MAX_LAP_MS = 10 * 60_000
 export const MAX_LAPS = 200
 export const MAX_NOTE = 500
 export const MAX_SUMMARY = 1000
+export const MAX_LABEL = 80
 const MAX_CROSSING = 24
 // Slowest and fastest speed the reader believes, in mph.
 export const MIN_MPH = 5
@@ -615,6 +622,10 @@ export function cleanSessionLaps(value: unknown): { session: SessionLaps } | { e
   }
   const session: SessionLaps = { key: sessionKey(s.date, s.time, s.group), date: s.date, time: s.time, group: s.group, laps }
   if (s.sessionNumber !== undefined) session.sessionNumber = s.sessionNumber
+  if (s.label !== undefined) {
+    if (typeof s.label !== 'string' || s.label.length > MAX_LABEL) return { error: `The session’s name can be up to ${MAX_LABEL} characters.` }
+    if (s.label.trim()) session.label = s.label.trim()
+  }
   if (s.summary !== undefined) {
     if (typeof s.summary !== 'string' || s.summary.length > MAX_SUMMARY) return { error: `The summary can be up to ${MAX_SUMMARY} characters.` }
     if (s.summary.trim()) session.summary = s.summary.trim()

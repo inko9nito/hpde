@@ -23,7 +23,8 @@ import type { RunGroupConfig } from '../types'
 /** Which session: its day, start time and run group. */
 export type SessionHead = Pick<SessionLaps, 'key' | 'date' | 'time' | 'group' | 'sessionNumber'>
 
-export function sessionTitle(s: Pick<SessionLaps, 'sessionNumber'>): string {
+export function sessionTitle(s: Pick<SessionLaps, 'sessionNumber' | 'label'>): string {
+  if (s.label) return s.label
   return s.sessionNumber !== undefined ? `Session ${s.sessionNumber}` : 'Session'
 }
 

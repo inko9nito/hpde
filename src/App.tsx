@@ -26,7 +26,7 @@ import { EventConditionsSheet } from './components/EventConditionsSheet'
 import type { SessionSlot, SessionView } from './components/LapTimesSheet'
 import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
-import { LapImportSheet } from './components/LapImportSheet'
+import { LapImportPage } from './components/LapImportPage'
 import { useScreenshotReader } from './data/lapImport'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import type { TrackLink } from './components/EventInfo'
@@ -1342,13 +1342,12 @@ export default function App() {
       />
     )}
     {lapImportOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (
-      <LapImportSheet
+      <LapImportPage
         key={`${activeEvent.id} ${driver?.id ?? ''}`}
         event={activeEvent}
         // Theirs at the event: their answer to "Did you drive?", then their laps'.
         groups={[...new Set([rsvpGroup, ...lapLog.sessions.map(s => s.group)].filter((g): g is string => !!g))]}
         saved={key => lapLog.byKey.get(key)}
-        showDate={multiDay}
         read={readScreenshot}
         onImport={async sessions => {
           for (const session of sessions) {
@@ -1356,10 +1355,9 @@ export default function App() {
             const rsvp = await lapLog.save(session)
             if (rsvp) eventRsvps.remember(activeEvent.id, rsvp)
           }
-          setLapImportOpen(false)
           showToast(sessions.length === 1 ? 'Laps imported' : `Laps imported for ${sessions.length} sessions`)
         }}
-        onClose={() => setLapImportOpen(false)}
+        onClosed={() => setLapImportOpen(false)}
       />
     )}
     {evaluationOpen && authStatus === 'signed-in' && isOnEventRoute && !routeMissing && (

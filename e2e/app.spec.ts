@@ -1017,12 +1017,14 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-// Laps from a lap timer's screenshots (#472): several at once, each read,
-// matched to the session on track when it started, and checked before
-// anything's saved.
+// Laps from a lap timer's screenshots (#472): several at once, each beside
+// what was read off it, in their group's session nearest its start time —
+// early, or lunch for lead-follow laps — checked before anything's saved.
 test('a driver imports laps from lap timer screenshots on My notes (#472)', async ({ page }) => {
   await stubEvents(page)
   await signInAsAdmin(page)
+  // They drove Blue.
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [alpha.id]: { status: 'going', runGroup: 'blue' } } } }))
   let sessions: { key: string }[] = []
   const saves: unknown[] = []
   await page.route(/\/api\/laps(\?|$)/, async route => {
@@ -1037,11 +1039,12 @@ test('a driver imports laps from lap timer screenshots on My notes (#472)', asyn
     }
     return route.fulfill({ json: { sessions } })
   })
-  // What's read off each screenshot, in the order they're sent: a session,
-  // lead-follow laps at lunch, and one that isn't a lap table.
+  // What's read off each screenshot, in the order they're sent: lead-follow
+  // laps at lunch, Blue's session let out 18 minutes early, and one that
+  // isn't a lap table.
   const answers = [
-    { status: 200, json: { read: { date: '2026-03-07', start: '08:31', laps: [{ ms: 112_000, counted: true }, { ms: 300_000, counted: false }, { ms: 106_000, counted: true }] } } },
-    { status: 200, json: { read: { date: '2026-03-07', start: '12:10', laps: [{ ms: 130_000, counted: true }] } } },
+    { status: 200, json: { read: { date: '2026-03-07', start: '12:09', laps: [{ ms: 130_000, counted: true }] } } },
+    { status: 200, json: { read: { date: '2026-03-07', start: '08:12', laps: [{ ms: 112_000, counted: true }, { ms: 300_000, counted: false }, { ms: 106_000, counted: true }] } } },
     { status: 422, json: { error: 'This doesn’t look like a lap timer’s lap table.' } },
   ]
   const images: { mediaType: string; data: string }[] = []
@@ -1057,48 +1060,67 @@ test('a driver imports laps from lap timer screenshots on My notes (#472)', asyn
   await page.goto(`/#/event/${alpha.id}`)
   await page.getByRole('tab', { name: /^My notes/ }).click()
   await page.getByRole('button', { name: 'Import laps from screenshots' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Import laps from screenshots' })
-  await expect(sheet).toBeVisible()
+  // A page that slides up, headed Cancel, Import laps and Import (#356).
+  const importPage = page.getByRole('dialog', { name: 'Import laps' })
+  await expect(importPage.getByRole('heading', { name: 'Import laps' })).toBeVisible()
+  await expect(importPage.getByRole('button', { name: 'Your run group: Blue' })).toBeVisible()
 
   // A real image, so it's shrunk and sent as the browser would.
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
-  await sheet.locator('[data-lap-import-files]').setInputFiles(['a', 'b', 'c'].map(n => ({ name: `IMG_${n}.png`, mimeType: 'image/png', buffer: png })))
+  await importPage.locator('[data-lap-import-files]').setInputFiles(['a', 'b', 'c'].map(n => ({ name: `IMG_${n}.png`, mimeType: 'image/png', buffer: png })))
 
-  const rows = sheet.getByRole('listitem')
-  await expect(rows).toHaveCount(3)
-  const matched = rows.filter({ has: page.getByText('Session 1 · 8:30 AM', { exact: true }) })
-  await expect(matched).toContainText('Started 8:31 AM')
-  await expect(matched).toContainText('2 laps · best 1:46.00')
-  await expect(matched.getByLabel('Laps read')).toHaveText('1:52.00 · 5:00.00 (in) · 1:46.00')
-  await expect(rows.filter({ hasText: 'No session was on track then' })).toContainText('Not imported')
-  await expect(rows.filter({ hasText: 'This doesn’t look like a lap timer’s lap table.' })).toHaveCount(1)
+  // In the order they were driven, the one that couldn't be read last.
+  const cards = importPage.locator('[data-import-card]')
+  await expect(importPage.locator('[data-import-summary]')).toHaveText('2 sessions to import, from 3 screenshots')
+  await expect(cards.nth(0)).toContainText('Session 1 · 8:30 AM')
+  await expect(cards.nth(0)).toContainText('Started 8:12 AM')
+  await expect(cards.nth(0).locator('[data-timing]')).toHaveText('18 min before its 8:30 AM start')
+  await expect(cards.nth(0).getByLabel('Laps read').getByRole('listitem')).toHaveText(['11:52.00', '25:00.00left out', '31:46.00'])
+  await expect(cards.nth(1)).toContainText('Lunch · 12:00 PM')
+  await expect(cards.nth(2)).toContainText('This doesn’t look like a lap timer’s lap table.')
   expect(images.every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // Each shows its screenshot, which opens full size, to see which it is…
-  const failed = rows.filter({ hasText: 'This doesn’t look like a lap timer’s lap table.' })
+  // Each shows its screenshot, which opens full size, to check against…
+  const failed = cards.nth(2)
   const name = (await failed.getAttribute('aria-label'))!
   await expect.poll(() => failed.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
   await failed.getByRole('button', { name: `Show ${name}` }).click()
   const viewer = page.getByRole('dialog', { name })
   await expect(viewer.locator('img')).toBeVisible()
-  // Escape closes it, not the sheet under it.
+  // Escape closes it, not the page under it.
   await page.keyboard.press('Escape')
   await expect(viewer).toBeHidden()
-  await expect(sheet).toBeVisible()
-  // …and comes out with its ✕.
+  await expect(importPage).toBeVisible()
+  // …and comes out.
   await failed.getByRole('button', { name: `Remove ${name}` }).click()
-  await expect(rows).toHaveCount(2)
+  await expect(cards).toHaveCount(2)
 
-  await sheet.getByRole('button', { name: 'Import 1 session' }).click()
-  await expect(sheet).toBeHidden()
-  // The toast: the lap chart that's appeared has a status of its own.
-  await expect(page.getByRole('status').filter({ hasText: 'Laps imported' })).toBeVisible()
-  expect(saves).toEqual([{
-    date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
-    laps: [{ ms: 112_000 }, { ms: 300_000, kind: 'in', note: 'Left out by the lap timer' }, { ms: 106_000 }],
-  }])
+  // Its session can be another, another group's, or none.
+  const goesIn = cards.nth(1).getByLabel('Goes in')
+  // Their group's sessions that day first, then the other groups'.
+  const sections = goesIn.locator('optgroup')
+  await expect(sections.nth(0)).toHaveAttribute('label', 'Blue · Sat, Mar 7')
+  await expect(sections.nth(0).locator('option')).toHaveText(['Session 1 · 8:30 AM', 'Lunch · 12:00 PM'])
+  await expect(sections.nth(1)).toHaveAttribute('label', 'Other groups · Sat, Mar 7')
+  await expect(sections.nth(1).locator('option')).toHaveText(['Session 1 · 8:00 AM · Red'])
+  await goesIn.selectOption({ label: 'Don’t import' })
+  await expect(cards.nth(1)).toContainText('Not imported')
+  await expect(importPage.locator('[data-import-summary]')).toHaveText('1 session to import, from 2 screenshots')
+  await goesIn.selectOption({ label: 'Lunch · 12:00 PM' })
+
+  await importPage.getByRole('button', { name: 'Import', exact: true }).click()
+  await expect(importPage).toBeHidden()
+  await expect(page.getByRole('status').filter({ hasText: 'Laps imported for 2 sessions' })).toBeVisible()
+  expect(saves).toEqual([
+    {
+      date: '2026-03-07', time: '08:30', group: 'blue', sessionNumber: 1,
+      laps: [{ ms: 112_000 }, { ms: 300_000, kind: 'in', note: 'Left out by the lap timer' }, { ms: 106_000 }],
+    },
+    { date: '2026-03-07', time: '12:00', group: 'blue', label: 'Lunch', laps: [{ ms: 130_000 }] },
+  ])
   await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' })).toContainText('2 laps')
+  await expect(page.getByRole('region', { name: /^Lunch/ })).toContainText('1 lap')
 })
 
 // With laps, they drove it (#377): saving them answers "Did you drive?",
