@@ -249,7 +249,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
         }}
       />
       <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
-      {/* Filled in from screenshots of the card (#483). */}
+      {/* Imported from screenshots of the card (#483). */}
       {tde && readScreenshots && (
         <ScreenshotFill
           read={readScreenshots}
@@ -559,7 +559,7 @@ function ScreenshotFill({ read, disabled, onRead }: {
             <ImagePlus size={18} aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-gray-900">Fill in from a screenshot</span>
+            <span className="block text-sm font-semibold text-gray-900">Import from a screenshot</span>
             <span className="mt-0.5 block text-xs text-gray-500">Of your report card as it was sent to you. A long one can take up to {MAX_EVALUATION_SCREENSHOTS}.</span>
           </span>
           <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
@@ -595,7 +595,7 @@ function ScreenshotFill({ read, disabled, onRead }: {
         )}
         {status === 'read' && (
           <p className="text-gray-900" data-evaluation-import-done>
-            <span className="font-semibold">Filled in from your screenshot.</span>{' '}
+            <span className="font-semibold">Imported from your screenshot.</span>{' '}
             <span className="text-gray-600">Check it against your card, then Save.</span>
           </p>
         )}

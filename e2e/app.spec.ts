@@ -1591,9 +1591,9 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
-// A report card filled in from its screenshot (#483): read by Claude, on
+// A report card imported from its screenshot (#483): read by Claude, on
 // the card the screenshot is of, and checked against it before it's saved.
-test('a driver fills in a TDE report card from its screenshot (#483)', async ({ page }) => {
+test('a driver imports a TDE report card from its screenshot (#483)', async ({ page }) => {
   const tde: EventConfig = { ...alpha, id: '2026-03-07_tde', name: 'TDE Day', organizer: 'The Drivers Edge' }
   await stubEvents(page, [tde])
   await signInAsAdmin(page)
@@ -1628,7 +1628,7 @@ test('a driver fills in a TDE report card from its screenshot (#483)', async ({ 
   const sheet = page.getByRole('dialog', { name: 'Instructor evaluation' })
   // They drove in Blue: Blue's card, till the screenshot says otherwise.
   await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(sheet.getByRole('button', { name: /^Fill in from a screenshot/ })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: /^Import from a screenshot/ })).toBeVisible()
 
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
   const files = sheet.locator('[data-evaluation-import-files]')
@@ -1652,7 +1652,7 @@ test('a driver fills in a TDE report card from its screenshot (#483)', async ({ 
   }
   // A long card in two screenshots, read together.
   await files.setInputFiles(['IMG_2.png', 'IMG_3.png'].map(name => ({ name, mimeType: 'image/png', buffer: png })))
-  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Filled in from your screenshot. Check it against your card, then Save.')
+  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshot. Check it against your card, then Save.')
   expect(sent.map(images => images.length)).toEqual([1, 2])
   expect(sent.flat().every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
 
