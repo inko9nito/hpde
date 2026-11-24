@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import { Sheet } from './Sheet'
 import { SuggestInput } from './SuggestInput'
 import { inputClass } from './SessionEvaluationForm'
-import { CONSUMABLES, MAX_NAME, MAX_NOTE, MAX_PART, carName, cleanEntry, partOptions, shopOptions } from '../utils/garage'
+import { CONSUMABLES, MAX_NAME, MAX_NOTE, MAX_PART, carName, cleanEntry, otherOptions, partOptions, shopOptions } from '../utils/garage'
 import type { Car, ConsumableId, Garage, LogEntry } from '../utils/garage'
 import { todayLocalISO } from '../utils/time'
 
@@ -14,8 +14,9 @@ const dateClass = `${inputClass} block h-10 min-w-0 appearance-none bg-white py-
 
 /**
  * Logs a job on a car (#344), or changes or removes an entry: what was
- * changed — any of the consumables, picked two by two, each then asking
- * what went on — the day it was done, the shop and a note.
+ * done — any of the consumables, picked two by two, each then asking
+ * what went on, and Other, for anything that isn't one, which asks what
+ * (#487): a tech inspection — the day it was done, the shop and a note.
  */
 export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   car: Car
@@ -31,6 +32,8 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   const [parts, setParts] = useState<Partial<Record<ConsumableId, string>>>(
     () => Object.fromEntries((entry?.parts ?? []).map(p => [p.part, p.what ?? ''])),
   )
+  // What else was done (#487): undefined till Other's picked.
+  const [other, setOther] = useState<string | undefined>(entry?.other)
   const [date, setDate] = useState(entry?.date ?? todayLocalISO())
   const [shop, setShop] = useState(entry?.shop ?? '')
   const [note, setNote] = useState(entry?.note ?? '')
@@ -39,7 +42,9 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const id = useId()
   const picked = CONSUMABLES.filter(c => parts[c.id] !== undefined)
-  const cleaned = cleanEntry({ date, shop, note, parts: picked.map(c => ({ part: c.id, what: parts[c.id] })) })
+  const cleaned = cleanEntry({ date, shop, note, other, parts: picked.map(c => ({ part: c.id, what: parts[c.id] })) })
+  // Other picked asks what it was.
+  const ready = 'value' in cleaned && (other === undefined || !!other.trim())
 
   function toggle(part: ConsumableId) {
     setParts(prev => {
@@ -74,23 +79,31 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
     >
       <fieldset className="mt-4">
         <legend className={`flex w-full items-baseline justify-between ${label}`}>
-          What was changed
+          What was done
           <span className="font-normal text-gray-400">Pick all that apply</span>
         </legend>
         <div className="mt-1.5 grid grid-cols-2 gap-2">
           {CONSUMABLES.map(c => (
-            <button
-              key={c.id}
-              onClick={() => toggle(c.id)}
-              aria-pressed={parts[c.id] !== undefined}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                parts[c.id] !== undefined ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              {c.label}
-            </button>
+            <Choice key={c.id} on={parts[c.id] !== undefined} onClick={() => toggle(c.id)}>{c.label}</Choice>
           ))}
+          {/* Anything that isn't a consumable, across the foot. */}
+          <Choice on={other !== undefined} onClick={() => setOther(prev => (prev === undefined ? '' : undefined))} className="col-span-2">
+            Other
+          </Choice>
         </div>
+        {other !== undefined && (
+          <div className="mt-2 flex flex-col">
+            <label htmlFor={`${id}-other`} className="text-xs text-gray-500">Other</label>
+            <SuggestInput
+              id={`${id}-other`}
+              value={other}
+              onChange={v => setOther(v.slice(0, MAX_PART))}
+              options={otherOptions(garage)}
+              placeholder="Tech inspection, alignment…"
+              className={inputClass}
+            />
+          </div>
+        )}
       </fieldset>
 
       {/* What went on, for each one picked. */}
@@ -157,8 +170,8 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
 
       <div className="mt-5 flex flex-col items-center gap-3">
         <button
-          onClick={() => 'value' in cleaned && run('saving', () => onSave({ ...(entry ? { id: entry.id } : {}), ...cleaned.value }))}
-          disabled={!('value' in cleaned) || !!busy}
+          onClick={() => ready && 'value' in cleaned && run('saving', () => onSave({ ...(entry ? { id: entry.id } : {}), ...cleaned.value }))}
+          disabled={!ready || !!busy}
           className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-gray-700 disabled:bg-gray-300"
         >
           {busy === 'saving' ? 'Saving…' : entry ? 'Save entry' : 'Add entry'}
@@ -181,5 +194,25 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
         )}
       </div>
     </Sheet>
+  )
+}
+
+/** One of What was done's choices: picked, it's filled in. */
+function Choice({ on, onClick, className = '', children }: {
+  on: boolean
+  onClick: () => void
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={on}
+      className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+        on ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 text-gray-800 hover:bg-gray-50'
+      } ${className}`}
+    >
+      {children}
+    </button>
   )
 }

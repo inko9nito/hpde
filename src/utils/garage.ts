@@ -41,14 +41,17 @@ export interface PartChange {
 
 /**
  * One entry in a car's log: on this day, at this shop, these consumables
- * were changed — one job, however many parts.
+ * were changed — one job, however many parts — and anything else done
+ * that isn't one of them (#487): a tech inspection, an alignment.
  */
 export interface LogEntry {
   id: string
   /** "YYYY-MM-DD". */
   date: string
-  /** In the order the forms list them. */
+  /** In the order the forms list them. None when it's only `other`. */
   parts: PartChange[]
+  /** Something done that isn't a consumable, in their words: "Tech inspection". */
+  other?: string
   /** Where it was done: "Mike's Motorsports". */
   shop?: string
   /** Anything else: the mileage, why. */
@@ -224,17 +227,21 @@ export function cleanCar(raw: unknown, thisYear = new Date().getFullYear()): Cle
 }
 
 /**
- * A log entry as sent: the day and at least one consumable required, each
- * once; what went on for each, the shop and a note optional.
+ * A log entry as sent: the day, and at least one consumable — each once —
+ * or what else was done (#487); what went on for each, the shop and a
+ * note optional.
  */
 export function cleanEntry(raw: unknown): Cleaned<Omit<LogEntry, 'id'>> {
   const r = (raw ?? {}) as Record<string, unknown>
   if (typeof r.date !== 'string' || !DATE.test(r.date) || Number.isNaN(Date.parse(r.date))) return { error: 'Add the day it was done.' }
-  if (!Array.isArray(r.parts) || r.parts.length === 0) return { error: 'Pick what was changed.' }
+  const other = text(r.other, MAX_PART, 'What was done')
+  if ('error' in other) return other
+  const rawParts = r.parts ?? []
+  if (!Array.isArray(rawParts) || (rawParts.length === 0 && !other.value)) return { error: 'Pick what was done.' }
   const byPart = new Map<ConsumableId, PartChange>()
-  for (const p of r.parts as Record<string, unknown>[]) {
+  for (const p of rawParts as Record<string, unknown>[]) {
     const id = p?.part as ConsumableId
-    if (!CONSUMABLES.some(c => c.id === id)) return { error: 'Pick what was changed.' }
+    if (!CONSUMABLES.some(c => c.id === id)) return { error: 'Pick what was done.' }
     if (byPart.has(id)) return { error: `${consumableLabel(id)} is in there twice.` }
     const what = text(p.what, MAX_PART, `What went on for ${consumableLabel(id).toLowerCase()}`)
     if ('error' in what) return what
@@ -248,6 +255,7 @@ export function cleanEntry(raw: unknown): Cleaned<Omit<LogEntry, 'id'>> {
     value: {
       date: r.date,
       parts: CONSUMABLES.flatMap(c => (byPart.has(c.id) ? [byPart.get(c.id)!] : [])),
+      ...(other.value ? { other: other.value } : {}),
       ...(shop.value ? { shop: shop.value } : {}),
       ...(note.value ? { note: note.value } : {}),
     },
@@ -475,6 +483,15 @@ export function partOptions(part: ConsumableId, garage: Garage): string[] {
     for (const e of car.log ?? []) {
       for (const p of e.parts) if (p.part === part && p.what) counts.set(p.what, (counts.get(p.what) ?? 0) + 1)
     }
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
+}
+
+/** Everything else that's been done (#487), across every car, most used first — for the form's suggestions. */
+export function otherOptions(garage: Garage): string[] {
+  const counts = new Map<string, number>()
+  for (const car of garage.cars) {
+    for (const e of car.log ?? []) if (e.other) counts.set(e.other, (counts.get(e.other) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v)
 }
