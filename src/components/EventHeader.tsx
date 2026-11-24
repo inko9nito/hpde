@@ -68,8 +68,6 @@ interface Props {
   status: EventStatus
   activeTab: EventTabId
   onTabChange: (id: EventTabId) => void
-  /** Sessions with lap times saved, shown on the My notes tab (#210). */
-  notesCount?: number
   /** They picked their run group in the RSVP (#235). */
   onRunGroup?: (id: string) => void
   onBack: () => void
@@ -101,7 +99,7 @@ interface Props {
  * together.
  * Nothing changes height, so the page never jumps while scrolling.
  */
-export function EventHeader({ event, status, activeTab, onTabChange, notesCount, onRunGroup, onBack, onDeleted, scrollRef, track }: Props) {
+export function EventHeader({ event, status, activeTab, onTabChange, onRunGroup, onBack, onDeleted, scrollRef, track }: Props) {
   const titleContentRef = useRef<HTMLDivElement>(null)
   const collapsed = useCollapsed(scrollRef, titleContentRef)
   const date = dateLine(event)
@@ -168,7 +166,7 @@ export function EventHeader({ event, status, activeTab, onTabChange, notesCount,
       </div>
 
       <div className="mx-auto max-w-lg">
-        <EventTabs active={activeTab} onChange={onTabChange} notesCount={notesCount} />
+        <EventTabs active={activeTab} onChange={onTabChange} />
       </div>
     </div>
   )
