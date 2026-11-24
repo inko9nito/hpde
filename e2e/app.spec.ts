@@ -1659,7 +1659,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   }
   // A long card in two screenshots, read together.
   await files.setInputFiles(['IMG_2.png', 'IMG_3.png'].map(name => ({ name, mimeType: 'image/png', buffer: png })))
-  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshot.')
+  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshots.')
   expect(sent.map(images => images.length)).toEqual([1, 2])
   expect(sent.flat().every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
 
@@ -1679,17 +1679,33 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   // Split View (#483): the screenshots over the form, to check one against the other.
   // Its thumbnail says it opens bigger: into Split View (#483), a screen of
   // its own over the sheet, the screenshots over the form.
-  await expect(sheet.locator('[data-enlarge]')).toHaveCount(2)
-  await sheet.getByRole('button', { name: 'Compare IMG_2.png in Split View' }).click()
+  // One square thumbnail, the first's, with how many there are on its corner.
+  await expect(sheet.locator('[data-enlarge]')).toHaveCount(1)
+  await expect(sheet.locator('[data-shot-count]')).toHaveText('2')
+  const thumb = (await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).boundingBox())!
+  expect(Math.round(thumb.width)).toBe(Math.round(thumb.height))
+  await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
   const split = page.getByRole('dialog', { name: 'Split View' })
   // Slid all the way up.
   await expect(split).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
   const shots = split.getByRole('region', { name: 'Screenshots' })
   await expect(shots.getByRole('img')).toHaveCount(2)
+  // A page each, swiped between, with which this is and dots to say there are more.
+  const pageBadge = shots.locator('[data-split-page]')
+  await expect(pageBadge).toHaveText('1 of 2')
+  const dots = shots.locator('[data-split-dots] button')
+  await expect(dots).toHaveCount(2)
+  await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true')
+  await shots.locator('[data-split-pager]').evaluate(el => el.scrollTo({ left: el.clientWidth }))
+  await expect(pageBadge).toHaveText('2 of 2')
+  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true')
+  await expect(shots.getByRole('group', { name: 'Screenshot 2 of 2' })).toBeInViewport()
+  await dots.nth(0).click()
+  await expect(pageBadge).toHaveText('1 of 2')
   // Just Done across its top: no Cancel or Save, and no import box, which would only repeat the screenshots.
   await expect(split.getByRole('button', { name: 'Done' })).toBeVisible()
   await expect(split.getByRole('button', { name: 'Save' })).toHaveCount(0)
-  await expect(split.getByText('Imported from your screenshot.')).toHaveCount(0)
+  await expect(split.locator('[data-evaluation-import]')).toHaveCount(0)
   await expect(split.getByRole('button', { name: 'Cancel' })).toHaveCount(0)
   const divider = split.getByRole('separator', { name: 'Resize Split View' })
   const form = split.locator('[data-split-form]')
@@ -1713,8 +1729,8 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   await expect(split).toBeHidden()
   await expect(sheet.getByLabel('Looks ahead')).toHaveValue('85')
   await expect(sheet.locator('[data-evaluation-import-done]')).toBeVisible()
-  // Either thumbnail opens it; Escape takes it down, not the sheet.
-  await sheet.getByRole('button', { name: 'Compare IMG_3.png in Split View' }).click()
+  // Again from the thumbnail; Escape takes it down, not the sheet.
+  await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
   await expect(split).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(split).toBeHidden()

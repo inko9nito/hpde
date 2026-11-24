@@ -141,12 +141,63 @@ export function ScreenshotSplitView({ shots, title, subtitle, onClose, children 
 }
 
 /**
- * The screenshots, one under another — a long card's parts — at the pane's
- * width, zoomed by `zoom`. Its own touches: a pinch zooms about the
- * fingers, a double tap zooms in there (or back out), and one finger
- * scrolls.
+ * The screenshots, a page each, swiped left and right between — a long
+ * card's parts, in the order they were picked. With more than one, a badge
+ * says which this is ("2 of 3") and dots under it say there are more; a
+ * dot taps to its page.
  */
 function ScreenshotPane({ shots, style }: { shots: Shot[]; style: React.CSSProperties }) {
+  const [page, setPage] = useState(0)
+  const pagerRef = useRef<HTMLDivElement>(null)
+  const many = shots.length > 1
+  const go = (i: number) => {
+    const pager = pagerRef.current
+    if (pager) pager.scrollTo({ left: i * pager.clientWidth, behavior: 'smooth' })
+  }
+
+  return (
+    <section aria-label="Screenshots" className="relative min-h-0 shrink-0 bg-gray-950 md:!basis-auto md:flex-1" style={style}>
+      <div
+        ref={pagerRef}
+        className="absolute inset-0 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={e => {
+          const el = e.currentTarget
+          if (el.clientWidth) setPage(clamp(Math.round(el.scrollLeft / el.clientWidth), 0, shots.length - 1))
+        }}
+        data-split-pager
+      >
+        {shots.map((shot, i) => <ZoomPage key={shot.url} shot={shot} label={many ? `Screenshot ${i + 1} of ${shots.length}` : undefined} />)}
+      </div>
+      {many && (<>
+        <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold tabular-nums text-white backdrop-blur" aria-live="polite" data-split-page>
+          {page + 1} of {shots.length}
+        </span>
+        <div className="absolute inset-x-0 bottom-3 flex justify-center" data-split-dots>
+          <div className="flex items-center gap-2 rounded-full bg-black/50 px-2.5 py-1.5 backdrop-blur">
+            {shots.map((shot, i) => (
+              <button
+                key={shot.url}
+                type="button"
+                onClick={() => go(i)}
+                aria-label={`Screenshot ${i + 1}`}
+                aria-current={i === page || undefined}
+                className={`h-2 w-2 rounded-full transition-colors ${i === page ? 'bg-white' : 'bg-white/40'}`}
+              />
+            ))}
+          </div>
+        </div>
+      </>)}
+    </section>
+  )
+}
+
+/**
+ * One screenshot, at the pane's width, zoomed by `zoom`: it scrolls up and
+ * down, and once zoomed, across too, till its edge, where a swipe goes on
+ * to the next. A pinch zooms about the fingers, a double tap zooms in
+ * there (or back out).
+ */
+function ZoomPage({ shot, label }: { shot: Shot; label?: string }) {
   const paneRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   // Kept off React's state: a pinch sets it every frame.
@@ -232,17 +283,17 @@ function ScreenshotPane({ shots, style }: { shots: Shot[]; style: React.CSSPrope
   }, [])
 
   return (
-    <section aria-label="Screenshots" className="relative min-h-0 shrink-0 bg-gray-950 md:!basis-auto md:flex-1" style={style}>
-      <div
-        ref={paneRef}
-        className="absolute inset-0 overflow-auto overscroll-contain [touch-action:pan-x_pan-y]"
-        data-split-screenshots
-      >
-        {/* The pane's width — at most a phone's, on a wide screen — times the zoom. */}
-        <div ref={contentRef} className="mx-auto flex flex-col gap-1" style={{ width: widthAt(1) }}>
-          {shots.map(shot => <img key={shot.url} src={shot.url} alt={shot.name} draggable={false} className="block w-full select-none" />)}
-        </div>
+    <div
+      ref={paneRef}
+      role="group"
+      aria-label={label}
+      className="h-full w-full shrink-0 snap-center snap-always overflow-auto overscroll-y-contain [touch-action:pan-x_pan-y]"
+      data-split-screenshots
+    >
+      {/* The pane's width — at most a phone's, on a wide screen — times the zoom. */}
+      <div ref={contentRef} className="mx-auto" style={{ width: widthAt(1) }}>
+        <img src={shot.url} alt={shot.name} draggable={false} className="block w-full select-none" />
       </div>
-    </section>
+    </div>
   )
 }

@@ -503,9 +503,10 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
 /**
  * Fills the form in from screenshots of the report card (#483), as it's
  * emailed: one, or up to three of a long one, read together. While they're
- * read, and after, they're shown small, with a badge that says they open
- * bigger: full size, or once read, beside the form in Split View, to check
- * one against the other (its ✕ closes it). Nothing's saved till Save.
+ * read, and after, the first is shown small and square, with how many on
+ * its corner if there's more than one, and a mark that says it opens
+ * bigger: once read, beside the form in Split View, to check one against
+ * the other; else full size. Nothing's saved till Save.
  */
 function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
   read: (files: File[]) => Promise<EventEvaluation>
@@ -570,6 +571,7 @@ function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
     />
   )
   const pickAgain = () => inputRef.current?.click()
+  const first = shots[0]
 
   if (status === 'idle') {
     return (
@@ -592,32 +594,35 @@ function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
   }
 
   return (
-    <section aria-label="Import from a screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
+    <section aria-label="Import from a screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
       {input}
-      {shots.length > 0 && (
-        <div className="flex shrink-0 gap-1.5">
-          {shots.map(shot => (
-            <button
-              key={shot.url}
-              type="button"
-              // Read, they open beside the form, in Split View; else full size.
-              onClick={() => (status === 'read' ? onSplit(true) : setShown(shot))}
-              disabled={status === 'reading'}
-              aria-label={status === 'read' ? `Compare ${shot.name} in Split View` : `Show ${shot.name}`}
-              className="relative h-20 w-12"
-            >
-              <span className="block h-full w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                <img src={shot.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
-              </span>
-              {/* It opens bigger: say so, on its corner. */}
-              {status !== 'reading' && (
-                <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-gray-900/80 text-white ring-2 ring-gray-50" aria-hidden="true" data-enlarge>
-                  <Maximize2 size={10} strokeWidth={2.75} />
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+      {first && (
+        // The first screenshot, square; how many there are, on its corner, if more than one.
+        <button
+          type="button"
+          // Read, they open beside the form, in Split View; else the first full size.
+          onClick={() => (status === 'read' ? onSplit(true) : setShown(first))}
+          disabled={status === 'reading'}
+          aria-label={status === 'read'
+            ? `Compare ${shots.length > 1 ? `your ${shots.length} screenshots` : first.name} in Split View`
+            : `Show ${first.name}`}
+          className="relative h-14 w-14 shrink-0"
+        >
+          <span className="block h-full w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <img src={first.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
+          </span>
+          {/* It opens bigger: say so, in its corner. */}
+          {status !== 'reading' && (
+            <span className="absolute bottom-1 right-1 grid h-4 w-4 place-items-center rounded bg-gray-900/70 text-white" aria-hidden="true" data-enlarge>
+              <Maximize2 size={9} strokeWidth={3} />
+            </span>
+          )}
+          {shots.length > 1 && (
+            <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-gray-900 px-1 text-[11px] font-semibold tabular-nums text-white ring-2 ring-gray-50" aria-hidden="true" data-shot-count>
+              {shots.length}
+            </span>
+          )}
+        </button>
       )}
       <div className="flex min-w-0 flex-1 flex-col items-start text-sm" aria-live="polite">
         {status === 'reading' && (
@@ -627,7 +632,7 @@ function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
           </p>
         )}
         {status === 'read' && (
-          <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your screenshot.</p>
+          <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your {shots.length > 1 ? 'screenshots' : 'screenshot'}.</p>
         )}
         {status === 'failed' && <p role="alert" className="text-red-700">{error}</p>}
         {status !== 'reading' && (
