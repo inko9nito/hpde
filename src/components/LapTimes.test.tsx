@@ -628,7 +628,7 @@ describe('lap times (#210)', () => {
     }]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91')
+    expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91')
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit Session 2' }))
     const sheet = await openInSheet('Lap times')
@@ -669,9 +669,9 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    expect(await screen.findByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91Across 1 recorded session')
     // The event header already names the track.
     expect(screen.queryByText('MSRC · 1.7 CW')).not.toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Best lap this event' })).toHaveTextContent('1:38.91Across 1 recorded session')
     // The counter-clockwise event doesn't count.
     await waitFor(() => {
       expect(screen.getByRole('group', { name: 'All time best' })).toHaveTextContent('1:38.54Across 2 events at this track config')
@@ -709,7 +709,7 @@ describe('lap times (#210)', () => {
     summary = [{ eventId: sameLayout.id, best: 98_910, sessions: 3 }]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const first = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    const first = await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     const second = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
     await waitFor(() => expect(first.querySelector('[data-all-time-best]')).not.toBeNull())
     // Session 2's best is its own best, not the all-time one.
@@ -724,7 +724,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const chart = screen.getByRole('group', { name: /^Best and average lap in each session, in schedule order: 2 sessions\./ })
+    const chart = await screen.findByRole('group', { name: /^Best and average lap in each session, in schedule order: 2 sessions\./ })
     expect(chart.closest('div.rounded-2xl')).toHaveTextContent(/^Lap times by session/)
     // Session by session, under their numbers; the latest best at the end.
     expect([...chart.querySelectorAll('svg > text')].map(t => t.textContent).filter(t => /^S\d/.test(t!))).toEqual(['S1', 'S2'])
@@ -744,7 +744,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const first = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    const first = await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     // Closed, the card has its figures only.
     expect(within(first).queryByRole('group', { name: /^Each lap’s time/ })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
@@ -780,7 +780,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const first = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    const first = await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     // To start, they're left off the tables and charts, and out of the average.
     expect(figures(first, 'Session figures')).toEqual({ Average: '1:40.207', Best: '1:39.42', '3 laps': '' })
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
@@ -841,7 +841,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Saturday Mar 7 2 sessions', 'Sunday Mar 8 1 session'])
+    expect((await screen.findAllByRole('heading', { level: 3 })).map(h => h.textContent)).toEqual(['Saturday Mar 7 2 sessions', 'Sunday Mar 8 1 session'])
     // Under Sunday, its first session: the day isn't repeated on the card.
     const sunday = screen.getByRole('heading', { name: 'Sunday Mar 8 1 session' }).parentElement!
     const card = within(sunday).getByRole('region', { name: 'Session 1, 9:20 AM' })
@@ -853,6 +853,7 @@ describe('lap times (#210)', () => {
     saved = [{ key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 101_000 }] }]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     expect(screen.queryByRole('heading', { name: /^Saturday/ })).toBeNull()
   })
 
@@ -866,7 +867,7 @@ describe('lap times (#210)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
     // The card keeps to lap times (#477), speeds or not: they're in the table
     // it opens onto, each lap's top and average.
-    const withSpeeds = screen.getByRole('region', { name: 'Session 1, 9:50 AM' })
+    const withSpeeds = await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     expect(figures(withSpeeds, 'Session figures')).toEqual({ Average: '1:40.210', Best: '1:39.42', '2 laps': '' })
     expect(withSpeeds).not.toHaveTextContent('mph')
     const without = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
@@ -896,6 +897,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     const headers = screen.getAllByRole('table', { name: 'Laps' }).map(t => rows(t)[0])
     expect(headers).toEqual([['Lap', 'From / To', 'Lap time', ''], ['Lap', 'From / To', 'Lap time', '']])
@@ -924,6 +926,7 @@ describe('lap times (#210)', () => {
     ]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })
     expect(screen.queryAllByRole('table', { name: 'Laps' })).toHaveLength(0)
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     expect(screen.getAllByRole('table', { name: 'Laps' })).toHaveLength(2)
@@ -1041,6 +1044,7 @@ describe('an admin logging another driver’s lap times (#288)', () => {
     saved = [blue2(99_000)]
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
+    await screen.findByRole('group', { name: 'Best lap this event' })
     await switchDriver('Jason')
     await userEvent.click(await screen.findByRole('tab', { name: /^My notes/ }))
     expect(await screen.findByText('No session notes yet')).toBeInTheDocument()
@@ -1187,7 +1191,7 @@ describe('instructor evaluation (#340)', () => {
     }] } }
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    const card = screen.getByRole('region', { name: 'Session 2, 11:45 AM' })
+    const card = await screen.findByRole('region', { name: 'Session 2, 11:45 AM' })
     expect(figures(card, 'Session figures')['2 laps']).toBe('')
     expect(card.querySelector('[data-session-evaluation]')).toHaveTextContent('Instructor feedbackEyes up through Big Bend.')
 
@@ -1554,7 +1558,7 @@ describe('a track page: the events on one layout (#274)', () => {
     await userEvent.click(await card('Earlier'))
     expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
     expect(await screen.findByRole('tab', { name: 'My notes', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Session 1, 9:50 AM' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Session 1, 9:50 AM' })).toBeInTheDocument()
 
     // The event's Back returns to the track page, which fetches its laps again.
     const before = lapCalls('GET').filter(([u]) => String(u).includes('events=')).length
@@ -1569,7 +1573,7 @@ describe('a track page: the events on one layout (#274)', () => {
   it('opened from one event, opens another over it; the event it came from is where it was', async () => {
     openEvent()
     await userEvent.click(await screen.findByRole('tab', { name: 'My notes' }))
-    await userEvent.click(screen.getByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
+    await userEvent.click(await screen.findByRole('link', { name: 'See all my MSRC 1.7 CW laps' }))
     await userEvent.click(await card('Earlier'))
     expect(window.location.hash).toBe(`#/event/${sameLayout.id}`)
     await userEvent.click(screen.getAllByRole('button', { name: 'Back' })[0])
