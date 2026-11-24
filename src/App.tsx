@@ -603,8 +603,6 @@ export default function App() {
   const eventCar = eventSetup?.carId ? garage.cars.find(c => c.id === eventSetup.carId) : undefined
   const pressuresByKey = new Map(Object.values(eventSetup?.sessions ?? {}).map(p => [p.key, p]))
   const pressureKeys = new Set(pressuresByKey.keys())
-  // Sessions with anything saved, the report card and the car: "My notes (3)".
-  const notesCount = new Set([...savedLapKeys, ...notesLog.byKey.keys(), ...pressureKeys]).size + (notesLog.evaluation ? 1 : 0) + (eventCar ? 1 : 0)
   // Their best on this track layout across every event — so a lap that's
   // the all-time best can say so. Only once the other events' bests are in.
   const lapSummary = useLapSummary(lapLog.status !== 'off', driver?.id ?? null)
@@ -903,7 +901,6 @@ export default function App() {
           status={eventStatus}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          notesCount={notesCount}
           onRunGroup={id => setSelectedGroups([id])}
           onBack={
             trackUnderEvent !== null ? () => goBack(trackHash(trackUnderEvent))

@@ -998,7 +998,7 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
   await closeSessionList(page)
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (saved)' })).toBeVisible()
 
-  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   // One row (#477): average and best lap, and the laps in a sparkline under
   // their count. No speeds on the card: they're in the table it opens.
@@ -1363,7 +1363,7 @@ test('a finger scrolling the page over the lap chart leaves its readout shut; a 
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions } : { events: [] },
   }))
   await page.goto(`/#/event/${alpha.id}`)
-  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const chart = page.getByRole('group', { name: /^Best and average lap in each session/ })
   const readout = chart.getByRole('status')
   await chart.scrollIntoViewIfNeeded()
@@ -1408,7 +1408,7 @@ test('an opened session charts its laps against its best and average, or the eve
     json: new URL(route.request().url()).searchParams.has('event') ? { sessions } : { events: [] },
   }))
   await page.goto(`/#/event/${alpha.id}`)
-  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const card = page.getByRole('region', { name: 'Session 2, 10:30 AM' })
   await card.getByRole('button', { name: 'Show laps for Session 2' }).click()
   const chart = card.getByRole('group', { name: /^Each lap’s time in Session 2, against the session’s best and average: 5 laps\./ })
@@ -1508,7 +1508,7 @@ test('an admin logs another driver’s lap times, switched to from the account m
   await expect(banner).toBeInViewport()
   await expect(page.getByLabel('Driver')).toHaveCount(0)
 
-  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   await expect(page.getByLabel('Driver')).toHaveCount(0)
   await expect(page.getByRole('group', { name: 'Best lap this event' })).toContainText('1:23.84')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -1557,7 +1557,7 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await closeSessionList(page)
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (evaluated)' })).toBeVisible()
 
-  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   await expect(page.getByRole('region', { name: 'Session 1, 8:30 AM' })).toContainText('Unwind the wheel sooner')
   await page.getByRole('button', { name: /^Add instructor evaluation/ }).click()
   const card = page.getByRole('dialog', { name: 'Instructor evaluation' })
@@ -1587,7 +1587,7 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   await expect(report).toContainText('John Harms')
   await expect(report).toContainText('Same track & directionGreenPart-time solo')
   await expect(report.getByRole('listitem', { name: 'Acknowledges all flags early: 65%' })).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'My notes (2)' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My notes', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
@@ -2040,7 +2040,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await page.getByRole('tab', { name: 'My notes' }).click()
   const carRow = page.getByRole('button', { name: 'Your car: The Cayman' })
   await expect(carRow).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'My notes', exact: true })).toBeVisible()
   await carRow.click()
   const details = page.getByRole('dialog', { name: 'Your car' })
   await expect(details).toContainText('Lug nut torque118 ft·lb')
@@ -2080,7 +2080,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(page.getByRole('button', { name: 'Lap times: 8:30 AM, Blue (tire pressures)' })).toBeVisible()
   expect(garage.events[alpha.id]).toMatchObject({ carId: 'car1' })
 
-  await page.getByRole('tab', { name: 'My notes (2)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const session = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   await expect(session.getByRole('table', { name: 'Tire pressures' })).toContainText('After36.536.536.536.5')
   await noSideScroll()
@@ -2093,7 +2093,7 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   const wentTo = page.getByRole('list', { name: 'Past events' }).getByRole('button', { name: new RegExp(alpha.name) })
   const carScrolled = () => wentTo.evaluate(el => el.closest('.overflow-y-auto')!.scrollTop)
   await wentTo.click()
-  await expect(page.getByRole('tab', { name: 'My notes (2)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'My notes', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', { name: 'Your car: The Cayman' })).toBeInViewport()
   const scrolled = await carScrolled()
   const eventPage = page.locator('.fixed.inset-0', { has: page.getByRole('button', { name: 'Your car: The Cayman' }) })
@@ -2365,7 +2365,7 @@ test('a track page slides in over the event from My notes, listing the layout’
   })
 
   await page.goto(`/#/event/${alpha.id}`)
-  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const card = page.getByRole('group', { name: 'All time best' })
   await expect(card).toContainText('1:45.22')
   const slide = await trackSlide(page, () => card.getByRole('link', { name: 'See all my MSRC 2.0 CW laps' }).click(), '2.0 mile · Clockwise')
@@ -2400,7 +2400,7 @@ test('a track page slides in over the event from My notes, listing the layout’
   await track.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByRole('heading', { level: 1, name: '2.0 mile · Clockwise' })).toHaveCount(0)
   await expect(page).toHaveURL(new RegExp(`#/event/${alpha.id}$`))
-  await expect(page.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'My notes', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(card).toBeInViewport()
 
   // An event's card slides its page in over the track page, on My notes…
@@ -2408,7 +2408,7 @@ test('a track page slides in over the event from My notes, listing the layout’
   const slideIn = await trackSlide(page, () => events.nth(1).click(), 'Alpha in October')
   expect(slideIn).toEqual({ fromBelow: false, fromSide: true })
   const october = page.locator('.fixed', { has: page.getByRole('heading', { level: 1, name: 'Alpha in October' }) })
-  await expect(october.getByRole('tab', { name: 'My notes (1)' })).toHaveAttribute('aria-selected', 'true')
+  await expect(october.getByRole('tab', { name: 'My notes', exact: true })).toHaveAttribute('aria-selected', 'true')
   // The top of My notes shows as it opens; the sessions are further down.
   await expect(october.getByRole('group', { name: /^Best and average lap in each session/ })).toBeInViewport()
   await october.getByRole('region', { name: 'Session 1, 8:30 AM' }).scrollIntoViewIfNeeded()
@@ -2489,7 +2489,7 @@ test('an admin switches to the test account from the account menu, sees its laps
 
   // Its laps show with each lap's speeds.
   await page.goto(`/#/event/${alpha.id}`)
-  await page.getByRole('tab', { name: 'My notes (1)' }).click()
+  await page.getByRole('tab', { name: 'My notes', exact: true }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
   await card.getByRole('button', { name: 'Show laps for Session 1' }).click()
   const table = card.getByRole('table', { name: 'Laps' })

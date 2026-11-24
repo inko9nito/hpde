@@ -22,20 +22,18 @@ export function isEventTabId(value: unknown): value is EventTabId {
 interface Props {
   active: EventTabId
   onChange: (id: EventTabId) => void
-  /** How many sessions have lap times saved: "My notes (1)" (#210). */
-  notesCount?: number
 }
 
 /**
  * Top-level tabs for the event page (Schedule / Details / My notes),
  * sitting along the bottom edge of the event header (#216): three equal
  * columns, the active one marked by a heavier label and a dark bar
- * underneath.
+ * underneath. My notes has no count of what's on it (#489).
  */
-export function EventTabs({ active, onChange, notesCount }: Props) {
+export function EventTabs({ active, onChange }: Props) {
   return (
     <TabStrip
-      tabs={TABS.map(tab => (tab.id === 'notes' && notesCount ? { ...tab, label: `${tab.label} (${notesCount})` } : tab))}
+      tabs={TABS}
       active={active}
       onChange={onChange}
       label="Event section"
