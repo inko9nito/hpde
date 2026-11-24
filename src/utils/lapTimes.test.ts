@@ -11,6 +11,7 @@ import {
   lapsToText,
   cleanSessionLaps,
   sessionKey,
+  outInText,
 } from './lapTimes'
 
 const ms = (text: string) => parseLapTimes(text).laps.map(l => l.ms)
@@ -325,6 +326,20 @@ describe('lapStats', () => {
 
   it('has no best without a lap that counts', () => {
     expect(lapStats([{ ms: 139_000, kind: 'out' }])).toEqual({ count: 0 })
+  })
+
+  it('counts out and in laps in the average when the driver asks, never in the best or the count (#480)', () => {
+    const laps = parseLapTimes(SHEET_SESSION).laps
+    const stats = lapStats(laps, { outLapsInAverage: true })
+    const all = laps.reduce((sum, lap) => sum + lap.ms, 0) / laps.length
+    expect(stats).toEqual({ count: 3, best: 104_000, bestIndex: 2, average: all })
+    expect(lapStats([{ ms: 139_000, kind: 'out' }], { outLapsInAverage: true })).toEqual({ count: 0 })
+  })
+
+  it('says what’s set aside in words (#480)', () => {
+    expect(outInText([{ ms: 139_000, kind: 'out' }, { ms: 99_000 }])).toBe('an out lap')
+    expect(outInText([{ ms: 139_000, kind: 'out' }, { ms: 139_000, kind: 'out' }, { ms: 125_000, kind: 'in' }])).toBe('2 out laps and an in lap')
+    expect(outInText([{ ms: 99_000 }])).toBe('')
   })
 
   it('averages to one decimal more than the laps have', () => {

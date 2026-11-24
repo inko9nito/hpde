@@ -1,11 +1,14 @@
 import { CROSSHAIR, GRID, INK, INSET, LEFT, LineKey, MUTED, PLOT_HEIGHT, RIGHT, SERIES, X_AXIS, labelled, lapTicks, useReadout, useWidth } from './LapTrendChart'
-import { formatGap, formatLapTime, lapDecimals, lapLabels, lapStats } from '../utils/lapTimes'
-import type { Lap } from '../utils/lapTimes'
+import { formatGap, formatLapTime, lapDecimals, lapLabels, lapStats, outInText } from '../utils/lapTimes'
+import type { Lap, LapCounting } from '../utils/lapTimes'
+import { useLapView } from '../data/lapView'
 
 // One session's laps, lap by lap (#475): each lap's time, against the
 // session's best and average — or, switched, the whole event's — as flat
 // lines across it, so a lap lost to traffic stands out as a spike above
-// them. Out and in laps aren't charted, as they don't count in either.
+// them. Out and in laps are charted only when the driver shows them (#480):
+// as hollow dots, off the line, since they don't count in the best — nor in
+// the average, unless the driver counts them there.
 //
 // The laps are the data here, so they're the solid line, with a dot on
 // each. Best and average keep the colors they have on the chart of every
@@ -27,8 +30,8 @@ export interface Reference {
 }
 
 /** The event's best and average lap, over every lap that counts in it. */
-export function eventReference(sessions: { laps: Lap[] }[]): Reference | undefined {
-  const { best, average } = lapStats(sessions.flatMap(s => s.laps))
+export function eventReference(sessions: { laps: Lap[] }[], counting: LapCounting = {}): Reference | undefined {
+  const { best, average } = lapStats(sessions.flatMap(s => s.laps), counting)
   return best !== undefined && average !== undefined ? { best, average } : undefined
 }
 
@@ -74,9 +77,12 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
   const [ref, measured] = useWidth()
   const width = measured || 300
 
+  const { showOutLaps, outLapsInAverage } = useLapView()
   const labels = lapLabels(laps)
-  const points = laps.flatMap((lap, i) => (lap.kind ? [] : [{ ms: lap.ms, label: labels[i], index: i }]))
-  const own = lapStats(laps)
+  const points = laps.flatMap((lap, i) => (lap.kind && !showOutLaps ? [] : [{ ms: lap.ms, label: labels[i], index: i, kind: lap.kind }]))
+  const counted = points.flatMap((p, i) => (p.kind ? [] : [{ ...p, at: i }]))
+  const setAside = laps.filter(lap => lap.kind && showOutLaps)
+  const own = lapStats(laps, { outLapsInAverage })
   const reference: Reference = scope === 'event' && event
     ? event
     : { best: own.best!, average: own.average! }
@@ -91,7 +97,8 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
     Math.max(reference.average, ...points.map(p => p.ms)),
   )
   const y = (ms: number) => PLOT_HEIGHT - ((ms - min) / (max - min)) * PLOT_HEIGHT
-  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.ms)}`).join(' ')
+  // Through the laps that count; an out or in lap sits off it.
+  const path = counted.map((p, k) => `${k ? 'L' : 'M'}${x(p.at)},${y(p.ms)}`).join(' ')
   const shownTicks = new Set(labelled(points.map((_, i) => x(i)), points.map(p => p.label)))
   // The lines' values at their right ends: the best always, the average
   // too unless the two would collide.
@@ -112,6 +119,7 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
           {/* The switch beside them says whose: the same words either way, so nothing moves. */}
           <span className="flex items-center gap-1.5"><LineKey color={SERIES.best.color} dashed />{SERIES.best.label}</span>
           <span className="flex items-center gap-1.5"><LineKey color={SERIES.average.color} dashed />{SERIES.average.label}</span>
+          {setAside.length > 0 && <span className="flex items-center gap-1.5" data-legend="out-in"><OutDot />Out / in</span>}
         </div>
         {event && <ScopeSwitch scope={scope} onChange={onScope} />}
       </div>
@@ -120,7 +128,7 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
         className="relative touch-pan-y select-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
         tabIndex={0}
         role="group"
-        aria-label={`Each lap’s time in ${title}, against the ${ofEvent ? 'event’s' : 'session’s'} best and average: ${n} ${n === 1 ? 'lap' : 'laps'}. Left and right arrows step through them.`}
+        aria-label={`Each lap’s time in ${title}, against the ${ofEvent ? 'event’s' : 'session’s'} best and average: ${counted.length} ${counted.length === 1 ? 'lap' : 'laps'}${setAside.length ? ` and ${outInText(setAside)}` : ''}. Left and right arrows step through them.`}
         {...handlers}
       >
         <svg width={width} height={PLOT_HEIGHT + X_AXIS} className="block overflow-visible" aria-hidden="true">
@@ -155,10 +163,17 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
           ))}
           <g data-series="lap">
             <path d={path} fill="none" stroke={LAP.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            {points.map((p, i) => (
+            {points.map((p, i) => !p.kind && (
               <circle key={p.index} cx={x(i)} cy={y(p.ms)} r={active === i ? 5 : 4} fill={LAP.color} stroke="#ffffff" strokeWidth={2} />
             ))}
           </g>
+          {setAside.length > 0 && (
+            <g data-series="out-in">
+              {points.map((p, i) => p.kind && (
+                <circle key={p.index} cx={x(i)} cy={y(p.ms)} r={active === i ? 4.5 : 3.5} fill="#ffffff" stroke={SERIES.average.color} strokeWidth={1.5} />
+              ))}
+            </g>
+          )}
           <text x={width - RIGHT + 6} y={y(reference.best)} dy="0.32em" fontSize={11} fontWeight={600} fill={INK} className="font-mono tabular-nums" data-end-label="best">
             {formatLapTime(reference.best)}
           </text>
@@ -176,9 +191,9 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
         >
           {shown && (
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-lg">
-              <p className="truncate font-medium text-gray-900">Lap {shown.label}</p>
+              <p className="truncate font-medium text-gray-900">{shown.kind ? `${shown.label} lap` : `Lap ${shown.label}`}</p>
               <p className="mt-1 flex items-center gap-1.5">
-                <LineKey color={LAP.color} />
+                {shown.kind ? <OutDot /> : <LineKey color={LAP.color} />}
                 <span className="font-mono font-semibold tabular-nums text-gray-900">{formatLapTime(shown.ms)}</span>
               </p>
               {(['best', 'average'] as const).map(key => (
@@ -193,5 +208,14 @@ export function SessionLapChart({ laps, title, scope, event, onScope }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/** An out or in lap's hollow dot, in the legend and the readout. */
+function OutDot() {
+  return (
+    <svg aria-hidden="true" width={9} height={9} className="shrink-0">
+      <circle cx={4.5} cy={4.5} r={3.5} fill="#ffffff" stroke={SERIES.average.color} strokeWidth={1.5} />
+    </svg>
   )
 }
