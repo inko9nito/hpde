@@ -103,7 +103,7 @@ export function SessionFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest
  */
 export function CardFigures({ laps, allTimeBest, sparkline = true }: { laps: Lap[]; allTimeBest?: number; sparkline?: boolean }) {
   // Out and in laps in the average only when the driver says so (#480).
-  const { outLapsInAverage } = useLapView()
+  const { outLapsInAverage, showOutLaps } = useLapView()
   const stats = lapStats(laps, { outLapsInAverage })
   const label = 'pb-1 text-[11px] font-medium text-gray-500'
   const figure = 'flex h-6 items-center font-mono text-xs font-semibold tabular-nums text-gray-900'
@@ -120,7 +120,7 @@ export function CardFigures({ laps, allTimeBest, sparkline = true }: { laps: Lap
       <div>
         <dt className={label}>{stats.count} {stats.count === 1 ? 'lap' : 'laps'}</dt>
         <dd className={`${figure} transition-opacity ${sparkline ? '' : 'opacity-0'}`} aria-hidden={!sparkline || undefined}>
-          <LapSparkline laps={laps} outLapsInAverage={outLapsInAverage} />
+          <LapSparkline laps={laps} outLapsInAverage={outLapsInAverage} showOutLaps={showOutLaps} />
         </dd>
       </div>
     </dl>
