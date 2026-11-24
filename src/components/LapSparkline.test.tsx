@@ -34,6 +34,21 @@ describe('LapSparkline (#477)', () => {
     expect(Math.min(...ys)).toBeGreaterThan(average)
   })
 
+  it('draws out and in laps as hollow dots off the line when the driver shows them (#480)', () => {
+    const laps = [{ ms: 130_000, kind: 'out' as const }, { ms: 102_000 }, { ms: 99_000 }, { ms: 125_000, kind: 'in' as const }]
+    const { rerender } = render(<LapSparkline laps={laps} />)
+    expect(screen.getByRole('img').querySelector('[data-series="out-in"]')).toBeNull()
+
+    rerender(<LapSparkline laps={laps} showOutLaps />)
+    const svg = screen.getByRole('img', { name: 'Each lap’s time: Out 2:10, 1:42, 1:39, In 2:05' })
+    const hollow = [...svg.querySelectorAll('[data-series="out-in"] circle')]
+    expect(hollow).toHaveLength(2)
+    expect(hollow.every(c => c.getAttribute('fill') === '#ffffff')).toBe(true)
+    // The line runs through the two laps that count only; the out lap, the slowest, is at the top.
+    expect(svg.querySelector('[data-series="lap"]')!.getAttribute('d')!.match(/[ML]/g)).toHaveLength(2)
+    expect(Number(hollow[0].getAttribute('cy'))).toBeCloseTo(3.5)
+  })
+
   it('draws nothing without a lap that counts', () => {
     const { container } = render(<LapSparkline laps={[{ ms: 130_000, kind: 'out' }]} />)
     expect(container).toBeEmptyDOMElement()

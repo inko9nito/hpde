@@ -787,6 +787,7 @@ describe('lap times (#210)', () => {
     expect(rows(first).map(r => r[0])).toEqual(['Lap', '1', '2', '3'])
     expect(first.querySelector('[data-out-laps-hidden]')).toHaveTextContent('An out lap and an in lap not shown. Show')
     expect(within(first).getByRole('group', { name: /: 3 laps\. / }).querySelector('[data-series="out-in"]')).toBeNull()
+    expect(first.querySelector('[data-lap-sparkline] [data-series="out-in"]')).toBeNull()
 
     // Shown: in the table, dimmed, and on the chart as hollow dots off the line.
     await userEvent.click(screen.getByRole('button', { name: 'Out laps' }))
@@ -796,6 +797,8 @@ describe('lap times (#210)', () => {
     await userEvent.click(show)
     expect(show).toHaveAttribute('aria-checked', 'true')
     expect(rows(first).map(r => r[0])).toEqual(['Lap', 'Out', '1', '2', '3', 'In'])
+    // The card's sparkline too, so a closed card shows the switch (#477).
+    expect(first.querySelectorAll('[data-lap-sparkline] [data-series="out-in"] circle')).toHaveLength(2)
     expect(first.querySelector('[data-out-laps-hidden]')).toBeNull()
     const chart = within(first).getByRole('group', { name: /: 3 laps and an out lap and an in lap\. / })
     expect(chart.querySelectorAll('[data-series="lap"] circle')).toHaveLength(3)
