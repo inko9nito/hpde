@@ -731,6 +731,29 @@ describe('lap times (#210)', () => {
     expect(screen.queryByRole('button', { name: 'Event' })).toBeNull()
   })
 
+  it('heads each day’s sessions with its weekday, and each card with a line for its time, session and group (#477)', async () => {
+    saved = [
+      { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 101_000 }, { ms: 99_420 }] },
+      { key: '2026-03-07 11:45 blue', date: '2026-03-07', time: '11:45', group: 'blue', sessionNumber: 2, laps: [{ ms: 98_910 }] },
+      { key: '2026-03-08 09:20 blue', date: '2026-03-08', time: '09:20', group: 'blue', sessionNumber: 1, laps: [{ ms: 98_500 }] },
+    ]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (3)' }))
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Saturday Mar 7 2 sessions', 'Sunday Mar 8 1 session'])
+    // Under Sunday, its first session: the day isn't repeated on the card.
+    const sunday = screen.getByRole('heading', { name: 'Sunday Mar 8 1 session' }).parentElement!
+    const card = within(sunday).getByRole('region', { name: 'Session 1, 9:20 AM' })
+    expect(card.firstElementChild!.firstElementChild).toHaveTextContent(/^9:20AMSession 1BlueEdit$/)
+    expect(card).not.toHaveTextContent('Mar 8')
+  })
+
+  it('heads no day when the sessions are all on one (#477)', async () => {
+    saved = [{ key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1, laps: [{ ms: 101_000 }] }]
+    openEvent()
+    await userEvent.click(await screen.findByRole('tab', { name: 'My notes (1)' }))
+    expect(screen.queryByRole('heading', { name: /^Saturday/ })).toBeNull()
+  })
+
   it('shows each session’s top and average speed, and charts top speed on a right-hand axis (#298)', async () => {
     saved = [
       { key: '2026-03-07 09:50 blue', date: '2026-03-07', time: '09:50', group: 'blue', sessionNumber: 1,
