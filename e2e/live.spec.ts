@@ -78,6 +78,16 @@ test('/api/laps keeps lap times to signed-in drivers (#210)', async ({ request }
   expect(res.status()).toBe(401)
 })
 
+// Loaded (a crash would be a 502), and keeping every driver's laps to
+// whoever has the site's export key (#486): 401 without it, or 503 where
+// the site has no key set. From Claude's sandbox the proxy may add the key
+// itself, so there it's only checked that the function loads.
+test('/api/export/laps keeps the lap export to the export key (#486)', async ({ request }) => {
+  const status = (await request.get('/api/export/laps')).status()
+  if (process.env.E2E_SANDBOX_PROXY) expect([200, 401, 503]).toContain(status)
+  else expect([401, 503]).toContain(status)
+})
+
 // Loaded (a crash would be a 502), and reading screenshots only for
 // signed-in drivers: each read costs a little (#472).
 test('/api/lap-import reads screenshots only for signed-in drivers (#472)', async ({ request }) => {
