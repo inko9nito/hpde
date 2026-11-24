@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { ChevronRight, ImagePlus, LoaderCircle, Maximize2 } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
@@ -8,6 +9,10 @@ import { RunGroupSelect } from './RunGroupSelect'
 import { ReportCardSwitch } from './ReportCardSwitch'
 import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
+import { ScreenshotViewer } from './LapImportPage'
+import { ScreenshotSplitView } from './ScreenshotSplitView'
+import type { Shot } from './ScreenshotSplitView'
+import { MAX_EVALUATION_SCREENSHOTS } from '../data/evaluationImport'
 import {
   INSTRUCTED, MAX_NAME, MAX_NOTES, NEXT_GROUPS, NEXT_HOW, TDE_CARDS,
   cardById, cardForGroup, cardOf, cleanEventEvaluation, isTdeEvent,
@@ -16,7 +21,7 @@ import type { CardId, EventEvaluation, Instructed, NextGroupId, NextHow } from '
 import type { EventConfig, RunGroupConfig } from '../types'
 
 /** What the form holds: every field as typed, numbers too. */
-interface Draft {
+export interface Draft {
   card: CardId
   instructor: string
   instructed: Instructed | null
@@ -36,7 +41,7 @@ interface Draft {
 const byLine = <T,>(value: (id: NextGroupId) => T) =>
   Object.fromEntries(NEXT_GROUPS.map(g => [g.id, value(g.id)])) as Record<NextGroupId, T>
 
-function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
+export function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
   const pct = (n: number | undefined) => (n === undefined ? '' : String(n))
   const skillIds = [...new Set(TDE_CARDS.flatMap(c => c.skills.map(s => s.id)))]
   return {
@@ -53,6 +58,32 @@ function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
     carAidsPct: pct(e?.carAidsPct),
     soloQualified: e?.soloQualified ?? null,
     notes: e?.notes ?? '',
+  }
+}
+
+/**
+ * The draft with what was read off a screenshot filled in (#483): on the
+ * card it was read off, if that's known, and each field the screenshot
+ * answers; the rest left as they were. A recommended group read comes with
+ * its how and its "or", or none.
+ */
+export function fillDraft(d: Draft, read: EventEvaluation): Draft {
+  const r = draftFrom(read, read.card ?? d.card)
+  const has = <K extends keyof EventEvaluation>(k: K) => read[k] !== undefined
+  return {
+    card: r.card,
+    instructor: has('instructor') ? r.instructor : d.instructor,
+    instructed: has('instructed') ? r.instructed : d.instructed,
+    car: has('car') ? r.car : d.car,
+    escTc: has('escTc') ? r.escTc : d.escTc,
+    next: byLine(id => (read.next?.[id] ? r.next[id] : d.next[id])),
+    nextHow: byLine(id => (read.next?.[id] ? r.nextHow[id] : d.nextHow[id])),
+    nextOr: byLine(id => (read.next?.[id] ? r.nextOr[id] : d.nextOr[id])),
+    skills: Object.fromEntries(Object.entries(d.skills).map(([id, v]) => [id, read.skills?.[id] !== undefined ? r.skills[id] : v])),
+    aggressivenessIsSkill: has('aggressivenessIsSkill') ? r.aggressivenessIsSkill : d.aggressivenessIsSkill,
+    carAidsPct: has('carAidsPct') ? r.carAidsPct : d.carAidsPct,
+    soloQualified: has('soloQualified') ? r.soloQualified : d.soloQualified,
+    notes: has('notes') ? r.notes : d.notes,
   }
 }
 
@@ -125,6 +156,9 @@ function Choice<T extends string | boolean>({ options, value, onChange, labelled
   )
 }
 
+/** The sheet's body, and Split View's form: a column, a phone's width at most. */
+const BODY = 'mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0'
+
 const YES_NO = [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] as const
 
 /**
@@ -139,7 +173,7 @@ const YES_NO = [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] as
  *
  * A page sheet, with Cancel and Save across its top (#415).
  */
-export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, onSave, onRemove, onClosed }: {
+export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, readScreenshots, onSave, onRemove, onClosed }: {
   /** A TDE event (isTdeEvent) gets the report card's fields. */
   event: EventConfig
   /** Every event, to color the groups as the app does. */
@@ -149,6 +183,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   runGroup?: RunGroupConfig | null
   /** The card their latest TDE evaluation elsewhere was on, once it's known. */
   lastCard?: CardId
+  /** Reads a report card off its screenshots (#483); none, and the form's only typed in. */
+  readScreenshots?: (files: File[]) => Promise<EventEvaluation>
   /** Saves it, throwing with a message to show; the page then slides away. */
   onSave: (evaluation: EventEvaluation) => Promise<void>
   /** Removes it, likewise. */
@@ -164,6 +200,9 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  // The screenshots it was imported from (#483), and whether they're beside the form, in Split View.
+  const [shots, setShots] = useState<Shot[]>([])
+  const [split, setSplit] = useState(false)
   const id = useId()
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }))
 
@@ -205,7 +244,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   return createPortal(
     <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-white" data-evaluation-sheet>
+      {/* Under Split View too (#483): out of reach there, but still showing, as a sheet under another does. */}
+      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || split || undefined} inert={!open || split || undefined} className="min-h-full bg-white" data-evaluation-sheet>
       <PageHeader
         title="Instructor evaluation"
         subtitle={event.name}
@@ -217,7 +257,39 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
         }}
       />
-      <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
+      <div className={BODY}>
+      {/* Imported from screenshots of the card (#483). It stays here, under Split View, while that's up: there it'd only repeat the screenshots beside the form. */}
+      {tde && readScreenshots && (
+        <ScreenshotFill
+          read={readScreenshots}
+          disabled={!!busy}
+          shots={shots}
+          onShots={setShots}
+          onSplit={setSplit}
+          onRead={read => {
+            if (read.card) setCardPicked(true)
+            setDraft(d => fillDraft(d, read))
+            setConfirmingRemove(false)
+          }}
+        />
+      )}
+      {fields(id)}
+      </div>
+      </div>
+      {split && shots.length > 0 && (
+        <ScreenshotSplitView shots={shots} onClose={() => setSplit(false)}>
+          {/* The same form, on the same draft: its own ids, as the sheet's is still there under it. */}
+          <div className={BODY}>{fields(`${id}-split`)}</div>
+        </ScreenshotSplitView>
+      )}
+    </PushPage>,
+    document.body,
+  )
+
+  /** The form's fields, under the import: in the sheet, and in Split View; `id` makes their ids. */
+  function fields(id: string) {
+    return (<>
+
       {/* Which run group's paper card it's filled in from (#350). */}
       {tde && (
         <div className="mt-3">
@@ -425,9 +497,152 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           </div>
         )}
       </div>
+    </>)
+  }
+}
+
+/**
+ * Fills the form in from screenshots of the report card (#483), as it's
+ * emailed: one, or up to three of a long one, read together. While they're
+ * read, and after, the first is shown small and square, with how many on
+ * its corner if there's more than one, and a mark that says it opens
+ * bigger: once read, beside the form in Split View, to check one against
+ * the other; else full size. Nothing's saved till Save.
+ */
+function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
+  read: (files: File[]) => Promise<EventEvaluation>
+  disabled: boolean
+  /** The screenshots picked; held by the sheet, for Split View. Their URLs are let go here. */
+  shots: Shot[]
+  onShots: (shots: Shot[]) => void
+  /** Opens Split View. */
+  onSplit: (on: boolean) => void
+  onRead: (evaluation: EventEvaluation) => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'reading' | 'read' | 'failed'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [shown, setShown] = useState<Shot | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Which pick is being read: a newer one's answer is the one that counts.
+  const pick = useRef(0)
+  const urls = useRef<string[]>([])
+  useEffect(() => () => {
+    pick.current = -1
+    urls.current.forEach(url => URL.revokeObjectURL(url))
+  }, [])
+
+  async function choose(list: FileList | null) {
+    const files = [...list ?? []]
+    if (!files.length) return
+    if (files.length > MAX_EVALUATION_SCREENSHOTS) {
+      setError(`Pick up to ${MAX_EVALUATION_SCREENSHOTS} screenshots of one evaluation.`)
+      setStatus('failed')
+      return
+    }
+    urls.current.forEach(url => URL.revokeObjectURL(url))
+    const next = files.map(file => ({ url: URL.createObjectURL(file), name: file.name }))
+    urls.current = next.map(s => s.url)
+    onShots(next)
+    setStatus('reading')
+    setError(null)
+    const mine = ++pick.current
+    try {
+      const evaluation = await read(files)
+      if (pick.current !== mine) return
+      onRead(evaluation)
+      setStatus('read')
+    } catch (err) {
+      if (pick.current !== mine) return
+      setError((err as Error).message)
+      setStatus('failed')
+    }
+  }
+
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*"
+      multiple
+      className="sr-only"
+      tabIndex={-1}
+      aria-hidden="true"
+      data-evaluation-import-files
+      onChange={e => { choose(e.target.files); e.target.value = '' }}
+    />
+  )
+  const pickAgain = () => inputRef.current?.click()
+  const first = shots[0]
+
+  if (status === 'idle') {
+    return (
+      <div className="mt-3">
+        {input}
+        <button
+          type="button"
+          onClick={pickAgain}
+          disabled={disabled}
+          className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
+            <ImagePlus size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">Import from a screenshot</span>
+          <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+        </button>
       </div>
+    )
+  }
+
+  return (
+    <section aria-label="Import from a screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-center gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
+      {input}
+      {first && (
+        // The first screenshot, square; how many there are, on its corner, if more than one.
+        <button
+          type="button"
+          // Read, they open beside the form, in Split View; else the first full size.
+          onClick={() => (status === 'read' ? onSplit(true) : setShown(first))}
+          disabled={status === 'reading'}
+          aria-label={status === 'read'
+            ? `Compare ${shots.length > 1 ? `your ${shots.length} screenshots` : first.name} in Split View`
+            : `Show ${first.name}`}
+          className="relative h-14 w-14 shrink-0"
+        >
+          <span className="block h-full w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <img src={first.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
+          </span>
+          {/* It opens bigger: say so, in its corner. */}
+          {status !== 'reading' && (
+            <span className="absolute bottom-1 right-1 grid h-4 w-4 place-items-center rounded bg-gray-900/70 text-white" aria-hidden="true" data-enlarge>
+              <Maximize2 size={9} strokeWidth={3} />
+            </span>
+          )}
+          {shots.length > 1 && (
+            <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-gray-900 px-1 text-[11px] font-semibold tabular-nums text-white ring-2 ring-gray-50" aria-hidden="true" data-shot-count>
+              {shots.length}
+            </span>
+          )}
+        </button>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col items-start text-sm" aria-live="polite">
+        {status === 'reading' && (
+          <p className="flex items-center gap-2 text-gray-700">
+            <LoaderCircle size={16} className="shrink-0 animate-spin text-gray-400" aria-hidden="true" />
+            Reading your report card…
+          </p>
+        )}
+        {status === 'read' && (
+          <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your {shots.length > 1 ? 'screenshots' : 'screenshot'}.</p>
+        )}
+        {status === 'failed' && <p role="alert" className="text-red-700">{error}</p>}
+        {status !== 'reading' && (
+          <button type="button" onClick={pickAgain} disabled={disabled} className="mt-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:text-gray-300">
+            {status === 'read' ? 'Use another screenshot' : 'Try another screenshot'}
+          </button>
+        )}
       </div>
-    </PushPage>,
-    document.body,
+      {shown && <ScreenshotViewer url={shown.url} name={shown.name} onClose={() => setShown(null)} />}
+    </section>
   )
 }

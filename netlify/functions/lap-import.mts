@@ -1,16 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { userFromRequest, jsonResponse as json } from '../lib/auth.mjs'
 import { cleanRead } from '../../src/utils/lapImport.ts'
+import { DEFAULT_MODEL, checkImage, claudeReader, gatewayFrom, noGateway } from '../lib/screenshotRead.mts'
+import type { Gateway, Image, ReadResult } from '../lib/screenshotRead.mts'
+
+export { DEFAULT_MODEL, MAX_IMAGE_BASE64, gatewayFrom } from '../lib/screenshotRead.mts'
 
 // Reads one screenshot of a lap timer's lap table (#472) — its date, the
 // time the session started, and each lap — for the import sheet on My
 // notes, which matches it to a session and shows it to the driver before
-// anything is saved. Nothing is kept here: the screenshot goes to Claude to
-// be read, and what it read comes back. Claude is reached through Netlify's
-// AI Gateway, as the cookbook app's recipe reading is: on Netlify it gives
-// every function ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL, so the SDK's
-// default client uses it and the usage is billed to the Netlify account —
-// no key of our own. One set on the site by hand would be used instead.
+// anything is saved. Nothing is kept here. It's read by Claude, through
+// Netlify's AI Gateway (netlify/lib/screenshotRead.mts); the site can pick
+// another model with LAP_IMPORT_MODEL.
 //   POST {image: {mediaType, data}}   data is the image, base64-encoded
 //     200 {read: {date?, start?, laps: [{ms, counted}]}}
 //     422 {error}  not a lap table, or nothing could be read off it
@@ -20,15 +20,6 @@ import { cleanRead } from '../../src/utils/lapImport.ts'
 // TypeScript (.mts) so it can share the checks in src/; Netlify bundles it
 // with esbuild (see netlify/lib/functionsLoad.test.ts).
 export const config = { path: '/api/lap-import' }
-
-/** The model, unless the site sets LAP_IMPORT_MODEL (e.g. if the gateway doesn't offer this one). */
-export const DEFAULT_MODEL = 'claude-opus-5-5'
-
-const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
-type MediaType = (typeof MEDIA_TYPES)[number]
-// The app shrinks a screenshot well under this before sending it.
-export const MAX_IMAGE_BASE64 = 4_000_000
-const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
 
 const SYSTEM = `You read screenshots of a lap timer app for a track-day driver's logbook. The screenshot shows one session's lap table. Transcribe what it shows; never work out, estimate or guess a value it doesn't show.`
 
@@ -84,92 +75,20 @@ export function lapTimeMs(text: string): number {
   return Math.round(((h * 60 + min) * 60 + Number(s)) * 1000)
 }
 
-type Read = (image: { mediaType: MediaType; data: string }) => Promise<
-  | { ok: true; answer: ModelRead }
-  | { ok: false; status: number; error: string }
->
+type Read = (image: Image) => Promise<ReadResult<ModelRead>>
 
-/**
- * Asks Claude to read the screenshot, with its answer held to SCHEMA. An
- * ordinary function gets 30 seconds, so Claude gets 25 and one try: a lap
- * table is short to read.
- */
-function claudeReader(model: string, gateway: Gateway): Read {
-  const client = new Anthropic({ ...gateway, timeout: 25_000, maxRetries: 0 })
-  return async ({ mediaType, data }) => {
-    let response
-    try {
-      response = await client.messages.create({
-        model,
-        max_tokens: 8000,
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-        system: SYSTEM,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
-            { type: 'text', text: INSTRUCTIONS },
-          ],
-        }],
-      })
-    } catch (err) {
-      console.error('lap-import: reading the screenshot failed:', err)
-      if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
-        return { ok: false, status: 503, error: 'Screenshot import isn’t set up on this site: Netlify’s AI Gateway didn’t accept the request.' }
-      }
-      if (err instanceof Anthropic.NotFoundError) {
-        return { ok: false, status: 503, error: 'Screenshot import isn’t set up on this site: the AI model wasn’t found.' }
-      }
-      if (err instanceof Anthropic.APIConnectionTimeoutError) {
-        return { ok: false, status: 504, error: 'Claude took too long to read the screenshot. Try again.' }
-      }
-      if (err instanceof Anthropic.RateLimitError) {
-        return { ok: false, status: 429, error: 'Too many screenshots at once. Wait a minute and try again.' }
-      }
-      return { ok: false, status: 502, error: 'Couldn’t read the screenshot just now. Try again.' }
-    }
-    if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') {
-      return { ok: false, status: 422, error: 'Couldn’t read the laps off this screenshot.' }
-    }
-    const text = response.content.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('')
-    try {
-      return { ok: true, answer: JSON.parse(text) as ModelRead }
-    } catch {
-      return { ok: false, status: 422, error: 'Couldn’t read the laps off this screenshot.' }
-    }
-  }
-}
-
-/** Where to reach Claude: the gateway's (or a key set on the site); none for the SDK's own defaults. */
-type Gateway = { apiKey?: string; baseURL?: string }
-
-// The variables the AI Gateway can show up in, for the message when none
-// is there: names only, never values.
-const GATEWAY_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'NETLIFY_AI_GATEWAY_KEY', 'NETLIFY_AI_GATEWAY_URL', 'AI_GATEWAY'] as const
-
-/**
- * How to reach Claude, from what Netlify gave the function, or null if it
- * gave nothing. ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL first — the AI
- * Gateway's, or a key set on the site, which the SDK reads itself. Then the
- * gateway's own NETLIFY_AI_GATEWAY_KEY and NETLIFY_AI_GATEWAY_URL, which it
- * says are always there; then AI_GATEWAY, the base64 JSON they're made from
- * ({token, url}: the same token and URL for every provider, as Netlify's
- * own @netlify/dev sets them).
- */
-export function gatewayFrom(env: Record<string, string | undefined>): Gateway | null {
-  if (env.ANTHROPIC_API_KEY) return {}
-  if (env.NETLIFY_AI_GATEWAY_KEY && env.NETLIFY_AI_GATEWAY_URL) {
-    return { apiKey: env.NETLIFY_AI_GATEWAY_KEY, baseURL: env.NETLIFY_AI_GATEWAY_URL }
-  }
-  if (env.AI_GATEWAY) {
-    try {
-      const { token, url } = JSON.parse(Buffer.from(env.AI_GATEWAY, 'base64').toString('utf8'))
-      if (typeof token === 'string' && token && typeof url === 'string' && url) return { apiKey: token, baseURL: url }
-    } catch {
-      // Not what it should be: as if it weren't there.
-    }
-  }
-  return null
+/** Claude, reading one lap table. */
+function lapReader(model: string, gateway: Gateway): Read {
+  const reader = claudeReader<ModelRead>({
+    model,
+    gateway,
+    system: SYSTEM,
+    instructions: INSTRUCTIONS,
+    schema: SCHEMA,
+    tag: 'lap-import',
+    unreadable: 'Couldn’t read the laps off this screenshot.',
+  })
+  return image => reader([image])
 }
 
 type Deps = {
@@ -192,27 +111,16 @@ export default async function handler(req: Request, _context: unknown, deps: Dep
   } catch {
     return json(400, { error: 'Request body must be JSON.' })
   }
-  const mediaType = body?.image?.mediaType
-  const data = body?.image?.data
-  if (!MEDIA_TYPES.includes(mediaType)) return json(400, { error: 'Send a JPEG, PNG, WebP or GIF image.' })
-  if (typeof data !== 'string' || !data || !BASE64.test(data)) return json(400, { error: 'The image must be base64-encoded.' })
-  if (data.length > MAX_IMAGE_BASE64) return json(413, { error: 'That image is too large.' })
+  const checked = checkImage(body?.image)
+  if ('error' in checked) return checked.error
 
   // The AI Gateway gives the function its key.
   const env = deps.env ?? process.env
   const gateway = gatewayFrom(env)
-  const read = deps.read ?? (gateway ? claudeReader(env.LAP_IMPORT_MODEL || DEFAULT_MODEL, gateway) : undefined)
-  if (!read) {
-    // Which of the gateway's variables Netlify gave the function: names
-    // only, to tell a gateway that's off from one that's half there.
-    const found = GATEWAY_VARS.filter(name => env[name] !== undefined)
-    console.error(`lap-import: no AI Gateway. Gateway variables set: ${found.join(', ') || 'none'}`)
-    return json(503, {
-      error: `Screenshot import isn’t set up on this site: it needs Netlify’s AI Gateway. (Gateway variables found: ${found.join(', ') || 'none'}.)`,
-    })
-  }
+  const read = deps.read ?? (gateway ? lapReader(env.LAP_IMPORT_MODEL || DEFAULT_MODEL, gateway) : undefined)
+  if (!read) return noGateway(env, 'lap-import')
 
-  const result = await read({ mediaType, data })
+  const result = await read(checked.image)
   if (!result.ok) return json(result.status, { error: result.error })
   const { answer } = result
   if (!answer || answer.is_lap_table === false) {

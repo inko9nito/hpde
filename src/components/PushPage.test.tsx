@@ -353,6 +353,34 @@ describe('a page sheet (#415)', () => {
   })
 })
 
+describe('a page sheet over another (#483)', () => {
+  const nextFrame = () => act(() => new Promise(r => requestAnimationFrame(() => r(null))))
+  const pageIn = (el: HTMLElement) => el.lastElementChild as HTMLElement
+
+  function Sheets({ second }: { second: boolean }) {
+    return (
+      <>
+        <div data-testid="first"><PushPage open from="bottom" sheet><div /></PushPage></div>
+        <div data-testid="second"><PushPage open={second} from="bottom" sheet><div /></PushPage></div>
+      </>
+    )
+  }
+
+  it('shrinks back a little and rides up, its top showing over the one over it, till that one goes', async () => {
+    const { getByTestId, rerender } = render(<Sheets second={false} />)
+    await nextFrame()
+    const first = pageIn(getByTestId('first'))
+    expect(first.style.transform).toBe('translateY(0)')
+    rerender(<Sheets second />)
+    await nextFrame()
+    expect(pageIn(getByTestId('second')).style.transform).toBe('translateY(0)')
+    expect(first.style.transform).toBe('translateY(-8px) scale(0.95)')
+    expect(first.style.transformOrigin).toBe('50% 0')
+    rerender(<Sheets second={false} />)
+    expect(first.style.transform).toBe('translateY(0)')
+  })
+})
+
 describe('a page sheet dragged down to close (#387)', () => {
   // A finger pulling down `by` px from `el`, then letting go.
   function pull(el: Element, by: number, end = true) {
@@ -403,6 +431,18 @@ describe('a page sheet dragged down to close (#387)', () => {
     // …and one on its toolbar drags it.
     pull(getByText('Cancel').parentElement!, 120)
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves what handles its own touches alone: Split View’s divider (#483)', () => {
+    const onDismiss = vi.fn()
+    const { container } = render(
+      <PushPage open skipEnterAnimation from="bottom" sheet onDismiss={onDismiss}>
+        <div data-own-gestures><span>Divider</span></div>
+      </PushPage>,
+    )
+    pull(container.querySelector('[data-own-gestures] span')!, 120)
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect((container.lastElementChild as HTMLElement).style.transform).toBe('translateY(0)')
   })
 
   it('doesn’t drag while saving, nor without a way to close', () => {

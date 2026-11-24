@@ -1591,6 +1591,172 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+// A report card imported from its screenshot (#483): read by Claude, on
+// the card the screenshot is of, and checked against it before it's saved.
+test('a driver imports a TDE report card from its screenshot (#483)', async ({ page }) => {
+  const tde: EventConfig = { ...alpha, id: '2026-03-07_tde', name: 'TDE Day', organizer: 'The Drivers Edge' }
+  await stubEvents(page, [tde])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [tde.id]: { status: 'going', runGroup: 'blue' } } } }))
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const saved: object[] = []
+  await page.route(/\/api\/notes(\?|$)/, async route => {
+    const req = route.request()
+    if (req.method() === 'PUT') {
+      const { evaluation } = req.postDataJSON()
+      saved.push(evaluation)
+      return route.fulfill({ json: { evaluation } })
+    }
+    return route.fulfill({ json: { sessions: [] } })
+  })
+  // The sample Green card, as the function reads it.
+  const sent: { mediaType: string; data: string }[][] = []
+  let answer: { status: number; json: object } = { status: 422, json: { error: 'This doesn’t look like an instructor’s evaluation.' } }
+  await page.route(/\/api\/evaluation-import$/, async route => {
+    const req = route.request()
+    expect(req.method()).toBe('POST')
+    expect(req.headers().authorization).toBe('Bearer token')
+    sent.push(req.postDataJSON().images)
+    return route.fulfill(answer)
+  })
+
+  await page.goto(`/#/event/${tde.id}`)
+  await page.getByRole('tab', { name: /^My notes/ }).click()
+  await page.getByRole('button', { name: /^Add instructor evaluation/ }).click()
+  const sheet = page.getByRole('dialog', { name: 'Instructor evaluation' })
+  // They drove in Blue: Blue's card, till the screenshot says otherwise.
+  await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByRole('button', { name: 'Import from a screenshot' })).toBeVisible()
+
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  const files = sheet.locator('[data-evaluation-import-files]')
+  // One that isn't a report card says so, and can be picked again.
+  await files.setInputFiles({ name: 'IMG_1.png', mimeType: 'image/png', buffer: png })
+  await expect(sheet.getByRole('alert')).toHaveText('This doesn’t look like an instructor’s evaluation.')
+  // Its screenshot opens full size; Escape closes it, not the sheet.
+  await sheet.getByRole('button', { name: 'Show IMG_1.png' }).click()
+  const viewer = page.getByRole('dialog', { name: 'IMG_1.png' })
+  await expect(viewer.locator('img')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
+  await expect(sheet).toBeVisible()
+  answer = {
+    status: 200,
+    json: {
+      read: {
+        card: 'green',
+        instructor: 'John Harms',
+        car: 'Porsche Panamerica',
+        next: { sameTrack: 'Blue', newDirection: 'Green', newTrack: 'Green' },
+        skills: { flags: 65, passing: 95, inputs: 95, vision: 80, consistency: 80, carControl: 95, pace: 95, references: 95, awareness: 95 },
+        aggressivenessIsSkill: true,
+        carAidsPct: 25,
+        notes: 'Overall, very smooth and got faster as the day went on.',
+      },
+    },
+  }
+  // A long card in two screenshots, read together.
+  await files.setInputFiles(['IMG_2.png', 'IMG_3.png'].map(name => ({ name, mimeType: 'image/png', buffer: png })))
+  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshots.')
+  expect(sent.map(images => images.length)).toEqual([1, 2])
+  expect(sent.flat().every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
+
+  // On Green's card, every field it read filled in.
+  await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Green' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByLabel('Instructor', { exact: true })).toHaveValue('John Harms')
+  await expect(sheet.getByLabel('Car', { exact: true })).toHaveValue('Porsche Panamerica')
+  await expect(sheet.getByRole('button', { name: 'Same track & direction: Blue' })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'New track: Green' })).toBeVisible()
+  await expect(sheet.getByLabel('Calls out all flags')).toHaveValue('65')
+  await expect(sheet.getByLabel('Track location awareness')).toHaveValue('95')
+  await expect(sheet.getByRole('group', { name: 'Aggressiveness = skill' }).getByRole('button', { name: 'Yes' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByLabel('Car aids over activated')).toHaveValue('25')
+  await expect(sheet.getByLabel('Instructor notes')).toHaveValue('Overall, very smooth and got faster as the day went on.')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Split View (#483): the screenshots over the form, to check one against the other.
+  // Its thumbnail says it opens bigger: into Split View (#483), a screen of
+  // its own over the sheet, the screenshots over the form.
+  // One square thumbnail, the first's, with how many there are on its corner.
+  await expect(sheet.locator('[data-enlarge]')).toHaveCount(1)
+  await expect(sheet.locator('[data-shot-count]')).toHaveText('2')
+  const thumb = (await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).boundingBox())!
+  expect(Math.round(thumb.width)).toBe(Math.round(thumb.height))
+  await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
+  const split = page.getByRole('dialog', { name: 'Review import' })
+  // A page sheet of its own, slid all the way up, stacked over the evaluation's,
+  // which shrinks back a little and peeks out above it.
+  await expect(split.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  const under = page.locator('[data-evaluation-sheet]').locator('..')
+  await expect(under).toHaveCSS('transform', 'matrix(0.95, 0, 0, 0.95, 0, -8)')
+  expect((await under.boundingBox())!.y).toBeLessThan((await split.locator('..').boundingBox())!.y)
+  // Named for what it's for, not the evaluation sheet's name again.
+  await expect(split.getByRole('heading')).toHaveText(['Review import', ...await split.locator('[data-split-form] h3').allInnerTexts()])
+  const shots = split.getByRole('region', { name: 'Screenshots' })
+  await expect(shots.getByRole('img')).toHaveCount(2)
+  // A page each, swiped between, with which this is and dots to say there are more.
+  const pageBadge = shots.locator('[data-split-page]')
+  await expect(pageBadge).toHaveText('1 of 2')
+  const dots = shots.locator('[data-split-dots] button')
+  await expect(dots).toHaveCount(2)
+  await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true')
+  await shots.locator('[data-split-pager]').evaluate(el => el.scrollTo({ left: el.clientWidth }))
+  await expect(pageBadge).toHaveText('2 of 2')
+  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true')
+  await expect(shots.getByRole('group', { name: 'Screenshot 2 of 2' })).toBeInViewport()
+  await dots.nth(0).click()
+  await expect(pageBadge).toHaveText('1 of 2')
+  // Just Done across its top: no Cancel or Save, and no import box, which would only repeat the screenshots.
+  await expect(split.getByRole('button', { name: 'Done' })).toBeVisible()
+  await expect(split.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await expect(split.locator('[data-evaluation-import]')).toHaveCount(0)
+  await expect(split.getByRole('button', { name: 'Cancel' })).toHaveCount(0)
+  const divider = split.getByRole('separator', { name: 'Resize Split View' })
+  const form = split.locator('[data-split-form]')
+  const [shotsBox, formBox] = [(await shots.boundingBox())!, (await form.boundingBox())!]
+  expect(formBox.y).toBeGreaterThan(shotsBox.y + shotsBox.height)
+  // The form scrolls under the screenshots, on its own.
+  expect(await form.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+  await split.getByLabel('Instructor notes').scrollIntoViewIfNeeded()
+  expect(await form.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  // The divider gives the screenshots more room.
+  const at = (await divider.boundingBox())!
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(at.x + at.width / 2, at.y + 150, { steps: 5 })
+  await page.mouse.up()
+  expect((await shots.boundingBox())!.height).toBeGreaterThan(shotsBox.height + 100)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  // A fix made there is the sheet's, once Done takes it down.
+  await split.getByLabel('Looks ahead').fill('85')
+  await split.getByRole('button', { name: 'Done' }).click()
+  await expect(split).toBeHidden()
+  await expect(sheet.getByLabel('Looks ahead')).toHaveValue('85')
+  await expect(under).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  await expect(sheet.locator('[data-evaluation-import-done]')).toBeVisible()
+  // Again from the thumbnail; Escape takes it down, not the sheet.
+  await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
+  await expect(split.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  await page.keyboard.press('Escape')
+  await expect(split).toBeHidden()
+  await expect(sheet).toBeVisible()
+
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(sheet).toBeHidden()
+  expect(saved).toEqual([{
+    instructor: 'John Harms',
+    car: 'Porsche Panamerica',
+    next: { sameTrack: 'Blue', newDirection: 'Green', newTrack: 'Green' },
+    skills: { flags: 65, passing: 95, inputs: 95, vision: 85, consistency: 80, carControl: 95, pace: 95, references: 95, awareness: 95 },
+    aggressivenessIsSkill: true,
+    carAidsPct: 25,
+    notes: 'Overall, very smooth and got faster as the day went on.',
+  }])
+  await expect(page.getByRole('region', { name: 'Instructor evaluation' }).getByRole('listitem', { name: 'Looks ahead: 85%' })).toBeVisible()
+})
+
 // Open-Meteo's answer for one day near the track (#347): rain until 11,
 // cloud until 2, then sun, warming up through the day.
 function weatherFor(date: string, daily: Record<string, unknown[]> = {}) {

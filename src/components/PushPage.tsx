@@ -21,6 +21,11 @@ const RECEDED = `translateY(calc(env(safe-area-inset-top) + 8px)) scale(${RECEDE
 // Its corners, before the card is scaled down to show them 10 px round.
 const RECEDED_RADIUS = `${+(10 / RECEDED_SCALE).toFixed(2)}px`
 const RECEDED_DIM = 0.12
+// A sheet with another sheet opened over it (#483) shrinks back a little
+// less, and rides up a little, so its top shows above the one over it — and
+// the card under both above that — as iOS stacks its sheets.
+const STACKED_SCALE = 0.95
+const STACKED = `translateY(-8px) scale(${STACKED_SCALE})`
 /** Where a sheet's top edge stops: below the acting banner and status bar. */
 export const SHEET_TOP = 'calc(var(--acting-h, 0px) + env(safe-area-inset-top) + 18px)'
 const SHEET_RADIUS = '12px'
@@ -126,6 +131,14 @@ function useUnderSheet(page?: Pushed): UnderSheet {
   return useSyncExternalStore(onCoveringChange, () => {
     const over = sheets.filter(sheet => sheet.page !== page)
     return over.some(sheet => sheet.up) ? 'up' : over.length > 0 ? 'shown' : 'none'
+  })
+}
+
+/** Whether a sheet opened after this sheet is over it, in place (#483). */
+function useSheetOver(page: Pushed): boolean {
+  return useSyncExternalStore(onCoveringChange, () => {
+    const i = sheets.findIndex(sheet => sheet.page === page)
+    return i !== -1 && sheets.slice(i + 1).some(sheet => sheet.up)
   })
 }
 
@@ -374,6 +387,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
   useHtmlClass('page-sheet-up', isSheet && inPosition)
   const underSheet = useUnderSheet(self)
   const receded = !isSheet && underSheet === 'up'
+  // A sheet under another sheet (#483).
+  const stacked = useSheetOver(self) && isSheet
   // Dragged down to close (#387), once it's up and until it's closing; it
   // then slides the rest of the way out along its own spring.
   const pageRef = useRef<HTMLDivElement | null>(null)
@@ -453,7 +468,8 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
         // that one a card: hidden, so it doesn't show at the card's corners.
         visibility: covered && underSheet !== 'none' ? 'hidden' : undefined,
         borderRadius: isSheet ? `${SHEET_RADIUS} ${SHEET_RADIUS} 0 0` : receded ? RECEDED_RADIUS : undefined,
-        transformOrigin: isSheet ? undefined : '50% 0',
+        // Scaled from its top: a page receding, a sheet stacked under another (#483).
+        transformOrigin: '50% 0',
         // Once in place, white is what Safari 26 samples to tint the
         // status bar — this fixed page is the element at the top edge —
         // so it matches the white header (#245). Gray-50 while sliding,
@@ -465,7 +481,7 @@ export function PushPage({ open, onExited, onEnteredChange, scrollRef, children,
           : entered && blackHeader ? 'linear-gradient(to bottom, #000000 50%, #f9fafb 50%)'
           : undefined,
         transform: from === 'bottom'
-          ? !inPosition ? 'translateY(100%)' : receded ? RECEDED : 'translateY(0)'
+          ? !inPosition ? 'translateY(100%)' : receded ? RECEDED : stacked ? STACKED : 'translateY(0)'
           : !inPosition ? 'translateX(100%)' : covered ? COVERED_SHIFT : receded ? RECEDED : 'translateX(0)',
         // iOS's own push, pop and sheet spring (#367).
         transition: slide(isSheet ? 'transform' : 'transform, border-radius', instant),

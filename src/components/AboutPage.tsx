@@ -572,7 +572,7 @@ export function AboutPage({ closeHref = '#/', onClose }: { closeHref?: string; o
           id="evaluations"
           Icon={ClipboardCheck}
           title="See how you’re improving."
-          text="Keep your instructor’s notes and report cards from every event, and see each skill come along over time."
+          text="Keep your instructor’s notes and report cards from every event — import one from a screenshot — and see each skill come along over time."
         >
           <EvaluationGlimpse />
         </Feature>

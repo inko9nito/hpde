@@ -28,6 +28,7 @@ import { EventEvaluationSheet } from './components/EventEvaluationSheet'
 import { MyLapTimes } from './components/MyLapTimes'
 import { LapImportPage } from './components/LapImportPage'
 import { useScreenshotReader } from './data/lapImport'
+import { useEvaluationReader } from './data/evaluationImport'
 import { TrackLapsPage, trackHash, trackPageTitle, trackSlugFromHash } from './components/TrackLapsPage'
 import type { TrackLink } from './components/EventInfo'
 import type { PastEventsHere } from './components/PastEventsCard'
@@ -313,6 +314,7 @@ export default function App() {
   // The sheet that imports laps from a lap timer's screenshots (#472).
   const [lapImportOpen, setLapImportOpen] = useState(false)
   const readScreenshot = useScreenshotReader()
+  const readEvaluation = useEvaluationReader()
   // A fresh page each time it's opened, even while the last is still sliding away (#415).
   const [evaluationN, setEvaluationN] = useState(0)
   function openEvaluation() {
@@ -1368,6 +1370,7 @@ export default function App() {
         existing={notesLog.evaluation}
         runGroup={evaluationGroup}
         lastCard={lastCard}
+        readScreenshots={readEvaluation}
         onSave={async evaluation => {
           await notesLog.saveEvaluation(evaluation)
           showToast('Evaluation saved')
