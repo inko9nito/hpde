@@ -8,16 +8,23 @@ import type { Lap } from '../utils/lapTimes'
 // laps higher, as on that chart, so a lap lost to traffic spikes up. The
 // best is a black dot and the average a dashed gray line, in the colors
 // that chart gives them. Out and in laps aren't drawn, as they don't count
-// in either.
+// in the best; the average counts them when the driver does (#480).
 
 const PAD = 3.5
 
-export function LapSparkline({ laps, width = 80, height = 22 }: { laps: Lap[]; width?: number; height?: number }) {
+export function LapSparkline({ laps, outLapsInAverage = false, width = 80, height = 22 }: {
+  laps: Lap[]
+  /** Out and in laps counted in the average line, as the driver chose (#480). */
+  outLapsInAverage?: boolean
+  width?: number
+  height?: number
+}) {
   const points = laps.filter(lap => !lap.kind).map(lap => lap.ms)
-  const { best, average } = lapStats(laps)
+  const { best, average } = lapStats(laps, { outLapsInAverage })
   if (best === undefined || average === undefined) return null
-  const lo = Math.min(...points)
-  const hi = Math.max(...points)
+  // The average too: with a slow out lap counted, it can be above every lap.
+  const lo = Math.min(...points, average)
+  const hi = Math.max(...points, average)
   const x = (i: number) => PAD + (points.length === 1 ? (width - 2 * PAD) / 2 : (i * (width - 2 * PAD)) / (points.length - 1))
   // Slower laps sit higher. All the same time, they run along the middle.
   const y = (ms: number) => (hi === lo ? height / 2 : PAD + ((hi - ms) / (hi - lo)) * (height - 2 * PAD))

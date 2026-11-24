@@ -22,6 +22,7 @@ import { eventBest, eventsOnLayout, layoutName, layoutSlug, layoutTitle, startDa
 import { trackInfo } from '../data/tracks'
 import { useScrolledPast } from '../utils/useScrolledPast'
 import { formatAverage, formatSpeed, lapSpeeds, lapStats } from '../utils/lapTimes'
+import { useLapView } from '../data/lapView'
 import type { SessionLaps } from '../utils/lapTimes'
 import { classifyEvent } from '../utils/eventClass'
 import { goingIds, myRunGroup } from '../utils/rsvp'
@@ -88,7 +89,9 @@ function EventLapsCard({ event, sessions, yours, rsvp, allTimeBest, onOpen }: {
 }) {
   const status = classifyEvent(event)
   const laps = sessions.flatMap(s => s.laps)
-  const { average, best } = lapStats(laps)
+  // Out and in laps in the average, if the driver counts them there (#480).
+  const { outLapsInAverage } = useLapView()
+  const { average, best } = lapStats(laps, { outLapsInAverage })
   const peak = lapSpeeds(laps).top
   // The group(s) they drove in, as the schedule lists them; before any
   // laps, the one they said they're in.
@@ -221,6 +224,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
   const laps = useTrackLaps(eventIds, driver?.id ?? null)
   // Your own answers; an admin looking at another driver's laps has only theirs.
   const { status: rsvpsStatus, rsvps } = useRsvps()
+  const { outLapsInAverage } = useLapView()
   const answers = useMemo(() => (driver ? {} : rsvps), [driver, rsvps])
   const going = useMemo(() => goingIds(onLayout, answers), [onLayout, answers])
   const name = driver ? driverName(driver) : null
@@ -259,7 +263,7 @@ export function TrackLapsPage({ slug, events, eventsLoaded, driver, filter, onFi
   // Each event's best and average, oldest first, for the chart.
   const trend = [...withLaps].reverse().flatMap(({ event, sessions }): TrendPoint[] => {
     const laps = sessions.flatMap(s => s.laps)
-    const stats = lapStats(laps)
+    const stats = lapStats(laps, { outLapsInAverage })
     if (stats.best === undefined || stats.average === undefined) return []
     const date = startDate(event)
     return [{

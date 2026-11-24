@@ -95,7 +95,7 @@ export function LapsToolbar({ keys, open, onOpen, action }: {
 }) {
   const allOpen = keys.length > 0 && keys.every(k => open.has(k))
   return (
-    <div className="mb-3 flex min-h-[20px] items-center justify-between gap-3 px-1 text-xs text-gray-500">
+    <div className="relative mb-3 flex min-h-[20px] items-center justify-between gap-3 px-1 text-xs text-gray-500">
       {keys.length > 0 ? (
         <button
           onClick={() => onOpen(allOpen ? new Set() : new Set(keys))}

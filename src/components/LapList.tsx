@@ -1,7 +1,8 @@
-import { Timer } from 'lucide-react'
-import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats } from '../utils/lapTimes'
+import { ChevronDown, Timer } from 'lucide-react'
+import { formatLapTime, formatAverage, formatSpeed, lapLabels, lapSpeeds, lapStats, outInText } from '../utils/lapTimes'
 import type { Lap } from '../utils/lapTimes'
 import { LapSparkline } from './LapSparkline'
+import { setLapView, useLapView } from '../data/lapView'
 
 const chip = 'inline-flex items-center gap-1 rounded-md bg-gray-900 px-1.5 py-0.5 font-mono font-bold tabular-nums text-white'
 
@@ -47,12 +48,14 @@ export const FIGURES_INDENT = 'pl-[19px]'
  * lap, and under them the average and top speed when they're logged
  * (#298). The best lap and the top speed are in chips, pulled left so
  * their digits line up with the column's heading. Out and in laps don't
- * count; `allTimeBest` marks the best lap when it's the best on this layout
- * too. The columns are the same widths on every card, so they line up down
+ * count, unless the driver counts them in the average (#480); `allTimeBest`
+ * marks the best lap when it's the best on this layout too. The columns are the same widths on every card, so they line up down
  * the page.
  */
 export function SessionFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest?: number }) {
-  const stats = lapStats(laps)
+  // Out and in laps in the average only when the driver says so (#480).
+  const { outLapsInAverage } = useLapView()
+  const stats = lapStats(laps, { outLapsInAverage })
   const speeds = lapSpeeds(laps)
   const hasSpeeds = speeds.top !== undefined || speeds.average !== undefined
   const figure = 'py-0.5 font-mono font-semibold tabular-nums text-gray-900'
@@ -99,7 +102,9 @@ export function SessionFigures({ laps, allTimeBest }: { laps: Lap[]; allTimeBest
  * they line up down the page.
  */
 export function CardFigures({ laps, allTimeBest, sparkline = true }: { laps: Lap[]; allTimeBest?: number; sparkline?: boolean }) {
-  const stats = lapStats(laps)
+  // Out and in laps in the average only when the driver says so (#480).
+  const { outLapsInAverage } = useLapView()
+  const stats = lapStats(laps, { outLapsInAverage })
   const label = 'pb-1 text-[11px] font-medium text-gray-500'
   const figure = 'flex h-6 items-center font-mono text-xs font-semibold tabular-nums text-gray-900'
   return (
@@ -115,7 +120,7 @@ export function CardFigures({ laps, allTimeBest, sparkline = true }: { laps: Lap
       <div>
         <dt className={label}>{stats.count} {stats.count === 1 ? 'lap' : 'laps'}</dt>
         <dd className={`${figure} transition-opacity ${sparkline ? '' : 'opacity-0'}`} aria-hidden={!sparkline || undefined}>
-          <LapSparkline laps={laps} />
+          <LapSparkline laps={laps} outLapsInAverage={outLapsInAverage} />
         </dd>
       </div>
     </dl>
@@ -164,23 +169,33 @@ export function lapColumns(laps: Lap[]): LapColumns {
  * Beside the crossings, which make every row two lines tall already, the
  * top and average speed stack in one column too, so a phone still has room
  * for notes. Without notes, an empty last column takes the spare width, so
- * the speeds stay by the lap time.
+ * the lap time stays by its number, and the speeds by the lap time.
+ *
+ * Out and in laps are listed only when the driver shows them (#480); left
+ * off, a line under the table says so, with the way to show them. With
+ * `onKind` — while the laps are edited — every lap is listed, and each
+ * one's number picks whether it's a lap, an out lap or an in lap.
  */
-export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
+export function LapTable({ laps, columns = lapColumns(laps), allTimeBest, onKind }: {
   laps: Lap[]
   columns?: LapColumns
   allTimeBest?: number
+  onKind?: (index: number, kind: Lap['kind']) => void
 }) {
+  const { showOutLaps } = useLapView()
+  const showAll = showOutLaps || !!onKind
+  const hidden = showAll ? [] : laps.filter(lap => lap.kind)
   const labels = lapLabels(laps)
   const { bestIndex } = lapStats(laps)
   const crossings = columns.start || columns.finish
   const crossingsLabel = columns.start && columns.finish ? 'From / To' : columns.start ? 'From' : 'To'
   const stacked = crossings && columns.top && columns.avg
-  const filler = (columns.top || columns.avg) && !columns.note
+  const filler = !columns.note
   return (
+    <>
     <table className="w-full table-fixed border-collapse text-left text-xs" aria-label="Laps">
       <colgroup>
-        <col className="w-8" />
+        <col className={onKind ? 'w-14' : 'w-8'} />
         {/* Wider screens spread the from/to times away from the lap time. */}
         {crossings && <col className="w-20 min-[480px]:w-36" />}
         <col className={crossings ? 'w-[5.75rem]' : 'w-[4.75rem]'} />
@@ -204,9 +219,11 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
         </tr>
       </thead>
       <tbody>
-        {laps.map((lap, i) => (
+        {laps.map((lap, i) => (showAll || !lap.kind) && (
           <tr key={i} className={`border-t border-gray-100 align-top ${lap.kind ? 'text-gray-400' : 'text-gray-700'}`}>
-            <th scope="row" className="py-1.5 pr-2 font-normal">{labels[i]}</th>
+            <th scope="row" className={`pr-2 font-normal ${onKind ? 'py-1' : 'py-1.5'}`}>
+              {onKind ? <KindPicker lap={lap} label={labels[i]} onChange={kind => onKind(i, kind)} /> : labels[i]}
+            </th>
             {crossings && (
               <td className="py-1.5 pr-2 font-mono text-[10px] leading-4 tabular-nums text-gray-500">
                 {columns.start && <span className="block truncate">{lap.start}</span>}
@@ -233,6 +250,44 @@ export function LapTable({ laps, columns = lapColumns(laps), allTimeBest }: {
         ))}
       </tbody>
     </table>
+    {hidden.length > 0 && (
+      <p className="-mt-1 text-xs text-gray-400" data-out-laps-hidden>
+        {capitalize(outInText(hidden))} not shown.{' '}
+        <button type="button" onClick={() => setLapView({ showOutLaps: true })} className="font-medium text-blue-600 hover:text-blue-700">
+          Show
+        </button>
+      </p>
+    )}
+    </>
+  )
+}
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+const KIND_OPTIONS: { value: '' | 'out' | 'in'; label: string }[] = [
+  { value: '', label: 'Lap' },
+  { value: 'out', label: 'Out lap' },
+  { value: 'in', label: 'In lap' },
+]
+
+/**
+ * A lap's number, or Out or In, in a chip that picks which it is (#480):
+ * the phone's own picker, over the chip it's drawn as.
+ */
+function KindPicker({ lap, label, onChange }: { lap: Lap; label: string; onChange: (kind: Lap['kind']) => void }) {
+  return (
+    <span className="relative inline-flex items-center gap-0.5 rounded-md border border-gray-300 bg-white py-0.5 pl-1.5 pr-1 text-gray-700 focus-within:ring-2 focus-within:ring-gray-900">
+      <span data-lap-label>{label}</span>
+      <ChevronDown size={11} className="shrink-0 text-gray-400" aria-hidden="true" />
+      <select
+        value={lap.kind ?? ''}
+        onChange={e => onChange((e.target.value || undefined) as Lap['kind'])}
+        aria-label={`${formatLapTime(lap.ms)}: a lap, an out lap or an in lap`}
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none text-base opacity-0"
+      >
+        {KIND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </span>
   )
 }
 

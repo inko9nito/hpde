@@ -22,6 +22,18 @@ describe('LapSparkline (#477)', () => {
     expect(average).toBeLessThan(ys[1])
   })
 
+  it('counts out and in laps in the average line when the driver does (#480), and keeps it in the box', () => {
+    const laps = [{ ms: 160_000, kind: 'out' as const }, { ms: 100_000 }, { ms: 99_000 }]
+    render(<LapSparkline laps={laps} outLapsInAverage height={22} />)
+    const svg = screen.getByRole('img')
+    // The average, 1:59.667, is slower than either lap: the top of the box.
+    const average = Number(svg.querySelector('[data-series="average"]')!.getAttribute('y1'))
+    expect(average).toBeCloseTo(3.5)
+    const ys = [...svg.querySelector('[data-series="lap"]')!.getAttribute('d')!.matchAll(/[ML][\d.]+,([\d.]+)/g)].map(m => Number(m[1]))
+    expect(Math.max(...ys)).toBeLessThanOrEqual(22)
+    expect(Math.min(...ys)).toBeGreaterThan(average)
+  })
+
   it('draws nothing without a lap that counts', () => {
     const { container } = render(<LapSparkline laps={[{ ms: 130_000, kind: 'out' }]} />)
     expect(container).toBeEmptyDOMElement()
