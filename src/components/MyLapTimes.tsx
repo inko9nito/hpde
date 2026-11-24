@@ -10,6 +10,8 @@ import type { PastEventsHere } from './PastEventsCard'
 import type { SessionView } from './LapTimesSheet'
 import { LapTrendChart, withTopSpeed } from './LapTrendChart'
 import { eventReference } from './SessionLapChart'
+import { LapViewMenu } from './LapViewMenu'
+import { useLapView } from '../data/lapView'
 import type { LapChartScope } from './SessionLapChart'
 import type { TrendPoint } from './LapTrendChart'
 import { groupFor, shortDate } from './LapTimesSheet'
@@ -75,6 +77,8 @@ export function MyLapTimes({
   const { open, setOpen, toggle } = useOpenSessions()
   // Whose best and average every session's chart draws its lines at (#475).
   const [scope, setScope] = useState<LapChartScope>('session')
+  // Out and in laps in the average, if the driver counts them there (#480).
+  const { outLapsInAverage } = useLapView()
   const runGroups = event.runGroups
   const track = trackShortName(event)
 
@@ -98,6 +102,8 @@ export function MyLapTimes({
       Import laps
     </button>
   )
+  // Once there's an out or in lap, how they're shown and counted (#480).
+  const lapView = log.status === 'ready' && log.sessions.some(s => s.laps.some(lap => lap.kind)) && <LapViewMenu />
   // Expand all: at the top until there are sessions to list,
   // then just over them, by the cards it opens (#361).
   const toolbar = (
@@ -106,7 +112,9 @@ export function MyLapTimes({
       open={open}
       onOpen={setOpen}
       // With nothing saved yet, the empty state has its own button.
-      action={log.sessions.length || notes.sessions.length || garage?.pressures.size ? importLaps : undefined}
+      action={(lapView || importLaps) && (log.sessions.length || notes.sessions.length || garage?.pressures.size)
+        ? <div className="flex items-center gap-4">{lapView}{importLaps}</div>
+        : undefined}
     />
   )
   // Then, before the event, how they did at its layout before (#462).
@@ -181,12 +189,12 @@ export function MyLapTimes({
   // The event's best and average, to switch the session charts to, once
   // there's more of it than one session (#475).
   const sessionsWithLaps = log.sessions.filter(s => lapStats(s.laps).count > 0)
-  const eventLaps = sessionsWithLaps.length > 1 ? eventReference(sessionsWithLaps) : undefined
+  const eventLaps = sessionsWithLaps.length > 1 ? eventReference(sessionsWithLaps, { outLapsInAverage }) : undefined
   // One set of columns for every session's table, so they line up.
   const columns = lapColumns(log.sessions.flatMap(s => s.laps))
   // Each session's best and average, in schedule order, for the chart (#274).
   const trend = log.sessions.flatMap((s): TrendPoint[] => {
-    const { best, average } = lapStats(s.laps)
+    const { best, average } = lapStats(s.laps, { outLapsInAverage })
     if (best === undefined || average === undefined) return []
     const day = days.size > 1 ? shortDate(s.date) : undefined
     return [{

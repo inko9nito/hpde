@@ -15,7 +15,7 @@ import type { SessionConditions } from '../utils/conditions'
 import type { HourWeather } from '../data/weather'
 import { formatTime, formatAmPm } from '../utils/time'
 import { MAX_SUMMARY, formatLapTime, lapStats, lapsToText, parseLapTimes, sessionKey } from '../utils/lapTimes'
-import type { ReadAs, SessionLaps } from '../utils/lapTimes'
+import type { Lap, ReadAs, SessionLaps } from '../utils/lapTimes'
 import type { SessionNotes } from '../utils/evaluation'
 import type { SessionPressures } from '../utils/garage'
 import { gapToBest } from '../utils/trackStats'
@@ -224,6 +224,22 @@ export function LapTimesSheet({
     setEditing(false)
   }
 
+  // A lap picked as an out or in lap, or back to one that counts (#480):
+  // the text says so, so what's saved is what's read.
+  function markLap(index: number, kind: Lap['kind']) {
+    const laps = parsed.laps.map((lap, i) => {
+      if (i !== index) return lap
+      const { kind: _old, ...rest } = lap
+      return kind ? { ...rest, kind } : rest
+    })
+    // Rewritten, the paste loses the words under its title: keep them.
+    if (summaryFromPaste) setSummaryText(parsed.summary!)
+    setText(lapsToText(laps))
+    setTextTouched(true)
+    setReadAs(undefined)
+    setConfirmingRemove(false)
+  }
+
   const key = group ? sessionKey(slot.date, slot.time, group) : null
   const pageBusy = !!busy || evaluationBusy
 
@@ -396,8 +412,8 @@ export function LapTimesSheet({
             />
             <p className="mt-1.5 text-xs text-gray-500">
               Paste a list, a spreadsheet column, or rows from your timing sheet (lap, start, finish,
-              time, top and average speed in mph, notes). Start and finish times work too. Mark out
-              laps with “Out”. Laps, best and average are worked out for you.
+              time, top and average speed in mph, notes). Start and finish times work too. Laps, best
+              and average are worked out for you.
             </p>
 
             {parsed.ambiguous && (
@@ -424,7 +440,12 @@ export function LapTimesSheet({
                     <SessionFigures laps={parsed.laps} allTimeBest={allTimeBest} />
                   </div>
                 </div>
-                <LapTable laps={parsed.laps} allTimeBest={allTimeBest} />
+                <LapTable laps={parsed.laps} allTimeBest={allTimeBest} onKind={parsed.errors.length ? undefined : markLap} />
+                {parsed.errors.length === 0 && (
+                  <p className="text-xs text-gray-500">
+                    Tap a lap’s number to mark it an out or in lap.
+                  </p>
+                )}
               </section>
             )}
 

@@ -2,9 +2,11 @@ interface Props {
   checked: boolean
   onChange: () => void
   label?: string
+  /** Its name, when the words beside it aren't its label. */
+  ariaLabel?: string
 }
 
-export function Toggle({ checked, onChange, label }: Props) {
+export function Toggle({ checked, onChange, label, ariaLabel }: Props) {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
       {label && <span style={{ fontSize: '14px', color: '#4b5563' }}>{label}</span>}
@@ -12,6 +14,7 @@ export function Toggle({ checked, onChange, label }: Props) {
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel}
         onClick={onChange}
         style={{
           position: 'relative',

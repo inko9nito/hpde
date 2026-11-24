@@ -113,21 +113,52 @@ export interface LapStats {
   average?: number
 }
 
-export function lapStats(laps: Lap[]): LapStats {
+export interface LapCounting {
+  /**
+   * Count out and in laps in the average too, as a driver can choose to
+   * (#480). Never in the best, or the number of laps.
+   */
+  outLapsInAverage?: boolean
+}
+
+export function lapStats(laps: Lap[], { outLapsInAverage = false }: LapCounting = {}): LapStats {
   let count = 0
   let total = 0
+  let averaged = 0
   let best: number | undefined
   let bestIndex: number | undefined
   laps.forEach((lap, i) => {
-    if (lap.kind) return
+    if (lap.kind) {
+      if (outLapsInAverage) {
+        total += lap.ms
+        averaged++
+      }
+      return
+    }
     count++
+    averaged++
     total += lap.ms
     if (best === undefined || lap.ms < best) {
       best = lap.ms
       bestIndex = i
     }
   })
-  return count ? { count, best, bestIndex, average: total / count } : { count }
+  return count ? { count, best, bestIndex, average: total / averaged } : { count }
+}
+
+/** How many of the laps are out laps, and how many in laps. */
+export function outInCount(laps: Lap[]): { out: number; in: number } {
+  return {
+    out: laps.filter(lap => lap.kind === 'out').length,
+    in: laps.filter(lap => lap.kind === 'in').length,
+  }
+}
+
+/** "an out lap", "2 out laps and an in lap": what's set aside, in words. */
+export function outInText(laps: Lap[]): string {
+  const { out, in: inLaps } = outInCount(laps)
+  const words = (n: number, name: string) => (n === 1 ? `an ${name} lap` : `${n} ${name} laps`)
+  return [out ? words(out, 'out') : null, inLaps ? words(inLaps, 'in') : null].filter(Boolean).join(' and ')
 }
 
 export interface SpeedStats {
