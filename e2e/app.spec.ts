@@ -1628,7 +1628,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   const sheet = page.getByRole('dialog', { name: 'Instructor evaluation' })
   // They drove in Blue: Blue's card, till the screenshot says otherwise.
   await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(sheet.getByRole('button', { name: /^Import from a screenshot/ })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Import from a screenshot' })).toBeVisible()
 
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
   const files = sheet.locator('[data-evaluation-import-files]')
@@ -1677,7 +1677,9 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Split View (#483): the screenshots over the form, to check one against the other.
-  await sheet.getByRole('button', { name: 'Compare in Split View' }).click()
+  // Its thumbnail says it opens bigger, and opens beside the form.
+  await expect(sheet.locator('[data-enlarge]')).toHaveCount(2)
+  await sheet.getByRole('button', { name: 'Compare IMG_2.png in Split View' }).click()
   const shots = sheet.getByRole('region', { name: 'Screenshots' })
   await expect(shots.getByRole('img')).toHaveCount(2)
   const divider = sheet.getByRole('separator', { name: 'Resize Split View' })
@@ -1699,7 +1701,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await shots.getByRole('button', { name: 'Close Split View' }).click()
   await expect(shots).toBeHidden()
-  // A thumbnail opens it too.
+  // Either thumbnail opens it.
   await sheet.getByRole('button', { name: 'Compare IMG_3.png in Split View' }).click()
   await expect(shots).toBeVisible()
 

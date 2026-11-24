@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, ImagePlus, LoaderCircle, Rows2 } from 'lucide-react'
+import { ChevronRight, ImagePlus, LoaderCircle, Maximize2 } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
@@ -270,7 +270,6 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           disabled={!!busy}
           shots={shots}
           onShots={setShots}
-          split={split}
           onSplit={setSplit}
           onRead={read => {
             if (read.card) setCardPicked(true)
@@ -495,17 +494,17 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
 /**
  * Fills the form in from screenshots of the report card (#483), as it's
  * emailed: one, or up to three of a long one, read together. While they're
- * read, and after, they're shown small — tap one for full size, or once
- * read, to see them beside the form in Split View and check one against
- * the other. Nothing's saved till Save.
+ * read, and after, they're shown small, with a badge that says they open
+ * bigger: full size, or once read, beside the form in Split View, to check
+ * one against the other (its ✕ closes it). Nothing's saved till Save.
  */
-function ScreenshotFill({ read, disabled, shots, onShots, split, onSplit, onRead }: {
+function ScreenshotFill({ read, disabled, shots, onShots, onSplit, onRead }: {
   read: (files: File[]) => Promise<EventEvaluation>
   disabled: boolean
   /** The screenshots picked; held by the sheet, for Split View. Their URLs are let go here. */
   shots: Shot[]
   onShots: (shots: Shot[]) => void
-  split: boolean
+  /** Opens Split View. */
   onSplit: (on: boolean) => void
   onRead: (evaluation: EventEvaluation) => void
 }) {
@@ -576,10 +575,7 @@ function ScreenshotFill({ read, disabled, shots, onShots, split, onSplit, onRead
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
             <ImagePlus size={18} aria-hidden="true" />
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-gray-900">Import from a screenshot</span>
-            <span className="mt-0.5 block text-xs text-gray-500">Of your report card as it was sent to you. A long one can take up to {MAX_EVALUATION_SCREENSHOTS}.</span>
-          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">Import from a screenshot</span>
           <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
         </button>
       </div>
@@ -595,12 +591,21 @@ function ScreenshotFill({ read, disabled, shots, onShots, split, onSplit, onRead
             <button
               key={shot.url}
               type="button"
-              // Read, they open beside the form; else full size.
+              // Read, they open beside the form, in Split View; else full size.
               onClick={() => (status === 'read' ? onSplit(true) : setShown(shot))}
+              disabled={status === 'reading'}
               aria-label={status === 'read' ? `Compare ${shot.name} in Split View` : `Show ${shot.name}`}
-              className="h-20 w-12 overflow-hidden rounded-md border border-gray-200 bg-white"
+              className="relative h-20 w-12"
             >
-              <img src={shot.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
+              <span className="block h-full w-full overflow-hidden rounded-md border border-gray-200 bg-white">
+                <img src={shot.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
+              </span>
+              {/* It opens bigger: say so, on its corner. */}
+              {status !== 'reading' && (
+                <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-gray-900/80 text-white ring-2 ring-gray-50" aria-hidden="true" data-enlarge>
+                  <Maximize2 size={10} strokeWidth={2.75} />
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -613,18 +618,7 @@ function ScreenshotFill({ read, disabled, shots, onShots, split, onSplit, onRead
           </p>
         )}
         {status === 'read' && (
-          <>
-            <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your screenshot.</p>
-            <button
-              type="button"
-              onClick={() => onSplit(!split)}
-              aria-pressed={split}
-              className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              <Rows2 size={15} aria-hidden="true" />
-              {split ? 'Close Split View' : 'Compare in Split View'}
-            </button>
-          </>
+          <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your screenshot.</p>
         )}
         {status === 'failed' && <p role="alert" className="text-red-700">{error}</p>}
         {status !== 'reading' && (
