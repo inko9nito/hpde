@@ -13,8 +13,19 @@ import { DATE, GROUP, TIME, sessionKey } from './lapTimes'
 import type { EventConfig } from '../types'
 import type { Rsvps } from './rsvp'
 
-/** The consumables a car's log tracks, in the order the forms list them. */
-export const CONSUMABLES = [
+/**
+ * One thing a car's log tracks, as the forms list it. One without a
+ * placeholder doesn't ask what went on; it's `done` on Setup instead.
+ */
+export interface Consumable {
+  id: ConsumableId
+  label: string
+  placeholder?: string
+  /** Shown for it when nothing's said about what went on: "Changed". */
+  done: string
+}
+
+const TRACKED = [
   { id: 'tires', label: 'Tires', placeholder: 'Hoosier R7, 245/40R17' },
   { id: 'frontPads', label: 'Front pads', placeholder: 'Hawk DTC-60' },
   { id: 'rearPads', label: 'Rear pads', placeholder: 'Hawk DTC-30' },
@@ -25,12 +36,22 @@ export const CONSUMABLES = [
   { id: 'transmissionFluid', label: 'Transmission fluid', placeholder: 'Motul Gear 300 75W-90' },
   { id: 'diffFluid', label: 'Diff fluid', placeholder: 'Red Line 75W-90' },
   { id: 'coolant', label: 'Coolant', placeholder: 'OEM, 50/50' },
+  // Not used up, but when it was last done counts the same way (#487).
+  { id: 'techInspection', label: 'Tech inspection', done: 'Inspected' },
 ] as const
 
-export type ConsumableId = typeof CONSUMABLES[number]['id']
+export type ConsumableId = typeof TRACKED[number]['id']
+
+/** What a car's log tracks — its consumables, and its tech inspection (#487) — in the order the forms list them. */
+export const CONSUMABLES: readonly Consumable[] = TRACKED.map(c => ({ done: 'Changed', ...c }))
 
 export function consumableLabel(id: ConsumableId): string {
   return CONSUMABLES.find(c => c.id === id)!.label
+}
+
+/** What's shown for one when nothing's said about what went on: "Changed", "Inspected". */
+export function consumableDone(id: ConsumableId): string {
+  return CONSUMABLES.find(c => c.id === id)!.done
 }
 
 /** One consumable changed: which, and what went on ("Hawk DTC-60"), if said. */
@@ -42,7 +63,7 @@ export interface PartChange {
 /**
  * One entry in a car's log: on this day, at this shop, these consumables
  * were changed — one job, however many parts — and anything else done
- * that isn't one of them (#487): a tech inspection, an alignment.
+ * that isn't one of them (#487): an alignment.
  */
 export interface LogEntry {
   id: string
@@ -50,7 +71,7 @@ export interface LogEntry {
   date: string
   /** In the order the forms list them. None when it's only `other`. */
   parts: PartChange[]
-  /** Something done that isn't a consumable, in their words: "Tech inspection". */
+  /** Something else done, in their words: "Alignment". */
   other?: string
   /** Where it was done: "Mike's Motorsports". */
   shop?: string

@@ -2011,15 +2011,16 @@ test('a driver adds their car and its photo in the Garage, logs a brake job, add
   await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 1Front padsHawk DTC-60Speed ShopFront rotorsSpeed Shop')
   await noSideScroll()
 
-  // Other work, not a consumable (#487): a tech inspection.
+  // A tech inspection, and other work that isn't on the list (#487).
   await page.getByRole('button', { name: 'Add entry' }).click()
+  await change.getByRole('button', { name: 'Tech inspection' }).click()
   await change.getByRole('button', { name: 'Other' }).click()
-  await change.getByLabel('Other', { exact: true }).and(page.getByRole('combobox')).fill('Tech inspection')
+  await change.getByLabel('Other', { exact: true }).and(page.getByRole('combobox')).fill('Alignment')
   await change.getByLabel('Date').fill('2026-03-08')
   await noSideScroll()
   await change.getByRole('button', { name: 'Add entry' }).click()
   await expect(change).toBeHidden()
-  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 8Tech inspectionMar 1Front pads')
+  await expect(page.getByRole('region', { name: 'March 2026' })).toContainText('Mar 8Tech inspectionAlignmentMar 1Front pads')
   await noSideScroll()
 
   // Added to an event from its page: any the driver didn't say they're not going to.

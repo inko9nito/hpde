@@ -15,7 +15,7 @@ import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { driverName } from '../data/drivers'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableDone, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import { useScrolledPast } from '../utils/useScrolledPast'
@@ -225,7 +225,7 @@ function SetupPanel({ car, driven, onOpenEntry, onLog }: {
                   >
                     <span className="w-[6.5rem] shrink-0 text-sm text-gray-500">{consumableLabel(c.part)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] text-gray-900">{c.what ?? 'Changed'}</span>
+                      <span className="block truncate text-[15px] text-gray-900">{c.what ?? consumableDone(c.part)}</span>
                       <span className="block text-[13px] text-gray-500">
                         Since {formatDay(c.date)}
                         {used > 0 && <span data-events-used> · {used === 1 ? '1 event' : `${used} events`}</span>}

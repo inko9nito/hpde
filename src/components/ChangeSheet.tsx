@@ -15,8 +15,8 @@ const dateClass = `${inputClass} block h-10 min-w-0 appearance-none bg-white py-
 /**
  * Logs a job on a car (#344), or changes or removes an entry: what was
  * done — any of the consumables, picked two by two, each then asking
- * what went on, and Other, for anything that isn't one, which asks what
- * (#487): a tech inspection — the day it was done, the shop and a note.
+ * what went on; a tech inspection; and Other, for anything else, which
+ * asks what (#487) — the day it was done, the shop and a note.
  */
 export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   car: Car
@@ -42,6 +42,8 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const id = useId()
   const picked = CONSUMABLES.filter(c => parts[c.id] !== undefined)
+  // Those that ask what went on: not a tech inspection.
+  const asking = picked.filter(c => c.placeholder)
   const cleaned = cleanEntry({ date, shop, note, other, parts: picked.map(c => ({ part: c.id, what: parts[c.id] })) })
   // Other picked asks what it was.
   const ready = 'value' in cleaned && (other === undefined || !!other.trim())
@@ -86,8 +88,8 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
           {CONSUMABLES.map(c => (
             <Choice key={c.id} on={parts[c.id] !== undefined} onClick={() => toggle(c.id)}>{c.label}</Choice>
           ))}
-          {/* Anything that isn't a consumable, across the foot. */}
-          <Choice on={other !== undefined} onClick={() => setOther(prev => (prev === undefined ? '' : undefined))} className="col-span-2">
+          {/* Anything else, by Tech inspection. */}
+          <Choice on={other !== undefined} onClick={() => setOther(prev => (prev === undefined ? '' : undefined))}>
             Other
           </Choice>
         </div>
@@ -99,7 +101,7 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
               value={other}
               onChange={v => setOther(v.slice(0, MAX_PART))}
               options={otherOptions(garage)}
-              placeholder="Tech inspection, alignment…"
+              placeholder="Alignment, corner balance…"
               className={inputClass}
             />
           </div>
@@ -107,13 +109,13 @@ export function ChangeSheet({ car, garage, entry, onSave, onRemove, onClose }: {
       </fieldset>
 
       {/* What went on, for each one picked. */}
-      {picked.length > 0 && (
+      {asking.length > 0 && (
         <fieldset className="mt-4">
           <legend className={`flex w-full items-baseline justify-between ${label}`}>
             What went on
             <span className="font-normal text-gray-400">Optional</span>
           </legend>
-          {picked.map(c => (
+          {asking.map(c => (
             <div key={c.id} className="mt-2 flex flex-col first-of-type:mt-1.5">
               <label htmlFor={`${id}-${c.id}`} className="text-xs text-gray-500">{c.label}</label>
               <SuggestInput

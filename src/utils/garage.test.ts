@@ -99,11 +99,11 @@ describe('garage (#344)', () => {
   })
 
   it('reads a log entry of other work: what was done, with or without a consumable (#487)', () => {
-    expect(cleanEntry({ date: '2026-11-24', parts: [], other: ' Tech inspection ', shop: 'Speed Shop' }))
-      .toEqual({ value: { date: '2026-11-24', parts: [], other: 'Tech inspection', shop: 'Speed Shop' } })
-    expect(cleanEntry({ date: '2026-11-24', other: 'Tech inspection' })).toEqual({ value: { date: '2026-11-24', parts: [], other: 'Tech inspection' } })
-    expect(cleanEntry({ date: '2026-11-24', parts: [{ part: 'tires' }], other: 'Alignment' }))
-      .toEqual({ value: { date: '2026-11-24', parts: [{ part: 'tires' }], other: 'Alignment' } })
+    expect(cleanEntry({ date: '2026-11-24', parts: [], other: ' Corner balance ', shop: 'Speed Shop' }))
+      .toEqual({ value: { date: '2026-11-24', parts: [], other: 'Corner balance', shop: 'Speed Shop' } })
+    expect(cleanEntry({ date: '2026-11-24', other: 'Corner balance' })).toEqual({ value: { date: '2026-11-24', parts: [], other: 'Corner balance' } })
+    expect(cleanEntry({ date: '2026-11-24', parts: [{ part: 'techInspection' }, { part: 'tires' }], other: 'Alignment' }))
+      .toEqual({ value: { date: '2026-11-24', parts: [{ part: 'tires' }, { part: 'techInspection' }], other: 'Alignment' } })
     expect(cleanEntry({ date: '2026-11-24', parts: [], other: '  ' })).toHaveProperty('error')
     expect(cleanEntry({ date: '2026-11-24', parts: [], other: 'x'.repeat(81) })).toHaveProperty('error')
     expect(cleanEntry({ date: '2026-11-24', parts: [], other: 3 })).toHaveProperty('error')
@@ -111,8 +111,8 @@ describe('garage (#344)', () => {
 
   it('suggests other work done before, most done first (#487)', () => {
     const car = (log: object[]): Car => ({ ...cayman, log: log.map((e, i) => ({ id: String(i), date: '2026-01-01', parts: [], ...e })) })
-    const garage: Garage = { cars: [car([{ other: 'Alignment' }, { other: 'Tech inspection' }]), car([{ other: 'Tech inspection' }, {}])], events: {} }
-    expect(otherOptions(garage)).toEqual(['Tech inspection', 'Alignment'])
+    const garage: Garage = { cars: [car([{ other: 'Alignment' }, { other: 'Corner balance' }]), car([{ other: 'Corner balance' }, {}])], events: {} }
+    expect(otherOptions(garage)).toEqual(['Corner balance', 'Alignment'])
   })
 
   it('reads a session’s pressures to a tenth of a psi, and wants at least one', () => {
