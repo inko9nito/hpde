@@ -1685,7 +1685,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   const thumb = (await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).boundingBox())!
   expect(Math.round(thumb.width)).toBe(Math.round(thumb.height))
   await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
-  const split = page.getByRole('dialog', { name: 'Split View' })
+  const split = page.getByRole('dialog', { name: 'Review import' })
   // A page sheet of its own, slid all the way up, stacked over the evaluation's,
   // which shrinks back a little and peeks out above it.
   await expect(split.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
@@ -1693,7 +1693,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   await expect(under).toHaveCSS('transform', 'matrix(0.95, 0, 0, 0.95, 0, -8)')
   expect((await under.boundingBox())!.y).toBeLessThan((await split.locator('..').boundingBox())!.y)
   // Named for what it's for, not the evaluation sheet's name again.
-  await expect(split.getByRole('heading')).toHaveText(['Your screenshots', ...await split.locator('[data-split-form] h3').allInnerTexts()])
+  await expect(split.getByRole('heading')).toHaveText(['Review import', ...await split.locator('[data-split-form] h3').allInnerTexts()])
   const shots = split.getByRole('region', { name: 'Screenshots' })
   await expect(shots.getByRole('img')).toHaveCount(2)
   // A page each, swiped between, with which this is and dots to say there are more.

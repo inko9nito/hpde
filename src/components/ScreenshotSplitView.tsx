@@ -56,13 +56,13 @@ export function ScreenshotSplitView({ shots, onClose, children }: {
   return createPortal(
     <PushPage open={open} onExited={onClose} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      <div role="dialog" aria-label="Split View" aria-hidden={!open || undefined} inert={!open || undefined} className="flex h-full flex-col bg-white" data-split-view>
+      <div role="dialog" aria-label="Review import" aria-hidden={!open || undefined} inert={!open || undefined} className="flex h-full flex-col bg-white" data-split-view>
       {/* Not the sheet's own name again: what this one's for. Held to drag it down. */}
       <div className="shrink-0 border-b border-gray-500/20 bg-white" data-sheet-grab>
         <div className="mx-auto grid max-w-lg grid-cols-[minmax(5rem,1fr)_minmax(0,max-content)_minmax(5rem,1fr)] items-center gap-2 px-2" style={{ height: PAGE_HEADER_PX }}>
           <span />
           <h2 className="truncate text-center text-[17px] font-semibold leading-[22px] text-gray-900">
-            Your {shots.length > 1 ? 'screenshots' : 'screenshot'}
+            Review import
           </h2>
           <button
             type="button"
