@@ -405,6 +405,18 @@ describe('a page sheet dragged down to close (#387)', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 
+  it('leaves what handles its own touches alone: Split View’s divider (#483)', () => {
+    const onDismiss = vi.fn()
+    const { container } = render(
+      <PushPage open skipEnterAnimation from="bottom" sheet onDismiss={onDismiss}>
+        <div data-own-gestures><span>Divider</span></div>
+      </PushPage>,
+    )
+    pull(container.querySelector('[data-own-gestures] span')!, 120)
+    expect(onDismiss).not.toHaveBeenCalled()
+    expect((container.lastElementChild as HTMLElement).style.transform).toBe('translateY(0)')
+  })
+
   it('doesn’t drag while saving, nor without a way to close', () => {
     const onDismiss = vi.fn()
     const { container, getByText, unmount } = render(<Sheet onDismiss={onDismiss} saving />)

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronRight, ImagePlus, LoaderCircle } from 'lucide-react'
+import { ChevronRight, ImagePlus, LoaderCircle, Rows2 } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
@@ -10,6 +10,8 @@ import { ReportCardSwitch } from './ReportCardSwitch'
 import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
 import { ScreenshotViewer } from './LapImportPage'
+import { ScreenshotSplitView } from './ScreenshotSplitView'
+import type { Shot } from './ScreenshotSplitView'
 import { MAX_EVALUATION_SCREENSHOTS } from '../data/evaluationImport'
 import {
   INSTRUCTED, MAX_NAME, MAX_NOTES, NEXT_GROUPS, NEXT_HOW, TDE_CARDS,
@@ -195,6 +197,9 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   const [busy, setBusy] = useState<'saving' | 'removing' | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  // The screenshots it was imported from (#483), and whether they're beside the form, in Split View.
+  const [shots, setShots] = useState<Shot[]>([])
+  const [split, setSplit] = useState(false)
   const id = useId()
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }))
 
@@ -236,7 +241,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   return createPortal(
     <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-white" data-evaluation-sheet>
+      {/* In Split View, as tall as the sheet: the screenshots and the form scroll each on its own. */}
+      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className={split && shots.length > 0 ? 'flex h-full flex-col bg-white' : 'min-h-full bg-white'} data-evaluation-sheet>
       <PageHeader
         title="Instructor evaluation"
         subtitle={event.name}
@@ -248,12 +254,24 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
         }}
       />
+      <ScreenshotSplitView on={split && shots.length > 0} shots={shots} onClose={() => setSplit(false)}>{form()}</ScreenshotSplitView>
+      </div>
+    </PushPage>,
+    document.body,
+  )
+
+  function form() {
+    return (
       <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
       {/* Imported from screenshots of the card (#483). */}
       {tde && readScreenshots && (
         <ScreenshotFill
           read={readScreenshots}
           disabled={!!busy}
+          shots={shots}
+          onShots={setShots}
+          split={split}
+          onSplit={setSplit}
           onRead={read => {
             if (read.card) setCardPicked(true)
             setDraft(d => fillDraft(d, read))
@@ -470,27 +488,27 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
         )}
       </div>
       </div>
-      </div>
-    </PushPage>,
-    document.body,
-  )
+    )
+  }
 }
-
-/** A screenshot picked to read, to show. */
-interface Shot { url: string; name: string }
 
 /**
  * Fills the form in from screenshots of the report card (#483), as it's
  * emailed: one, or up to three of a long one, read together. While they're
- * read, and after, they're shown small — tap for full size — to check the
- * form against. Nothing's saved till Save.
+ * read, and after, they're shown small — tap one for full size, or once
+ * read, to see them beside the form in Split View and check one against
+ * the other. Nothing's saved till Save.
  */
-function ScreenshotFill({ read, disabled, onRead }: {
+function ScreenshotFill({ read, disabled, shots, onShots, split, onSplit, onRead }: {
   read: (files: File[]) => Promise<EventEvaluation>
   disabled: boolean
+  /** The screenshots picked; held by the sheet, for Split View. Their URLs are let go here. */
+  shots: Shot[]
+  onShots: (shots: Shot[]) => void
+  split: boolean
+  onSplit: (on: boolean) => void
   onRead: (evaluation: EventEvaluation) => void
 }) {
-  const [shots, setShots] = useState<Shot[]>([])
   const [status, setStatus] = useState<'idle' | 'reading' | 'read' | 'failed'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [shown, setShown] = useState<Shot | null>(null)
@@ -514,7 +532,7 @@ function ScreenshotFill({ read, disabled, onRead }: {
     urls.current.forEach(url => URL.revokeObjectURL(url))
     const next = files.map(file => ({ url: URL.createObjectURL(file), name: file.name }))
     urls.current = next.map(s => s.url)
-    setShots(next)
+    onShots(next)
     setStatus('reading')
     setError(null)
     const mine = ++pick.current
@@ -569,7 +587,7 @@ function ScreenshotFill({ read, disabled, onRead }: {
   }
 
   return (
-    <section aria-label="Screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
+    <section aria-label="Import from a screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
       {input}
       {shots.length > 0 && (
         <div className="flex shrink-0 gap-1.5">
@@ -577,8 +595,9 @@ function ScreenshotFill({ read, disabled, onRead }: {
             <button
               key={shot.url}
               type="button"
-              onClick={() => setShown(shot)}
-              aria-label={`Show ${shot.name}`}
+              // Read, they open beside the form; else full size.
+              onClick={() => (status === 'read' ? onSplit(true) : setShown(shot))}
+              aria-label={status === 'read' ? `Compare ${shot.name} in Split View` : `Show ${shot.name}`}
               className="h-20 w-12 overflow-hidden rounded-md border border-gray-200 bg-white"
             >
               <img src={shot.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
@@ -586,7 +605,7 @@ function ScreenshotFill({ read, disabled, onRead }: {
           ))}
         </div>
       )}
-      <div className="min-w-0 flex-1 text-sm" aria-live="polite">
+      <div className="flex min-w-0 flex-1 flex-col items-start text-sm" aria-live="polite">
         {status === 'reading' && (
           <p className="flex items-center gap-2 text-gray-700">
             <LoaderCircle size={16} className="shrink-0 animate-spin text-gray-400" aria-hidden="true" />
@@ -594,10 +613,18 @@ function ScreenshotFill({ read, disabled, onRead }: {
           </p>
         )}
         {status === 'read' && (
-          <p className="text-gray-900" data-evaluation-import-done>
-            <span className="font-semibold">Imported from your screenshot.</span>{' '}
-            <span className="text-gray-600">Check it against your card, then Save.</span>
-          </p>
+          <>
+            <p className="font-semibold text-gray-900" data-evaluation-import-done>Imported from your screenshot.</p>
+            <button
+              type="button"
+              onClick={() => onSplit(!split)}
+              aria-pressed={split}
+              className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+            >
+              <Rows2 size={15} aria-hidden="true" />
+              {split ? 'Close Split View' : 'Compare in Split View'}
+            </button>
+          </>
         )}
         {status === 'failed' && <p role="alert" className="text-red-700">{error}</p>}
         {status !== 'reading' && (

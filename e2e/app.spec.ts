@@ -1635,6 +1635,13 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   // One that isn't a report card says so, and can be picked again.
   await files.setInputFiles({ name: 'IMG_1.png', mimeType: 'image/png', buffer: png })
   await expect(sheet.getByRole('alert')).toHaveText('This doesn’t look like an instructor’s evaluation.')
+  // Its screenshot opens full size; Escape closes it, not the sheet.
+  await sheet.getByRole('button', { name: 'Show IMG_1.png' }).click()
+  const viewer = page.getByRole('dialog', { name: 'IMG_1.png' })
+  await expect(viewer.locator('img')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
+  await expect(sheet).toBeVisible()
   answer = {
     status: 200,
     json: {
@@ -1652,7 +1659,7 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   }
   // A long card in two screenshots, read together.
   await files.setInputFiles(['IMG_2.png', 'IMG_3.png'].map(name => ({ name, mimeType: 'image/png', buffer: png })))
-  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshot. Check it against your card, then Save.')
+  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Imported from your screenshot.')
   expect(sent.map(images => images.length)).toEqual([1, 2])
   expect(sent.flat().every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
 
@@ -1669,13 +1676,32 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   await expect(sheet.getByLabel('Instructor notes')).toHaveValue('Overall, very smooth and got faster as the day went on.')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
-  // Each screenshot opens full size, to check against; Escape closes it, not the sheet.
-  await sheet.getByRole('button', { name: 'Show IMG_3.png' }).click()
-  const viewer = page.getByRole('dialog', { name: 'IMG_3.png' })
-  await expect(viewer.locator('img')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(viewer).toBeHidden()
-  await expect(sheet).toBeVisible()
+  // Split View (#483): the screenshots over the form, to check one against the other.
+  await sheet.getByRole('button', { name: 'Compare in Split View' }).click()
+  const shots = sheet.getByRole('region', { name: 'Screenshots' })
+  await expect(shots.getByRole('img')).toHaveCount(2)
+  const divider = sheet.getByRole('separator', { name: 'Resize Split View' })
+  const form = sheet.locator('[data-split-form]')
+  const [shotsBox, formBox] = [(await shots.boundingBox())!, (await form.boundingBox())!]
+  expect(formBox.y).toBeGreaterThan(shotsBox.y + shotsBox.height)
+  // The form scrolls under the screenshots, on its own; the sheet doesn't.
+  expect(await form.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+  await sheet.getByLabel('Instructor notes').scrollIntoViewIfNeeded()
+  expect(await form.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+  expect(await page.locator('[data-page-sheet]').last().evaluate(el => el.scrollTop)).toBe(0)
+  // The divider gives the screenshots more room.
+  const at = (await divider.boundingBox())!
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(at.x + at.width / 2, at.y + 150, { steps: 5 })
+  await page.mouse.up()
+  expect((await shots.boundingBox())!.height).toBeGreaterThan(shotsBox.height + 100)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await shots.getByRole('button', { name: 'Close Split View' }).click()
+  await expect(shots).toBeHidden()
+  // A thumbnail opens it too.
+  await sheet.getByRole('button', { name: 'Compare IMG_3.png in Split View' }).click()
+  await expect(shots).toBeVisible()
 
   // A fix before it's saved.
   await sheet.getByLabel('Looks ahead').fill('85')
