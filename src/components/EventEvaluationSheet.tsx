@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { ChevronRight, ImagePlus, LoaderCircle } from 'lucide-react'
 import { PushPage } from './PushPage'
 import { PageHeader } from './PageHeader'
 import { GroupBadge } from './GroupBadge'
@@ -8,6 +9,8 @@ import { RunGroupSelect } from './RunGroupSelect'
 import { ReportCardSwitch } from './ReportCardSwitch'
 import { recommendableGroups } from './EventEvaluationCard'
 import { inputClass } from './SessionEvaluationForm'
+import { ScreenshotViewer } from './LapImportPage'
+import { MAX_EVALUATION_SCREENSHOTS } from '../data/evaluationImport'
 import {
   INSTRUCTED, MAX_NAME, MAX_NOTES, NEXT_GROUPS, NEXT_HOW, TDE_CARDS,
   cardById, cardForGroup, cardOf, cleanEventEvaluation, isTdeEvent,
@@ -16,7 +19,7 @@ import type { CardId, EventEvaluation, Instructed, NextGroupId, NextHow } from '
 import type { EventConfig, RunGroupConfig } from '../types'
 
 /** What the form holds: every field as typed, numbers too. */
-interface Draft {
+export interface Draft {
   card: CardId
   instructor: string
   instructed: Instructed | null
@@ -36,7 +39,7 @@ interface Draft {
 const byLine = <T,>(value: (id: NextGroupId) => T) =>
   Object.fromEntries(NEXT_GROUPS.map(g => [g.id, value(g.id)])) as Record<NextGroupId, T>
 
-function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
+export function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
   const pct = (n: number | undefined) => (n === undefined ? '' : String(n))
   const skillIds = [...new Set(TDE_CARDS.flatMap(c => c.skills.map(s => s.id)))]
   return {
@@ -53,6 +56,32 @@ function draftFrom(e: EventEvaluation | undefined, card: CardId): Draft {
     carAidsPct: pct(e?.carAidsPct),
     soloQualified: e?.soloQualified ?? null,
     notes: e?.notes ?? '',
+  }
+}
+
+/**
+ * The draft with what was read off a screenshot filled in (#483): on the
+ * card it was read off, if that's known, and each field the screenshot
+ * answers; the rest left as they were. A recommended group read comes with
+ * its how and its "or", or none.
+ */
+export function fillDraft(d: Draft, read: EventEvaluation): Draft {
+  const r = draftFrom(read, read.card ?? d.card)
+  const has = <K extends keyof EventEvaluation>(k: K) => read[k] !== undefined
+  return {
+    card: r.card,
+    instructor: has('instructor') ? r.instructor : d.instructor,
+    instructed: has('instructed') ? r.instructed : d.instructed,
+    car: has('car') ? r.car : d.car,
+    escTc: has('escTc') ? r.escTc : d.escTc,
+    next: byLine(id => (read.next?.[id] ? r.next[id] : d.next[id])),
+    nextHow: byLine(id => (read.next?.[id] ? r.nextHow[id] : d.nextHow[id])),
+    nextOr: byLine(id => (read.next?.[id] ? r.nextOr[id] : d.nextOr[id])),
+    skills: Object.fromEntries(Object.entries(d.skills).map(([id, v]) => [id, read.skills?.[id] !== undefined ? r.skills[id] : v])),
+    aggressivenessIsSkill: has('aggressivenessIsSkill') ? r.aggressivenessIsSkill : d.aggressivenessIsSkill,
+    carAidsPct: has('carAidsPct') ? r.carAidsPct : d.carAidsPct,
+    soloQualified: has('soloQualified') ? r.soloQualified : d.soloQualified,
+    notes: has('notes') ? r.notes : d.notes,
   }
 }
 
@@ -139,7 +168,7 @@ const YES_NO = [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] as
  *
  * A page sheet, with Cancel and Save across its top (#415).
  */
-export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, onSave, onRemove, onClosed }: {
+export function EventEvaluationSheet({ event, events, existing, runGroup, lastCard, readScreenshots, onSave, onRemove, onClosed }: {
   /** A TDE event (isTdeEvent) gets the report card's fields. */
   event: EventConfig
   /** Every event, to color the groups as the app does. */
@@ -149,6 +178,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   runGroup?: RunGroupConfig | null
   /** The card their latest TDE evaluation elsewhere was on, once it's known. */
   lastCard?: CardId
+  /** Reads a report card off its screenshots (#483); none, and the form's only typed in. */
+  readScreenshots?: (files: File[]) => Promise<EventEvaluation>
   /** Saves it, throwing with a message to show; the page then slides away. */
   onSave: (evaluation: EventEvaluation) => Promise<void>
   /** Removes it, likewise. */
@@ -218,6 +249,19 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
         }}
       />
       <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
+      {/* Filled in from screenshots of the card (#483). */}
+      {tde && readScreenshots && (
+        <ScreenshotFill
+          read={readScreenshots}
+          disabled={!!busy}
+          onRead={read => {
+            if (read.card) setCardPicked(true)
+            setDraft(d => fillDraft(d, read))
+            setConfirmingRemove(false)
+          }}
+        />
+      )}
+
       {/* Which run group's paper card it's filled in from (#350). */}
       {tde && (
         <div className="mt-3">
@@ -429,5 +473,140 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
       </div>
     </PushPage>,
     document.body,
+  )
+}
+
+/** A screenshot picked to read, to show. */
+interface Shot { url: string; name: string }
+
+/**
+ * Fills the form in from screenshots of the report card (#483), as it's
+ * emailed: one, or up to three of a long one, read together. While they're
+ * read, and after, they're shown small — tap for full size — to check the
+ * form against. Nothing's saved till Save.
+ */
+function ScreenshotFill({ read, disabled, onRead }: {
+  read: (files: File[]) => Promise<EventEvaluation>
+  disabled: boolean
+  onRead: (evaluation: EventEvaluation) => void
+}) {
+  const [shots, setShots] = useState<Shot[]>([])
+  const [status, setStatus] = useState<'idle' | 'reading' | 'read' | 'failed'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [shown, setShown] = useState<Shot | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Which pick is being read: a newer one's answer is the one that counts.
+  const pick = useRef(0)
+  const urls = useRef<string[]>([])
+  useEffect(() => () => {
+    pick.current = -1
+    urls.current.forEach(url => URL.revokeObjectURL(url))
+  }, [])
+
+  async function choose(list: FileList | null) {
+    const files = [...list ?? []]
+    if (!files.length) return
+    if (files.length > MAX_EVALUATION_SCREENSHOTS) {
+      setError(`Pick up to ${MAX_EVALUATION_SCREENSHOTS} screenshots of one evaluation.`)
+      setStatus('failed')
+      return
+    }
+    urls.current.forEach(url => URL.revokeObjectURL(url))
+    const next = files.map(file => ({ url: URL.createObjectURL(file), name: file.name }))
+    urls.current = next.map(s => s.url)
+    setShots(next)
+    setStatus('reading')
+    setError(null)
+    const mine = ++pick.current
+    try {
+      const evaluation = await read(files)
+      if (pick.current !== mine) return
+      onRead(evaluation)
+      setStatus('read')
+    } catch (err) {
+      if (pick.current !== mine) return
+      setError((err as Error).message)
+      setStatus('failed')
+    }
+  }
+
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*"
+      multiple
+      className="sr-only"
+      tabIndex={-1}
+      aria-hidden="true"
+      data-evaluation-import-files
+      onChange={e => { choose(e.target.files); e.target.value = '' }}
+    />
+  )
+  const pickAgain = () => inputRef.current?.click()
+
+  if (status === 'idle') {
+    return (
+      <div className="mt-3">
+        {input}
+        <button
+          type="button"
+          onClick={pickAgain}
+          disabled={disabled}
+          className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-gray-300 bg-white p-3 text-left transition-colors hover:bg-gray-50"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-700">
+            <ImagePlus size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-gray-900">Fill in from a screenshot</span>
+            <span className="mt-0.5 block text-xs text-gray-500">Of your report card as it was sent to you. A long one can take up to {MAX_EVALUATION_SCREENSHOTS}.</span>
+          </span>
+          <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <section aria-label="Screenshot" aria-busy={status === 'reading' || undefined} className="mt-3 flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-3" data-evaluation-import>
+      {input}
+      {shots.length > 0 && (
+        <div className="flex shrink-0 gap-1.5">
+          {shots.map(shot => (
+            <button
+              key={shot.url}
+              type="button"
+              onClick={() => setShown(shot)}
+              aria-label={`Show ${shot.name}`}
+              className="h-20 w-12 overflow-hidden rounded-md border border-gray-200 bg-white"
+            >
+              <img src={shot.url} alt="" className={`h-full w-full object-cover object-top ${status === 'reading' ? 'opacity-60' : ''}`} />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="min-w-0 flex-1 text-sm" aria-live="polite">
+        {status === 'reading' && (
+          <p className="flex items-center gap-2 text-gray-700">
+            <LoaderCircle size={16} className="shrink-0 animate-spin text-gray-400" aria-hidden="true" />
+            Reading your report card…
+          </p>
+        )}
+        {status === 'read' && (
+          <p className="text-gray-900" data-evaluation-import-done>
+            <span className="font-semibold">Filled in from your screenshot.</span>{' '}
+            <span className="text-gray-600">Check it against your card, then Save.</span>
+          </p>
+        )}
+        {status === 'failed' && <p role="alert" className="text-red-700">{error}</p>}
+        {status !== 'reading' && (
+          <button type="button" onClick={pickAgain} disabled={disabled} className="mt-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:text-gray-300">
+            {status === 'read' ? 'Use another screenshot' : 'Try another screenshot'}
+          </button>
+        )}
+      </div>
+      {shown && <ScreenshotViewer url={shown.url} name={shown.name} onClose={() => setShown(null)} />}
+    </section>
   )
 }

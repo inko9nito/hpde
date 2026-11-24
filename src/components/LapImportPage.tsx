@@ -297,7 +297,7 @@ export function LapImportPage({ event, groups, saved, read, onImport, onClosed }
           {failure && <p role="alert" className="mt-4 text-sm text-red-700">{failure}</p>}
         </div>
       </div>
-      {shownItem && <ScreenshotViewer item={shownItem} onClose={() => setShown(null)} />}
+      {shownItem && <ScreenshotViewer url={shownItem.url} name={shownItem.name} onClose={() => setShown(null)} />}
     </PushPage>,
     document.body,
   )
@@ -448,7 +448,7 @@ function SessionSelect({ id, event, group, date, value, taken, onChange, disable
  * A screenshot full size, over everything: to check what was read off it.
  * A tap anywhere, ✕ or Escape closes it — Escape not the page under it too.
  */
-function ScreenshotViewer({ item, onClose }: { item: Item; onClose: () => void }) {
+export function ScreenshotViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const latest = useRef(onClose)
   latest.current = onClose
@@ -466,12 +466,12 @@ function ScreenshotViewer({ item, onClose }: { item: Item; onClose: () => void }
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={item.name}
+      aria-label={name}
       onClick={onClose}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4 pt-[max(3.5rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]"
       data-screenshot-viewer
     >
-      <img src={item.url} alt={item.name} className="max-h-full max-w-full rounded-lg object-contain" />
+      <img src={url} alt={name} className="max-h-full max-w-full rounded-lg object-contain" />
       <button
         ref={closeRef}
         onClick={onClose}

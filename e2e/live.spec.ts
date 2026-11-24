@@ -85,6 +85,12 @@ test('/api/lap-import reads screenshots only for signed-in drivers (#472)', asyn
   expect(res.status()).toBe(401)
 })
 
+// Loaded, and reading report cards only for signed-in drivers (#483).
+test('/api/evaluation-import reads screenshots only for signed-in drivers (#483)', async ({ request }) => {
+  const res = await request.post('/api/evaluation-import', { data: { images: [{ mediaType: 'image/jpeg', data: 'aGVsbG8=' }] } })
+  expect(res.status()).toBe(401)
+})
+
 test('/api/notes keeps instructor evaluations to signed-in drivers (#340)', async ({ request }) => {
   // Refused at the sign-in check, so this reads and changes nothing — but
   // answers with the function's own JSON, so it loaded.

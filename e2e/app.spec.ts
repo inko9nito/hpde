@@ -1591,6 +1591,108 @@ test('a driver adds their instructor’s evaluation of a session, and a TDE even
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
+// A report card filled in from its screenshot (#483): read by Claude, on
+// the card the screenshot is of, and checked against it before it's saved.
+test('a driver fills in a TDE report card from its screenshot (#483)', async ({ page }) => {
+  const tde: EventConfig = { ...alpha, id: '2026-03-07_tde', name: 'TDE Day', organizer: 'The Drivers Edge' }
+  await stubEvents(page, [tde])
+  await signInAsAdmin(page)
+  await page.route(/\/api\/rsvps(\?|$)/, route => route.fulfill({ json: { rsvps: { [tde.id]: { status: 'going', runGroup: 'blue' } } } }))
+  await page.route(/\/api\/laps(\?|$)/, route => route.fulfill({
+    json: new URL(route.request().url()).searchParams.has('event') ? { sessions: [] } : { events: [] },
+  }))
+  const saved: object[] = []
+  await page.route(/\/api\/notes(\?|$)/, async route => {
+    const req = route.request()
+    if (req.method() === 'PUT') {
+      const { evaluation } = req.postDataJSON()
+      saved.push(evaluation)
+      return route.fulfill({ json: { evaluation } })
+    }
+    return route.fulfill({ json: { sessions: [] } })
+  })
+  // The sample Green card, as the function reads it.
+  const sent: { mediaType: string; data: string }[][] = []
+  let answer: { status: number; json: object } = { status: 422, json: { error: 'This doesn’t look like an instructor’s evaluation.' } }
+  await page.route(/\/api\/evaluation-import$/, async route => {
+    const req = route.request()
+    expect(req.method()).toBe('POST')
+    expect(req.headers().authorization).toBe('Bearer token')
+    sent.push(req.postDataJSON().images)
+    return route.fulfill(answer)
+  })
+
+  await page.goto(`/#/event/${tde.id}`)
+  await page.getByRole('tab', { name: /^My notes/ }).click()
+  await page.getByRole('button', { name: /^Add instructor evaluation/ }).click()
+  const sheet = page.getByRole('dialog', { name: 'Instructor evaluation' })
+  // They drove in Blue: Blue's card, till the screenshot says otherwise.
+  await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Blue' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByRole('button', { name: /^Fill in from a screenshot/ })).toBeVisible()
+
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  const files = sheet.locator('[data-evaluation-import-files]')
+  // One that isn't a report card says so, and can be picked again.
+  await files.setInputFiles({ name: 'IMG_1.png', mimeType: 'image/png', buffer: png })
+  await expect(sheet.getByRole('alert')).toHaveText('This doesn’t look like an instructor’s evaluation.')
+  answer = {
+    status: 200,
+    json: {
+      read: {
+        card: 'green',
+        instructor: 'John Harms',
+        car: 'Porsche Panamerica',
+        next: { sameTrack: 'Blue', newDirection: 'Green', newTrack: 'Green' },
+        skills: { flags: 65, passing: 95, inputs: 95, vision: 80, consistency: 80, carControl: 95, pace: 95, references: 95, awareness: 95 },
+        aggressivenessIsSkill: true,
+        carAidsPct: 25,
+        notes: 'Overall, very smooth and got faster as the day went on.',
+      },
+    },
+  }
+  // A long card in two screenshots, read together.
+  await files.setInputFiles(['IMG_2.png', 'IMG_3.png'].map(name => ({ name, mimeType: 'image/png', buffer: png })))
+  await expect(sheet.locator('[data-evaluation-import-done]')).toHaveText('Filled in from your screenshot. Check it against your card, then Save.')
+  expect(sent.map(images => images.length)).toEqual([1, 2])
+  expect(sent.flat().every(image => image.mediaType === 'image/jpeg' && image.data.length > 0)).toBe(true)
+
+  // On Green's card, every field it read filled in.
+  await expect(sheet.getByRole('group', { name: 'Report card' }).getByRole('button', { name: 'Green' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByLabel('Instructor', { exact: true })).toHaveValue('John Harms')
+  await expect(sheet.getByLabel('Car', { exact: true })).toHaveValue('Porsche Panamerica')
+  await expect(sheet.getByRole('button', { name: 'Same track & direction: Blue' })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'New track: Green' })).toBeVisible()
+  await expect(sheet.getByLabel('Calls out all flags')).toHaveValue('65')
+  await expect(sheet.getByLabel('Track location awareness')).toHaveValue('95')
+  await expect(sheet.getByRole('group', { name: 'Aggressiveness = skill' }).getByRole('button', { name: 'Yes' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(sheet.getByLabel('Car aids over activated')).toHaveValue('25')
+  await expect(sheet.getByLabel('Instructor notes')).toHaveValue('Overall, very smooth and got faster as the day went on.')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Each screenshot opens full size, to check against; Escape closes it, not the sheet.
+  await sheet.getByRole('button', { name: 'Show IMG_3.png' }).click()
+  const viewer = page.getByRole('dialog', { name: 'IMG_3.png' })
+  await expect(viewer.locator('img')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(viewer).toBeHidden()
+  await expect(sheet).toBeVisible()
+
+  // A fix before it's saved.
+  await sheet.getByLabel('Looks ahead').fill('85')
+  await sheet.getByRole('button', { name: 'Save' }).click()
+  await expect(sheet).toBeHidden()
+  expect(saved).toEqual([{
+    instructor: 'John Harms',
+    car: 'Porsche Panamerica',
+    next: { sameTrack: 'Blue', newDirection: 'Green', newTrack: 'Green' },
+    skills: { flags: 65, passing: 95, inputs: 95, vision: 85, consistency: 80, carControl: 95, pace: 95, references: 95, awareness: 95 },
+    aggressivenessIsSkill: true,
+    carAidsPct: 25,
+    notes: 'Overall, very smooth and got faster as the day went on.',
+  }])
+  await expect(page.getByRole('region', { name: 'Instructor evaluation' }).getByRole('listitem', { name: 'Looks ahead: 85%' })).toBeVisible()
+})
+
 // Open-Meteo's answer for one day near the track (#347): rain until 11,
 // cloud until 2, then sun, warming up through the day.
 function weatherFor(date: string, daily: Record<string, unknown[]> = {}) {
