@@ -156,6 +156,9 @@ function Choice<T extends string | boolean>({ options, value, onChange, labelled
   )
 }
 
+/** The sheet's body, and Split View's form: a column, a phone's width at most. */
+const BODY = 'mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0'
+
 const YES_NO = [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] as const
 
 /**
@@ -241,8 +244,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   return createPortal(
     <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      {/* In Split View, as tall as the sheet: the screenshots and the form scroll each on its own. */}
-      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className={split && shots.length > 0 ? 'flex h-full flex-col bg-white' : 'min-h-full bg-white'} data-evaluation-sheet>
+      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-white" data-evaluation-sheet>
       <PageHeader
         title="Instructor evaluation"
         subtitle={event.name}
@@ -254,16 +256,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           onClick: () => { if ('value' in cleaned) run('saving', () => onSave(cleaned.value)) },
         }}
       />
-      <ScreenshotSplitView on={split && shots.length > 0} shots={shots} onClose={() => setSplit(false)}>{form()}</ScreenshotSplitView>
-      </div>
-    </PushPage>,
-    document.body,
-  )
-
-  function form() {
-    return (
-      <div className="mx-auto flex max-w-lg flex-col px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-1 [&>*]:shrink-0">
-      {/* Imported from screenshots of the card (#483). */}
+      <div className={BODY}>
+      {/* Imported from screenshots of the card (#483). It stays here, under Split View, while that's up: there it'd only repeat the screenshots beside the form. */}
       {tde && readScreenshots && (
         <ScreenshotFill
           read={readScreenshots}
@@ -278,6 +272,22 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           }}
         />
       )}
+      {/* In Split View, the form's there instead, beside the screenshots. */}
+      {!split && fields()}
+      </div>
+      </div>
+      {split && shots.length > 0 && (
+        <ScreenshotSplitView shots={shots} title="Instructor evaluation" subtitle={event.name} onClose={() => setSplit(false)}>
+          <div className={BODY}>{fields()}</div>
+        </ScreenshotSplitView>
+      )}
+    </PushPage>,
+    document.body,
+  )
+
+  /** The form's fields, under the import: in the sheet, or in Split View. */
+  function fields() {
+    return (<>
 
       {/* Which run group's paper card it's filled in from (#350). */}
       {tde && (
@@ -486,8 +496,7 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           </div>
         )}
       </div>
-      </div>
-    )
+    </>)
   }
 }
 

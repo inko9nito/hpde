@@ -13,9 +13,7 @@ import type { RefObject } from 'react'
 //    Cancel does, rather than closing;
 //  - nothing scrolls the page behind it: not a finger on the dimmed page,
 //    nor one that runs past the end of what's in the sheet. What's in it
-//    still scrolls, and its text boxes are left alone — as is anything
-//    marked data-own-gestures, which handles its own touches: Split View's
-//    divider and zoomable screenshot (#483).
+//    still scrolls, and its text boxes are left alone.
 // Touch only: on a computer, ✕, Escape and the dimmed page close it.
 
 /** How far a finger moves before it's a drag. */
@@ -50,7 +48,7 @@ function canScroll(el: HTMLElement, axis: Axis, delta: number): boolean {
   return delta > 0 ? at > 0 : at < max - 1
 }
 
-const inField = (el: Element | null) => !!el?.closest('input, textarea, select, [contenteditable="true"], [data-own-gestures]')
+const inField = (el: Element | null) => !!el?.closest('input, textarea, select, [contenteditable="true"]')
 
 /**
  * The sheet's gestures, on its overlay (`root`): the dimmed page

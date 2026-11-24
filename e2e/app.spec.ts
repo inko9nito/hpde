@@ -1677,20 +1677,28 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Split View (#483): the screenshots over the form, to check one against the other.
-  // Its thumbnail says it opens bigger, and opens beside the form.
+  // Its thumbnail says it opens bigger: into Split View (#483), a screen of
+  // its own over the sheet, the screenshots over the form.
   await expect(sheet.locator('[data-enlarge]')).toHaveCount(2)
   await sheet.getByRole('button', { name: 'Compare IMG_2.png in Split View' }).click()
-  const shots = sheet.getByRole('region', { name: 'Screenshots' })
+  const split = page.getByRole('dialog', { name: 'Split View' })
+  // Slid all the way up.
+  await expect(split).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  const shots = split.getByRole('region', { name: 'Screenshots' })
   await expect(shots.getByRole('img')).toHaveCount(2)
-  const divider = sheet.getByRole('separator', { name: 'Resize Split View' })
-  const form = sheet.locator('[data-split-form]')
+  // Just Done across its top: no Cancel or Save, and no import box, which would only repeat the screenshots.
+  await expect(split.getByRole('button', { name: 'Done' })).toBeVisible()
+  await expect(split.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await expect(split.getByText('Imported from your screenshot.')).toHaveCount(0)
+  await expect(split.getByRole('button', { name: 'Cancel' })).toHaveCount(0)
+  const divider = split.getByRole('separator', { name: 'Resize Split View' })
+  const form = split.locator('[data-split-form]')
   const [shotsBox, formBox] = [(await shots.boundingBox())!, (await form.boundingBox())!]
   expect(formBox.y).toBeGreaterThan(shotsBox.y + shotsBox.height)
-  // The form scrolls under the screenshots, on its own; the sheet doesn't.
+  // The form scrolls under the screenshots, on its own.
   expect(await form.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
-  await sheet.getByLabel('Instructor notes').scrollIntoViewIfNeeded()
+  await split.getByLabel('Instructor notes').scrollIntoViewIfNeeded()
   expect(await form.evaluate(el => el.scrollTop)).toBeGreaterThan(0)
-  expect(await page.locator('[data-page-sheet]').last().evaluate(el => el.scrollTop)).toBe(0)
   // The divider gives the screenshots more room.
   const at = (await divider.boundingBox())!
   await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2)
@@ -1699,14 +1707,19 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   await page.mouse.up()
   expect((await shots.boundingBox())!.height).toBeGreaterThan(shotsBox.height + 100)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await shots.getByRole('button', { name: 'Close Split View' }).click()
-  await expect(shots).toBeHidden()
-  // Either thumbnail opens it.
+  // A fix made there is the sheet's, once Done takes it down.
+  await split.getByLabel('Looks ahead').fill('85')
+  await split.getByRole('button', { name: 'Done' }).click()
+  await expect(split).toBeHidden()
+  await expect(sheet.getByLabel('Looks ahead')).toHaveValue('85')
+  await expect(sheet.locator('[data-evaluation-import-done]')).toBeVisible()
+  // Either thumbnail opens it; Escape takes it down, not the sheet.
   await sheet.getByRole('button', { name: 'Compare IMG_3.png in Split View' }).click()
-  await expect(shots).toBeVisible()
+  await expect(split).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(split).toBeHidden()
+  await expect(sheet).toBeVisible()
 
-  // A fix before it's saved.
-  await sheet.getByLabel('Looks ahead').fill('85')
   await sheet.getByRole('button', { name: 'Save' }).click()
   await expect(sheet).toBeHidden()
   expect(saved).toEqual([{
