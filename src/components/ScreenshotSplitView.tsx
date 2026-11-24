@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PAGE_HEADER_PX } from './PageHeader'
+import { PushPage } from './PushPage'
 
 /** A screenshot to show: its object URL, and its file's name. */
 export interface Shot { url: string; name: string }
@@ -14,83 +15,58 @@ const SPLIT_MAX_PCT = 75
 // How far it zooms in, and to what a double tap takes it.
 const MAX_ZOOM = 4
 const TAP_ZOOM = 2.5
-// How long it takes to slide up, or down.
-const SLIDE_MS = 300
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 const widthAt = (zoom: number) => `calc(min(100%, 36rem) * ${zoom})`
 
 /**
- * Split View (#483), as BEI's bill review has it: a screen of its own, over
- * the sheet, with the screenshots a form was filled in from and the form,
- * to check one against the other. On a phone the screenshots are over the
- * form, the divider between dragged to give either more room; on a wide
- * screen, side by side. Each scrolls on its own. The screenshots fit the
- * pane's width and zoom: pinch, double-tap, or pinch on a trackpad. It
- * slides up, as a full-screen cover does on iOS, and Done (or Escape)
- * slides it back down to the sheet, whose Save saves.
+ * Split View (#483), as BEI's bill review has it: a page sheet of its own,
+ * stacked over the sheet whose form it shows, with the screenshots the
+ * form was filled in from, to check one against the other. On a phone the
+ * screenshots are over the form, the divider between dragged to give
+ * either more room; on a wide screen, side by side. Each scrolls on its
+ * own. The screenshots fit the pane's width and zoom: pinch, double-tap,
+ * or pinch on a trackpad. Done, Escape or a drag down by its toolbar
+ * takes it back down to the sheet, whose Save saves.
  */
-export function ScreenshotSplitView({ shots, title, subtitle, onClose, children }: {
+export function ScreenshotSplitView({ shots, onClose, children }: {
   shots: Shot[]
-  title: string
-  subtitle?: string
   /** Once it's slid away. */
   onClose: () => void
   /** The form. */
   children: ReactNode
 }) {
+  const [open, setOpen] = useState(true)
   const [pct, setPct] = useState(SPLIT_START_PCT)
-  const [up, setUp] = useState(false)
-  const [closing, setClosing] = useState(false)
   const splitRef = useRef<HTMLDivElement>(null)
-  const doneRef = useRef<HTMLButtonElement>(null)
   const drag = useRef<{ y: number; pct: number } | null>(null)
-  const latest = useRef(onClose)
-  latest.current = onClose
-  const close = useRef(() => {})
-  close.current = () => {
-    if (closing) return
-    setClosing(true)
-    // Down it slides, then it's gone: by the clock, as it may not have got all the way up.
-    setTimeout(() => latest.current(), SLIDE_MS)
-  }
+  const close = () => setOpen(false)
 
-  // Up it slides once it's on screen, and Escape takes it down, not the sheet under it.
+  // Escape takes it down, not the sheet under it.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setUp(true))
-    doneRef.current?.focus()
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopImmediatePropagation()
-      close.current()
+      setOpen(false)
     }
     window.addEventListener('keydown', onKey, true)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('keydown', onKey, true)
-    }
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Split View"
-      className="fixed inset-0 z-[60] flex flex-col bg-white pt-[env(safe-area-inset-top)] ease-out"
-      style={{ transform: up && !closing ? 'translateY(0)' : 'translateY(100%)', transition: `transform ${SLIDE_MS}ms` }}
-      data-split-view
-    >
-      <div className="shrink-0 border-b border-gray-500/20 bg-white">
+    <PushPage open={open} onExited={onClose} onDismiss={close} raised from="bottom" sheet>
+      {/* On its way out once closed: gone to a screen reader, and to taps. */}
+      <div role="dialog" aria-label="Split View" aria-hidden={!open || undefined} inert={!open || undefined} className="flex h-full flex-col bg-white" data-split-view>
+      {/* Not the sheet's own name again: what this one's for. Held to drag it down. */}
+      <div className="shrink-0 border-b border-gray-500/20 bg-white" data-sheet-grab>
         <div className="mx-auto grid max-w-lg grid-cols-[minmax(5rem,1fr)_minmax(0,max-content)_minmax(5rem,1fr)] items-center gap-2 px-2" style={{ height: PAGE_HEADER_PX }}>
           <span />
-          <div className="min-w-0 text-center">
-            <h2 className="truncate text-[17px] font-semibold leading-[22px] text-gray-900">{title}</h2>
-            {subtitle && <p className="truncate text-[13px] leading-4 text-gray-500">{subtitle}</p>}
-          </div>
+          <h2 className="truncate text-center text-[17px] font-semibold leading-[22px] text-gray-900">
+            Your {shots.length > 1 ? 'screenshots' : 'screenshot'}
+          </h2>
           <button
-            ref={doneRef}
             type="button"
-            onClick={() => close.current()}
+            onClick={close}
             className="justify-self-end rounded-lg px-2 py-2 text-[17px] font-semibold text-blue-600 hover:text-blue-700"
           >
             Done
@@ -108,6 +84,7 @@ export function ScreenshotSplitView({ shots, title, subtitle, onClose, children 
           aria-valuemin={SPLIT_MIN_PCT}
           aria-valuemax={SPLIT_MAX_PCT}
           tabIndex={0}
+          data-own-gestures
           data-split-divider
           className="flex h-7 shrink-0 cursor-row-resize touch-none select-none items-center justify-center border-y border-gray-700 bg-gray-900 md:hidden"
           onPointerDown={e => {
@@ -135,7 +112,8 @@ export function ScreenshotSplitView({ shots, title, subtitle, onClose, children 
           {children}
         </div>
       </div>
-    </div>,
+      </div>
+    </PushPage>,
     document.body,
   )
 }
@@ -288,6 +266,7 @@ function ZoomPage({ shot, label }: { shot: Shot; label?: string }) {
       role="group"
       aria-label={label}
       className="h-full w-full shrink-0 snap-center snap-always overflow-auto overscroll-y-contain [touch-action:pan-x_pan-y]"
+      data-own-gestures
       data-split-screenshots
     >
       {/* The pane's width — at most a phone's, on a wide screen — times the zoom. */}

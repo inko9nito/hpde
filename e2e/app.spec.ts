@@ -1686,8 +1686,14 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   expect(Math.round(thumb.width)).toBe(Math.round(thumb.height))
   await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
   const split = page.getByRole('dialog', { name: 'Split View' })
-  // Slid all the way up.
-  await expect(split).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  // A page sheet of its own, slid all the way up, stacked over the evaluation's,
+  // which shrinks back a little and peeks out above it.
+  await expect(split.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
+  const under = page.locator('[data-evaluation-sheet]').locator('..')
+  await expect(under).toHaveCSS('transform', 'matrix(0.95, 0, 0, 0.95, 0, -8)')
+  expect((await under.boundingBox())!.y).toBeLessThan((await split.locator('..').boundingBox())!.y)
+  // Named for what it's for, not the evaluation sheet's name again.
+  await expect(split.getByRole('heading')).toHaveText(['Your screenshots', ...await split.locator('[data-split-form] h3').allInnerTexts()])
   const shots = split.getByRole('region', { name: 'Screenshots' })
   await expect(shots.getByRole('img')).toHaveCount(2)
   // A page each, swiped between, with which this is and dots to say there are more.
@@ -1728,10 +1734,11 @@ test('a driver imports a TDE report card from its screenshot (#483)', async ({ p
   await split.getByRole('button', { name: 'Done' }).click()
   await expect(split).toBeHidden()
   await expect(sheet.getByLabel('Looks ahead')).toHaveValue('85')
+  await expect(under).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
   await expect(sheet.locator('[data-evaluation-import-done]')).toBeVisible()
   // Again from the thumbnail; Escape takes it down, not the sheet.
   await sheet.getByRole('button', { name: 'Compare your 2 screenshots in Split View' }).click()
-  await expect(split).toBeVisible()
+  await expect(split.locator('..')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)')
   await page.keyboard.press('Escape')
   await expect(split).toBeHidden()
   await expect(sheet).toBeVisible()

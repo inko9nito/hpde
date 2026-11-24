@@ -244,7 +244,8 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
   return createPortal(
     <PushPage open={open} onExited={onClosed} onDismiss={close} raised from="bottom" sheet>
       {/* On its way out once closed: gone to a screen reader, and to taps. */}
-      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || undefined} inert={!open || undefined} className="min-h-full bg-white" data-evaluation-sheet>
+      {/* Under Split View too (#483): out of reach there, but still showing, as a sheet under another does. */}
+      <div role="dialog" aria-label="Instructor evaluation" aria-hidden={!open || split || undefined} inert={!open || split || undefined} className="min-h-full bg-white" data-evaluation-sheet>
       <PageHeader
         title="Instructor evaluation"
         subtitle={event.name}
@@ -272,21 +273,21 @@ export function EventEvaluationSheet({ event, events, existing, runGroup, lastCa
           }}
         />
       )}
-      {/* In Split View, the form's there instead, beside the screenshots. */}
-      {!split && fields()}
+      {fields(id)}
       </div>
       </div>
       {split && shots.length > 0 && (
-        <ScreenshotSplitView shots={shots} title="Instructor evaluation" subtitle={event.name} onClose={() => setSplit(false)}>
-          <div className={BODY}>{fields()}</div>
+        <ScreenshotSplitView shots={shots} onClose={() => setSplit(false)}>
+          {/* The same form, on the same draft: its own ids, as the sheet's is still there under it. */}
+          <div className={BODY}>{fields(`${id}-split`)}</div>
         </ScreenshotSplitView>
       )}
     </PushPage>,
     document.body,
   )
 
-  /** The form's fields, under the import: in the sheet, or in Split View. */
-  function fields() {
+  /** The form's fields, under the import: in the sheet, and in Split View; `id` makes their ids. */
+  function fields(id: string) {
     return (<>
 
       {/* Which run group's paper card it's filled in from (#350). */}
