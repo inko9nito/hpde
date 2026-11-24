@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ImagePlus, NotebookPen } from 'lucide-react'
 import { lapColumns } from './LapList'
-import { LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
+import { DayHeading, LapsSkeleton, LapsToolbar, SessionLapsCard, StatCard, plural, sessionTitle, useOpenSessions, useSkeletonFade } from './LapSessions'
 import type { SessionHead } from './LapSessions'
 import { AddEventEvaluation, EventEvaluationCard } from './EventEvaluationCard'
 import { CarRow } from './CarRow'
@@ -186,6 +186,7 @@ export function MyLapTimes({
   }
 
   const days = new Set(sessions.map(s => s.date))
+  const byDay = [...days].map(date => [date, sessions.filter(s => s.date === date)] as const)
   // The event's best and average, to switch the session charts to, once
   // there's more of it than one session (#475).
   const sessionsWithLaps = log.sessions.filter(s => lapStats(s.laps).count > 0)
@@ -238,27 +239,32 @@ export function MyLapTimes({
           </div>
         )}
         {toolbar}
-        <div className="flex flex-col gap-5">
-          {sessions.map(session => (
-            <SessionLapsCard
-              key={session.key}
-              session={session}
-              laps={log.byKey.get(session.key)}
-              notes={notes.byKey.get(session.key)}
-              pressures={garage?.pressures.get(session.key)}
-              runGroups={runGroups}
-              showDate={days.size > 1}
-              columns={columns}
-              allTimeBest={allTimeBest}
-              chart={{ scope, event: eventLaps, onScope: setScope }}
-              expanded={open.has(session.key)}
-              onToggle={() => toggle(session.key)}
-              onEdit={() => onEdit(session, 'menu')}
-              onOpenEvaluation={() => onEdit(session, 'evaluation')}
-              onOpenPressures={() => onEdit(session, 'pressures')}
-              onOpenConditions={() => onEdit(session, 'conditions')}
-              tableId={`laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`}
-            />
+        {/* A heading over each day's sessions, when there's more than one (#477). */}
+        <div className="flex flex-col gap-7">
+          {byDay.map(([date, daySessions]) => (
+            <div key={date} className="flex flex-col gap-3">
+              {byDay.length > 1 && <DayHeading date={date} sessions={daySessions.length} />}
+              {daySessions.map(session => (
+                <SessionLapsCard
+                  key={session.key}
+                  session={session}
+                  laps={log.byKey.get(session.key)}
+                  notes={notes.byKey.get(session.key)}
+                  pressures={garage?.pressures.get(session.key)}
+                  runGroups={runGroups}
+                  columns={columns}
+                  allTimeBest={allTimeBest}
+                  chart={{ scope, event: eventLaps, onScope: setScope }}
+                  expanded={open.has(session.key)}
+                  onToggle={() => toggle(session.key)}
+                  onEdit={() => onEdit(session, 'menu')}
+                  onOpenEvaluation={() => onEdit(session, 'evaluation')}
+                  onOpenPressures={() => onEdit(session, 'pressures')}
+                  onOpenConditions={() => onEdit(session, 'conditions')}
+                  tableId={`laps-${session.key.replace(/[^a-z0-9]+/gi, '-')}`}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </div>

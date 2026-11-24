@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, Waves } from 'lucide-react'
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardCheck, Disc3, NotebookPen, Waves } from 'lucide-react'
 import { GroupBadge } from './GroupBadge'
-import { FIGURES_INDENT, LapTable, LapsHeading, SessionFigures } from './LapList'
+import { CardFigures, FIGURES_INDENT, LapTable } from './LapList'
 import type { LapColumns } from './LapList'
 import { SessionLapChart } from './SessionLapChart'
 import type { LapChartScope, Reference } from './SessionLapChart'
@@ -112,22 +112,41 @@ export function LapsToolbar({ keys, open, onOpen, action }: {
   )
 }
 
+/** `2026-11-21` → `Saturday`. */
+export function weekday(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' })
+}
+
 /**
- * One session's notes on My notes (#210): its time and group, then what's
- * saved for it (#324) — its lap count and a small table of its average and
- * best lap and speeds, which open onto the lap table; its instructor's
- * evaluation (#340) and its tire pressures (#344), which open in the
- * session's sheet. `onEdit` adds an
- * Edit button, for everything the session has.
+ * Heads a day's sessions on My notes (#477), when the event runs more than
+ * one: the weekday spelled out, its date, and how many sessions it has.
  */
-export function SessionLapsCard({ session, laps, notes, pressures, runGroups, showDate, columns, allTimeBest, chart, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, onOpenConditions, tableId }: {
+export function DayHeading({ date, sessions }: { date: string; sessions: number }) {
+  return (
+    <h3 className="flex items-baseline gap-2 px-1">
+      <span className="text-[17px] font-semibold text-gray-900">{weekday(date)}</span>{' '}
+      <span className="text-sm text-gray-500">{shortDate(date)}</span>{' '}
+      <span className="ml-auto text-xs text-gray-400">{plural(sessions, 'session', 'sessions')}</span>
+    </h3>
+  )
+}
+
+/**
+ * One session's notes on My notes (#210): a line with its time, which
+ * session and its group (#477), then what's saved for it (#324) — its
+ * average and best lap and its laps in a sparkline, which open onto the lap
+ * chart and table, and its note; its instructor's evaluation (#340) and its
+ * tire pressures (#344), which open in the session's sheet. `onEdit` adds an
+ * Edit button, for everything the session has. Its day is in the heading
+ * above it, when the event runs more than one (`DayHeading`).
+ */
+export function SessionLapsCard({ session, laps, notes, pressures, runGroups, columns, allTimeBest, chart, expanded, onToggle, onEdit, onOpenEvaluation, onOpenPressures, onOpenConditions, tableId }: {
   session: SessionHead
   laps?: SessionLaps
   notes?: SessionNotes
   pressures?: SessionPressures
   runGroups: RunGroupConfig[]
-  /** Show the day too — the event runs more than one. */
-  showDate: boolean
   /** Shared by every card on the page, so the tables line up. */
   columns: LapColumns
   allTimeBest?: number
@@ -149,21 +168,19 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
   const title = sessionTitle(session)
   return (
     <section aria-label={`${title}, ${formatTime(session.time)} ${formatAmPm(session.time)}`}>
-      <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-widest text-gray-400">
-        {title}
-        {showDate && <span className="ml-2 font-medium normal-case tracking-normal">{shortDate(session.date)}</span>}
-      </h3>
+      {/* One slim line (#477): the time, which session, its group, and Edit. */}
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex min-h-7 items-center gap-3">
-          <div className="flex items-baseline gap-0.5 font-mono text-lg font-semibold text-gray-900">
+        <div className="flex min-h-6 items-center gap-2">
+          <div className="flex items-baseline gap-0.5 font-mono text-base font-semibold text-gray-900">
             {formatTime(session.time)}
             <span className="font-sans text-[10px] font-normal text-gray-400">{formatAmPm(session.time)}</span>
           </div>
-          <GroupBadge group={groupFor(session.group, runGroups)} size="sm" />
+          <span className="min-w-0 truncate text-xs text-gray-500">{title}</span>
+          <GroupBadge group={groupFor(session.group, runGroups)} size="sm" className="shrink-0" />
           {onEdit && (
             <button
               onClick={onEdit}
-              className="ml-auto text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="ml-auto shrink-0 text-sm font-medium text-blue-600 hover:text-blue-700"
               aria-label={`Edit ${title}`}
             >
               Edit
@@ -171,31 +188,29 @@ export function SessionLapsCard({ session, laps, notes, pressures, runGroups, sh
           )}
         </div>
         {laps && (
-          <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-            {/* The heading and figures open the table: the chevron's button stretches over them. */}
-            <div className="relative flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <LapsHeading laps={laps.laps} />
-                <button
-                  onClick={onToggle}
-                  aria-expanded={expanded}
-                  aria-controls={tableId}
-                  aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
-                  className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
-                >
-                  <ChevronRight
-                    size={18}
-                    className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
-              <div className={FIGURES_INDENT}>
-                <SessionFigures laps={laps.laps} allTimeBest={allTimeBest} />
-              </div>
+          <div className="flex flex-col gap-2.5">
+            {/* The figures open the table: the chevron's button stretches over them. */}
+            <div className="relative flex items-center gap-3">
+              <CardFigures laps={laps.laps} allTimeBest={allTimeBest} sparkline={!expanded} />
+              <button
+                onClick={onToggle}
+                aria-expanded={expanded}
+                aria-controls={tableId}
+                aria-label={`${expanded ? 'Hide' : 'Show'} laps for ${title}`}
+                className="-my-1 shrink-0 rounded-lg p-1 text-gray-400 after:absolute after:inset-0 after:content-[''] hover:text-gray-600"
+              >
+                <ChevronRight
+                  size={18}
+                  className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
             {laps.summary && (
-              <p className={`${FIGURES_INDENT} text-sm text-gray-700`} data-lap-summary>{laps.summary}</p>
+              <p className="flex gap-1.5 text-sm text-gray-700" data-lap-summary>
+                <NotebookPen size={13} className="mt-[3px] shrink-0 text-gray-400" aria-label="Note" />
+                <span>{laps.summary}</span>
+              </p>
             )}
             {expanded && (
               <div id={tableId} className="flex flex-col gap-3">
@@ -377,17 +392,15 @@ export function LapsSkeleton({ cards, leaving, label }: {
           </div>
         ))}
       </div>
-      <div className={`mb-2 ml-1 h-2.5 w-20 ${bar}`} />
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex min-h-7 items-center gap-3">
-          <div className={`h-5 w-16 ${bar}`} />
+        <div className="flex min-h-6 items-center gap-2">
+          <div className={`h-4 w-14 ${bar}`} />
+          <div className={`h-3 w-16 ${bar}`} />
           <div className="h-5 w-12 animate-pulse rounded-full bg-gray-100" />
         </div>
-        <div className="flex flex-col gap-2.5 border-t border-gray-100 pt-3">
-          <div className={`h-3 w-28 ${bar}`} />
-          <div className={`flex flex-col gap-2 ${FIGURES_INDENT}`}>
-            {[0, 1].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
-          </div>
+        <div className="grid grid-cols-[1fr_1fr_5rem] gap-x-3 gap-y-2">
+          {[0, 1, 2].map(i => <div key={i} className={`h-2.5 w-12 ${bar}`} />)}
+          {[0, 1, 2].map(i => <div key={i} className={`h-4 w-4/5 ${bar}`} />)}
         </div>
       </div>
     </div>

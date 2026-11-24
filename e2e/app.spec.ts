@@ -1000,12 +1000,18 @@ test('a driver logs a session’s lap times from spreadsheet rows, and sees them
 
   await page.getByRole('tab', { name: 'My notes (1)' }).click()
   const card = page.getByRole('region', { name: 'Session 1, 8:30 AM' })
-  // A compact table (#324): average and best lap, then average and top speed.
-  await expect(card).toContainText('Laps & speeds · 2 laps')
-  await expect(card.getByLabel('Session figures').locator('tbody').getByRole('cell')).toHaveText(['1:49.0', '1:46', '69.5 mph', '103.9 mph'])
+  // One row (#477): average and best lap, and the laps in a sparkline under
+  // their count. No speeds on the card: they're in the table it opens.
+  await expect(card.getByLabel('Session figures').locator('dd').first()).toHaveText('1:49.0')
+  await expect(card.getByLabel('Session figures').locator('dt')).toHaveText(['Average', 'Best', '2 laps'])
+  await expect(card.getByRole('img', { name: 'Each lap’s time: 1:52, 1:46' })).toBeVisible()
+  await expect(card).not.toContainText('mph')
+  // Their labels in a line, though the best is in a taller chip.
+  const labelTops = await card.getByLabel('Session figures').locator('dt').evaluateAll(dts => dts.map(dt => Math.round(dt.getBoundingClientRect().top)))
+  expect(new Set(labelTops).size).toBe(1)
   // Tapping anywhere on the figures opens the laps (the toggle covers them).
   // Below the chart on a phone, so scrolled to first, as a thumb would.
-  const firstFigure = card.getByLabel('Session figures').locator('tbody').getByRole('cell').first()
+  const firstFigure = card.getByLabel('Session figures').locator('dd').first()
   await firstFigure.scrollIntoViewIfNeeded()
   const figure = (await firstFigure.boundingBox())!
   await page.mouse.click(figure.x + 4, figure.y + 4)
