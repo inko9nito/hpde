@@ -2118,6 +2118,45 @@ describe('the garage (#344)', () => {
     expect(within(page).getByRole('region', { name: 'Maintenance' })).toHaveTextContent('TiresHoosier R7Since Feb 20, 2026')
   })
 
+  it('logs a tech inspection, and other work that isn’t on the list (#487)', async () => {
+    garageData = { cars: [cayman], events: {} }
+    openWithGarage('#/garage/cayman')
+    const page = await carPage('The Cayman')
+    await userEvent.click(within(page).getByRole('button', { name: 'Add entry' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add entry' })
+    const add = within(sheet).getByRole('button', { name: 'Add entry' })
+    // A tech inspection doesn't ask what went on.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Tech inspection' }))
+    expect(within(sheet).queryByRole('group', { name: /^What went on/ })).not.toBeInTheDocument()
+    expect(add).toBeEnabled()
+    // Other asks what it was before it can be added.
+    expect(within(sheet).queryByLabelText('Other')).not.toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Other' }))
+    expect(add).toBeDisabled()
+    fireEvent.change(within(sheet).getByLabelText('Other'), { target: { value: 'Alignment' } })
+    expect(add).toBeEnabled()
+    fireEvent.change(within(sheet).getByLabelText('Date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(within(sheet).getByRole('textbox', { name: /^Note/ }), { target: { value: 'Passed.' } })
+    await userEvent.click(add)
+    await sheetGone()
+    expect(body(garageCalls('PUT')[0]).entry).toEqual({ date: '2026-05-01', parts: [{ part: 'techInspection' }], other: 'Alignment', note: 'Passed.' })
+    // The inspection's on Setup with the consumables, last; the alignment isn't.
+    const on = within(page).getByRole('region', { name: 'Maintenance' })
+    expect(on).toHaveTextContent(/Tech inspectionInspectedSince May 1, 2026$/)
+    expect(on).not.toHaveTextContent('Alignment')
+    // Both in its history.
+    await userEvent.click(within(page).getByRole('tab', { name: 'History' }))
+    const log = within(page).getByRole('group', { name: 'Change log' })
+    expect(within(log).getAllByRole('listitem')[0]).toHaveTextContent(/^May 1Tech inspectionAlignmentPassed\.$/)
+
+    // It opens to change, as it was picked and filled in.
+    await userEvent.click(within(log).getByRole('button', { name: /^Alignment/ }))
+    const edit = screen.getByRole('dialog', { name: 'Edit entry' })
+    expect(within(edit).getByRole('button', { name: 'Tech inspection' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(edit).getByRole('button', { name: 'Other' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(edit).getByLabelText('Other')).toHaveValue('Alignment')
+  })
+
   it('adds a photo with a new car, and changes or removes it from Edit, each saved with Save', async () => {
     const createObjectURL = vi.fn(() => 'blob:car-photo')
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }))

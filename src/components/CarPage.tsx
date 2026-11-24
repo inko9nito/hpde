@@ -15,7 +15,7 @@ import { ShareCarSheet } from './ShareCarSheet'
 import { useCarPhoto, useGarage } from '../data/GarageContext'
 import { driverName } from '../data/drivers'
 import { useRsvps } from '../data/RsvpsContext'
-import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
+import { MAX_DRIVERS, carEvents, carHeading, carOutings, carSubtitle, consumableDone, consumableLabel, consumablesOn, driverLabel, eventsSince, formatDay, isShared, logNewestFirst, othersText, replacedOn } from '../utils/garage'
 import type { Car, CarOuting, LogEntry } from '../utils/garage'
 import { classifyEvent } from '../utils/eventClass'
 import { useScrolledPast } from '../utils/useScrolledPast'
@@ -206,7 +206,10 @@ function SetupPanel({ car, driven, onOpenEntry, onLog }: {
       <section aria-label="Maintenance">
         <SectionTitle aside={onLog && <AddLink onClick={onLog}>Add entry</AddLink>}>Maintenance</SectionTitle>
         {on.length === 0 ? (
-          <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>None logged yet. Add an entry to keep track of what’s on the car.</p>
+          <p className={`${CARD_FRAME} px-4 py-4 text-sm text-gray-500`}>
+            {/* Only other work logged (#487): that's under History. */}
+            {log.length === 0 ? 'None logged yet. Add an entry to keep track of what’s on the car.' : 'No parts logged yet. The rest is under History.'}
+          </p>
         ) : (
           <ul className={`${CARD_FRAME} overflow-hidden`}>
             {on.map(c => {
@@ -222,7 +225,7 @@ function SetupPanel({ car, driven, onOpenEntry, onLog }: {
                   >
                     <span className="w-[6.5rem] shrink-0 text-sm text-gray-500">{consumableLabel(c.part)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] text-gray-900">{c.what ?? 'Changed'}</span>
+                      <span className="block truncate text-[15px] text-gray-900">{c.what ?? consumableDone(c.part)}</span>
                       <span className="block text-[13px] text-gray-500">
                         Since {formatDay(c.date)}
                         {used > 0 && <span data-events-used> · {used === 1 ? '1 event' : `${used} events`}</span>}
@@ -301,28 +304,33 @@ function HistoryPanel({ car, driven, onOpenEntry, onLog }: {
               <li key={date} className="flex gap-3 border-b border-gray-100 pl-4 last:border-b-0">
                 <span className="w-14 shrink-0 py-3 text-[13px] tabular-nums text-gray-500">{dayTitle(date)}</span>
                 <div className="min-w-0 flex-1 divide-y divide-gray-100">
-                  {entries.flatMap(e => e.parts.map((p, j) => {
-                    // None: no count, as on Setup.
-                    const used = eventsSince(e.date, driven, replacedOn(car, e, p.part))
-                    return (
+                  {entries.flatMap(e => {
+                    // Each part, then what else was done (#487), which
+                    // isn't used up, so has no count.
+                    const rows = [
+                      ...e.parts.map(p => ({ key: p.part, title: consumableLabel(p.part), what: p.what, used: eventsSince(e.date, driven, replacedOn(car, e, p.part)) })),
+                      ...(e.other ? [{ key: 'other', title: e.other, what: undefined, used: 0 }] : []),
+                    ]
+                    return rows.map((row, j) => (
                       <button
-                        key={`${e.id} ${p.part}`}
+                        key={`${e.id} ${row.key}`}
                         onClick={() => onOpenEntry(e)}
                         className="flex w-full items-start gap-3 py-3 pr-4 text-left transition-colors hover:bg-gray-50"
                         data-history-part
                       >
                         <span className="min-w-0 flex-1 text-sm leading-snug">
-                          <span className="block font-semibold text-gray-900">{consumableLabel(p.part)}</span>
-                          {p.what && <span className="block text-gray-700">{p.what}</span>}
+                          <span className="block font-semibold text-gray-900">{row.title}</span>
+                          {row.what && <span className="block text-gray-700">{row.what}</span>}
                           {e.shop && <span className="block text-gray-500">{e.shop}</span>}
-                          {/* The job's note, once, under its last part. */}
-                          {e.note && j === e.parts.length - 1 && <span className="mt-1 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
+                          {/* The job's note, once, under its last line. */}
+                          {e.note && j === rows.length - 1 && <span className="mt-1 block whitespace-pre-line text-xs text-gray-500">{e.note}</span>}
                         </span>
-                        {used > 0 && <span className="shrink-0 text-[13px] tabular-nums text-gray-500" data-events-used>{used === 1 ? '1 event' : `${used} events`}</span>}
+                        {/* None: no count, as on Setup. */}
+                        {row.used > 0 && <span className="shrink-0 text-[13px] tabular-nums text-gray-500" data-events-used>{row.used === 1 ? '1 event' : `${row.used} events`}</span>}
                         <ChevronRight size={16} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
                       </button>
-                    )
-                  }))}
+                    ))
+                  })}
                 </div>
               </li>
             ))}

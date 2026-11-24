@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { CarIcon } from './CarIcons'
-import { carHeading, carSubtitle, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
+import { carHeading, carSubtitle, consumableDone, consumableLabel, consumablesOn, formatDay } from '../utils/garage'
 import type { Car } from '../utils/garage'
 import { useCarPhoto } from '../data/GarageContext'
 
@@ -123,7 +123,7 @@ export function ConsumablesList({ car, day }: { car: Car; day?: string }) {
     <dl aria-label="Consumables">
       {on.map(c => (
         <DetailRow key={c.part} label={consumableLabel(c.part)}>
-          <span className="block">{c.what ?? 'Changed'}</span>
+          <span className="block">{c.what ?? consumableDone(c.part)}</span>
           <span className="block text-xs text-gray-500">since {formatDay(c.date)}</span>
         </DetailRow>
       ))}
